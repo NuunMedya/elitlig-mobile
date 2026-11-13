@@ -9,7 +9,7 @@ import React, { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { Panel } from "@/components/admin";
-import { EmptyState, MetricGrid, MetricTile, Touchable } from "@/components/ui";
+import { EmptyState, GradientBar, IconTile, Touchable, withAlpha, type IconTileTone } from "@/components/ui";
 import { formatMoney } from "@/lib/admin/format";
 import {
   ACTIVITY_META,
@@ -29,7 +29,7 @@ import {
   todayIso,
   whenLabel,
 } from "@/lib/admin/projectUtils";
-import { colors, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
 
 import { useProject } from "./ProjectContext";
 import { ContactActions, Dot, ProgressBar } from "./ui";
@@ -55,25 +55,23 @@ export function Overview() {
 
   return (
     <View style={styles.wrap}>
-      <MetricGrid columns={2}>
-        <MetricTile label="İlerleme" value={`%${ss.progress}`} hint={`${ss.done} / ${ss.total - ss.skipped} adım tamam`} tone="brand" onPress={() => nav.go("surec")} />
-        <MetricTile label="Geciken adım" value={String(ss.overdue)} hint={`${ss.by_status.doing || 0} devam · ${ss.by_status.waiting || 0} yanıt bekliyor`} tone={ss.overdue ? "danger" : "neutral"} onPress={() => nav.go("surec")} />
-        <MetricTile label="Bugün aranacak" value={String(ls.due + suppliers.due)} hint={`${ls.open} açık kişi · toplam ${ls.total}`} tone={ls.due ? "warn" : "neutral"} onPress={() => nav.go("kisiler", { takip: true })} />
-        <MetricTile label="Kazanılan" value={formatMoney(ls.won_value, true)} hint={`${ls.won} kişi · huni ${formatMoney(ls.pipeline_value, true)}`} tone="win" onPress={() => nav.go("kisiler")} />
-        <MetricTile label="Açık soru" value={String(openQuestions.length)} hint={`${data.questions.length} soru / ihtiyaç`} onPress={() => nav.go("sorular")} />
-        <MetricTile label="Portföy" value={String(data.portfolio.length)} hint={formatMoney(data.portfolio.reduce((n, x) => n + (Number(x.value) || 0), 0), true)} onPress={() => nav.go("portfoy")} />
-      </MetricGrid>
-      <ProgressBar value={ss.progress} color={data.item.color} />
+      <View style={styles.tiles}>
+        <StatTile icon="trophy-outline" tone="mint" label="Kazanılan" value={formatMoney(ls.won_value, true)} hint={`${ls.won} kişi`} onPress={() => nav.go("kisiler")} />
+        <StatTile icon="funnel-outline" tone="violet" label="Huni" value={formatMoney(ls.pipeline_value, true)} hint={`${ls.open} açık · ${ls.total} kişi`} onPress={() => nav.go("kisiler")} />
+        <StatTile icon="help-circle-outline" tone="gold" label="Açık soru" value={String(openQuestions.length)} hint={`${data.questions.length} soru / ihtiyaç`} onPress={() => nav.go("sorular")} />
+        <StatTile icon="briefcase-outline" tone="cyan" label="Portföy" value={String(data.portfolio.length)} hint={formatMoney(data.portfolio.reduce((n, x) => n + (Number(x.value) || 0), 0), true)} onPress={() => nav.go("portfoy")} />
+      </View>
 
       <Panel title="Adım durumları">
         <View style={styles.stack}>
-          {STEP_STATUSES.map((k) => (ss.by_status[k] ? <View key={k} style={{ flex: ss.by_status[k], backgroundColor: STEP_STATUS_META[k].color }} /> : null))}
+          {STEP_STATUSES.map((k) => (ss.by_status[k] ? <View key={k} style={[styles.stackPart, { flex: ss.by_status[k], backgroundColor: STEP_STATUS_META[k].color }]} /> : null))}
         </View>
         <View style={styles.legend}>
           {STEP_STATUSES.map((k) => (
-            <View key={k} style={styles.legendItem}>
+            <View key={k} style={[styles.legendItem, !ss.by_status[k] ? styles.legendOff : null]}>
               <Dot color={STEP_STATUS_META[k].color} size={8} />
-              <Text style={styles.small} {...textScale.dense}>{STEP_STATUS_META[k].label} <Text style={styles.strong}>{ss.by_status[k] || 0}</Text></Text>
+              <Text style={styles.small} {...textScale.dense}>{STEP_STATUS_META[k].label}</Text>
+              <Text style={styles.strong} {...textScale.badge}>{ss.by_status[k] || 0}</Text>
             </View>
           ))}
         </View>
@@ -123,9 +121,7 @@ export function Overview() {
                 <Dot color={st.color} size={8} />
                 <Text style={styles.small} numberOfLines={1} {...textScale.dense}>{st.label}</Text>
               </View>
-              <View style={styles.funnelBar}>
-                <View style={[styles.funnelFill, { width: `${((ls.by_stage[st.key] || 0) / maxStage) * 100}%`, backgroundColor: st.color }]} />
-              </View>
+              <GradientBar value={(ls.by_stage[st.key] || 0) / maxStage} height={10} gradient={[withAlpha(st.color, 0.55), st.color]} style={styles.flex} />
               <Text style={styles.strong} {...textScale.dense}>{ls.by_stage[st.key] || 0}</Text>
             </Touchable>
           ))
@@ -190,10 +186,13 @@ export function Overview() {
             const outcome = a.outcome ? outcomeOf(settings, a.outcome, kindOf(l))?.label : null;
             return (
               <Touchable key={a.id} onPress={l ? () => nav.openLead(l.id) : undefined} disabled={!l} style={styles.feed}>
-                <View style={[styles.feedIcon, { backgroundColor: colors.surface3 }]}>
-                  <Ionicons name={m.icon} size={14} color={m.color} />
+                <View style={styles.feedRail}>
+                  <View style={[styles.feedIcon, { backgroundColor: withAlpha(m.color, 0.18), borderColor: withAlpha(m.color, 0.5) }]}>
+                    <Ionicons name={m.icon} size={14} color={m.color} />
+                  </View>
+                  <View style={styles.feedLine} />
                 </View>
-                <View style={styles.flex}>
+                <View style={styles.feedBody}>
                   <Text style={styles.feedTitle} numberOfLines={1} {...textScale.dense}>
                     {l ? l.name : m.short}
                     {outcome ? <Text style={styles.small}> · {outcome}</Text> : null}
@@ -207,6 +206,25 @@ export function Overview() {
         )}
       </Panel>
     </View>
+  );
+}
+
+function StatTile({ icon, tone, label, value, hint, onPress }: { icon: keyof typeof Ionicons.glyphMap; tone: IconTileTone; label: string; value: string; hint?: string; onPress: () => void }) {
+  return (
+    <Touchable feedback="card" onPress={onPress} style={styles.tile} accessibilityRole="button" accessibilityLabel={`${label}: ${value}${hint ? `, ${hint}` : ""}`}>
+      <IconTile icon={icon} tone={tone} size={32} glow={false} />
+      <Text style={styles.tileValue} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
+        {value}
+      </Text>
+      <Text style={styles.tileLabel} numberOfLines={1} {...textScale.badge}>
+        {upperTR(label)}
+      </Text>
+      {hint ? (
+        <Text style={styles.tileHint} numberOfLines={1} {...textScale.dense}>
+          {hint}
+        </Text>
+      ) : null}
+    </Touchable>
   );
 }
 
@@ -233,9 +251,11 @@ function MiniRow({
 }) {
   return (
     <Touchable onPress={onPress} style={styles.mini} accessibilityRole="button" accessibilityLabel={`${when}: ${title}`}>
-      <Text style={[styles.when, alert ? styles.alert : null, whenColor ? { color: whenColor } : null]} numberOfLines={2} {...textScale.badge}>
-        {when}
-      </Text>
+      <View style={[styles.whenBox, alert ? styles.whenAlert : null, whenColor ? { backgroundColor: withAlpha(whenColor, 0.14), borderColor: withAlpha(whenColor, 0.4) } : null]}>
+        <Text style={[styles.when, alert ? styles.alert : null, whenColor ? { color: whenColor } : null]} numberOfLines={2} {...textScale.badge}>
+          {when}
+        </Text>
+      </View>
       <View style={styles.flex}>
         <Text style={styles.miniTitle} numberOfLines={2} {...textScale.dense}>{title}</Text>
         {sub ? <Text style={styles.small} numberOfLines={1} {...textScale.dense}>{sub}</Text> : null}
@@ -249,24 +269,34 @@ function MiniRow({
 const styles = StyleSheet.create({
   wrap: { gap: space.md },
   flex: { flex: 1 },
-  stack: { flexDirection: "row", height: 12, borderRadius: radius.pill, overflow: "hidden", backgroundColor: colors.surface3 },
-  legend: { flexDirection: "row", flexWrap: "wrap", gap: space.sm, marginTop: space.sm },
-  legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  tiles: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  tile: { flexBasis: "47%", flexGrow: 1, gap: space.xxs, padding: space.md, borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.border, backgroundColor: colors.surface1 },
+  tileValue: { ...type.metric, color: colors.textPrimary, marginTop: space.xs },
+  tileLabel: { ...type.nano, color: colors.textTertiary },
+  tileHint: { ...type.caption, color: colors.textSecondary },
+  stack: { flexDirection: "row", height: 14, gap: 3 },
+  stackPart: { borderRadius: radius.pill },
+  legend: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: space.md },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: space.sm, paddingVertical: space.xxs + 1, borderRadius: radius.pill, backgroundColor: colors.surface2 },
+  legendOff: { opacity: 0.5 },
   small: { ...type.bodySm, color: colors.textSecondary },
   tiny: { ...type.meta, color: colors.textTertiary },
-  strong: { ...type.labelSm, color: colors.textPrimary },
+  strong: { ...type.numSmStrong, color: colors.textPrimary },
   alert: { color: colors.danger, ...type.labelXs },
-  mini: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.s },
-  when: { ...type.labelXs, color: colors.textSecondary, width: 72 },
-  miniTitle: { ...type.label, color: colors.textPrimary },
-  funnel: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.xs },
-  funnelLabel: { flexDirection: "row", alignItems: "center", gap: space.xs, width: 130 },
-  funnelBar: { flex: 1, height: 8, borderRadius: radius.pill, backgroundColor: colors.surface3, overflow: "hidden" },
-  funnelFill: { height: "100%", borderRadius: radius.pill },
+  mini: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.sm, borderBottomWidth: hairline, borderBottomColor: colors.separator },
+  whenBox: { width: 76, paddingVertical: space.xs, paddingHorizontal: space.xs, borderRadius: radius.md, backgroundColor: colors.surface2, borderWidth: hairline, borderColor: colors.border, alignItems: "center" },
+  whenAlert: { backgroundColor: colors.dangerDim, borderColor: colors.danger },
+  when: { ...type.labelXs, color: colors.textSecondary, textAlign: "center" },
+  miniTitle: { ...type.h4, color: colors.textPrimary },
+  funnel: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.xs + 1 },
+  funnelLabel: { flexDirection: "row", alignItems: "center", gap: space.xs, width: 110 },
   phaseRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.s },
   phaseHead: { flexDirection: "row", alignItems: "center", gap: space.sm, marginBottom: space.xs },
-  phaseName: { ...type.label, color: colors.textPrimary, flex: 1 },
-  feed: { flexDirection: "row", gap: space.sm, paddingVertical: space.s },
-  feedIcon: { width: 28, height: 28, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
-  feedTitle: { ...type.label, color: colors.textPrimary },
+  phaseName: { ...type.h4, color: colors.textPrimary, flex: 1 },
+  feed: { flexDirection: "row", gap: space.md },
+  feedRail: { alignItems: "center", width: 30 },
+  feedIcon: { width: 30, height: 30, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: hairline },
+  feedLine: { flex: 1, width: 2, minHeight: space.md, backgroundColor: colors.separator, marginVertical: space.xxs },
+  feedBody: { flex: 1, paddingBottom: space.md, gap: 2 },
+  feedTitle: { ...type.h4, color: colors.textPrimary },
 });

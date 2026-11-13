@@ -35,7 +35,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -51,6 +51,7 @@ import {
   Button,
   EmptyState,
   ErrorState,
+  IconTile,
   Input,
   ScreenHeader,
   SectionHeader,
@@ -130,6 +131,12 @@ export default function DeleteAccountScreen() {
   const summaryFailed = Boolean(query.error) && !query.data;
   const summary: DeletionSummary | undefined = query.data ?? (summaryFailed ? FALLBACK_SUMMARY : undefined);
   const phrase = summary?.confirmationPhrase ?? FALLBACK_SUMMARY.confirmationPhrase;
+
+  /** Görsel hazırlık durumu — gönderim mantığını değiştirmez. */
+  const ready = {
+    password: password.length > 0,
+    phrase: confirmation.trim() === phrase,
+  };
 
   const goToSignIn = useCallback(() => router.push("/giris"), [router]);
 
@@ -253,9 +260,7 @@ export default function DeleteAccountScreen() {
         >
           {/* UYARI BAŞLIĞI — ekranın ilk cümlesi geri dönüşün olmadığını söyler. */}
           <View style={styles.warning}>
-            <View style={styles.warningIcon}>
-              <Ionicons name="trash-outline" size={22} color={DANGER.fg} />
-            </View>
+            <IconTile icon="trash" tone="red" size={44} />
             <View style={styles.warningCopy}>
               <Text style={styles.warningTitle} accessibilityRole="header" {...textScale.dense}>
                 Bu işlem geri alınamaz
@@ -267,17 +272,46 @@ export default function DeleteAccountScreen() {
             </View>
           </View>
 
+          {/* ÜÇ ADIM — oku, doğrula, sil. Doldukça adım yanar. */}
+          <View style={styles.steps} accessibilityLabel={`Adım: ${ready.password && ready.phrase ? 3 : ready.password ? 2 : 1} / 3`}>
+            {[
+              { key: "oku", label: "Sonuçları oku", done: true },
+              { key: "dogrula", label: "Doğrula", done: ready.password && ready.phrase },
+              { key: "sil", label: "Sil", done: false },
+            ].map((step, index) => (
+              <React.Fragment key={step.key}>
+                {index > 0 ? <View style={[styles.stepLine, step.done || ready.password ? styles.stepLineOn : null]} /> : null}
+                <View style={styles.stepItem}>
+                  <View style={[styles.stepDot, step.done ? styles.stepDotDone : null]}>
+                    {step.done ? (
+                      <Ionicons name="checkmark" size={11} color={colors.textOnStatus} />
+                    ) : (
+                      <Text style={styles.stepNum} {...textScale.badge}>
+                        {index + 1}
+                      </Text>
+                    )}
+                  </View>
+                  <Text style={styles.stepLabel} numberOfLines={1} {...textScale.badge}>
+                    {step.label}
+                  </Text>
+                </View>
+              </React.Fragment>
+            ))}
+          </View>
+
           {summaryFailed ? (
             <ErrorState error={query.error} onRetry={query.refetch} variant="banner" />
           ) : null}
 
           {/* NE OLACAK — sunucudan gelen sonuçlar tek kartta, satır satır. */}
-          <SectionHeader title="Ne olacak?" style={styles.flushHeader} />
+          <SectionHeader title="Ne olacak?" icon="alert-circle" iconTone="red" inset="flush" style={styles.flushHeader} />
           <View style={styles.card}>
             {summary.consequences.map((item, index) => (
               <View key={item.key} style={[styles.consequence, index > 0 ? styles.consequenceBorder : null]}>
                 <View style={styles.bullet}>
-                  <Ionicons name="remove-circle-outline" size={16} color={DANGER.fg} />
+                  <Text style={styles.bulletNum} {...textScale.badge}>
+                    {index + 1}
+                  </Text>
                 </View>
                 <View style={styles.consequenceCopy}>
                   <Text style={styles.consequenceTitle} {...textScale.long}>
@@ -291,8 +325,8 @@ export default function DeleteAccountScreen() {
             ))}
             {summary.team ? (
               <View style={[styles.consequence, styles.consequenceBorder]}>
-                <View style={styles.bullet}>
-                  <Ionicons name="information-circle-outline" size={16} color={colors.textTertiary} />
+                <View style={[styles.bullet, styles.bulletInfo]}>
+                  <Ionicons name="information" size={12} color={colors.textSecondary} />
                 </View>
                 <Text style={[styles.consequenceBody, styles.consequenceCopy]} {...textScale.long}>
                   Takımını bırakmak istemiyorsan hesabını silmeden önce elitlig.com üzerinden
@@ -303,7 +337,7 @@ export default function DeleteAccountScreen() {
           </View>
 
           {/* ONAY — şifre + elle yazılan cümle (+ isteğe bağlı neden). */}
-          <SectionHeader title="Onayla" style={styles.flushHeader} />
+          <SectionHeader title="Onayla" icon="key" iconTone="gold" inset="flush" style={styles.flushHeader} />
           <View style={[styles.card, styles.form]}>
             <Input
               label="Şifren"
@@ -340,6 +374,12 @@ export default function DeleteAccountScreen() {
               placeholder="Ligi geliştirmemize yardımcı olur"
               editable={!busy}
             />
+
+            {/* HAZIRLIK — iki şart karşılandıkça yeşile döner. */}
+            <View style={styles.checks}>
+              <CheckLine done={ready.password} label="Şifre girildi" />
+              <CheckLine done={ready.phrase} label={`"${phrase}" birebir yazıldı`} />
+            </View>
           </View>
 
           {error ? <AuthNotice message={error} /> : null}
@@ -357,6 +397,18 @@ export default function DeleteAccountScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+/** Hazırlık satırı: tamamlandıysa yeşil onay, değilse boş halka. */
+function CheckLine({ done, label }: { done: boolean; label: string }) {
+  return (
+    <View style={styles.checkLine}>
+      <Ionicons name={done ? "checkmark-circle" : "ellipse-outline"} size={16} color={done ? colors.win : colors.textDisabled} />
+      <Text style={[styles.checkText, done ? styles.checkTextDone : null]} numberOfLines={1} {...textScale.dense}>
+        {label}
+      </Text>
+    </View>
   );
 }
 
@@ -378,25 +430,47 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: space.md,
     padding: space.lg,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     backgroundColor: DANGER.dim,
     borderWidth: hairline,
     borderColor: DANGER.fg,
   },
-  warningIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
+  steps: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: space.xs,
+  },
+  stepItem: { alignItems: "center", gap: space.xs, width: 84 },
+  stepDot: {
+    width: 22,
+    height: 22,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surface1,
+    backgroundColor: colors.surface3,
+    borderWidth: hairline,
+    borderColor: colors.border,
   },
+  stepDotDone: { backgroundColor: colors.win, borderColor: colors.win },
+  stepNum: { ...type.numSmStrong, color: colors.textSecondary },
+  stepLabel: { ...type.micro, color: colors.textTertiary },
+  stepLine: { flex: 1, height: 2, borderRadius: 1, backgroundColor: colors.surface3, marginBottom: space.lg },
+  stepLineOn: { backgroundColor: colors.win },
+  checks: {
+    gap: space.s,
+    paddingTop: space.sm,
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+  },
+  checkLine: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  checkText: { ...type.bodySm, color: colors.textTertiary, flex: 1 },
+  checkTextDone: { color: colors.textPrimary },
   warningCopy: { flex: 1, gap: space.xxs },
   warningTitle: { ...type.h2, color: DANGER.fg },
   warningBody: { ...type.bodySm, color: colors.textPrimary, lineHeight: 19 },
 
   card: {
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
     borderColor: colors.border,
@@ -412,7 +486,16 @@ const styles = StyleSheet.create({
     borderTopWidth: hairline,
     borderTopColor: colors.separator,
   },
-  bullet: { paddingTop: 2 },
+  bullet: {
+    width: 22,
+    height: 22,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: DANGER.dim,
+  },
+  bulletInfo: { backgroundColor: colors.surface3 },
+  bulletNum: { ...type.numSmStrong, color: DANGER.fg },
   consequenceCopy: { flex: 1, gap: space.xxs },
   consequenceTitle: { ...type.h4, color: colors.textPrimary },
   consequenceBody: { ...type.bodySm, color: colors.textSecondary, lineHeight: 18 },

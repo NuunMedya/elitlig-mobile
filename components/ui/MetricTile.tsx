@@ -24,6 +24,8 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { colors, elevate, radius, space, textScale, type, upperTR } from "@/theme";
+import { GradientFill } from "./GradientFill";
+import { IconTile, Odometer, type IconTileTone } from "./NightKit";
 import { Touchable } from "./Pressable";
 
 /** Sayının rengi. Zemin hiçbir tonda değişmez (bkz. dosya başlığı). */
@@ -38,6 +40,20 @@ const TONE_COLORS: Record<MetricTone, string> = {
   danger: colors.danger,
   live: colors.live,
 };
+
+/** Tonun ikon kutusu karşılığı — ikon renkli degrade kutuda durur. */
+const TONE_TILES: Record<MetricTone, IconTileTone> = {
+  neutral: "violet",
+  accent: "cyan",
+  brand: "signature",
+  win: "mint",
+  warn: "gold",
+  danger: "red",
+  live: "pink",
+};
+
+/** Dönen sayaç yalnız kısa, rakam ağırlıklı değerlerde: "36", "+146", "5.093", "%62". */
+const ODOMETER_RE = /^[+\-−%]?[\d.,]{1,6}[%']?$/;
 
 export interface MetricTileProps {
   /** Üstteki küçük büyük-harf etiket. */
@@ -70,22 +86,27 @@ export const MetricTile = React.memo(function MetricTile({
 }: MetricTileProps) {
   const body = (
     <>
+      <GradientFill radius="xl" />
       <View style={styles.labelRow}>
-        {icon ? <Ionicons name={icon} size={13} color={colors.textTertiary} /> : null}
+        {icon ? <IconTile icon={icon} tone={TONE_TILES[tone]} size={26} glow={false} /> : null}
         <Text style={styles.label} numberOfLines={1} {...textScale.badge}>
           {upperTR(label)}
         </Text>
       </View>
 
-      <Text
-        style={[styles.value, { color: TONE_COLORS[tone] }]}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.7}
-        {...textScale.dense}
-      >
-        {value}
-      </Text>
+      {ODOMETER_RE.test(String(value).trim()) ? (
+        <Odometer value={String(value).trim()} style={[styles.value, { color: TONE_COLORS[tone] }]} />
+      ) : (
+        <Text
+          style={[styles.value, { color: TONE_COLORS[tone] }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.7}
+          {...textScale.dense}
+        >
+          {value}
+        </Text>
+      )}
 
       {hint ? (
         <Text style={styles.hint} numberOfLines={1} {...textScale.dense}>
@@ -180,11 +201,13 @@ const styles = StyleSheet.create({
        rakam + etiket artık sığmıyordu. */
     minHeight: 84,
     justifyContent: "center",
-    gap: 2,
+    gap: space.xs,
     paddingHorizontal: space.md + space.xxs,
     paddingVertical: space.md,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     ...elevate(1),
+    borderColor: colors.glassLine,
+    overflow: "hidden",
   },
   flex: {
     flex: 1,
@@ -192,7 +215,7 @@ const styles = StyleSheet.create({
   labelRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: space.sm,
   },
   label: {
     ...type.overline,

@@ -2,7 +2,8 @@
  * TeamPickerGrid — bir ligin takımlarından takip seçme ızgarası.
  *
  * NE: verilen (ya da seçili) kapsamın puan tablosundaki takımları üç sütunlu
- * karolar olarak dizer: amblem + ad, seçiliyse menekşe çerçeve ve onay pulu.
+ * karolar olarak dizer: puan sırası, amblem + ad ve durum hapı; seçiliyse mor
+ * zemin, parıltı ve "Takipte" hapı.
  * Dokunuş `onPress(team)` çağırır; ne olacağına ekran karar verir:
  *   · Takip sekmesi (boş durum)  → `useFollowFlow().follow` (takip + bildirim türleri)
  *   · İlk açılış takım adımı     → yerel çoklu seçim, sonda `useFavorite().follow`
@@ -19,13 +20,13 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import React, { useCallback, useMemo, useState } from "react";
 import { StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
-import { EmptyState, ErrorState, Skeleton, TeamLogo, Touchable } from "@/components/ui";
+import { EmptyState, ErrorState, RankBadge, Reveal, Skeleton, TeamLogo, Touchable } from "@/components/ui";
 import { getStandings } from "@/lib/api/standings";
 import { queryKeys } from "@/lib/queryKeys";
 import type { StandingRow } from "@/lib/types";
 import type { FavoriteTeam } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, elevate, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { colors, elevate, fonts, glowStyle, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 const GAP = space.sm;
 const DEFAULT_COLUMNS = 3;
@@ -113,14 +114,16 @@ export const TeamPickerGrid = React.memo(function TeamPickerGrid({
     );
   } else {
     body = tileWidth
-      ? teams.map((team) => (
-          <PickerTile
-            key={team.id}
-            team={team}
-            width={tileWidth}
-            selected={isSelected(team.id)}
-            onPress={onPress}
-          />
+      ? teams.map((team, index) => (
+          <Reveal key={team.id} index={index} limit={9} distance={8} scaleFrom={0.95}>
+            <PickerTile
+              team={team}
+              rank={index + 1}
+              width={tileWidth}
+              selected={isSelected(team.id)}
+              onPress={onPress}
+            />
+          </Reveal>
         ))
       : null;
   }
@@ -132,13 +135,19 @@ export const TeamPickerGrid = React.memo(function TeamPickerGrid({
   );
 });
 
+/**
+ * Takım karosu — puan sırası (ilk üç madalya), amblem, ad ve altta durum hapı
+ * ("+ Takip et" / "✓ Takipte"). Seçili karo mor zemin + parıltı taşır.
+ */
 const PickerTile = React.memo(function PickerTile({
   team,
+  rank,
   width,
   selected,
   onPress,
 }: {
   team: FavoriteTeam;
+  rank: number;
   width: number;
   selected: boolean;
   onPress: (team: FavoriteTeam) => void;
@@ -155,15 +164,19 @@ const PickerTile = React.memo(function PickerTile({
       testID={`team-pick-${team.id}`}
       style={[styles.tile, { width }, selected ? styles.tileSelected : null]}
     >
-      <TeamLogo name={team.name} logo={team.logo ?? null} size={layout.crestXl - 8} />
+      <View style={styles.rank}>
+        <RankBadge rank={rank} size={18} />
+      </View>
+      <TeamLogo name={team.name} logo={team.logo ?? null} size={layout.crestXl - 10} />
       <Text style={styles.name} numberOfLines={2} {...textScale.dense}>
         {team.name}
       </Text>
-      {selected ? (
-        <View style={styles.check}>
-          <Ionicons name="checkmark" size={12} color={colors.textOnBrand} />
-        </View>
-      ) : null}
+      <View style={[styles.pill, selected ? styles.pillOn : null]}>
+        <Ionicons name={selected ? "checkmark" : "add"} size={11} color={selected ? colors.textOnBrand : colors.brandAccent} />
+        <Text style={[styles.pillText, selected ? styles.pillTextOn : null]} {...textScale.badge}>
+          {selected ? "Takipte" : "Takip et"}
+        </Text>
+      </View>
     </Touchable>
   );
 });
@@ -196,22 +209,35 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brandDim,
     borderColor: colors.brand,
     borderWidth: 1.5,
+    ...glowStyle(colors.glow, 1),
   },
   name: {
     ...type.caption,
+    fontFamily: fonts.semibold,
     color: colors.textPrimary,
     textAlign: "center",
     minHeight: 30,
   },
-  check: {
+  rank: {
     position: "absolute",
     top: space.s,
-    right: space.s,
-    width: 18,
-    height: 18,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.brand,
+    left: space.s,
   },
+  pill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    paddingHorizontal: space.sm,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+  },
+  pillOn: {
+    backgroundColor: colors.brand,
+    borderColor: colors.brand,
+  },
+  pillText: { ...type.micro, color: colors.brandAccent },
+  pillTextOn: { color: colors.textOnBrand },
 });

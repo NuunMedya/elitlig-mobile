@@ -10,11 +10,12 @@
  * Başka ile / tüm illere ait sponsor il yetkilisine salt okunur açılır.
  */
 
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { FormFields, ToggleField, validateFields, type FieldDef, type FormValues } from "@/components/admin";
-import { BottomSheet, Button, Chip, ChipGroup } from "@/components/ui";
+import { BottomSheet, Button, Chip, ChipGroup, GradientBar, IconTile } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { toNumber } from "@/lib/admin/format";
 import {
@@ -24,7 +25,7 @@ import {
   type SponsorCatalog,
   type SponsorPayload,
 } from "@/lib/api/admin/broadcast";
-import { colors, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 import { ImageUploadField } from "./ImageUploadField";
 
@@ -192,14 +193,10 @@ export function SponsorEditor({
             Bu sponsor tüm illere ya da başka bir ile ait. Görüntüleyebilirsin ama değişiklik yalnız Türkiye geneli yetkili hesaplardan yapılabilir.
           </Text>
         ) : null}
-        <Text style={styles.section} {...textScale.dense}>
-          1 · Temel bilgiler
-        </Text>
+        <StepHead n={1} title="Temel bilgiler" />
         <FormFields fields={basic} values={values} onChange={setValues} errors={errors} />
 
-        <Text style={styles.section} {...textScale.dense}>
-          2 · Görseller
-        </Text>
+        <StepHead n={2} title="Görseller" />
         {(catalog?.imageSlots ?? []).map((slot) => (
           <ImageUploadField
             key={slot.key}
@@ -220,18 +217,25 @@ export function SponsorEditor({
           />
         ))}
 
-        <Text style={styles.section} {...textScale.dense}>
-          3 · Nerelerde görünecek
-        </Text>
+        <StepHead n={3} title="Nerelerde görünecek" />
         {PLACEMENT_GROUPS.map((g) => {
           const items = (catalog?.placements ?? []).filter((p) => p.group === g.key);
           const selected = items.filter((p) => placements.includes(p.key)).length;
           return (
             <View key={g.key} style={styles.group}>
               <View style={styles.groupHead}>
-                <Text style={styles.groupTitle} {...textScale.dense}>
-                  {g.label} · {selected}/{items.length}
-                </Text>
+                <IconTile icon={GROUP_ICONS[g.key] ?? "apps"} tone={selected ? "violet" : "neutral"} size={30} glow={false} />
+                <View style={styles.flex}>
+                  <Text style={styles.groupTitle} {...textScale.dense}>
+                    {g.label}
+                  </Text>
+                  <View style={styles.groupMeter}>
+                    <GradientBar value={items.length ? selected / items.length : 0} height={4} style={styles.flex} />
+                    <Text style={styles.groupCount} {...textScale.badge}>
+                      {selected}/{items.length}
+                    </Text>
+                  </View>
+                </View>
                 <ChipGroup contentPadding={0}>
                   <Chip size="sm" label="Tümü" onPress={() => toggleGroup(g.key, true)} disabled={!editable} />
                   <Chip size="sm" label="Hiçbiri" onPress={() => toggleGroup(g.key, false)} disabled={!editable} />
@@ -249,9 +253,7 @@ export function SponsorEditor({
           </Text>
         ) : null}
 
-        <Text style={styles.section} {...textScale.dense}>
-          4 · Sözleşme ve iletişim
-        </Text>
+        <StepHead n={4} title="Sözleşme ve iletişim" />
         <FormFields fields={contract} values={values} onChange={setValues} errors={errors} />
 
         {failure ? (
@@ -264,13 +266,39 @@ export function SponsorEditor({
   );
 }
 
+const GROUP_ICONS: Record<string, React.ComponentProps<typeof IconTile>["icon"]> = { broadcast: "tv", led: "tablet-landscape", web: "globe", app: "phone-portrait" };
+
+/** Adım başlığı: degrade numara pulu + başlık. */
+function StepHead({ n, title }: { n: number; title: string }) {
+  return (
+    <View style={styles.step} accessibilityRole="header">
+      <LinearGradient colors={colors.gradientBrand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.stepNo}>
+        <Text style={styles.stepNoText} {...textScale.badge}>
+          {n}
+        </Text>
+      </LinearGradient>
+      <Text style={styles.stepTitle} {...textScale.dense}>
+        {title}
+      </Text>
+      <View style={styles.stepRule} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   wrap: { gap: space.md },
+  step: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.sm },
+  stepNo: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  stepNoText: { ...type.numSmStrong, color: colors.onDark },
+  stepTitle: { ...type.h4, color: colors.textPrimary },
+  stepRule: { flex: 1, height: hairline, backgroundColor: colors.separator },
+  groupMeter: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  groupCount: { ...type.numSmStrong, color: colors.textSecondary },
   flex: { flex: 1 },
   footer: { flexDirection: "row", gap: space.sm },
   section: { ...type.overline, color: colors.textTertiary, marginTop: space.sm },
-  group: { gap: space.xs },
-  groupHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm },
+  group: { gap: space.xs, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
+  groupHead: { flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" },
   groupTitle: { ...type.label, color: colors.textPrimary },
   warn: { ...type.bodySm, color: colors.warn },
   error: { ...type.bodySm, color: colors.danger },

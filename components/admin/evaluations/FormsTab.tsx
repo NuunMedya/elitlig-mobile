@@ -13,8 +13,8 @@ import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { RecordCard } from "@/components/admin";
-import { Chip, ChipGroup, EmptyState, ErrorState, Input, SegmentedControl, SkeletonListRow } from "@/components/ui";
+import { Badge, Chip, ChipGroup, EmptyState, ErrorState, GradientBar, Input, ProgressRing, Reveal, SegmentedControl, SkeletonListRow, Touchable } from "@/components/ui";
+import { CountTiles, ScorePlate } from "@/components/admin/system/SysKit";
 import {
   formatDay,
   formatPct,
@@ -22,11 +22,13 @@ import {
   listEvalMatches,
   listWeeks,
   presetRange,
+  scoreLevel,
   type FilterScope,
 } from "@/lib/api/admin/evaluations";
-import { colors, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
-import { ScoreBar } from "./widgets";
+import { AreaDots, levelGradient } from "./EvalParts";
+
 
 const PRESETS = [
   { key: "week", label: "Bu hafta" },
@@ -112,12 +114,13 @@ function MatchList({ scope, showCity }: { scope: FilterScope; showCity: boolean 
       </ChipGroup>
       <Input variant="search" leadingIcon="search" value={search} onChangeText={setSearch} placeholder="Takım, saha, lig ara" autoCorrect={false} />
       {summary && summary.matchCount > 0 ? (
-        <View style={styles.summary}>
-          <Text style={styles.muted} {...textScale.dense}>
-            {summary.done}/{summary.slots} alan · {summary.matchCount} maç · {summary.completeCount} maç tamam
-          </Text>
-          <ScoreBar value={summary.coveragePct} />
-        </View>
+        <CountTiles
+          items={[
+            { key: "cov", label: "Kapsama", value: formatPct(summary.coveragePct), icon: "pie-chart-outline", tone: "brand" },
+            { key: "done", label: "Tamam maç", value: summary.completeCount, icon: "checkmark-done", tone: "win" },
+            { key: "none", label: "Hiç yok", value: summary.untouchedCount, icon: "alert-circle-outline", tone: "danger" },
+          ]}
+        />
       ) : null}
       {query.isLoading ? (
         <SkeletonListRow count={5} />
@@ -126,28 +129,63 @@ function MatchList({ scope, showCity }: { scope: FilterScope; showCity: boolean 
       ) : !visible.length ? (
         <EmptyState icon="calendar-outline" title="Maç yok" body="Bu dönemde ya da aramayla eşleşen değerlendirilecek maç bulunamadı." variant="inline" />
       ) : (
-        visible.map((m) => {
+        visible.map((m, i) => {
           const complete = m.doneCount === m.areaCount;
+          const ratio = m.areaCount ? m.doneCount / m.areaCount : 0;
           return (
-            <RecordCard
-              key={m.id}
-              title={m.label}
-              subtitle={[formatDay(m.day, false), m.time, showCity ? m.city : null, scope.leagueId ? null : m.league, scope.seasonId ? null : m.season].filter(Boolean).join(" · ")}
-              icon={complete ? "checkmark-done-outline" : "clipboard-outline"}
-              iconTone={complete ? "win" : m.doneCount ? "warn" : "neutral"}
-              value={m.doneCount ? formatPct(m.averageScore) : null}
-              badges={[
-                { label: complete ? "Tamam" : `${m.doneCount}/${m.areaCount}`, tone: complete ? "win" : m.doneCount ? "warn" : "neutral" },
-                ...areas.map((a) => {
-                  const done = m.areas[a.key];
-                  return done ? { label: a.label, tone: done.failCount ? ("danger" as const) : ("info" as const) } : null;
-                }),
-              ]}
-              onPress={() => router.push({ pathname: "/yonetim/degerlendirmeler/mac/[id]", params: { id: String(m.id), ids: order } })}
-            />
+            <Reveal key={m.id} index={i}>
+              <Touchable
+                feedback="card"
+                style={[styles.card, complete ? styles.cardDone : null]}
+                onPress={() => router.push({ pathname: "/yonetim/degerlendirmeler/mac/[id]", params: { id: String(m.id), ids: order } })}
+                accessibilityRole="button"
+                accessibilityLabel={`${m.label}, ${m.doneCount}/${m.areaCount} alan değerlendirildi`}
+              >
+                <DayStamp day={m.day} time={m.time} />
+                <View style={styles.flex}>
+                  <Text style={styles.title} numberOfLines={2} {...textScale.dense}>
+                    {m.label}
+                  </Text>
+                  <Text style={styles.muted} numberOfLines={1} {...textScale.dense}>
+                    {[m.field, showCity ? m.city : null, scope.leagueId ? null : m.league, scope.seasonId ? null : m.season].filter(Boolean).join(" · ")}
+                  </Text>
+                  <AreaDots areas={areas} done={m.areas} />
+                </View>
+                <View style={styles.side}>
+                  <ProgressRing value={ratio} size={46} thickness={5} tone={complete ? "win" : m.doneCount ? "warn" : "neutral"} label={`${m.doneCount}/${m.areaCount}`} />
+                  {m.doneCount ? (
+                    <Text style={styles.avg} {...textScale.badge}>
+                      {formatPct(m.averageScore)}
+                    </Text>
+                  ) : null}
+                </View>
+              </Touchable>
+            </Reveal>
           );
         })
       )}
+    </View>
+  );
+}
+
+const MONTHS = ["OCA", "ŞUB", "MAR", "NİS", "MAY", "HAZ", "TEM", "AĞU", "EYL", "EKİ", "KAS", "ARA"];
+
+/** Takvim pulu: gün sayısı + ay (+ saat). */
+function DayStamp({ day, time, accent }: { day: string | null; time?: string | null; accent?: boolean }) {
+  const m = String(day ?? "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return (
+    <View style={[styles.stamp, accent ? styles.stampAccent : null]}>
+      <Text style={styles.stampDay} {...textScale.badge}>
+        {m ? Number(m[3]) : "–"}
+      </Text>
+      <Text style={styles.stampMonth} {...textScale.badge}>
+        {m ? MONTHS[Number(m[2]) - 1] : ""}
+      </Text>
+      {time ? (
+        <Text style={styles.stampTime} {...textScale.badge}>
+          {time}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -170,23 +208,44 @@ function WeekList({ scope, cityName, nationwide }: { scope: FilterScope; cityNam
       ) : query.error ? (
         <ErrorState error={query.error} onRetry={query.refetch} variant="inline" />
       ) : (
-        (query.data ?? []).map((w) => (
-          <RecordCard
-            key={w.weekStart}
-            title={w.label}
-            subtitle={w.evaluations.length ? `${w.evaluations.length} kişi değerlendirildi` : "Değerlendirme yok"}
-            icon="share-social-outline"
-            iconTone={w.evaluations.length ? "win" : "neutral"}
-            value={w.evaluations.length ? formatPct(w.averageScore) : "Bekliyor"}
-            badges={[w.current ? { label: "Bu hafta", tone: "accent" } : null, w.evaluations.length ? { label: formatTl(w.net, true), tone: w.net >= 0 ? "win" : "danger" } : null]}
-            onPress={() =>
-              router.push({
-                pathname: "/yonetim/degerlendirmeler/hafta/[week]",
-                params: { week: w.weekStart, cityId: scope.cityId ?? "", cityName: cityName ?? "", nationwide: nationwide ? "1" : "" },
-              })
-            }
-          />
-        ))
+        (query.data ?? []).map((w, i) => {
+          const done = w.evaluations.length > 0;
+          return (
+            <Reveal key={w.weekStart} index={i}>
+              <Touchable
+                feedback="card"
+                style={[styles.card, w.current ? styles.cardCurrent : null]}
+                accessibilityRole="button"
+                accessibilityLabel={`${w.label}, ${done ? `${w.evaluations.length} kişi değerlendirildi` : "bekliyor"}`}
+                onPress={() =>
+                  router.push({
+                    pathname: "/yonetim/degerlendirmeler/hafta/[week]",
+                    params: { week: w.weekStart, cityId: scope.cityId ?? "", cityName: cityName ?? "", nationwide: nationwide ? "1" : "" },
+                  })
+                }
+              >
+                <DayStamp day={w.weekStart} accent={w.current} />
+                <View style={styles.flex}>
+                  <View style={styles.row}>
+                    <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
+                      {w.label}
+                    </Text>
+                    {w.current ? <Badge label="Bu hafta" tone="accent" size="xs" /> : null}
+                  </View>
+                  <Text style={styles.muted} numberOfLines={1} {...textScale.dense}>
+                    {done ? `${w.evaluations.map((e) => e.staffName).filter(Boolean).join(", ")} · ${formatTl(w.net, true)}` : "Sosyal medya formu bekliyor"}
+                  </Text>
+                  {done ? <GradientBar value={Math.max(0, Math.min(1, (w.averageScore ?? 0) / 100))} height={5} gradient={levelGradient(w.averageScore)} /> : null}
+                </View>
+                {done ? (
+                  <ScorePlate value={formatPct(w.averageScore)} tone={scoreLevel(w.averageScore).tone} size="sm" />
+                ) : (
+                  <Badge label="Bekliyor" tone="warn" size="xs" />
+                )}
+              </Touchable>
+            </Reveal>
+          );
+        })
       )}
     </View>
   );
@@ -194,6 +253,27 @@ function WeekList({ scope, cityName, nationwide }: { scope: FilterScope; cityNam
 
 const styles = StyleSheet.create({
   wrap: { gap: space.md },
-  summary: { gap: space.xs },
+  flex: { flex: 1, minWidth: 0, gap: 4 },
+  row: { flexDirection: "row", alignItems: "center", gap: space.xs },
   muted: { ...type.caption, color: colors.textTertiary },
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  cardDone: { borderColor: colors.winDim },
+  cardCurrent: { backgroundColor: colors.brandDim, borderColor: colors.brand },
+  title: { ...type.h4, color: colors.textPrimary, flexShrink: 1 },
+  side: { alignItems: "center", gap: 2 },
+  avg: { ...type.numSmStrong, color: colors.textSecondary },
+  stamp: { width: 50, paddingVertical: space.xs, borderRadius: radius.lg, alignItems: "center", backgroundColor: colors.surface2, borderWidth: hairline, borderColor: colors.border },
+  stampAccent: { backgroundColor: colors.accentDim, borderColor: colors.accentText },
+  stampDay: { ...type.scoreSm, color: colors.textPrimary },
+  stampMonth: { ...type.micro, color: colors.brandAccent },
+  stampTime: { ...type.nano, color: colors.textTertiary, marginTop: 2 },
 });

@@ -17,7 +17,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { memo, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { Badge, Chip, ChipGroup, Input, Toggle, Touchable } from "@/components/ui";
+import { Badge, Chip, ChipGroup, GradientBar, IconTile, Input, ProgressRing, Toggle, Touchable, type IconTileTone } from "@/components/ui";
 import {
   isSensitivePermission,
   isViewPermission,
@@ -95,12 +95,22 @@ export function PermissionEditor({ groups, draft, onChange, readOnly, baseline, 
 
   return (
     <View style={styles.root}>
+      {/* Kapsama kartı: halka + sayı + modül modül ince şeritler. */}
       <View style={styles.meter} accessible accessibilityLabel={`${draft.length} / ${allKeys.length} yetki açık`}>
-        <Text style={styles.meterText} {...textScale.dense}>
-          <Text style={styles.meterValue}>{draft.length}</Text> / {allKeys.length} yetki açık
-        </Text>
-        <View style={styles.meterTrack}>
-          <View style={[styles.meterFill, { width: `${percent}%` }]} />
+        <ProgressRing value={percent / 100} size={58} thickness={6} tone="brand" label={`%${percent}`} />
+        <View style={styles.meterBody}>
+          <Text style={styles.meterText} {...textScale.dense}>
+            <Text style={styles.meterValue}>{draft.length}</Text> / {allKeys.length} yetki açık
+          </Text>
+          <View style={styles.meterStrips}>
+            {groups.map((g) => {
+              const n = g.permissions.filter((p) => draftSet.has(p.key)).length;
+              return <GradientBar key={g.key} value={g.permissions.length ? n / g.permissions.length : 0} height={4} style={styles.meterStrip} />;
+            })}
+          </View>
+          <Text style={styles.meterHint} {...textScale.dense}>
+            {groups.length} modül · {groups.filter((g) => g.permissions.every((p) => draftSet.has(p.key))).length} tam açık
+          </Text>
         </View>
       </View>
 
@@ -159,7 +169,7 @@ export function PermissionEditor({ groups, draft, onChange, readOnly, baseline, 
           const onCount = keys.filter((k) => draftSet.has(k)).length;
           const open = isOpen(group.key);
           return (
-            <View key={group.key} style={styles.group}>
+            <View key={group.key} style={[styles.group, open ? styles.groupOpen : null]}>
               <View style={styles.groupHead}>
                 <Touchable
                   onPress={() => setExpanded((prev) => ({ ...prev, [group.key]: !open }))}
@@ -168,22 +178,26 @@ export function PermissionEditor({ groups, draft, onChange, readOnly, baseline, 
                   accessibilityState={{ expanded: open }}
                   accessibilityLabel={`${group.label}, ${onCount} / ${keys.length} açık`}
                 >
-                  <Ionicons name={open ? "chevron-down" : "chevron-forward"} size={16} color={colors.textTertiary} />
+                  <IconTile icon={groupIcon(group.key)} tone={onCount ? groupTone(group.key) : "neutral"} size={34} glow={false} />
                   <View style={styles.groupText}>
-                    <Text style={styles.groupLabel} numberOfLines={2} {...textScale.dense}>
-                      {group.label}
-                    </Text>
+                    <View style={styles.groupTop}>
+                      <Text style={styles.groupLabel} numberOfLines={1} {...textScale.dense}>
+                        {group.label}
+                      </Text>
+                      <Ionicons name={open ? "chevron-up" : "chevron-down"} size={14} color={colors.textTertiary} />
+                    </View>
+                    <View style={styles.groupMeter}>
+                      <GradientBar value={keys.length ? onCount / keys.length : 0} height={4} style={styles.flex} />
+                      <Text style={[styles.groupCount, onCount === keys.length ? { color: colors.win } : null]} {...textScale.badge}>
+                        {onCount}/{keys.length}
+                      </Text>
+                    </View>
                     {group.description && open ? (
                       <Text style={styles.groupDesc} numberOfLines={3} {...textScale.dense}>
                         {group.description}
                       </Text>
                     ) : null}
                   </View>
-                  <Badge
-                    label={`${onCount}/${keys.length}`}
-                    tone={onCount === 0 ? "neutral" : onCount === keys.length ? "win" : "brand"}
-                    size="xs"
-                  />
                 </Touchable>
                 <Toggle
                   value={onCount === keys.length}
@@ -213,6 +227,45 @@ export function PermissionEditor({ groups, draft, onChange, readOnly, baseline, 
   );
 }
 
+/** İşlem türü → ikon (satırın önündeki küçük pul). */
+const VERB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  view: "eye-outline",
+  directory: "eye-outline",
+  create: "add",
+  update: "create-outline",
+  delete: "trash-outline",
+  purge: "flame-outline",
+  restore: "arrow-undo-outline",
+  manage: "settings-outline",
+  settings: "options-outline",
+  publish: "megaphone-outline",
+  review: "checkmark-done-outline",
+  assign: "person-add-outline",
+  archive: "archive-outline",
+  submit: "send-outline",
+  roles: "key-outline",
+};
+
+const GROUP_ICONS: Record<string, [keyof typeof Ionicons.glyphMap, IconTileTone]> = {
+  matches: ["football", "mint"],
+  teams: ["shield", "cyan"],
+  players: ["person", "cyan"],
+  staff: ["people", "violet"],
+  evaluations: ["clipboard", "gold"],
+  news: ["newspaper", "pink"],
+  permissions: ["key", "red"],
+  users: ["id-card", "red"],
+  trash: ["trash", "neutral"],
+  finance: ["cash", "mint"],
+  accounting: ["cash", "mint"],
+  messages: ["chatbubbles", "pink"],
+  leagues: ["trophy", "gold"],
+  broadcast: ["videocam", "red"],
+  analytics: ["stats-chart", "cyan"],
+};
+const groupIcon = (key: string) => GROUP_ICONS[key]?.[0] ?? "grid";
+const groupTone = (key: string): IconTileTone => GROUP_ICONS[key]?.[1] ?? "violet";
+
 const PermissionRow = memo(function PermissionRow({
   item,
   on,
@@ -230,8 +283,13 @@ const PermissionRow = memo(function PermissionRow({
 }) {
   const action = permissionAction(item.key);
   const sensitive = isSensitivePermission(item.key);
+  const verb = String(item.key).split(".").pop() ?? "";
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, on ? styles.rowOn : null]}>
+      {sensitive ? <View style={styles.sensitiveStripe} /> : null}
+      <View style={[styles.verb, { backgroundColor: on ? (sensitive ? colors.warnDim : colors.brandDim) : colors.surface2 }]}>
+        <Ionicons name={VERB_ICONS[verb] ?? "ellipse-outline"} size={13} color={on ? (sensitive ? colors.warn : colors.brandAccent) : colors.textTertiary} />
+      </View>
       <View style={styles.rowText}>
         <Text style={[styles.rowLabel, on ? null : styles.rowOff]} {...textScale.dense}>
           {item.label}
@@ -254,25 +312,32 @@ const PermissionRow = memo(function PermissionRow({
 
 const styles = StyleSheet.create({
   root: { gap: space.sm },
-  meter: { gap: space.xs },
+  flex: { flex: 1 },
+  meter: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
+  meterBody: { flex: 1, gap: space.xs },
   meterText: { ...type.bodySm, color: colors.textSecondary },
-  meterValue: { ...type.numSmStrong, color: colors.textPrimary },
-  meterTrack: { height: 6, borderRadius: radius.pill, backgroundColor: colors.surface3, overflow: "hidden" },
-  meterFill: { height: 6, borderRadius: radius.pill, backgroundColor: colors.brandAccent },
+  meterValue: { ...type.scoreSm, color: colors.textPrimary },
+  meterStrips: { flexDirection: "row", gap: 3 },
+  meterStrip: { flex: 1 },
+  meterHint: { ...type.caption, color: colors.textTertiary },
   expandAll: { alignSelf: "flex-start", paddingVertical: space.xs },
   link: { ...type.label, color: colors.brandAccent },
   empty: { ...type.bodySm, color: colors.textTertiary, paddingVertical: space.md },
   group: {
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
     borderColor: colors.border,
     overflow: "hidden",
   },
+  groupOpen: { borderColor: colors.borderStrong },
   groupHead: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingRight: space.md },
-  groupTitle: { flex: 1, flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md },
-  groupText: { flex: 1, gap: 2 },
-  groupLabel: { ...type.h4, color: colors.textPrimary },
+  groupTitle: { flex: 1, flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md },
+  groupText: { flex: 1, gap: 4 },
+  groupTop: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  groupLabel: { ...type.h4, color: colors.textPrimary, flexShrink: 1 },
+  groupMeter: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  groupCount: { ...type.numSmStrong, color: colors.textSecondary, minWidth: 32, textAlign: "right" },
   groupDesc: { ...type.caption, color: colors.textTertiary },
   row: {
     flexDirection: "row",
@@ -280,11 +345,15 @@ const styles = StyleSheet.create({
     gap: space.md,
     paddingHorizontal: space.md,
     paddingVertical: space.sm,
+    minHeight: 56,
     borderTopWidth: hairline,
     borderTopColor: colors.separator,
   },
+  rowOn: {},
+  sensitiveStripe: { position: "absolute", left: 0, top: space.sm, bottom: space.sm, width: 3, borderTopRightRadius: 3, borderBottomRightRadius: 3, backgroundColor: colors.warn },
+  verb: { width: 28, height: 28, borderRadius: 9, alignItems: "center", justifyContent: "center" },
   rowText: { flex: 1, gap: space.xxs },
-  rowLabel: { ...type.bodySm, color: colors.textPrimary },
+  rowLabel: { ...type.label, color: colors.textPrimary },
   rowOff: { color: colors.textSecondary },
   tags: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs },
   code: { ...type.micro, color: colors.textTertiary },

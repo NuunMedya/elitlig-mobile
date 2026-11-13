@@ -2,8 +2,8 @@
  * Bir alanın değerlendirme formu (hakem, spiker, ... ya da sosyal medya).
  *
  * Web: evaluations/EvaluationForm.js. Sorular kategoriye göre gruplanır.
- * Yapıldı / Yapılmadı soruları iki düğme, 1-10 puan soruları on düğmelik
- * sarmalayan sıra; "Uygulanamaz" izinli sorularda üçüncü düğme. Aksayan
+ * Yapıldı / Yapılmadı soruları iki düğme, 1-10 puan soruları tek raylı
+ * puan seçici (seçilene kadar degradeyle dolar, seçilen hücre yaylanır); "Uygulanamaz" izinli sorularda üçüncü düğme. Aksayan
  * maddede (yapılmadı ya da 1-4 puan) açıklama alanı kendiliğinden açılır.
  *
  * Üstteki canlı özet cevap verildikçe güncellenir: skor, bonus / kesinti,
@@ -12,11 +12,12 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import React, { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Animated, StyleSheet, Text, View } from "react-native";
 
-import { InfoLine, Panel, SelectField } from "@/components/admin";
-import { Badge, Button, EmptyState, Input, Touchable, toneColors } from "@/components/ui";
+import { Panel, SelectField } from "@/components/admin";
+import { Badge, Button, EmptyState, GradientBar, Input, Touchable, toneColors, useReduceMotion } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import {
   amountSummary,
@@ -38,9 +39,10 @@ import {
   type Evaluation,
   type SavePayload,
 } from "@/lib/api/admin/evaluations";
-import { colors, hairline, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, spring, textScale, type } from "@/theme";
 
-import { LevelBadge, MoneyText, ScoreBar } from "./widgets";
+import { levelGradient, ScoreDial } from "./EvalParts";
+import { LevelBadge, MoneyText } from "./widgets";
 
 const isFail = (q: EvalQuestion, v: AnswerValue | undefined) =>
   v !== undefined && v !== null && v !== NA && (q.answerType === "yes_no" ? v === false : Number(v) < 5);
@@ -153,19 +155,26 @@ export function EvaluationForm({
 
   return (
     <View style={styles.form}>
-      <Panel>
-        <View style={styles.summaryRow}>
+      {/* Canlı özet: skor halkası, cevap ilerlemesi, para kalemleri. */}
+      <View style={styles.live}>
+        <View style={styles.liveTop}>
+          <ScoreDial value={preview.scorePct} size={78} caption="canlı skor" />
           <View style={styles.flex}>
             <Text style={styles.overline} {...textScale.dense}>
-              Canlı özet · {preview.answered}/{preview.total} cevaplandı
+              CANLI ÖZET
             </Text>
-            <ScoreBar value={preview.scorePct} />
+            <Text style={styles.liveCount} {...textScale.dense}>
+              {preview.answered}/{preview.total} soru cevaplandı
+            </Text>
+            <GradientBar value={preview.total ? preview.answered / preview.total : 0} height={6} />
+            <View style={styles.liveBadges}>
+              <LevelBadge value={preview.scorePct} />
+              {preview.fails > 0 ? <Badge label={`${preview.fails} aksayan`} tone="danger" icon="warning-outline" size="xs" /> : null}
+            </View>
           </View>
-          <LevelBadge value={preview.scorePct} />
         </View>
-        {preview.fails > 0 ? <Badge label={`${preview.fails} aksayan madde`} tone="danger" icon="warning-outline" size="xs" /> : null}
         <PayoutLines baseFee={preview.baseFee} bonus={preview.bonus} deduction={preview.deduction} areaAmount={preview.areaAmount} net={preview.net} payout={preview.payout} />
-      </Panel>
+      </View>
 
       <SelectField<number>
         label={suggested ? "Değerlendirilen personel (görevli)" : "Değerlendirilen personel"}
@@ -196,22 +205,28 @@ export function EvaluationForm({
             return (
               <View key={q.id} style={[styles.question, value !== undefined ? styles.answered : null, fail ? styles.failed : null]}>
                 <View style={styles.qHead}>
-                  <Text style={styles.qNo} {...textScale.dense}>
-                    {index + 1}
-                  </Text>
+                  <View style={[styles.qNo, value !== undefined ? (fail ? styles.qNoFail : styles.qNoDone) : null]}>
+                    {value !== undefined ? (
+                      <Ionicons name={fail ? "alert" : "checkmark"} size={13} color={colors.onDark} />
+                    ) : (
+                      <Text style={styles.qNoText} {...textScale.badge}>
+                        {index + 1}
+                      </Text>
+                    )}
+                  </View>
                   <View style={styles.flex}>
                     <Text style={styles.qText} {...textScale.long}>
                       {q.text}
-                      {q.weight > 1 ? <Text style={styles.weight}>  ×{q.weight}</Text> : null}
                     </Text>
+                    {q.weight > 1 || money ? (
+                      <View style={styles.qTags}>
+                        {q.weight > 1 ? <Badge label={`Ağırlık ×${q.weight}`} tone="brand" size="xs" /> : null}
+                        {money ? <Badge label={money} tone="neutral" icon="cash-outline" size="xs" /> : null}
+                      </View>
+                    ) : null}
                     {q.help ? (
                       <Text style={styles.help} {...textScale.long}>
                         {q.help}
-                      </Text>
-                    ) : null}
-                    {money ? (
-                      <Text style={styles.money} {...textScale.dense}>
-                        {money}
                       </Text>
                     ) : null}
                   </View>
@@ -230,11 +245,7 @@ export function EvaluationForm({
                   </View>
                 ) : (
                   <>
-                    <View style={styles.scale}>
-                      {SCORE_VALUES.map((s) => (
-                        <ScaleButton key={s} score={s} on={value !== NA && Number(value) === s && value !== undefined} onPress={() => setValue(q.id, s)} disabled={readOnly} />
-                      ))}
-                    </View>
+                    <ScoreScale value={value === undefined || value === NA ? null : Number(value)} onChange={(v) => setValue(q.id, v)} disabled={readOnly} />
                     {q.allowNa ? (
                       <View style={styles.choices}>
                         <Choice label="Uygulanamaz" tone="neutral" on={value === NA} onPress={() => setValue(q.id, NA)} disabled={readOnly} />
@@ -277,14 +288,40 @@ export function EvaluationForm({
   );
 }
 
+/** Para kalemleri: küçük cam karolar (taban · bonus · kesinti · eşik) + vurgulu hakediş. */
 function PayoutLines({ baseFee, bonus, deduction, areaAmount, net, payout }: { baseFee: number; bonus: number; deduction: number; areaAmount: number; net: number; payout: number }) {
+  const cells = [
+    baseFee > 0 ? { label: "Taban", value: formatTl(baseFee), tone: colors.textPrimary } : null,
+    { label: "Bonus", value: formatTl(bonus, true), tone: bonus ? colors.win : colors.textSecondary },
+    { label: "Kesinti", value: formatTl(-deduction, true), tone: deduction ? colors.danger : colors.textSecondary },
+    areaAmount !== 0 ? { label: "Skor eşiği", value: formatTl(areaAmount, true), tone: areaAmount > 0 ? colors.win : colors.danger } : null,
+  ].filter(Boolean) as { label: string; value: string; tone: string }[];
   return (
-    <View>
-      {baseFee > 0 ? <InfoLine label="Taban ücret" value={formatTl(baseFee)} /> : null}
-      <InfoLine label="Bonus" value={<MoneyText value={bonus} />} />
-      <InfoLine label="Kesinti" value={<MoneyText value={-deduction} />} />
-      {areaAmount !== 0 ? <InfoLine label="Skor eşiği" value={<MoneyText value={areaAmount} />} /> : null}
-      <InfoLine label={baseFee > 0 ? "Hakediş" : "Net"} value={baseFee > 0 ? formatTl(payout) : <MoneyText value={net} />} />
+    <View style={styles.pay}>
+      <View style={styles.payCells}>
+        {cells.map((c) => (
+          <View key={c.label} style={styles.payCell}>
+            <Text style={styles.payLabel} {...textScale.badge}>
+              {c.label.toLocaleUpperCase("tr-TR")}
+            </Text>
+            <Text style={[styles.payValue, { color: c.tone }]} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
+              {c.value}
+            </Text>
+          </View>
+        ))}
+      </View>
+      <View style={styles.payTotal}>
+        <Text style={styles.payTotalLabel} {...textScale.dense}>
+          {baseFee > 0 ? "Hakediş" : "Net"}
+        </Text>
+        {baseFee > 0 ? (
+          <Text style={styles.payTotalValue} {...textScale.badge}>
+            {formatTl(payout)}
+          </Text>
+        ) : (
+          <MoneyText value={net} style={styles.payTotalValue} />
+        )}
+      </View>
     </View>
   );
 }
@@ -294,19 +331,22 @@ function EvaluationSummary({ evaluation, canSubmit, onEdit, onDelete }: { evalua
   const groups = groupByCategory(evaluation.answers);
   return (
     <View style={styles.form}>
-      <Panel>
-        <View style={styles.summaryRow}>
+      <View style={styles.live}>
+        <View style={styles.liveTop}>
+          <ScoreDial value={evaluation.scorePct} size={78} />
           <View style={styles.flex}>
             <Text style={styles.overline} {...textScale.dense}>
-              Değerlendirilen
+              KAYITLI DEĞERLENDİRME
             </Text>
-            <Text style={styles.who} {...textScale.dense}>
+            <Text style={styles.who} numberOfLines={1} {...textScale.dense}>
               {evaluation.staffName || `Personel #${evaluation.staffId}`}
             </Text>
+            <View style={styles.liveBadges}>
+              <LevelBadge value={evaluation.scorePct} />
+              {evaluation.failCount ? <Badge label={`${evaluation.failCount} aksayan`} tone="danger" size="xs" /> : <Badge label="Aksama yok" tone="win" size="xs" />}
+            </View>
           </View>
-          <LevelBadge value={evaluation.scorePct} />
         </View>
-        <ScoreBar value={evaluation.scorePct} />
         <PayoutLines
           baseFee={evaluation.baseFee}
           bonus={evaluation.bonus}
@@ -315,11 +355,12 @@ function EvaluationSummary({ evaluation, canSubmit, onEdit, onDelete }: { evalua
           net={evaluation.net}
           payout={evaluation.payout}
         />
-      </Panel>
+      </View>
       {groups.map((group) => (
         <Panel key={group.key} title={groups.length > 1 ? group.label : undefined}>
           {group.items.map((a) => (
             <View key={a.questionId} style={styles.answerRow}>
+              <AnswerIcon answer={a} />
               <View style={styles.flex}>
                 <Text style={styles.answerText} {...textScale.long}>
                   {a.text}
@@ -367,94 +408,170 @@ function AnswerBadge({ answer }: { answer: Evaluation["answers"][number] }) {
 
 function Choice({ label, icon, tone, on, onPress, disabled }: { label: string; icon?: keyof typeof Ionicons.glyphMap; tone: "win" | "danger" | "neutral"; on: boolean; onPress: () => void; disabled?: boolean }) {
   const c = toneColors(tone);
+  const pop = usePop(on);
   return (
     <Touchable
       onPress={onPress}
       disabled={disabled}
       haptic="selection"
-      style={[styles.choice, on ? { backgroundColor: c.solidBg, borderColor: c.solidBg } : null]}
+      style={styles.choiceWrap}
       accessibilityRole="radio"
       accessibilityState={{ checked: on }}
     >
-      {icon ? <Ionicons name={icon} size={16} color={on ? c.solidFg : c.fg} /> : null}
-      <Text style={[styles.choiceText, { color: on ? c.solidFg : colors.textPrimary }]} {...textScale.dense}>
-        {label}
-      </Text>
+      <Animated.View style={[styles.choice, on ? { backgroundColor: c.solidBg, borderColor: c.solidBg } : null, { transform: [{ scale: pop }] }]}>
+        {icon ? (
+          <View style={[styles.choiceIcon, { backgroundColor: on ? colors.inkPill : c.dim }]}>
+            <Ionicons name={icon} size={13} color={on ? c.solidFg : c.fg} />
+          </View>
+        ) : null}
+        <Text style={[styles.choiceText, { color: on ? c.solidFg : colors.textPrimary }]} numberOfLines={1} {...textScale.dense}>
+          {label}
+        </Text>
+      </Animated.View>
     </Touchable>
   );
 }
 
-function ScaleButton({ score, on, onPress, disabled }: { score: number; on: boolean; onPress: () => void; disabled?: boolean }) {
-  const c = toneColors(score < 5 ? "danger" : score >= 8 ? "win" : "brand");
+/**
+ * PUAN SEÇİCİ — 1-10 tek ray. Seçilen değere kadar olan hücreler seviye
+ * degradesiyle dolar; seçilen hücre yaylanarak (spring.pop) büyür.
+ */
+function ScoreScale({ value, onChange, disabled }: { value: number | null; onChange: (v: number) => void; disabled?: boolean }) {
+  const fill = value == null ? null : levelGradient(value * 10);
+  return (
+    <View style={styles.scale} accessibilityRole="radiogroup">
+      {SCORE_VALUES.map((score) => (
+        <ScaleCell key={score} score={score} filled={value != null && score <= value} on={value === score} gradient={fill} onPress={() => onChange(score)} disabled={disabled} />
+      ))}
+    </View>
+  );
+}
+
+function ScaleCell({ score, filled, on, gradient, onPress, disabled }: { score: number; filled: boolean; on: boolean; gradient: readonly [string, string] | null; onPress: () => void; disabled?: boolean }) {
+  const pop = usePop(on);
   return (
     <Touchable
       onPress={onPress}
       disabled={disabled}
       haptic="selection"
-      style={[styles.scaleBtn, on ? { backgroundColor: c.solidBg, borderColor: c.solidBg } : null]}
+      style={styles.scaleCell}
       accessibilityRole="radio"
       accessibilityLabel={`${score} puan`}
       accessibilityState={{ checked: on }}
     >
-      <Text style={[styles.scaleText, { color: on ? c.solidFg : colors.textPrimary }]} {...textScale.badge}>
-        {score}
-      </Text>
+      <Animated.View style={[styles.scaleBtn, filled ? styles.scaleFilled : null, on ? styles.scaleOn : null, { transform: [{ scale: pop }] }]}>
+        {filled && gradient ? <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { opacity: on ? 1 : 0.55 }]} /> : null}
+        <Text style={[styles.scaleText, filled ? { color: colors.onDark } : null]} {...textScale.badge}>
+          {score}
+        </Text>
+      </Animated.View>
     </Touchable>
+  );
+}
+
+/** Seçilince bir kez yaylanan ölçek (1 → 1.14 → 1). Hareket azaltılmışsa durağan. */
+function usePop(on: boolean): Animated.Value {
+  const reduce = useReduceMotion();
+  const v = useRef(new Animated.Value(1)).current;
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    if (!on || reduce) return;
+    v.setValue(1.14);
+    Animated.spring(v, { toValue: 1, ...spring.pop }).start();
+  }, [on, reduce, v]);
+  return v;
+}
+
+function AnswerIcon({ answer }: { answer: Evaluation["answers"][number] }) {
+  const pts = Number(answer.points ?? answer.value);
+  const tone = answer.na ? "neutral" : answer.type === "yes_no" ? (answer.value ? "win" : "danger") : pts < 5 ? "danger" : pts >= 8 ? "win" : "brand";
+  const c = toneColors(tone);
+  return (
+    <View style={[styles.answerIcon, { backgroundColor: c.dim }]}>
+      {answer.type === "score" && !answer.na ? (
+        <Text style={[styles.answerIconText, { color: c.fg }]} {...textScale.badge}>
+          {String(answer.value)}
+        </Text>
+      ) : (
+        <Ionicons name={answer.na ? "remove" : answer.value ? "checkmark" : "close"} size={13} color={c.fg} />
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   form: { gap: space.md },
-  flex: { flex: 1 },
-  summaryRow: { flexDirection: "row", alignItems: "center", gap: space.md },
-  overline: { ...type.overline, color: colors.textTertiary, marginBottom: space.xs },
+  flex: { flex: 1, minWidth: 0, gap: 4 },
+  live: { gap: space.md, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
+  liveTop: { flexDirection: "row", alignItems: "center", gap: space.md },
+  liveCount: { ...type.label, color: colors.textPrimary },
+  liveBadges: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: 2 },
+  overline: { ...type.overline, color: colors.textTertiary },
   who: { ...type.h3, color: colors.textPrimary },
+  pay: { gap: space.sm },
+  payCells: { flexDirection: "row", gap: space.xs },
+  payCell: { flex: 1, minWidth: 0, gap: 2, padding: space.sm, borderRadius: radius.md, backgroundColor: colors.surface2 },
+  payLabel: { ...type.nano, color: colors.textTertiary },
+  payValue: { ...type.numSmStrong },
+  payTotal: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.brandDim },
+  payTotalLabel: { ...type.label, color: colors.textPrimary },
+  payTotalValue: { ...type.scoreSm, color: colors.textPrimary },
   group: { gap: space.sm },
   question: {
-    gap: space.sm,
+    gap: space.md,
     padding: space.md,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
     borderColor: colors.border,
   },
   answered: { borderColor: colors.borderStrong },
-  failed: { borderColor: colors.danger },
+  failed: { borderColor: colors.danger, backgroundColor: colors.dangerDim },
   qHead: { flexDirection: "row", gap: space.sm, alignItems: "flex-start" },
-  qNo: { ...type.numSmStrong, color: colors.textTertiary, width: 18 },
-  qText: { ...type.body, color: colors.textPrimary },
-  weight: { ...type.caption, color: colors.brandAccent },
+  qNo: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface3 },
+  qNoDone: { backgroundColor: colors.win },
+  qNoFail: { backgroundColor: colors.danger },
+  qNoText: { ...type.numSmStrong, color: colors.textSecondary },
+  qText: { ...type.label, color: colors.textPrimary },
+  qTags: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: 2 },
   help: { ...type.caption, color: colors.textTertiary },
-  money: { ...type.caption, color: colors.textSecondary },
-  choices: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  choices: { flexDirection: "row", gap: space.sm },
+  choiceWrap: { flex: 1 },
   choice: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: space.xs,
-    paddingHorizontal: space.md,
-    minHeight: 40,
-    borderRadius: radius.md,
+    paddingHorizontal: space.sm,
+    minHeight: 44,
+    borderRadius: radius.lg,
     borderWidth: hairline,
     borderColor: colors.borderStrong,
     backgroundColor: colors.surface2,
   },
-  choiceText: { ...type.label },
-  scale: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
+  choiceIcon: { width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  choiceText: { ...type.labelSm, flexShrink: 1 },
+  scale: { flexDirection: "row", gap: 3, padding: 3, borderRadius: radius.lg, backgroundColor: colors.surface2 },
+  scaleCell: { flex: 1 },
   scaleBtn: {
-    width: 40,
-    height: 40,
+    height: 38,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: radius.sm,
-    borderWidth: hairline,
-    borderColor: colors.borderStrong,
-    backgroundColor: colors.surface2,
+    borderRadius: radius.md,
+    overflow: "hidden",
   },
-  scaleText: { ...type.tableNumStrong },
-  answerRow: { flexDirection: "row", gap: space.md, paddingVertical: space.xs, alignItems: "flex-start" },
+  scaleFilled: {},
+  scaleOn: { borderWidth: 2, borderColor: colors.onDark },
+  scaleText: { ...type.tableNumStrong, color: colors.textSecondary },
+  answerRow: { flexDirection: "row", gap: space.sm, paddingVertical: space.xs, alignItems: "flex-start" },
+  answerIcon: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  answerIconText: { ...type.numSmStrong },
   answerText: { ...type.bodySm, color: colors.textPrimary },
   answerSide: { alignItems: "flex-end", gap: 2 },
   error: { ...type.bodySm, color: colors.danger },
   actions: { flexDirection: "row", gap: space.sm, flexWrap: "wrap" },
 });
-

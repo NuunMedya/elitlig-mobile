@@ -16,10 +16,10 @@
  * canlı işareti DAİREDİR ve yanında dakika yazar.
  */
 
-import { memo } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { Ping } from "./Motion";
-import { colors, space, textScale, type } from "@/theme";
+import { memo, useEffect, useRef } from "react";
+import { Animated, Easing, StyleSheet, Text, View } from "react-native";
+import { colors, duration, space, textScale, type } from "@/theme";
+import { useReduceMotion } from "./useReduceMotion";
 
 export interface LiveBadgeProps {
   /** Dakika verilirse "67'" gösterir, yoksa "CANLI" */
@@ -75,7 +75,7 @@ export const LiveBadge = memo(function LiveBadge({
         {/* Tek atımlık halka: dakika ilerleyince bir kez yayılır (sonsuz nabız
             değil — bkz. dosya başı). Devre arasında oynamaz. */}
         {halftime ? null : (
-          <Ping trigger={label} color={onDark ? colors.liveOnDark : colors.live} size={DOT} />
+          <LivePulse color={onDark ? colors.liveOnDark : colors.live} />
         )}
         <View
           style={[
@@ -103,6 +103,38 @@ export const LiveBadge = memo(function LiveBadge({
 
 const DOT = 6;
 
+/**
+ * GECE TEMASI — PING: canlı noktasının etrafından sürekli yayılan halka
+ * (ui_motion_prompts "canlı" kartlarındaki nabız). Yerel sürücüde döner,
+ * "hareketi azalt" açıkken durur.
+ */
+function LivePulse({ color }: { color: string }) {
+  const reduceMotion = useReduceMotion();
+  const t = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (reduceMotion) return;
+    const loop = Animated.loop(
+      Animated.timing(t, { toValue: 1, duration: duration.pulse, easing: Easing.out(Easing.cubic), useNativeDriver: true, isInteraction: false }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [reduceMotion, t]);
+  if (reduceMotion) return null;
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.pulse,
+        {
+          backgroundColor: color,
+          opacity: t.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0] }),
+          transform: [{ scale: t.interpolate({ inputRange: [0, 1], outputRange: [1, 3] }) }],
+        },
+      ]}
+    />
+  );
+}
+
 const styles = StyleSheet.create({
   wrap: {
     flexDirection: "row",
@@ -119,6 +151,12 @@ const styles = StyleSheet.create({
     height: DOT,
     alignItems: "center",
     justifyContent: "center",
+  },
+  pulse: {
+    position: "absolute",
+    width: DOT,
+    height: DOT,
+    borderRadius: DOT / 2,
   },
   dot: {
     width: DOT,

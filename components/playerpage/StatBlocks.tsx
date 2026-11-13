@@ -13,6 +13,8 @@
 
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { GradientBar, Odometer } from "@/components/ui";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
 import { surfaces } from "./shared";
 
@@ -29,17 +31,27 @@ export interface StatTile {
 export const StatTiles = React.memo(function StatTiles({ tiles }: { tiles: StatTile[] }) {
   if (tiles.length === 0) return null;
   return (
-    <View style={[surfaces.card, tileStyles.row]}>
-      {tiles.map((tile, index) => (
+    <View style={tileStyles.row}>
+      {tiles.map((tile) => (
         <View
           key={tile.key}
-          style={[tileStyles.cell, index > 0 && tileStyles.divider]}
+          style={[surfaces.card, tileStyles.cell]}
           accessible
           accessibilityLabel={`${tile.label.toLocaleLowerCase("tr-TR")} ${tile.value}${tile.hint ? `, ${tile.hint}` : ""}`}
         >
-          <Text style={tileStyles.value} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} {...textScale.dense}>
-            {tile.value}
-          </Text>
+          <LinearGradient
+            colors={colors.gradientSignature}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={tileStyles.beam}
+          />
+          {/^[0-9]+\.?$/.test(tile.value) ? (
+            <Odometer value={tile.value} style={tileStyles.value} />
+          ) : (
+            <Text style={tileStyles.value} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} {...textScale.dense}>
+              {tile.value}
+            </Text>
+          )}
           <Text style={tileStyles.label} numberOfLines={1} {...textScale.badge}>
             {tile.label}
           </Text>
@@ -57,17 +69,25 @@ export const StatTiles = React.memo(function StatTiles({ tiles }: { tiles: StatT
 const tileStyles = StyleSheet.create({
   row: {
     flexDirection: "row",
-    paddingVertical: space.md,
+    gap: space.sm,
   },
   cell: {
     flex: 1,
     alignItems: "center",
     paddingHorizontal: space.xs,
+    paddingTop: space.md,
+    paddingBottom: space.m,
     gap: 2,
+    overflow: "hidden",
   },
-  divider: {
-    borderLeftWidth: hairline,
-    borderLeftColor: colors.separator,
+  beam: {
+    position: "absolute",
+    top: 0,
+    left: space.lg,
+    right: space.lg,
+    height: 2,
+    borderBottomLeftRadius: 2,
+    borderBottomRightRadius: 2,
   },
   value: {
     ...type.metric,
@@ -231,7 +251,8 @@ export interface BarListProps {
 }
 
 /**
- * Kırılım çubukları. Çubuk boyu EN BÜYÜK paya göre ölçeklenir (en büyük pay
+ * Kırılım çubukları (ikinci tur: imza degradeli, yaylanarak dolan
+ * `GradientBar`). Çubuk boyu EN BÜYÜK paya göre ölçeklenir (en büyük pay
  * rayı doldurur), yüzde ise TOPLAMA göre yazılır — biri karşılaştırmayı,
  * öbürü gerçek oranı söyler.
  */
@@ -274,10 +295,7 @@ export const BarList = React.memo(function BarList({ title, meta, items }: BarLi
                 {item.value}
               </Text>
             </View>
-            <View style={barStyles.track}>
-              <View style={[barStyles.fill, { flex: ratio }]} />
-              <View style={{ flex: 1 - ratio }} />
-            </View>
+            <GradientBar value={ratio} height={6} />
           </View>
         );
       })}

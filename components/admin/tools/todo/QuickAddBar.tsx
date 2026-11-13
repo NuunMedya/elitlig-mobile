@@ -7,6 +7,10 @@
  * gün, saat ve öncelik başlıktan ayıklanır; ne anlaşıldığı kutunun altında
  * gönderilmeden ÖNCE gösterilir. Yazıdan anlaşılan tarih çiplerdeki seçimin
  * önüne geçer (lib/admin/quickParse.ts).
+ *
+ * GÖRÜNÜM: cam çubuk — solda "+" pulu, ortada yazı, sağda marka degradeli
+ * yuvarlak gönder düğmesi (yazı varken parıldar). Anlaşılan tarih/öncelik
+ * camgöbeği kıvılcım satırında, gün/önem çipleri ince ayraçla altta.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -14,15 +18,15 @@ import React, { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 
 import { DateSheet } from "@/components/admin";
+import { LinearGradient } from "expo-linear-gradient";
+
 import { Chip, ChipGroup, Touchable } from "@/components/ui";
 import { parseQuickTask } from "@/lib/admin/quickParse";
-import { TOOL_APPS } from "@/lib/admin/toolApps";
 import type { TodoPriority } from "@/lib/api/todos";
-import { colors, hairline, radius, space, textScale, touchSlop, type } from "@/theme";
+import { colors, glowStyle, hairline, radius, space, textScale, touchSlop, type } from "@/theme";
 
 import { endOfDay, formatDue } from "./boardUtils";
 
-const APP = TOOL_APPS.gorevler;
 
 type When = "" | "today" | "tomorrow" | "pick";
 
@@ -91,7 +95,9 @@ export function QuickAddBar({
   return (
     <View style={styles.box}>
       <View style={styles.line}>
-        <Ionicons name="add" size={22} color={APP.accent} />
+        <View style={styles.plus}>
+          <Ionicons name="add" size={20} color={colors.brandAccent} />
+        </View>
         <TextInput
           value={title}
           onChangeText={setTitle}
@@ -109,17 +115,18 @@ export function QuickAddBar({
           haptic="success"
           onPress={submit}
           disabled={busy || !title.trim()}
-          style={[styles.send, { backgroundColor: APP.accent }, !title.trim() ? styles.sendOff : null]}
-          hitSlop={touchSlop(32)}
+          style={[styles.send, title.trim() ? glowStyle(colors.glow, 1) : styles.sendOff]}
+          hitSlop={touchSlop(36)}
           accessibilityLabel="Ekle"
         >
-          <Ionicons name="arrow-up" size={18} color={APP.onAccent} />
+          <LinearGradient colors={colors.gradientBrand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, styles.sendFill]} />
+          <Ionicons name="arrow-up" size={18} color={colors.textOnBrand} />
         </Touchable>
       </View>
       {understood ? (
         <View style={styles.understood} accessibilityLiveRegion="polite">
-          <Ionicons name="sparkles-outline" size={14} color={APP.accent} />
-          <Text style={[styles.understoodText, { color: APP.accent }]} numberOfLines={1} {...textScale.dense}>
+          <Ionicons name="sparkles" size={14} color={colors.accentText} />
+          <Text style={[styles.understoodText, { color: colors.accentText }]} numberOfLines={1} {...textScale.dense}>
             {understood}
           </Text>
           <Text style={styles.hint} numberOfLines={1} {...textScale.dense}>
@@ -127,7 +134,8 @@ export function QuickAddBar({
           </Text>
         </View>
       ) : null}
-      <ChipGroup contentPadding={0}>
+      <View style={styles.rule} />
+      <ChipGroup scrollable contentPadding={0}>
         <Chip label="Tarihsiz" size="sm" selected={when === ""} onPress={() => setWhen("")} />
         <Chip label="Bugün" icon="sunny-outline" size="sm" selected={when === "today"} onPress={() => setWhen("today")} />
         <Chip label="Yarın" size="sm" selected={when === "tomorrow"} onPress={() => setWhen("tomorrow")} />
@@ -163,13 +171,25 @@ const styles = StyleSheet.create({
     padding: space.md,
     borderRadius: radius.xl,
     borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface1,
+    borderColor: colors.glassLine,
+    backgroundColor: colors.glass,
   },
-  line: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  input: { flex: 1, ...type.body, color: colors.textPrimary, paddingVertical: space.xs },
-  send: { width: 32, height: 32, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
-  sendOff: { opacity: 0.4 },
+  line: { flexDirection: "row", alignItems: "center", gap: space.md },
+  plus: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderColor: colors.brandBorder,
+  },
+  input: { flex: 1, ...type.bodyLg, color: colors.textPrimary, paddingVertical: space.xs, ...({ outlineStyle: "none" } as object) },
+  send: { width: 38, height: 38, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  sendFill: { borderRadius: radius.pill },
+  sendOff: { opacity: 0.35 },
+  rule: { height: hairline, backgroundColor: colors.separator },
   hint: { ...type.caption, color: colors.textTertiary, flexShrink: 1 },
   understood: { flexDirection: "row", alignItems: "center", gap: space.xs },
   understoodText: { ...type.labelSm },

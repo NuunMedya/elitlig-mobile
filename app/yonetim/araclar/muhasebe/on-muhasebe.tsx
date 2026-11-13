@@ -11,6 +11,11 @@
  *            Düzenli ödemeler (fatura/kira/maaş: dönemi tek dokunuşla işle).
  * Göstergeye, kategoriye ya da cariye dokunmak Hareketler'i o süzgeçle açar.
  *
+ * TASARIM: gece sahnesinde dönemin net sonucu (dönen rakam), dokunulabilir
+ * gelir/gider hapları, alacak-borç-KDV cam sayaçları; iki renkli hızlı ekle
+ * karosu; degrade trend; hareketler GÜN GÜN gruplu tek kartlarda, kategori
+ * karosu + Archivo tutar (gelir yeşil, gider kırmızı).
+ *
  * DIŞA AKTARMA: süzülmüş kayıtlar Excel uyumlu CSV olarak paylaşılır. Web'deki
  * "Rapor (yazdır)" tarayıcı yazdırmasıdır; telefonda karşılığı CSV paylaşımı.
  *
@@ -21,9 +26,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
-import { ActionSheet, AdminScreen, DateField, Panel, RecordCard, SelectField, StatRow, confirmAction, useAdminMutation, type FormValues } from "@/components/admin";
+import { LineRow, Lines, StageChip, ToolStage, categoryVisual } from "@/components/admin/tools/ToolKit";
+import { ActionSheet, AdminScreen, DateField, Panel, SelectField, StatRow, confirmAction, useAdminMutation, type FormValues } from "@/components/admin";
 import { AccountingNav } from "@/components/admin/accounting/AccountingNav";
 import { ToolFab } from "@/components/admin/tools/ToolApp";
 import { LedgerEntrySheet, blankLedger, ledgerToForm } from "@/components/admin/accounting/LedgerEntrySheet";
@@ -31,7 +37,7 @@ import { AccountStrip, BarRow, Muted, Note, TrendBars } from "@/components/admin
 import { RecurringTab } from "@/components/admin/accounting/RecurringTab";
 import { TransferSheet } from "@/components/admin/accounting/financeSheets";
 import { shareCsv } from "@/components/admin/accounting/share";
-import { Button, Chip, ChipGroup, EmptyState, Input, MetricGrid, MetricTile, SegmentedControl, SkeletonCard, Tabs } from "@/components/ui";
+import { Button, Chip, ChipGroup, EmptyState, IconTile, Input, Reveal, SegmentedControl, SkeletonCard, Tabs, Touchable } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { formatDate } from "@/lib/admin/format";
 import {
@@ -62,7 +68,7 @@ import {
   type LedgerPeriod,
   type LedgerSummary,
 } from "@/lib/api/admin/accounting";
-import { space } from "@/theme";
+import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
 
 const PERIOD_KEY = "tools:ledger:period";
 type Tab = "entries" | "pending" | "recurring" | "categories" | "parties";
@@ -167,12 +173,37 @@ export default function LedgerScreen() {
       refreshing={query.isRefetching}
       actions={filtered.length ? [{ icon: "share-outline", accessibilityLabel: "Kayıtları CSV olarak paylaş", onPress: exportCsv }] : undefined}
     >
-      {allAccounts.data ? <AccountStrip accounts={(allAccounts.data.items || []).filter((a) => !a.archived)} scope="personal" onTransfer={() => setTransfer(true)} /> : null}
-
-      <View style={styles.row}>
-        <Button label="Gelir" icon="add" variant="secondary" onPress={() => open(blankLedger("income"))} style={styles.flex} />
-        <Button label="Gider" icon="remove" variant="secondary" onPress={() => open(blankLedger("expense"))} style={styles.flex} />
-      </View>
+      {query.isLoading ? (
+        <SkeletonCard />
+      ) : query.error ? (
+        <Note tone="danger" text={errorText(query.error)} action={{ label: "Tekrar dene", onPress: () => void query.refetch() }} />
+      ) : (
+        <Reveal index={0}>
+          <ToolStage
+            icon="receipt"
+            tone="mint"
+            overline={`${summary.net >= 0 ? "Net kâr" : "Net zarar"} · ${periodLabel ?? ""}`}
+            value={money(summary.net)}
+            valueTone={summary.net < 0 ? "danger" : undefined}
+            caption={range.from ? `${formatDate(range.from)} – ${formatDate(range.to)}${summary.income ? ` · kâr marjı %${Math.round((summary.net / summary.income) * 100)}` : ""}` : "Tüm kayıtlar"}
+            chips={
+              <>
+                <Touchable feedback="chip" onPress={() => go({ type: "income" })} accessibilityRole="button" accessibilityLabel={`Gelir ${money(summary.income)}, gelirleri göster`}>
+                  <StageChip icon="arrow-down" tone="win" label={`Gelir ${money(summary.income)}`} />
+                </Touchable>
+                <Touchable feedback="chip" onPress={() => go({ type: "expense" })} accessibilityRole="button" accessibilityLabel={`Gider ${money(summary.expense)}, giderleri göster`}>
+                  <StageChip icon="arrow-up" tone="danger" label={`Gider ${money(summary.expense)}`} />
+                </Touchable>
+              </>
+            }
+            stats={[
+              { label: "Alacak", value: compactMoney(summary.receivable), tone: summary.overdue ? "danger" : summary.receivable ? "warn" : undefined, onPress: () => setTab("pending") },
+              { label: "Borç", value: compactMoney(summary.payable), tone: summary.payable ? "danger" : undefined, onPress: () => setTab("pending") },
+              { label: "KDV dengesi", value: compactMoney(summary.vat_balance) },
+            ]}
+          />
+        </Reveal>
+      )}
 
       <ChipGroup scrollable contentPadding={0}>
         {LEDGER_PERIODS.map((p) => (
@@ -189,42 +220,29 @@ export default function LedgerScreen() {
           </View>
         </View>
       ) : null}
-      <Muted>{range.from ? `${formatDate(range.from)} – ${formatDate(range.to)}` : "Tüm kayıtlar"}</Muted>
+      {summary.overdue ? (
+        <Note tone="danger" icon="alarm-outline" text={`${summary.overdue} kaydın vadesi geçti · ${money(summary.overdue_amount)}`} action={{ label: "Vade takibi", onPress: () => setTab("pending") }} />
+      ) : null}
 
-      {query.isLoading ? (
-        <SkeletonCard />
-      ) : query.error ? (
-        <Note tone="danger" text={errorText(query.error)} action={{ label: "Tekrar dene", onPress: () => void query.refetch() }} />
-      ) : (
-        <MetricGrid columns={2}>
-          <MetricTile label="Gelir" value={money(summary.income)} hint={`${periodLabel} · gerçekleşen`} tone="win" icon="trending-up" onPress={() => go({ type: "income" })} />
-          <MetricTile label="Gider" value={money(summary.expense)} hint={`${periodLabel} · gerçekleşen`} tone="danger" icon="trending-down" onPress={() => go({ type: "expense" })} />
-          <MetricTile
-            label={summary.net >= 0 ? "Net kâr" : "Net zarar"}
-            value={money(summary.net)}
-            hint={summary.income ? `Kâr marjı %${Math.round((summary.net / summary.income) * 100)}` : "Gelir yok"}
-            tone={summary.net >= 0 ? "brand" : "danger"}
-            icon="scale-outline"
-          />
-          <MetricTile
-            label="Bekleyen alacak"
-            value={money(summary.receivable)}
-            hint={summary.overdue ? `${summary.overdue} kayıt vadesi geçti` : "Tahsil edilecek"}
-            tone={summary.overdue ? "warn" : "neutral"}
-            icon="hand-left-outline"
-            onPress={() => setTab("pending")}
-          />
-          <MetricTile label="Bekleyen borç" value={money(summary.payable)} hint="Ödenecek" icon="document-text-outline" onPress={() => setTab("pending")} />
-          <MetricTile label="KDV dengesi" value={money(summary.vat_balance)} hint={`Hesaplanan ${compactMoney(summary.vat_collected)} · İndirilecek ${compactMoney(summary.vat_paid)}`} icon="pie-chart-outline" />
-        </MetricGrid>
-      )}
+      <View style={styles.row}>
+        <Touchable feedback="card" haptic="light" onPress={() => open(blankLedger("income"))} style={[styles.quickBtn, styles.quickIncome]} accessibilityRole="button" accessibilityLabel="Gelir ekle">
+          <IconTile icon="arrow-down" tone="mint" size={32} glow={false} />
+          <Text style={styles.quickLabel} {...textScale.dense}>Gelir ekle</Text>
+        </Touchable>
+        <Touchable feedback="card" haptic="light" onPress={() => open(blankLedger("expense"))} style={[styles.quickBtn, styles.quickExpense]} accessibilityRole="button" accessibilityLabel="Gider ekle">
+          <IconTile icon="arrow-up" tone="red" size={32} glow={false} />
+          <Text style={styles.quickLabel} {...textScale.dense}>Gider ekle</Text>
+        </Touchable>
+      </View>
 
-      <Panel title="Son 12 ay">
+      <Panel title="Son 12 ay · gelir / gider">
         <TrendBars
           rows={(query.data?.trend || []).map((m) => ({ key: m.month, label: shortMonth(m.month).split(" ")[0], title: shortMonth(m.month), income: m.income, expense: m.expense, net: m.net }))}
           emptyText="Gerçekleşen kayıt eklendikçe grafik dolacak."
         />
       </Panel>
+
+      {allAccounts.data ? <AccountStrip accounts={(allAccounts.data.items || []).filter((a) => !a.archived)} scope="personal" onTransfer={() => setTransfer(true)} /> : null}
 
       <Tabs
         items={[
@@ -293,11 +311,25 @@ export default function LedgerScreen() {
                   { label: "Net", value: money(sums.net), tone: sums.net >= 0 ? "win" : "danger" },
                 ]}
               />
-              <View style={styles.list}>
-                {filtered.map((e) => (
-                  <LedgerCard key={e.id} entry={e} accountName={accountName} onPress={() => open(ledgerToForm(e), e.id)} onLongPress={() => setMenu(e)} />
-                ))}
-              </View>
+              {groupByDay(filtered).map((group, gi) => (
+                <View key={group.day} style={styles.dayGroup}>
+                  <View style={styles.dayHead}>
+                    <Text style={styles.dayTitle} {...textScale.dense}>
+                      {upperTR(formatDate(group.day, false))}
+                    </Text>
+                    <Text style={[styles.dayNet, { color: group.net >= 0 ? colors.win : colors.danger }]} {...textScale.badge}>
+                      {money(group.net, { signed: true })}
+                    </Text>
+                  </View>
+                  <Lines>
+                    {group.items.map((e, i) => (
+                      <Reveal key={e.id} index={gi < 2 ? i : 0}>
+                        <LedgerCard entry={e} accountName={accountName} onPress={() => open(ledgerToForm(e), e.id)} onLongPress={() => setMenu(e)} />
+                      </Reveal>
+                    ))}
+                  </Lines>
+                </View>
+              ))}
               <Muted>Düzenlemek için dokunun; tahsil/ödendi, benzerini ekle ve sil için basılı tutun.</Muted>
             </>
           ) : (
@@ -314,32 +346,33 @@ export default function LedgerScreen() {
 
       {tab === "pending" ? (
         pending.length ? (
-          <View style={styles.list}>
+          <Lines>
             {pending.map((e) => {
               const overdue = isLedgerOverdue(e);
               const days = e.due_date ? Math.round((new Date(`${e.due_date}T00:00:00`).getTime() - new Date(`${todayKey()}T00:00:00`).getTime()) / 86400000) : null;
+              const visual = categoryVisual(e.category, e.type);
               return (
-                <RecordCard
+                <LineRow
                   key={e.id}
+                  icon={visual.icon}
+                  tone={visual.tone}
                   title={e.description || e.party || LEDGER_TYPE_LABELS[e.type]}
-                  subtitle={`${e.party ? `${e.party} · ` : ""}${e.due_date ? `Vade ${formatDate(e.due_date)}` : "Vade belirtilmedi"}`}
-                  icon={e.type === "income" ? "arrow-down" : "arrow-up"}
-                  iconTone={e.type === "income" ? "win" : "danger"}
+                  sub={`${e.type === "income" ? "Alacak" : "Borç"}${e.party ? ` · ${e.party}` : ""}`}
+                  meta={e.due_date ? `Vade ${formatDate(e.due_date)}` : "Vade belirtilmedi"}
+                  metaIcon="calendar-outline"
+                  stripe={overdue ? colors.danger : days != null && days <= 3 ? colors.warn : null}
                   value={money(e.amount)}
                   valueTone={e.type === "income" ? "win" : "danger"}
-                  badges={[
-                    { label: e.type === "income" ? "Alacak" : "Borç", tone: e.type === "income" ? "win" : "danger" },
-                    days != null ? { label: days < 0 ? `${-days} gün geçti` : days === 0 ? "Bugün" : `${days} gün kaldı`, tone: overdue ? "danger" : days <= 3 ? "warn" : "neutral" } : null,
-                  ]}
+                  badge={days != null ? { label: days < 0 ? `${-days} gün geçti` : days === 0 ? "Bugün" : `${days} gün kaldı`, tone: overdue ? "danger" : days <= 3 ? "warn" : "neutral" } : null}
                   onPress={() => open(ledgerToForm(e), e.id)}
                 >
                   <View style={styles.inline}>
                     <Button label={e.type === "income" ? "Tahsil edildi" : "Ödendi"} icon="checkmark" size="sm" variant="secondary" onPress={() => markPaid.mutate(e)} />
                   </View>
-                </RecordCard>
+                </LineRow>
               );
             })}
-          </View>
+          </Lines>
         ) : (
           <EmptyState icon="checkmark-circle-outline" title="Bekleyen alacak ya da borç yok" body="Durumu “Bekliyor” olan kayıtlar burada vade sırasıyla listelenir." variant="inline" />
         )
@@ -379,20 +412,21 @@ export default function LedgerScreen() {
 
       {tab === "parties" ? (
         summary.parties.length ? (
-          <View style={styles.list}>
+          <Lines>
             {summary.parties.map((p) => (
-              <RecordCard
+              <LineRow
                 key={p.name}
+                avatar={{ name: p.name }}
                 title={p.name}
-                subtitle={`Tahsil edilen ${money(p.income)} · Ödenen ${money(p.expense)}`}
+                sub={`Tahsil ${compactMoney(p.income)} · Ödenen ${compactMoney(p.expense)}`}
                 meta={`${p.count} kayıt${p.receivable ? ` · Alacak ${money(p.receivable)}` : ""}${p.payable ? ` · Borç ${money(p.payable)}` : ""}`}
-                icon="person-outline"
-                value={money(p.balance)}
+                value={money(p.balance, { signed: true })}
                 valueTone={p.balance >= 0 ? "win" : "danger"}
+                chevron
                 onPress={() => go({ query: p.name })}
               />
             ))}
-          </View>
+          </Lines>
         ) : (
           <EmptyState icon="people-outline" title="Cari bilgisi olan kayıt yok" body="Kayıtlara cari (kişi / firma) yazdıkça bakiyeleri burada toplanır." variant="inline" />
         )
@@ -453,28 +487,49 @@ export default function LedgerScreen() {
 function LedgerCard({ entry: e, accountName, onPress, onLongPress }: { entry: LedgerEntry; accountName: (id: number) => string; onPress: () => void; onLongPress: () => void }) {
   const overdue = isLedgerOverdue(e);
   const method = LEDGER_METHODS.find((m) => m.key === e.method)?.label;
+  const visual = categoryVisual(e.category, e.type);
   return (
-    <RecordCard
+    <LineRow
+      icon={visual.icon}
+      tone={visual.tone}
       title={e.description || LEDGER_TYPE_LABELS[e.type]}
-      subtitle={[e.category, e.party].filter(Boolean).join(" · ") || null}
-      meta={[formatDate(e.entry_date), method, e.account_id ? accountName(e.account_id) : null, e.document_no ? `Belge ${e.document_no}` : null].filter(Boolean).join(" · ")}
-      icon={e.type === "income" ? "arrow-down" : "arrow-up"}
-      iconTone={e.type === "income" ? "win" : "danger"}
+      sub={[e.category, e.party].filter(Boolean).join(" · ") || null}
+      meta={[method, e.account_id ? accountName(e.account_id) : null, e.vat_rate ? `KDV %${e.vat_rate}` : null, e.document_no ? `Belge ${e.document_no}` : null].filter(Boolean).join(" · ") || null}
       value={`${e.type === "income" ? "+" : "−"}${money(e.amount)}`}
       valueTone={e.type === "income" ? "win" : "danger"}
-      badges={[
-        { label: overdue ? "Vadesi geçti" : LEDGER_STATUS_BY_TYPE[e.type][e.status], tone: overdue ? "danger" : e.status === "paid" ? "win" : "warn" },
-        e.status === "pending" && e.due_date ? { label: `Vade ${formatDate(e.due_date, false)}`, tone: "neutral" } : null,
-        e.vat_rate ? { label: `KDV %${e.vat_rate}`, tone: "neutral" } : null,
-      ]}
+      valueSub={e.status === "pending" && e.due_date ? `Vade ${formatDate(e.due_date, false)}` : null}
+      badge={e.status === "paid" ? null : { label: overdue ? "Vadesi geçti" : LEDGER_STATUS_BY_TYPE[e.type][e.status], tone: overdue ? "danger" : "warn" }}
+      stripe={overdue ? colors.danger : null}
       onPress={onPress}
       onLongPress={onLongPress}
     />
   );
 }
 
+/** Kayıtları gün gün toplar (sıra korunur); her günün net toplamıyla. */
+function groupByDay(entries: LedgerEntry[]) {
+  const map = new Map<string, { day: string; items: LedgerEntry[]; net: number }>();
+  const sorted = [...entries].sort((a, b) => (b.entry_date || "").localeCompare(a.entry_date || ""));
+  for (const e of sorted) {
+    const day = e.entry_date || "";
+    const group = map.get(day) ?? { day, items: [], net: 0 };
+    group.items.push(e);
+    group.net += (e.type === "income" ? 1 : -1) * e.amount;
+    map.set(day, group);
+  }
+  return [...map.values()];
+}
+
 const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: space.sm },
+  quickBtn: { flex: 1, flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 56, paddingHorizontal: space.md, borderRadius: radius.xl, borderWidth: hairline },
+  quickIncome: { backgroundColor: colors.winDim, borderColor: colors.border },
+  quickExpense: { backgroundColor: colors.dangerDim, borderColor: colors.border },
+  quickLabel: { ...type.h4, color: colors.textPrimary },
+  dayGroup: { gap: space.xs },
+  dayHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space.xs, paddingTop: space.xs },
+  dayTitle: { ...type.overline, color: colors.textTertiary },
+  dayNet: { ...type.numSmStrong },
   flex: { flex: 1 },
   list: { gap: space.sm },
   inline: { flexDirection: "row", marginTop: space.xs },

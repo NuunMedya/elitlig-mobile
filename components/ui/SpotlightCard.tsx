@@ -30,6 +30,8 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { colors, fonts, hairline, radius, space, textScale, type, upperTR } from "@/theme";
+import { Aurora } from "./Aurora";
+import { GlowRim } from "./GlowRim";
 import { GradientFill } from "./GradientFill";
 import { LiveBadge } from "./LiveBadge";
 import { Touchable } from "./Pressable";
@@ -100,6 +102,9 @@ export const SpotlightCard = React.memo(function SpotlightCard({
   const content = (
     <>
       <GradientFill tone="ink" radius="xxl" />
+      {/* Sahne ışığı: mor/camgöbeği aurora; canlıda kenarda dolaşan neon. */}
+      <Aurora variant="stage" />
+      {live ? <GlowRim radius={radius.xxl} /> : null}
 
       <View style={styles.head}>
         {live ? <LiveBadge minute={minute} onDark /> : null}
@@ -207,6 +212,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingTop: space.lg,
     paddingBottom: space.md,
+    overflow: "hidden",
   },
   head: {
     flexDirection: "row",

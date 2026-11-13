@@ -9,18 +9,28 @@
  * histogram gibi okunuyordu — "hangi ay kaç" sorusu. Sorulan soru "değer
  * yükseliyor mu" olduğu için tek çizgi (Sparkline, veri rengi) yeter.
  *
+ * İKİNCİ TUR: kart bir KİMLİK anıdır — koyu mürekkep zemin + aurora ışığı,
+ * beyaz dev değer, camgöbeği seyir çizgisi, sıralar cam karolarda. Değişim
+ * rozeti ▲/▼ ile nane/kırmızı.
+ *
  * YÜZDELİK DÜZELTMESİ: sunucu `percentile`ı 0–1 kesir olarak döndürür
  * (0.9999 = oyuncuların %99,99'undan değerli). Eski kart bunu `%1` diye
  * yazıyordu — yuvarlanmış kesir, anlamı ters. Burada "üst dilim" olarak
  * yazılır: 0.9999 → "İlk %1".
  */
 
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
 import { StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
-import { Badge, Sparkline } from "@/components/ui";
+import { Aurora, Sparkline } from "@/components/ui";
 import { formatDateShort, formatMoney } from "@/lib/format";
-import { colors, hairline, space, textScale, type } from "@/theme";
-import { decimalTR, num, surfaces } from "./shared";
+import { colors, dark, hairline, radius, space, textScale, type } from "@/theme";
+import { decimalTR, num } from "./shared";
+
+/* Yüzey gradyanı yatay, sağdan sola. */
+const INK_START = { x: 1, y: 0.5 };
+const INK_END = { x: 0, y: 0.5 };
 
 export interface MarketValueData {
   currentValue: number;
@@ -63,21 +73,35 @@ export const MarketValueCard = React.memo(function MarketValueCard({ market, ser
   }
 
   return (
-    <View style={surfaces.card}>
+    <View style={styles.card}>
+      <View style={styles.clip}>
+        <LinearGradient colors={colors.gradientInk} start={INK_START} end={INK_END} style={StyleSheet.absoluteFill} />
+        <Aurora variant="stage" style={StyleSheet.absoluteFill} />
+      </View>
       <View style={styles.body}>
         <View style={styles.head}>
-          <Text style={styles.overline} {...textScale.badge}>
-            PİYASA DEĞERİ
-          </Text>
+          <View style={styles.overlineRow}>
+            <Ionicons name="diamond" size={12} color={colors.brandOnDark} />
+            <Text style={styles.overline} {...textScale.badge}>
+              PİYASA DEĞERİ
+            </Text>
+          </View>
           {/* Oran yalnız ANLAMLIYSA: ilk değerlemeden (≈0) sonraki değişim
               "+%69393" gibi bir sayı üretiyor — bilgi değil gürültü. */}
           {market.changeAmount !== 0 && Math.abs(market.changePercentage) < 1000 ? (
-            <Badge
-              label={`${rising ? "+" : ""}%${decimalTR(market.changePercentage)}`}
-              tone={rising ? "win" : falling ? "danger" : "neutral"}
-              icon={rising ? "trending-up" : "trending-down"}
-              size="sm"
-            />
+            <View style={styles.change}>
+              <Ionicons
+                name={rising ? "caret-up" : "caret-down"}
+                size={11}
+                color={rising ? dark.win : falling ? dark.loss : colors.onDarkMuted}
+              />
+              <Text
+                style={[styles.changeText, { color: rising ? dark.win : falling ? dark.loss : colors.onDark }]}
+                {...textScale.badge}
+              >
+                {`${rising ? "+" : ""}%${decimalTR(market.changePercentage)}`}
+              </Text>
+            </View>
           ) : null}
         </View>
 
@@ -87,7 +111,7 @@ export const MarketValueCard = React.memo(function MarketValueCard({ market, ser
 
         {series.length > 1 ? (
           <View style={styles.chart} onLayout={onLayout}>
-            {width > 0 ? <Sparkline values={series} width={width} height={48} thickness={2} /> : null}
+            {width > 0 ? <Sparkline values={series} width={width} height={56} thickness={2.5} color={dark.accent} /> : null}
           </View>
         ) : null}
 
@@ -101,10 +125,10 @@ export const MarketValueCard = React.memo(function MarketValueCard({ market, ser
 
       {ranks.length ? (
         <View style={styles.ranks}>
-          {ranks.map((rank, index) => (
+          {ranks.map((rank) => (
             <View
               key={rank.key}
-              style={[styles.rank, index > 0 && styles.rankDivider]}
+              style={styles.rank}
               accessible
               accessibilityLabel={`${rank.label.toLocaleLowerCase("tr-TR")} sırası ${rank.value}`}
             >
@@ -123,6 +147,16 @@ export const MarketValueCard = React.memo(function MarketValueCard({ market, ser
 });
 
 const styles = StyleSheet.create({
+  card: {
+    borderRadius: radius.xl,
+  },
+  clip: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: radius.xl,
+    overflow: "hidden",
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
+  },
   body: {
     padding: space.lg,
     gap: space.s,
@@ -133,43 +167,63 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: space.sm,
   },
+  overlineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+  },
   overline: {
     ...type.overline,
-    color: colors.textTertiary,
+    color: colors.brandOnDark,
+  },
+  change: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xxs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.inkPillBorder,
+  },
+  changeText: {
+    ...type.numSmStrong,
   },
   value: {
     ...type.scoreLg,
-    color: colors.textPrimary,
+    color: colors.onDark,
   },
   chart: {
     marginTop: space.s,
   },
   updated: {
     ...type.caption,
-    color: colors.textTertiary,
+    color: colors.onDarkMuted,
   },
   ranks: {
     flexDirection: "row",
-    borderTopWidth: hairline,
-    borderTopColor: colors.separator,
-    paddingVertical: space.m,
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+    paddingBottom: space.lg,
   },
   rank: {
     flex: 1,
     alignItems: "center",
     paddingHorizontal: space.xs,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
     gap: 2,
-  },
-  rankDivider: {
-    borderLeftWidth: hairline,
-    borderLeftColor: colors.separator,
   },
   rankValue: {
     ...type.metricSm,
-    color: colors.textPrimary,
+    color: colors.onDark,
   },
   rankLabel: {
     ...type.overline,
-    color: colors.textTertiary,
+    color: colors.onDarkMuted,
   },
 });

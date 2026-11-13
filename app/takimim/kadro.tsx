@@ -77,7 +77,6 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { PitchBench, PitchLineup, type PitchPlayer } from "@/components/PitchLineup";
-import { StatStrip } from "@/components/club/Panel";
 import { countLines } from "@/components/club/SquadSnapshot";
 import { SquadBuilderView } from "@/components/team/SquadBuilderView";
 import { LastMatchesList, LastMatchesStrip, daysAgo, shortDate } from "@/components/team/PlayerMatchHistory";
@@ -85,6 +84,10 @@ import {
   Avatar,
   Badge,
   BottomSheet,
+  GradientBar,
+  IconTile,
+  Odometer,
+  type IconTileTone,
   Button,
   Chip,
   ChipGroup,
@@ -188,6 +191,13 @@ const GROUP_ITEMS: SegmentedItem<GroupMode>[] = [
 /** Ekranın dört görünümü. Seçim `?gorunum=` ile rotada taşınır. */
 type ViewMode = "kadro" | "dizilis" | "transfer" | "sezon";
 
+/** Satırdaki kısa rol hapı. */
+const ROLE_SHORT: Record<SquadRole, string> = {
+  starter: "İlk 8",
+  substitute: "Yedek",
+  reserve: "Kadro dışı",
+};
+
 const ROLE_LABELS: Record<SquadRole, string> = {
   starter: "İlk Kadro",
   substitute: "Yedek",
@@ -207,6 +217,15 @@ const LINE_LABELS: Record<PositionLine, string> = {
   MID: "Orta Saha",
   FWD: "Forvet",
 };
+
+/** Hat → başlık simgesi ve degrade karo tonu (Gece teması). */
+const LINE_ICON: Record<PositionLine, keyof typeof Ionicons.glyphMap> = {
+  GK: "hand-left",
+  DEF: "shield",
+  MID: "git-network",
+  FWD: "flash",
+};
+const LINE_TONE: Record<PositionLine, IconTileTone> = { GK: "gold", DEF: "cyan", MID: "violet", FWD: "pink" };
 
 /** Mevki kısaltması → hat. `POSITIONS` sözlüğünden bir kez türetilir. */
 const LINE_BY_CODE: Record<string, PositionLine> = Object.fromEntries(
@@ -486,9 +505,19 @@ export default function SquadManagementScreen() {
   );
 
   const renderSectionHeader = useCallback(
-    ({ section }: { section: RosterSection }) => (
-      <SectionHeader title={section.title} meta={`${section.data.length} oyuncu`} size="group" style={styles.flushHeader} />
-    ),
+    ({ section }: { section: RosterSection }) => {
+      const line = (LINE_ORDER as string[]).includes(section.key) ? (section.key as PositionLine) : null;
+      return (
+        <SectionHeader
+          title={section.title}
+          meta={`${section.data.length}`}
+          icon={line ? LINE_ICON[line] : section.key === "bilinmiyor" ? "help-circle" : "people"}
+          iconTone={line ? LINE_TONE[line] : "neutral"}
+          size="group"
+          style={styles.flushHeader}
+        />
+      );
+    },
     []
   );
 
@@ -604,19 +633,11 @@ export default function SquadManagementScreen() {
 
       {/* Kadro dengesi — tek ince şerit: hat sayıları ve sözleşme sağlığı.
           Sayıya dokunmak ilgili süzgeci açar (mevki boşsa "mevkisiz"). */}
-      <StatStrip
-        items={[
-          { label: "Kaleci", value: String(lines.GK), tone: lines.GK === 0 ? "danger" : "neutral" },
-          { label: "Defans", value: String(lines.DEF) },
-          { label: "Orta", value: String(lines.MID) },
-          { label: "Forvet", value: String(lines.FWD) },
-          {
-            label: "Sözleşme",
-            value: `${contracted}/${roster.length}`,
-            tone: contracted < roster.length ? "danger" : "win",
-            onPress: contracted < roster.length ? () => changeQuick("sozlesmesiz") : undefined,
-          },
-        ]}
+      <LineBalance
+        lines={lines}
+        total={roster.length}
+        contracted={contracted}
+        onContracts={contracted < roster.length ? () => changeQuick("sozlesmesiz") : undefined}
       />
 
       <Input
@@ -1139,10 +1160,8 @@ const PlayerRow = React.memo(function PlayerRow({
       : null;
 
   const meta = [
-    matches != null ? `${matches} maç` : null,
     positionLabel(player.team_position) || player.profile_position || "Mevki seçilmedi",
-    ROLE_LABELS[player.squad_role],
-    player.has_linked_account ? null : "Hesabı yok",
+    matches != null ? `${matches} maç` : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -1161,11 +1180,14 @@ const PlayerRow = React.memo(function PlayerRow({
         position === "last" ? styles.rowLast : null,
       ]}
     >
-      <Text style={styles.jersey} numberOfLines={1} {...textScale.badge}>
-        {player.jersey_number != null ? player.jersey_number : "—"}
-      </Text>
+      {/* Forma numarası: küçük forma karosu; numarasız oyuncu kesik çerçeve. */}
+      <View style={[styles.jersey, player.jersey_number == null ? styles.jerseyEmpty : null]}>
+        <Text style={[styles.jerseyText, player.jersey_number == null ? styles.jerseyTextEmpty : null]} numberOfLines={1} {...textScale.badge}>
+          {player.jersey_number != null ? player.jersey_number : "—"}
+        </Text>
+      </View>
 
-      <Avatar name={player.player_name} image={mediaUrl(player.player_img)} size={30} />
+      <Avatar name={player.player_name} image={mediaUrl(player.player_img)} size={36} />
 
       <View style={styles.rowTexts}>
         <Text style={styles.rowName} numberOfLines={1} {...textScale.dense}>
@@ -1174,6 +1196,14 @@ const PlayerRow = React.memo(function PlayerRow({
         <Text style={styles.rowMeta} numberOfLines={1} {...textScale.dense}>
           {meta}
         </Text>
+        {/* Durum hapları: rol ve eksikler tek satırda. */}
+        <View style={styles.pills}>
+          <Badge label={ROLE_SHORT[player.squad_role]} tone={player.squad_role === "starter" ? "brand" : "neutral"} size="xs" />
+          {player.has_active_contract ? null : <Badge label="Sözleşmesiz" tone="warn" size="xs" />}
+          {player.has_linked_account ? null : <Badge label="Hesapsız" tone="neutral" variant="outline" size="xs" />}
+          {player.is_loan ? <Badge label="Kiralık" tone="info" size="xs" /> : null}
+          {marked ? <Badge label="Çıkarılacak" tone="danger" size="xs" /> : null}
+        </View>
         {history && history.last_matches.length > 0 ? (
           <View style={styles.historyLine}>
             <LastMatchesStrip matches={history.last_matches} teamId={teamId} />
@@ -1219,13 +1249,6 @@ const PlayerRow = React.memo(function PlayerRow({
       {/* Renk sinyaldir (Arena §1): sözleşmeli olmak NORMAL hâldir ve rozet
           taşımaz; yalnız eksik olan işaretlenir. On altı yeşil rozetin
           arasında iki turuncu kayboluyordu. */}
-      {marked ? <Badge label="ÇIKAR" tone="danger" size="xs" /> : null}
-      {player.has_active_contract ? null : (
-        <View style={styles.flag} accessibilityLabel="Sözleşmesiz">
-          <Ionicons name="document-text" size={11} color={colors.warn} />
-        </View>
-      )}
-
       <Ionicons name="chevron-forward" size={13} color={colors.textTertiary} />
 
       {position === "first" || position === "middle" ? (
@@ -1234,6 +1257,67 @@ const PlayerRow = React.memo(function PlayerRow({
     </Touchable>
   );
 });
+
+/**
+ * KADRO DENGESİ — dört hat karosu (degrade simge + döner sayaç) ve altında
+ * sözleşme sağlığı çubuğu. Kalecisi olmayan kadro kırmızıyla uyarılır.
+ */
+function LineBalance({
+  lines,
+  total,
+  contracted,
+  onContracts,
+}: {
+  lines: Record<PositionLine, number>;
+  total: number;
+  contracted: number;
+  onContracts?: () => void;
+}) {
+  const ratio = total ? contracted / total : 0;
+  const missing = total - contracted;
+  const contractBody = (
+    <>
+      <View style={styles.balanceFoot}>
+        <Text style={styles.balanceLabel} {...textScale.badge}>
+          SÖZLEŞME
+        </Text>
+        <Text style={[styles.balanceRatio, missing ? styles.balanceWarn : styles.balanceOk]} {...textScale.badge}>
+          {`${contracted}/${total}`}
+        </Text>
+        <View style={styles.flexFill} />
+        <Text style={[styles.balanceHint, missing ? styles.balanceWarn : null]} numberOfLines={1} {...textScale.dense}>
+          {missing ? `${missing} oyuncu sözleşmesiz ›` : "Herkes sözleşmeli"}
+        </Text>
+      </View>
+      <GradientBar value={ratio} height={6} gradient={missing ? colors.tileTones.gold : colors.tileTones.mint} />
+    </>
+  );
+  return (
+    <View style={styles.balance}>
+      <View style={styles.balanceLines}>
+        {LINE_ORDER.map((line) => {
+          const empty = lines[line] === 0;
+          return (
+            <View key={line} style={[styles.balanceLine, empty && line === "GK" ? styles.balanceLineDanger : null]} accessibilityLabel={`${LINE_LABELS[line]}: ${lines[line]}`}>
+              <IconTile icon={LINE_ICON[line]} tone={empty ? "red" : LINE_TONE[line]} size={26} glow={false} />
+              <Odometer value={lines[line]} style={[styles.balanceValue, empty ? styles.balanceZero : null]} />
+              <Text style={styles.balanceLabel} numberOfLines={1} {...textScale.badge}>
+                {upperTR(LINE_LABELS[line])}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+      {onContracts ? (
+        <Touchable onPress={onContracts} haptic="selection" accessibilityRole="button" accessibilityLabel={`Sözleşme ${contracted}/${total}. Sözleşmesizleri göster`} style={styles.balanceContract}>
+          {contractBody}
+        </Touchable>
+      ) : (
+        <View style={styles.balanceContract}>{contractBody}</View>
+      )}
+    </View>
+  );
+}
 
 /* ══════════════════════════════════════════════════════════════════════════
    Düzenleme alt sayfası
@@ -1630,9 +1714,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space.m,
-    minHeight: 50,
+    minHeight: 64,
     paddingHorizontal: space.md,
-    paddingVertical: space.s,
+    paddingVertical: space.sm,
     backgroundColor: colors.surface1,
   },
   flag: {
@@ -1644,33 +1728,83 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   rowSingle: {
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     borderWidth: hairline,
-    borderColor: colors.border,
+    borderColor: colors.glassLine,
   },
   rowFirst: {
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
   },
   rowLast: {
-    borderBottomLeftRadius: radius.lg,
-    borderBottomRightRadius: radius.lg,
+    borderBottomLeftRadius: radius.xl,
+    borderBottomRightRadius: radius.xl,
   },
   rowDivider: {
     position: "absolute",
-    left: space.md + 22 + space.m,
+    left: space.md + 30 + space.m,
     right: 0,
     bottom: 0,
     height: hairline,
     backgroundColor: colors.separator,
   },
   jersey: {
-    ...type.caption,
-    fontFamily: fonts.bold,
-    color: colors.brandAccent,
-    width: 22,
-    textAlign: "center",
+    width: 30,
+    height: 30,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
   },
+  jerseyEmpty: {
+    backgroundColor: "transparent",
+    borderStyle: "dashed",
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+  },
+  jerseyText: {
+    ...type.scoreXs,
+    color: colors.brandAccent,
+  },
+  jerseyTextEmpty: {
+    color: colors.textTertiary,
+  },
+  pills: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.xs,
+    marginTop: space.xxs,
+  },
+  flexFill: { flex: 1 },
+  balance: {
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  balanceLines: { flexDirection: "row", gap: space.s },
+  balanceLine: {
+    flex: 1,
+    alignItems: "center",
+    gap: space.xxs,
+    paddingVertical: space.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface2,
+  },
+  balanceLineDanger: { backgroundColor: colors.dangerDim },
+  balanceValue: { ...type.metricSm, color: colors.textPrimary },
+  balanceZero: { color: colors.danger },
+  balanceLabel: { ...type.micro, color: colors.textTertiary },
+  balanceContract: { gap: space.s },
+  balanceFoot: { flexDirection: "row", alignItems: "center", gap: space.s },
+  balanceRatio: { ...type.numSmStrong },
+  balanceOk: { color: colors.win },
+  balanceWarn: { color: colors.warn },
+  balanceHint: { ...type.caption, color: colors.textSecondary },
   rowTexts: {
     flex: 1,
     gap: 2,

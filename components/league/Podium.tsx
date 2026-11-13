@@ -1,44 +1,42 @@
 /**
  * Podium — sıralamanın ilk üçü (Oyuncular bölmesi, Türkiye sıralaması).
  *
- * ARENA PODYUMU: üç oyuncu tek bir kartta, gerçek bir podyum gibi BASAMAK
- * üstünde durur — birinci ortada ve en yüksek basamakta (2 · 1 · 3 düzeni).
- * Basamaklar nötr ikinci katman yüzeyidir (`surface2`); madalya rengi yalnız
- * avatar halkasında ve sıra rozetindedir. Birincinin rakamı büyük Archivo.
- * Birim (GOL, PUAN) kartın sağ üstünde bir kez yazılır.
+ * İKİNCİ TUR — SAHNE PODYUMU: üç oyuncu koyu bir sahne kartında (`StageCard`:
+ * mürekkep degradesi + aurora) gerçek bir podyum gibi BASAMAK üstünde durur;
+ * birinci ortada ve en yüksek basamakta (2 · 1 · 3 düzeni).
  *
- * Üçten az oyuncu varsa podyum çizilmez — çağıran taraf listeye düşer.
+ *   · Avatarın altında kitin madalya rozeti (`RankBadge`: altın · gümüş ·
+ *     bronz degrade + parıltı); birincinin avatarı büyük ve ışık halkalı.
+ *   · Rakam KAHRAMANDIR: basamağın üstünde Archivo, birincide `scoreLg` ve
+ *     `Odometer` ile döner (ölçüt değişince rakamlar yuvarlanır).
+ *   · Basamaklar cam (`inkTile`); tepelerinde madalya renginde 3px çizgi.
+ *   · Birim (GOL, PUAN) kartın üst satırında bir kez yazılır.
+ *
+ * Sahne iki temada da koyudur: metin `onDark`. Üçten az oyuncu varsa podyum
+ * çizilmez — çağıran taraf listeye düşer. Prop API'si değişmedi.
  */
 
+import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { Avatar, Touchable } from "@/components/ui";
+import { Avatar, Odometer, RankBadge, Reveal, Touchable } from "@/components/ui";
 import type { PlayerRankRow } from "@/lib/types";
-import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
-import { groupStyles } from "./shared";
+import { colors, glowStyle, hairline, radius, space, textScale, type, upperTR } from "@/theme";
+import { StageCard } from "./kit";
 
 const defaultMeta = (row: PlayerRankRow) => row.teamName || "Takımsız";
 
-/**
- * Madalya rengi, basamağa göre (dizin = sıra − 1): altın · gümüş · bronz.
- * Altın, puan tablosundaki şampiyonluk rayıyla AYNI token — "birinci" iki
- * ekranda aynı renkle okunur. Gümüş nötr kayrak, bronz uyarı turuncusu.
- */
-/* 3. madalya BRONZ: `warn` koyu temada (#FBBF24) altınla ayırt edilemiyordu;
-   düşme play-off rayı iki temada da bronz-turuncu. */
-const MEDAL = [colors.zoneChampion, colors.slate, colors.zoneRelegationPlayoff] as const;
+/** Madalya degradesi, basamağa göre (dizin = sıra − 1). */
+const MEDAL = [colors.medalGold, colors.medalSilver, colors.medalBronze] as const;
 
 /** Podyumdaki çizim sırası — sol, orta, sağ (0 tabanlı sıra dizini). */
 const PODIUM_ORDER = [1, 0, 2] as const;
 
-/** Avatar ölçüsü: birinci büyük (40), diğerleri 32 — Lig sekmesinin yoğun ölçüsü. */
-const PODIUM_AVATAR_FIRST = 40;
-const PODIUM_AVATAR = 32;
+const PODIUM_AVATAR_FIRST = 60;
+const PODIUM_AVATAR = 46;
 
-
-/* ══════════════════════════════════════════════════════════════════════════
-   Podyum — ilk üç
-   ══════════════════════════════════════════════════════════════════════════ */
+/** Basamak yükseklikleri (dizin = sıra − 1): birinci en yüksek. */
+const STEP_HEIGHT = [64, 46, 34] as const;
 
 export const Podium = React.memo(function Podium({
   players,
@@ -55,158 +53,183 @@ export const Podium = React.memo(function Podium({
   metaOf?: (row: PlayerRankRow) => string;
 }) {
   return (
-    <View style={[groupStyles.card, styles.podium]}>
-      <Text style={styles.podiumUnit} {...textScale.badge}>
-        {upperTR(unit)}
-      </Text>
-      <View style={styles.podiumRow}>
-        {PODIUM_ORDER.map((index) => {
+    <StageCard testID="players-podium">
+      <View style={styles.top}>
+        <Text style={styles.over} {...textScale.badge}>
+          {upperTR("Zirvedeki üçlü")}
+        </Text>
+        <View style={styles.unitPill}>
+          <Text style={styles.unitText} {...textScale.badge}>
+            {upperTR(unit)}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.row}>
+        {PODIUM_ORDER.map((index, column) => {
           const player = players[index];
+          if (!player) return <View key={`empty-${index}`} style={styles.cell} />;
           const first = index === 0;
+          const metric = metricOf(player);
           return (
-            <Touchable
-              key={player.id}
-              style={styles.podiumCell}
-              onPress={() => onPress(player.id)}
-              feedback="card"
-              haptic="selection"
-              accessibilityRole="button"
-              accessibilityLabel={`${index + 1}. ${player.name}, ${metricOf(player)} ${unit}`}
-            >
-              <View style={styles.podiumAvatar}>
-                <View style={[styles.podiumRing, { borderColor: MEDAL[index] }]}>
-                  <Avatar
-                    name={player.name}
-                    image={player.image ?? null}
-                    size={first ? PODIUM_AVATAR_FIRST : PODIUM_AVATAR}
-                  />
-                </View>
-                <View style={[styles.podiumRankBadge, { backgroundColor: MEDAL[index] }]}>
-                  <Text style={styles.podiumRankText} {...textScale.badge}>
-                    {index + 1}
-                  </Text>
-                </View>
-              </View>
-              <Text
-                style={first ? styles.podiumNameFirst : styles.podiumName}
-                numberOfLines={1}
-                {...textScale.dense}
+            <Reveal key={player.id} index={column} distance={14} style={styles.cell}>
+              <Touchable
+                style={styles.cellInner}
+                onPress={() => onPress(player.id)}
+                feedback="card"
+                haptic="selection"
+                accessibilityRole="button"
+                accessibilityLabel={`${index + 1}. ${player.name}, ${metric} ${unit}`}
               >
-                {player.name}
-              </Text>
-              <Text style={styles.podiumTeam} numberOfLines={1} {...textScale.dense}>
-                {metaOf(player)}
-              </Text>
-              {/* Basamak: yükseklik sırayı söyler, rakam basamağın üstündedir. */}
-              <View style={[styles.podiumStep, { height: STEP_HEIGHT[index] }]}>
+                <View style={styles.avatarWrap}>
+                  <View
+                    style={[
+                      styles.ring,
+                      { borderColor: MEDAL[index][0] },
+                      first ? glowStyle(MEDAL[index][1], 2) : null,
+                    ]}
+                  >
+                    <Avatar
+                      name={player.name}
+                      image={player.image ?? null}
+                      size={first ? PODIUM_AVATAR_FIRST : PODIUM_AVATAR}
+                    />
+                  </View>
+                  <RankBadge rank={index + 1} size={first ? 24 : 20} style={styles.medal} />
+                </View>
                 <Text
-                  style={first ? styles.podiumMetricFirst : styles.podiumMetric}
-                  numberOfLines={1}
+                  style={first ? styles.nameFirst : styles.name}
+                  numberOfLines={first ? 2 : 1}
                   {...textScale.dense}
                 >
-                  {metricOf(player)}
+                  {player.name}
                 </Text>
-              </View>
-            </Touchable>
+                <Text style={styles.team} numberOfLines={1} {...textScale.dense}>
+                  {metaOf(player)}
+                </Text>
+                {/* Basamak: yükseklik sırayı söyler, rakam basamağın üstündedir. */}
+                <View style={[styles.step, { height: STEP_HEIGHT[index] }]}>
+                  <LinearGradient
+                    colors={MEDAL[index]}
+                    start={{ x: 0, y: 0.5 }}
+                    end={{ x: 1, y: 0.5 }}
+                    style={styles.stepTop}
+                  />
+                  {first ? (
+                    <Odometer value={metric} style={styles.metricFirst} />
+                  ) : (
+                    <Text style={styles.metric} numberOfLines={1} {...textScale.dense}>
+                      {metric}
+                    </Text>
+                  )}
+                </View>
+              </Touchable>
+            </Reveal>
           );
         })}
       </View>
-    </View>
+    </StageCard>
   );
 });
 
-/** Basamak yükseklikleri (dizin = sıra − 1): birinci en yüksek. */
-const STEP_HEIGHT = [40, 30, 24] as const;
-
 const styles = StyleSheet.create({
-  /* — Podyum — */
-  podium: {
-    paddingTop: space.sm,
-    paddingHorizontal: space.sm,
-    overflow: "hidden",
+  top: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: space.lg,
+    paddingTop: space.md,
   },
-  podiumUnit: {
+  over: {
     ...type.overline,
-    letterSpacing: 1,
-    color: colors.textTertiary,
-    alignSelf: "flex-end",
-    paddingRight: space.xs,
+    color: colors.brandOnDark,
   },
-  podiumRow: {
+  unitPill: {
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xxs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.inkPillBorder,
+  },
+  unitText: {
+    ...type.micro,
+    color: colors.onDark,
+  },
+  row: {
     flexDirection: "row",
     /* Basamaklar tabandan hizalanır: podyum silueti buradan çıkar. */
     alignItems: "flex-end",
-    gap: space.xs,
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    paddingTop: space.sm,
   },
-  podiumCell: {
+  cell: {
     flex: 1,
+    minWidth: 0,
+  },
+  cellInner: {
     alignItems: "center",
     gap: space.px,
   },
-  podiumAvatar: {
+  avatarWrap: {
     alignItems: "center",
-    marginBottom: space.s,
+    marginBottom: space.m,
   },
-  podiumRing: {
-    padding: 1.5,
+  ring: {
+    padding: 2,
     borderRadius: radius.pill,
-    borderWidth: 1.5,
+    borderWidth: 2,
   },
-  podiumRankBadge: {
+  medal: {
     position: "absolute",
-    bottom: -4,
+    bottom: -9,
     alignSelf: "center",
-    minWidth: 14,
-    height: 14,
-    paddingHorizontal: 2,
-    borderRadius: radius.pill,
+  },
+  name: {
+    ...type.labelSm,
+    color: colors.onDark,
+    textAlign: "center",
+    alignSelf: "stretch",
+  },
+  nameFirst: {
+    ...type.h4,
+    color: colors.onDark,
+    textAlign: "center",
+    alignSelf: "stretch",
+  },
+  team: {
+    ...type.meta,
+    color: colors.onDarkMuted,
+    textAlign: "center",
+    alignSelf: "stretch",
+  },
+  step: {
+    alignSelf: "stretch",
+    marginTop: space.s,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1.5,
-    borderColor: colors.surface1,
-  },
-  podiumRankText: {
-    ...type.micro,
-    letterSpacing: 0,
-    color: colors.textOnStatus,
-  },
-  podiumName: {
-    ...type.labelXs,
-    color: colors.textPrimary,
-    textAlign: "center",
-    alignSelf: "stretch",
-  },
-  podiumNameFirst: {
-    ...type.labelSm,
-    color: colors.textPrimary,
-    textAlign: "center",
-    alignSelf: "stretch",
-  },
-  podiumTeam: {
-    ...type.meta,
-    color: colors.textTertiary,
-    textAlign: "center",
-    alignSelf: "stretch",
-  },
-  podiumStep: {
-    alignSelf: "stretch",
-    marginTop: space.xs,
-    alignItems: "center",
-    paddingTop: space.xs,
-    borderTopLeftRadius: radius.sm,
-    borderTopRightRadius: radius.sm,
-    backgroundColor: colors.surface2,
+    borderTopLeftRadius: radius.md,
+    borderTopRightRadius: radius.md,
+    backgroundColor: colors.inkTile,
     borderWidth: hairline,
     borderBottomWidth: 0,
-    borderColor: colors.border,
+    borderColor: colors.inkTileBorder,
+    overflow: "hidden",
   },
-  podiumMetric: {
-    ...type.scoreXs,
-    color: colors.textSecondary,
+  stepTop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+  },
+  metric: {
+    ...type.scoreSm,
+    color: colors.onDark,
   },
   /* Birincinin sayısı büyük: "kim önde" sorusunun tek bakışlık yanıtı. */
-  podiumMetricFirst: {
-    ...type.scoreSm,
-    color: colors.textPrimary,
+  metricFirst: {
+    ...type.scoreLg,
+    color: colors.onDark,
   },
 });

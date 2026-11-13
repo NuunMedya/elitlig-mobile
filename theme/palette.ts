@@ -5,7 +5,7 @@
  * yalnızca iki sabit nesne tanımlar. Aktif temanın seçilmesi `theme/index.ts`
  * işidir.
  *
- * RENK FELSEFESİ — BEYAZ KÂĞIT, KOYU MOR KİMLİK, MOR + PEMBE SİNYAL.
+ * RENK FELSEFESİ (2026-11 GECE TEMASI) — MOR GECE, CAMGÖBEĞİ IŞIK, PEMBE CANLI.
  *
  * Ayrıntılı gerekçe aşağıdaki `light` nesnesinin başlığında ve
  * docs/arena-tasarim-dili.md içindedir. Özet:
@@ -335,148 +335,186 @@ export interface Palette {
   chartGrid: string;
   scrimGradientTop: string;    // hero üstü okunabilirlik gradyanı
   scrimGradientBottom: string;
+
+  /* — GECE TEMASI (2026-11) — imza degrade, aurora ve cam — */
+  /**
+   * İMZA DEGRADE — mor → camgöbeği. YALNIZ GRAFİK İŞARETTE kullanılır: alt
+   * menü kapsülü, sekme solucan çizgisi, ilerleme barı, halkalar, seçili gün.
+   * Üstüne metin yazılmaz (camgöbeği ucunda beyaz metin AA'yı geçmez);
+   * metin taşıyan dolgu `gradientBrand`tır.
+   */
+  gradientSignature: readonly [string, string];
+  /** Aurora arka planının üç ışık lekesi (yarı saydam). */
+  auroraViolet: string;
+  auroraCyan: string;
+  auroraPink: string;
+  /** Cam yüzey: yüzen bar, hap seçici, başlık düğmesi (yarı saydam). */
+  glass: string;
+  /** Cam yüzeyin ışıklı kenarı. */
+  glassLine: string;
+  /** Marka parıltısı — mor gölge rengi (buton, kapsül, seçili gün). */
+  glow: string;
+  /** Butonun üstünden geçen ışık şeridi (saydam → beyaz → saydam). */
+  shineGradient: readonly [string, string, string];
+  /** Anahtar topu ve kaydırıcı başparmağı — iki temada da beyaz. */
+  knob: string;
+  /** Degrade ikon kutuları (IconTile) — iki temada aynı, üstünde beyaz ikon. */
+  tileTones: {
+    violet: readonly [string, string];
+    cyan: readonly [string, string];
+    pink: readonly [string, string];
+    mint: readonly [string, string];
+    gold: readonly [string, string];
+    red: readonly [string, string];
+    signature: readonly [string, string];
+    neutral: readonly [string, string];
+  };
+  /** Sıralama madalyaları (RankBadge) ve üstlerindeki rakam. */
+  medalGold: readonly [string, string];
+  medalSilver: readonly [string, string];
+  medalBronze: readonly [string, string];
+  medalInk: string;
 }
 
 /**
- * ELİTLİG TASARIM DİLİ — SAKİN KÂĞIT, KİMLİK KOYU MOR, VURGU PEMBE.
+ * ELİTLİG GECE TEMASI (2026-11) — MOR GECE, CAMGÖBEĞİ IŞIK, PEMBE CANLI.
  *
- *   1. KÂĞIT ÇOK AÇIK LAVANTA-GRİDİR (#F7F5FB), kartlar beyaz ve GÖLGESİZ;
- *      ayrımı dolgu farkı + 1px kenarlık yapar. Arayüz ferah ve sade okunur.
- *   2. SİYAH YOK, KOYU MOR VAR. Önceki grafit (neredeyse siyah) yüzeylerin
- *      tamamı — kimlik blokları (`inkBlock`, `gradientInk`), maç sahnesi,
- *      toast — ElitLig'in koyu moruna (#2A0E5E) geçti. Metin bile
- *      saf siyah değil, morun en koyu tonudur.
- *   3. RENK PALETİ MOR + PEMBE.
- *        brand  (mor)   = AKSİYON ve SEÇİLİ DURUM
- *        accent (pembe) = VERİ (bar, oran, vurgulanan takım)
- *        live   (kırmızı) = CANLI
- *      Sonuç renkleri (galibiyet yeşili vb.) ve saha yeşili anlam taşıdığı
- *      için korunur.
- *   4. GÖLGE yalnız yüzen katmandadır (sheet, toast) ve mordur; kart gradyanı düzdür.
+ *   1. KOYU TEMA "GECE MORU": zemin siyah değil, mora çalan bir gece
+ *      (#100F1A). Kartlar bir kademe açık ve hafif mor. Ekranların tepesinde
+ *      mor + camgöbeği bir ışık (aurora) durur.
+ *   2. AÇIK TEMA "LAVANTA SİS": lavanta zemin, beyaz kartlar, aynı renkler
+ *      beyazda okunacak kadar koyulaştırılmış.
+ *   3. RENKLERİN ANLAMI:
+ *        brand  (mor)        = AKSİYON ve SEÇİLİ DURUM
+ *        accent (camgöbeği)  = VERİ (bar, oran, ev sahibi)
+ *        live   (pembe)      = CANLI
+ *        win nane · draw altın · loss kırmızı
+ *   4. İMZA DEGRADE mor → camgöbeği yalnız grafik işarettedir
+ *      (`gradientSignature`); metin taşıyan dolgu `gradientBrand`tır.
+ *   5. Gölge yalnız yüzen katmandadır ve mor tonludur; seçili kapsül ve
+ *      birincil buton mor bir parıltı (`glow`) taşır.
  */
 export const light: Palette = {
-  bg:       "#F7F5FB",
+  bg:       "#F4F3FB",
   surface1: "#FFFFFF",
-  surface2: "#F6F3FC",
-  surface3: "#EFEBF7",
+  surface2: "#F3F1FB",
+  surface3: "#EAE7F6",
   elevated: "#FFFFFF",
-  inverse:  "#2A0E5E",
-  inkBlock: "#2A0E5E",
-  overlay:  "rgba(30, 10, 64, 0.50)",
-  pressed:  "#F3EFFA",
-  ripple:   "rgba(46, 16, 101, 0.07)",
+  inverse:  "#1D1A3D",
+  inkBlock: "#1D1A3D",
+  overlay:  "rgba(21, 19, 42, 0.50)",
+  pressed:  "#EFEDF9",
+  ripple:   "rgba(40, 30, 110, 0.07)",
 
-  textPrimary:   "#1A1030",
-  textSecondary: "#4D4466",
-  textTertiary:  "#6B6382",
-  textDisabled:  "#AAA2BE",
+  textPrimary:   "#15132A",
+  textSecondary: "#4A4766",
+  textTertiary:  "#666383",
+  textDisabled:  "#ABA8C4",
   textOnBrand:   "#FFFFFF",
   textOnStatus:  "#FFFFFF",
   onDark:        "#FFFFFF",
-  onDarkMuted:   "rgba(255, 255, 255, 0.70)",
+  onDarkMuted:   "rgba(255, 255, 255, 0.72)",
   onInverse:     "#FFFFFF",
 
-  border:       "#EAE6F2",
-  borderStrong: "#D6CEE6",
-  separator:    "#F0EDF6",
+  border:       "#E4E1F1",
+  borderStrong: "#CFCAE6",
+  separator:    "#EEECF7",
   borderOnDark: "rgba(255, 255, 255, 0.14)",
 
-  brand:       "#6D28D9",
-  brandStrong: "#5B21B6",
-  brandAccent: "#6D28D9",
-  brandDim:    "#F1EBFE",
-  brandBorder: "#DDD0FB",
-  brandOnDark: "#D8C8FF",
+  brand:       "#5A46F0",
+  brandStrong: "#4936D6",
+  brandAccent: "#5340E6",
+  brandDim:    "#ECE9FE",
+  brandBorder: "#D3CCFB",
+  brandOnDark: "#C9C1FF",
 
-  accent:       "#DB2777",
-  accentStrong: "#BE185D",
-  accentText:   "#BE185D",
-  accentDim:    "#FDEDF5",
-  accentBorder: "#F8C8DF",
+  accent:       "#0776AA",
+  accentStrong: "#06628E",
+  accentText:   "#06709C",
+  accentDim:    "#E3F4FC",
+  accentBorder: "#BCE5F7",
   textOnAccent: "#FFFFFF",
 
-  slate:     "#7A7091",
-  slateSoft: "#E1DAEE",
+  slate:     "#7A7894",
+  slateSoft: "#E0DDF0",
 
-  live:       "#E0233A",
-  liveDim:    "#FDE8EB",
-  liveGlow:   "rgba(224, 35, 58, 0.20)",
-  liveOnDark: "#FF8A98",
+  live:       "#DB2E6B",
+  liveDim:    "#FDE7EF",
+  liveGlow:   "rgba(219, 46, 107, 0.20)",
+  liveOnDark: "#FF8CB5",
 
-  win:    "#0F9F5F",  winDim:    "#E3F6EC",
-  draw:   "#6E6585",  drawDim:   "#F1EDF8",
-  loss:   "#D92D20",  lossDim:   "#FDEBE9",
-  warn:   "#B54708",  warnDim:   "#FEF2E4",
-  danger: "#D92D20",  dangerDim: "#FDEBE9",
-  info:   "#6D28D9",  infoDim:   "#F3EDFF",
+  win:    "#0C9672",  winDim:    "#E1F6F0",
+  draw:   "#A87300",  drawDim:   "#FBF2DC",
+  loss:   "#DC3049",  lossDim:   "#FDE9EC",
+  warn:   "#B0600A",  warnDim:   "#FEF1E2",
+  danger: "#DC3049",  dangerDim: "#FDE9EC",
+  info:   "#06709C",  infoDim:   "#E3F4FC",
 
-  yellowCard: "#D4A106",
-  redCard:    "#D92D20",
-  star:       "#6D28D9",
-  starEmpty:  "#D4C9EC",
-  pitch:      "#103A31",
+  yellowCard: "#E0A800",
+  redCard:    "#DC3049",
+  star:       "#D69A00",
+  starEmpty:  "#D6D2EA",
+  pitch:      "#103A33",
   chalk:      "rgba(255, 255, 255, 0.22)",
-  chalkInk:   "rgba(46, 16, 101, 0.06)",
+  chalkInk:   "rgba(40, 30, 110, 0.06)",
   onPitch:    "#FFFFFF",
 
-  ratingPoor:  "#D92D20", ratingPoorBg:  "#FDEBE9",
-  ratingFair:  "#B54708", ratingFairBg:  "#FEF2E4",
-  ratingGood:  "#0F9F5F", ratingGoodBg:  "#E3F6EC",
-  ratingGreat: "#067647", ratingGreatBg: "#D6F2E3",
-  ratingElite: "#6D28D9", ratingEliteBg: "#F3EDFF",
-  ratingNone:  "#625879", ratingNoneBg:  "#F1EDF8",
+  ratingPoor:  "#DC3049", ratingPoorBg:  "#FDE9EC",
+  ratingFair:  "#B0600A", ratingFairBg:  "#FEF1E2",
+  ratingGood:  "#0C9672", ratingGoodBg:  "#E1F6F0",
+  ratingGreat: "#06709C", ratingGreatBg: "#E3F4FC",
+  ratingElite: "#5A46F0", ratingEliteBg: "#ECE9FE",
+  ratingNone:  "#625F7D", ratingNoneBg:  "#F0EEF8",
 
-  posKeeper:    "#93610A",
-  posDefense:   "#0B7468",
-  posMidfield:  "#6D28D9",
-  posForward:   "#BE185D",
-  posUnknown:   "#625879",
+  posKeeper:    "#8F5F06",
+  posDefense:   "#06709C",
+  posMidfield:  "#5A46F0",
+  posForward:   "#C42762",
+  posUnknown:   "#625F7D",
 
-  zoneChampion:          "#B7861A",
-  zonePromotion:         "#0F9F5F",
-  zonePlayoff:           "#DB2777",
-  zoneRelegationPlayoff: "#B54708",
-  zoneRelegation:        "#D92D20",
+  zoneChampion:          "#C98A00",
+  zonePromotion:         "#0C9672",
+  zonePlayoff:           "#0776AA",
+  zoneRelegationPlayoff: "#B0600A",
+  zoneRelegation:        "#DC3049",
 
-  /* SAHNE — koyu mor; sağdan sola çok hafif aydınlanır. */
-  gradientInk:     ["#371379", "#2A0E5E"],
-  gradientBrand:   ["#7735E3", "#6D28D9"],
-  gradientAccent:  ["#EC4899", "#DB2777"],
-  gradientLive:    ["#EC3A4F", "#D41F35"],
+  /* SAHNE — gece moru; mor bir ışıkla aydınlanır. İki temada da aynı. */
+  gradientInk:     ["#2B2470", "#1A1740"],
+  gradientBrand:   ["#5A46F0", "#3F64F2"],
+  gradientAccent:  ["#0A86BE", "#06628E"],
+  gradientLive:    ["#F0457F", "#D42A64"],
   gradientPitch:   ["#174A40", "#0F2F28"],
   gradientSurface: ["#FFFFFF", "#FFFFFF"],
-  /* Kart DÜZDÜR: iki durak aynı beyaz. */
   gradientCard:    ["#FFFFFF", "#FFFFFF"],
 
-  /* MAÇ SAHNESİ — koyu mor atmosfer, dipte beyaz kâğıt. Son durak matchCanvas ile aynı. */
-  matchCanvas:  "#F7F5FB",
-  matchTint: "#2A0E5E",
-  matchWash: ["rgba(42, 14, 94, 0)", "rgba(42, 14, 94, 0.55)", "#F7F5FB"],
-  glassBorder:  "rgba(255, 255, 255, 0.18)",
-  rimLight: ["#FFFFFF", "#F3EEFC"],
+  matchCanvas: "#F4F3FB",
+  matchTint:   "#1D1A3D",
+  matchWash:   ["rgba(29, 26, 61, 0)", "rgba(29, 26, 61, 0.55)", "#F4F3FB"],
+  glassBorder: "rgba(255, 255, 255, 0.18)",
+  rimLight: ["#FFFFFF", "#EFEDF9"],
   rimDark:  ["rgba(255, 255, 255, 0.24)", "rgba(255, 255, 255, 0.05)"],
 
-  shadowColor:       "#2A0E5E",
-  skeletonBase:      "#EEEAF6",
-  skeletonHighlight: "#F8F6FC",
+  shadowColor:       "#2A2070",
+  skeletonBase:      "#ECE9F6",
+  skeletonHighlight: "#F8F7FD",
 
-  /* ALT MENÜ — beyaz; seçili sekme derin mor. */
+  /* ALT MENÜ — yüzen beyaz cam; seçili sekme imza degradeli kapsül. */
   tabBar:         "#FFFFFF",
-  tabBarBorder:   "#EAE6F2",
+  tabBarBorder:   "rgba(40, 30, 110, 0.08)",
   gradientTabBar: ["#FFFFFF", "#FFFFFF"],
-  tabActive:      "#6D28D9",
-  tabInactive:    "#6B6382",
-  tabBeam:        "#DB2777",
-  tabCapsule:       "#F1EBFE",
-  tabCapsuleBorder: "rgba(109, 40, 217, 0)",
+  tabActive:      "#5A46F0",
+  tabInactive:    "#666383",
+  tabBeam:        "#0776AA",
+  tabCapsule:       "#5A46F0",
+  tabCapsuleBorder: "rgba(255, 255, 255, 0.18)",
 
-  adminBar:           "#0E1424",
-  adminBarBorder:     "#232B42",
-  gradientAdminBar:   ["#141C31", "#0E1424"],
-  gradientAdminStage: ["#1B2440", "#0E1424"],
+  adminBar:           "#12142A",
+  adminBarBorder:     "#252845",
+  gradientAdminBar:   ["#181B36", "#12142A"],
+  gradientAdminStage: ["#22265A", "#12142A"],
   adminTabActive:     "#F7C948",
-  adminTabInactive:   "#9AA3BC",
-  adminCapsule:       "rgba(247, 201, 72, 0.14)",
+  adminTabInactive:   "#A1A6C4",
+  adminCapsule:       "rgba(247, 201, 72, 0.16)",
   adminAccent:        "#F7C948",
   gradientAdminAccent: ["#FBD86A", "#F2B420"],
   adminAccentInk:     "#1A1405",
@@ -487,134 +525,158 @@ export const light: Palette = {
   inkTile:          "rgba(255, 255, 255, 0.08)",
   inkTileBorder:    "rgba(255, 255, 255, 0.14)",
 
-  chartGrid:         "#F0EDF6",
-  scrimGradientTop:    "rgba(30, 10, 64, 0.00)",
-  scrimGradientBottom: "rgba(30, 10, 64, 0.88)",
+  chartGrid:           "#EEECF7",
+  scrimGradientTop:    "rgba(21, 19, 42, 0.00)",
+  scrimGradientBottom: "rgba(21, 19, 42, 0.88)",
+
+  gradientSignature: ["#5A46F0", "#0BA5E3"],
+  auroraViolet: "rgba(110, 91, 255, 0.20)",
+  auroraCyan:   "rgba(56, 198, 255, 0.16)",
+  auroraPink:   "rgba(255, 92, 168, 0.10)",
+  glass:        "rgba(255, 255, 255, 0.86)",
+  glassLine:    "rgba(40, 30, 110, 0.08)",
+  glow:         "#5A46F0",
+  shineGradient: ["rgba(255, 255, 255, 0)", "rgba(255, 255, 255, 0.45)", "rgba(255, 255, 255, 0)"],
+  knob:         "#FFFFFF",
+  tileTones: {
+    violet: ["#8F7BFF", "#5A46F0"],
+    cyan: ["#38C6FF", "#1C7FD6"],
+    pink: ["#FF6FB0", "#C42A79"],
+    mint: ["#3DDBB0", "#0E9C78"],
+    gold: ["#FFD166", "#E0960E"],
+    red: ["#FF7A8A", "#D42A44"],
+    signature: ["#6E5BFF", "#38C6FF"],
+    neutral: ["#6D6B88", "#45435E"],
+  },
+  medalGold: ["#FFE08A", "#E7A91C"],
+  medalSilver: ["#F1F2F8", "#A9ADC4"],
+  medalBronze: ["#F3B98A", "#B86A2E"],
+  medalInk: "#2A1A05",
 };
 
 /**
- * KOYU TEMA — mor gece. Siyah yerine morun en derin tonları; kartlar bir
- * kademe açık, marka moru ve pembe koyu zeminde okunsun diye açılır.
+ * KOYU TEMA "GECE MORU" — siyah yerine mora çalan gece; kartlar bir kademe
+ * açık. Mor ve camgöbeği koyu zeminde okunacak kadar açıktır.
  */
 export const dark: Palette = {
-  bg:       "#100820",
-  surface1: "#190F2E",
-  surface2: "#21163B",
-  surface3: "#2A1D48",
-  elevated: "#21163B",
-  inverse:  "#F5F1FD",
-  inkBlock: "#2A0E5E",
-  overlay:  "rgba(8, 3, 20, 0.72)",
-  pressed:  "#21163B",
+  bg:       "#100F1A",
+  surface1: "#1A1929",
+  surface2: "#232138",
+  surface3: "#2B2943",
+  elevated: "#1E1D30",
+  inverse:  "#F4F3FB",
+  inkBlock: "#1F1B45",
+  overlay:  "rgba(6, 5, 14, 0.72)",
+  pressed:  "#232138",
   ripple:   "rgba(255, 255, 255, 0.08)",
 
-  textPrimary:   "#FFFFFF",
-  textSecondary: "#CBC2DF",
-  textTertiary:  "#9E94B8",
-  textDisabled:  "#5F5478",
+  textPrimary:   "#F4F4F8",
+  textSecondary: "#B9B7D3",
+  textTertiary:  "#8F8DAC",
+  textDisabled:  "#55536E",
   textOnBrand:   "#FFFFFF",
   textOnStatus:  "#FFFFFF",
   onDark:        "#FFFFFF",
-  onDarkMuted:   "rgba(255, 255, 255, 0.70)",
-  onInverse:     "#1A1030",
+  onDarkMuted:   "rgba(255, 255, 255, 0.72)",
+  onInverse:     "#15132A",
 
-  border:       "#2B2045",
-  borderStrong: "#43376A",
-  separator:    "#22183A",
-  borderOnDark: "rgba(255, 255, 255, 0.14)",
+  border:       "#27253C",
+  borderStrong: "#3A3852",
+  separator:    "#201E31",
+  borderOnDark: "rgba(255, 255, 255, 0.12)",
 
-  brand:       "#7C3AED",
-  brandStrong: "#6D28D9",
-  brandAccent: "#C4B5FD",
-  brandDim:    "#2A1A50",
-  brandBorder: "#45317C",
-  brandOnDark: "#D8C8FF",
+  brand:       "#6E5BFF",
+  brandStrong: "#5A46F0",
+  brandAccent: "#ADA2FF",
+  brandDim:    "#221F45",
+  brandBorder: "#3B3480",
+  brandOnDark: "#C9C1FF",
 
-  accent:       "#F472B6",
-  accentStrong: "#EC4899",
-  accentText:   "#F9A8D4",
-  accentDim:    "#3A1431",
-  accentBorder: "#5C2149",
-  textOnAccent: "#2A0618",
+  accent:       "#38C6FF",
+  accentStrong: "#1FAEEA",
+  accentText:   "#7FDBFF",
+  accentDim:    "#0F2A3A",
+  accentBorder: "#1B4A63",
+  textOnAccent: "#06202E",
 
-  slate:     "#9C91B5",
-  slateSoft: "#3A2F56",
+  slate:     "#8F8DAC",
+  slateSoft: "#2E2C45",
 
-  live:       "#FF4D61",
-  liveDim:    "#3A1219",
-  liveGlow:   "rgba(255, 77, 97, 0.28)",
-  liveOnDark: "#FF8A98",
+  live:       "#FF5C9A",
+  liveDim:    "#3A1428",
+  liveGlow:   "rgba(255, 92, 154, 0.30)",
+  liveOnDark: "#FF8CB5",
 
-  win:    "#34D399",  winDim:    "#0F2E22",
-  draw:   "#9C91B5",  drawDim:   "#251B3C",
-  loss:   "#FF7A6E",  lossDim:   "#3A1512",
-  warn:   "#F5B544",  warnDim:   "#33240C",
-  danger: "#FF7A6E",  dangerDim: "#3A1512",
-  info:   "#C4B5FD",  infoDim:   "#2A1B4E",
+  win:    "#3DDBB0",  winDim:    "#0E2E28",
+  draw:   "#FFD166",  drawDim:   "#33290F",
+  loss:   "#FF6378",  lossDim:   "#3A1520",
+  warn:   "#FFB547",  warnDim:   "#33240C",
+  danger: "#FF6378",  dangerDim: "#3A1520",
+  info:   "#7FDBFF",  infoDim:   "#0F2A3A",
 
-  yellowCard: "#F5B544",
-  redCard:    "#FF7A6E",
-  star:       "#C4B5FD",
-  starEmpty:  "#463A68",
-  pitch:      "#0E2E27",
+  yellowCard: "#FFD166",
+  redCard:    "#FF6378",
+  star:       "#FFD166",
+  starEmpty:  "#3A3852",
+  pitch:      "#0E2E2A",
   chalk:      "rgba(255, 255, 255, 0.18)",
   chalkInk:   "rgba(255, 255, 255, 0.05)",
   onPitch:    "#FFFFFF",
 
-  ratingPoor:  "#FF7A6E", ratingPoorBg:  "#3A1512",
-  ratingFair:  "#F5B544", ratingFairBg:  "#33240C",
-  ratingGood:  "#34D399", ratingGoodBg:  "#0F2E22",
-  ratingGreat: "#10B981", ratingGreatBg: "#0C2A1F",
-  ratingElite: "#C4B5FD", ratingEliteBg: "#2A1B4E",
-  ratingNone:  "#9C91B5", ratingNoneBg:  "#251B3C",
+  ratingPoor:  "#FF6378", ratingPoorBg:  "#3A1520",
+  ratingFair:  "#FFB547", ratingFairBg:  "#33240C",
+  ratingGood:  "#3DDBB0", ratingGoodBg:  "#0E2E28",
+  ratingGreat: "#38C6FF", ratingGreatBg: "#0F2A3A",
+  ratingElite: "#ADA2FF", ratingEliteBg: "#221F45",
+  ratingNone:  "#8F8DAC", ratingNoneBg:  "#232138",
 
-  posKeeper:    "#E7B54A",
-  posDefense:   "#5EEAD4",
-  posMidfield:  "#C4B5FD",
-  posForward:   "#F9A8D4",
-  posUnknown:   "#9C91B5",
+  posKeeper:    "#FFD166",
+  posDefense:   "#38C6FF",
+  posMidfield:  "#ADA2FF",
+  posForward:   "#FF8CB5",
+  posUnknown:   "#8F8DAC",
 
-  zoneChampion:          "#E7B54A",
-  zonePromotion:         "#34D399",
-  zonePlayoff:           "#F472B6",
-  zoneRelegationPlayoff: "#E39A5B",
-  zoneRelegation:        "#FF7A6E",
+  zoneChampion:          "#FFD166",
+  zonePromotion:         "#3DDBB0",
+  zonePlayoff:           "#38C6FF",
+  zoneRelegationPlayoff: "#FFB547",
+  zoneRelegation:        "#FF6378",
 
-  gradientInk:     ["#371379", "#2A0E5E"],
-  gradientBrand:   ["#8148F0", "#6D28D9"],
-  gradientAccent:  ["#F472B6", "#EC4899"],
-  gradientLive:    ["#FF4D61", "#E02A40"],
-  gradientPitch:   ["#174A40", "#0D2822"],
-  gradientSurface: ["#190F2E", "#190F2E"],
-  gradientCard:    ["#190F2E", "#190F2E"],
+  gradientInk:     ["#2B2470", "#1A1740"],
+  gradientBrand:   ["#6E5BFF", "#4C6CFF"],
+  gradientAccent:  ["#38C6FF", "#1FAEEA"],
+  gradientLive:    ["#FF5C9A", "#E0336F"],
+  gradientPitch:   ["#15463F", "#0C2824"],
+  gradientSurface: ["#1A1929", "#1A1929"],
+  gradientCard:    ["#1C1B2C", "#1A1929"],
 
-  matchCanvas:  "#100820",
-  matchTint: "#2A0E5E",
-  matchWash: ["rgba(42, 14, 94, 0)", "rgba(42, 14, 94, 0.62)", "#100820"],
-  glassBorder:  "rgba(255, 255, 255, 0.16)",
-  rimLight: ["#34284F", "#1B1232"],
+  matchCanvas: "#100F1A",
+  matchTint:   "#241E5C",
+  matchWash:   ["rgba(36, 30, 92, 0)", "rgba(36, 30, 92, 0.62)", "#100F1A"],
+  glassBorder: "rgba(255, 255, 255, 0.14)",
+  rimLight: ["#2E2C48", "#1C1B2C"],
   rimDark:  ["rgba(255, 255, 255, 0.18)", "rgba(255, 255, 255, 0.04)"],
 
-  shadowColor:       "#05020D",
-  skeletonBase:      "#21163B",
-  skeletonHighlight: "#2A1D48",
+  shadowColor:       "#000000",
+  skeletonBase:      "#1E1D30",
+  skeletonHighlight: "#2B2943",
 
-  tabBar:         "#190F2E",
-  tabBarBorder:   "#2B2045",
-  gradientTabBar: ["#190F2E", "#190F2E"],
-  tabActive:      "#F9A8D4",
-  tabInactive:    "#A69CC0",
-  tabBeam:        "#F472B6",
-  tabCapsule:       "rgba(244, 114, 182, 0.16)",
-  tabCapsuleBorder: "rgba(216, 200, 255, 0)",
+  tabBar:         "#1D1C2E",
+  tabBarBorder:   "rgba(255, 255, 255, 0.09)",
+  gradientTabBar: ["#1D1C2E", "#1D1C2E"],
+  tabActive:      "#FFFFFF",
+  tabInactive:    "#8F8DAC",
+  tabBeam:        "#38C6FF",
+  tabCapsule:       "#6E5BFF",
+  tabCapsuleBorder: "rgba(255, 255, 255, 0.16)",
 
-  adminBar:           "#0E1424",
-  adminBarBorder:     "#232B42",
-  gradientAdminBar:   ["#141C31", "#0E1424"],
-  gradientAdminStage: ["#1B2440", "#0E1424"],
+  adminBar:           "#12142A",
+  adminBarBorder:     "#252845",
+  gradientAdminBar:   ["#181B36", "#12142A"],
+  gradientAdminStage: ["#22265A", "#12142A"],
   adminTabActive:     "#F7C948",
-  adminTabInactive:   "#9AA3BC",
-  adminCapsule:       "rgba(247, 201, 72, 0.14)",
+  adminTabInactive:   "#A1A6C4",
+  adminCapsule:       "rgba(247, 201, 72, 0.16)",
   adminAccent:        "#F7C948",
   gradientAdminAccent: ["#FBD86A", "#F2B420"],
   adminAccentInk:     "#1A1405",
@@ -625,9 +687,33 @@ export const dark: Palette = {
   inkTile:          "rgba(255, 255, 255, 0.08)",
   inkTileBorder:    "rgba(255, 255, 255, 0.14)",
 
-  chartGrid:         "#22183A",
-  scrimGradientTop:    "rgba(8, 3, 20, 0.00)",
-  scrimGradientBottom: "rgba(8, 3, 20, 0.90)",
+  chartGrid:           "#201E31",
+  scrimGradientTop:    "rgba(6, 5, 14, 0.00)",
+  scrimGradientBottom: "rgba(6, 5, 14, 0.90)",
+
+  gradientSignature: ["#6E5BFF", "#38C6FF"],
+  auroraViolet: "rgba(110, 91, 255, 0.34)",
+  auroraCyan:   "rgba(56, 198, 255, 0.16)",
+  auroraPink:   "rgba(255, 92, 168, 0.12)",
+  glass:        "rgba(29, 28, 46, 0.90)",
+  glassLine:    "rgba(255, 255, 255, 0.09)",
+  glow:         "#6E5BFF",
+  shineGradient: ["rgba(255, 255, 255, 0)", "rgba(255, 255, 255, 0.40)", "rgba(255, 255, 255, 0)"],
+  knob:         "#FFFFFF",
+  tileTones: {
+    violet: ["#8F7BFF", "#5A46F0"],
+    cyan: ["#38C6FF", "#1C7FD6"],
+    pink: ["#FF6FB0", "#C42A79"],
+    mint: ["#3DDBB0", "#0E9C78"],
+    gold: ["#FFD166", "#E0960E"],
+    red: ["#FF7A8A", "#D42A44"],
+    signature: ["#6E5BFF", "#38C6FF"],
+    neutral: ["#6D6B88", "#45435E"],
+  },
+  medalGold: ["#FFE08A", "#E7A91C"],
+  medalSilver: ["#F1F2F8", "#A9ADC4"],
+  medalBronze: ["#F3B98A", "#B86A2E"],
+  medalInk: "#2A1A05",
 };
 
 /** Tema adı — depolanan tercih ve sistem ayarı bu iki değere indirgenir. */

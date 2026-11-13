@@ -16,15 +16,25 @@
  *     initial={{ active: true }}
  *     onSubmit={(values) => createLeague(values)}
  *   />
+ *
+ * YÖNETİM TASARIM DİLİ (form sayfası):
+ *   · Alanlar CAM GRUP KARTLARINDA durur; `FieldDef.group` verilen alan yeni
+ *     bir grup açar ve grubun başlığı versal `overline` olarak kartın üstüne
+ *     yazılır. Grup verilmeyen formlar tek kartta toplanır.
+ *   · Metin alanları `Input floating`; seçim/tarih alanları aynı ölçüde
+ *     (fields.tsx). Çok satırlı metin etiketi üstte tutar.
+ *   · Birincil eylem altta tam genişlik `Button size="lg"`; yıkıcı ikincil
+ *     eylem (`secondary.danger`) solda `danger` olarak durur.
+ *   · Sunucu hatası formun dibinde kırmızı zeminli bir kutuda, ikonla.
  */
 
-import type Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { BottomSheet, Button, Input } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
-import { colors, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
 
 import {
   ChipsField,
@@ -79,9 +89,58 @@ export interface FieldDef {
   onChange?: (value: unknown, values: FormValues) => FormValues | void;
   disabled?: boolean;
   maxLength?: number;
+  /**
+   * Grup başlığı — bu alandan itibaren yeni bir grup kartı açılır (FormSheet
+   * ve `grouped` FormFields). Sonraki alanlar aynı grubu `group` vermeden de
+   * sürdürür.
+   */
+  group?: string;
 }
 
 export function FormFields({
+  fields,
+  values,
+  onChange,
+  errors,
+  grouped = false,
+}: {
+  fields: FieldDef[];
+  values: FormValues;
+  onChange: (next: FormValues) => void;
+  errors?: Record<string, string>;
+  /** Alanları cam grup kartlarına böl (FormSheet varsayılanı). */
+  grouped?: boolean;
+}) {
+  if (grouped || fields.some((f) => f.group)) {
+    const groups: { title?: string; fields: FieldDef[] }[] = [];
+    for (const field of fields) {
+      if (field.hidden?.(values)) continue;
+      if (!groups.length || (field.group && field.group !== groups[groups.length - 1].title)) {
+        groups.push({ title: field.group, fields: [] });
+      }
+      groups[groups.length - 1].fields.push(field);
+    }
+    return (
+      <View style={styles.groups}>
+        {groups.map((group, index) => (
+          <View key={`${group.title ?? "g"}-${index}`} style={styles.groupWrap}>
+            {group.title ? (
+              <Text style={styles.groupTitle} {...textScale.dense}>
+                {upperTR(group.title)}
+              </Text>
+            ) : null}
+            <View style={grouped ? styles.groupCard : null}>
+              <FieldList fields={group.fields} values={values} onChange={onChange} errors={errors} />
+            </View>
+          </View>
+        ))}
+      </View>
+    );
+  }
+  return <FieldList fields={fields} values={values} onChange={onChange} errors={errors} />;
+}
+
+function FieldList({
   fields,
   values,
   onChange,
@@ -203,6 +262,7 @@ export function FormFields({
             return (
               <Input
                 key={field.key}
+                floating={field.kind !== "multiline"}
                 label={label}
                 value={value == null ? "" : String(value)}
                 onChangeText={(text) => set(field, numeric ? text.replace(/[^\d.,-]/g, "") : text)}
@@ -326,23 +386,30 @@ export function FormSheet({
               variant={secondary.danger ? "danger" : "secondary"}
               onPress={secondary.onPress}
               disabled={busy}
+              size="lg"
             />
           ) : null}
-          <Button label={submitLabel} onPress={submit} loading={busy} style={styles.submit} haptic="success" />
+          <Button label={submitLabel} onPress={submit} loading={busy} style={styles.submit} haptic="success" size="lg" />
         </View>
       }
     >
       {intro ? (
-        <Text style={styles.intro} {...textScale.long}>
-          {intro}
-        </Text>
+        <View style={styles.intro}>
+          <Ionicons name="information-circle-outline" size={18} color={colors.brandAccent} />
+          <Text style={styles.introText} {...textScale.long}>
+            {intro}
+          </Text>
+        </View>
       ) : null}
-      <FormFields fields={fields} values={values} onChange={setValues} errors={errors} />
+      <FormFields fields={fields} values={values} onChange={setValues} errors={errors} grouped />
       {children}
       {failure ? (
-        <Text style={styles.failure} {...textScale.long}>
-          {failure}
-        </Text>
+        <View style={styles.failure} accessibilityRole="alert">
+          <Ionicons name="alert-circle" size={18} color={colors.danger} />
+          <Text style={styles.failureText} {...textScale.long}>
+            {failure}
+          </Text>
+        </View>
       ) : null}
     </BottomSheet>
   );
@@ -350,8 +417,36 @@ export function FormSheet({
 
 const styles = StyleSheet.create({
   fields: { gap: space.md },
+  groups: { gap: space.lg },
+  groupWrap: { gap: space.sm },
+  groupTitle: { ...type.overline, color: colors.textTertiary, paddingHorizontal: space.xs },
+  groupCard: {
+    padding: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
   footer: { flexDirection: "row", gap: space.sm },
   submit: { flex: 1 },
-  intro: { ...type.bodySm, color: colors.textSecondary, marginBottom: space.md },
-  failure: { ...type.bodySm, color: colors.danger, marginTop: space.md },
+  intro: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space.sm,
+    padding: space.md,
+    marginBottom: space.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.brandDim,
+  },
+  introText: { ...type.bodySm, color: colors.textSecondary, flex: 1 },
+  failure: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space.sm,
+    padding: space.md,
+    marginTop: space.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.dangerDim,
+  },
+  failureText: { ...type.bodySm, color: colors.danger, flex: 1 },
 });

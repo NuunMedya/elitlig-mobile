@@ -5,6 +5,11 @@
  *   (Metin isteyen onaylar — ret gerekçesi gibi — FormSheet ile yapılır.)
  *   <ActionSheet visible actions={[{ label, icon, onPress, danger }]} />
  *   useAdminMutation(fn, { success, invalidate }) → useMutation + toast + önbellek tazeleme
+ *
+ * EYLEM SAYFASI GÖRÜNÜMÜ (yönetim tasarım dili): her eylem 56 px satır —
+ * solda yuvarlak ikon pulu (yıkıcı eylem kırmızı zeminli), ad + ipucu, sağda
+ * chevron. Satırlar tek cam kartta ince ayraçla; yıkıcı eylemler kartın
+ * dibinde ayrı bir kartta durur ki yanlışlıkla dokunulmasın.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -14,7 +19,7 @@ import { Alert, StyleSheet, Text, View } from "react-native";
 
 import { BottomSheet, Touchable, useToast } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
-import { colors, hairline, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 export function confirmAction({
   title,
@@ -64,36 +69,40 @@ export function ActionSheet({
   return (
     <BottomSheet visible={visible} onClose={onClose} title={title}>
       {children}
-      <View>
-        {actions
-          .filter((a) => !a.hidden)
-          .map((action, index) => (
-            <Touchable
-              key={action.key ?? action.label}
-              disabled={action.disabled}
-              onPress={() => {
-                onClose();
-                setTimeout(action.onPress, 250);
-              }}
-              style={[styles.row, index === 0 ? null : styles.rowBorder, action.disabled ? styles.disabled : null]}
-              accessibilityRole="button"
-            >
-              {action.icon ? (
-                <Ionicons name={action.icon} size={20} color={action.danger ? colors.danger : colors.textSecondary} />
-              ) : null}
-              <View style={styles.texts}>
-                <Text style={[styles.label, action.danger ? styles.danger : null]} {...textScale.dense}>
-                  {action.label}
-                </Text>
-                {action.hint ? (
-                  <Text style={styles.hint} {...textScale.dense}>
-                    {action.hint}
+      {[actions.filter((a) => !a.hidden && !a.danger), actions.filter((a) => !a.hidden && a.danger)]
+        .filter((group) => group.length)
+        .map((group, groupIndex) => (
+          <View key={groupIndex} style={[styles.card, groupIndex ? styles.cardGap : null]}>
+            {group.map((action, index) => (
+              <Touchable
+                key={action.key ?? action.label}
+                feedback="row"
+                disabled={action.disabled}
+                onPress={() => {
+                  onClose();
+                  setTimeout(action.onPress, 250);
+                }}
+                style={[styles.row, index === 0 ? null : styles.rowBorder, action.disabled ? styles.disabled : null]}
+                accessibilityRole="button"
+              >
+                <View style={[styles.lead, action.danger ? styles.leadDanger : null]}>
+                  <Ionicons name={action.icon ?? "ellipse-outline"} size={18} color={action.danger ? colors.danger : colors.brandAccent} />
+                </View>
+                <View style={styles.texts}>
+                  <Text style={[styles.label, action.danger ? styles.danger : null]} {...textScale.dense}>
+                    {action.label}
                   </Text>
-                ) : null}
-              </View>
-            </Touchable>
-          ))}
-      </View>
+                  {action.hint ? (
+                    <Text style={styles.hint} {...textScale.dense}>
+                      {action.hint}
+                    </Text>
+                  ) : null}
+                </View>
+                <Ionicons name="chevron-forward" size={15} color={colors.textTertiary} />
+              </Touchable>
+            ))}
+          </View>
+        ))}
     </BottomSheet>
   );
 }
@@ -128,10 +137,20 @@ export function useAdminMutation<TVars, TResult = unknown>(
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.md },
+  card: {
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    overflow: "hidden",
+  },
+  cardGap: { marginTop: space.md },
+  row: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 56, paddingVertical: space.sm, paddingHorizontal: space.md },
   rowBorder: { borderTopWidth: hairline, borderTopColor: colors.separator },
+  lead: { width: 36, height: 36, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandDim },
+  leadDanger: { backgroundColor: colors.dangerDim },
   texts: { flex: 1, gap: 2 },
-  label: { ...type.body, color: colors.textPrimary },
+  label: { ...type.h4, color: colors.textPrimary },
   danger: { color: colors.danger },
   hint: { ...type.caption, color: colors.textTertiary },
   disabled: { opacity: 0.4 },

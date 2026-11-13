@@ -17,7 +17,8 @@ import { StyleSheet, View } from "react-native";
 import { AdminScreen, Panel, RecordCard, StatRow, confirmAction, useAdminMutation } from "@/components/admin";
 import { TeamEntrySheet } from "@/components/admin/accounting/TeamFinanceSheets";
 import { BarRow, Muted } from "@/components/admin/accounting/parts";
-import { Badge, Button, EmptyState, SkeletonCard } from "@/components/ui";
+import { LineRow, StageChip, ToolStage } from "@/components/admin/tools/ToolKit";
+import { Button, EmptyState, Reveal, SkeletonCard } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { errorText } from "@/lib/admin/errors";
 import { formatDate } from "@/lib/admin/format";
@@ -72,24 +73,26 @@ export default function TeamFinanceDetailScreen() {
         <EmptyState icon="wallet-outline" title="Takım detayı yüklenemedi" body={query.error ? errorText(query.error) : undefined} action={{ label: "Tekrar dene", onPress: () => void query.refetch() }} variant="inline" />
       ) : (
         <>
-          <View style={styles.badges}>
-            <Badge label={FFP_STATUS_LABELS[d.ffp.status] || d.ffp.status} tone={FFP_TONE[d.ffp.status] || "neutral"} />
-            <Badge label={`${d.playerCount} aktif oyuncu`} tone="neutral" />
-          </View>
-          <Panel title="Finansal özet">
-            <StatRow
-              items={[
-                { label: "Kadro toplam değeri", value: formatEtl(d.squadValue), tone: "accent" },
-                { label: "Net transfer harcaması", value: teamMoney(d.totals.netSpend), tone: d.totals.netSpend > 0 ? "danger" : "win" },
+          <Reveal index={0}>
+            <ToolStage
+              icon="shield-half"
+              tone="gold"
+              overline="Kadro toplam değeri"
+              value={formatEtl(d.squadValue)}
+              caption={[d.team.league, d.team.season].filter(Boolean).join(" · ") || null}
+              chips={
+                <>
+                  <StageChip icon="shield-checkmark-outline" tone={d.ffp.status === "BREACH" ? "danger" : d.ffp.status === "WARNING" ? "warn" : d.ffp.status === "COMPLIANT" ? "win" : "plain"} label={FFP_STATUS_LABELS[d.ffp.status] || d.ffp.status} />
+                  <StageChip icon="people-outline" label={`${d.playerCount} aktif oyuncu`} />
+                </>
+              }
+              stats={[
+                { label: "Satış geliri", value: teamMoney(d.totals.income, "").trim(), tone: "win" },
+                { label: "Alım gideri", value: teamMoney(d.totals.expense, "").trim(), tone: "danger" },
+                { label: "Net harcama", value: teamMoney(d.totals.netSpend, "").trim(), tone: d.totals.netSpend > 0 ? "warn" : "win" },
               ]}
             />
-            <StatRow
-              items={[
-                { label: "Oyuncu satış geliri", value: teamMoney(d.totals.income), tone: "win" },
-                { label: "Oyuncu alım gideri", value: teamMoney(d.totals.expense), tone: "danger" },
-              ]}
-            />
-          </Panel>
+          </Reveal>
 
           {d.ffp.enabled && d.ffp.checks.length ? (
             <Panel title="FFP sınır kullanımı">
@@ -113,7 +116,19 @@ export default function TeamFinanceDetailScreen() {
 
           <Panel title={`Kadro (${d.playerCount} oyuncu)`}>
             {d.squad.length ? (
-              d.squad.map((p) => <RecordCard key={p.id} title={p.playerName} subtitle={p.position || "—"} avatar={{ name: p.playerName, image: p.image }} value={p.marketValue != null ? formatEtl(p.marketValue) : "—"} valueTone="accent" />)
+              <View>
+                {d.squad.map((p) => (
+                  <LineRow
+                    key={p.id}
+                    avatar={{ name: p.playerName, image: p.image }}
+                    title={p.playerName}
+                    sub={p.position || "—"}
+                    meta={p.globalRank ? `Genel sıra #${p.globalRank}` : null}
+                    value={p.marketValue != null ? formatEtl(p.marketValue) : "—"}
+                    valueTone="accent"
+                  />
+                ))}
+              </View>
             ) : (
               <Muted>Aktif oyuncu yok.</Muted>
             )}

@@ -20,7 +20,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   EmptyState,
   ErrorState,
+  IconTile,
   ListRow,
+  Reveal,
   ScreenHeader,
   SkeletonListFooter,
   SkeletonListRow,
@@ -38,12 +40,13 @@ import { getPanelNotifications, markAllNotifsRead, markNotifRead, type PanelNoti
 import { timeAgo } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, space, textScale, type } from "@/theme";
+import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 const PARAM_TO_KIND: Record<string, NotificationKind> = { transfer: "transfer", disiplin: "discipline", mac: "match" };
 const KIND_TO_PARAM: Record<NotificationKind, string> = { transfer: "transfer", discipline: "disiplin", match: "mac" };
 const KIND_ICON = { transfer: "swap-horizontal", discipline: "alert-circle", match: "football" } as const;
 const KIND_TONE = { transfer: "brand", discipline: "danger", match: "live" } as const;
+const KIND_TILE = { transfer: "violet", discipline: "red", match: "pink" } as const;
 const PAGE = 50;
 
 const positionOf = (index: number, length: number) =>
@@ -134,9 +137,17 @@ export default function TeamNotificationsScreen() {
         refreshControl={refresh.control}
         contentContainerStyle={styles.content}
         ListHeaderComponent={
-          <Text style={styles.hint} {...textScale.long}>
-            {NOTIFICATION_KINDS[kind].hint}
-          </Text>
+          <View style={styles.intro}>
+            <IconTile icon={KIND_ICON[kind]} tone={KIND_TILE[kind]} size={40} />
+            <View style={styles.introTexts}>
+              <Text style={styles.introTitle} {...textScale.dense}>
+                {unread[kind] ? `${unread[kind]} okunmamış` : "Hepsi okundu"}
+              </Text>
+              <Text style={styles.hint} {...textScale.long}>
+                {NOTIFICATION_KINDS[kind].hint}
+              </Text>
+            </View>
+          </View>
         }
         onEndReachedThreshold={0.5}
         onEndReached={() => {
@@ -153,6 +164,7 @@ export default function TeamNotificationsScreen() {
           )
         }
         renderItem={({ item, index }) => (
+          <Reveal index={index} limit={8} replayKey={kind}>
           <ListRow
             leading={{ icon: KIND_ICON[kind], tone: item.is_read ? "neutral" : KIND_TONE[kind] }}
             title={item.title}
@@ -162,6 +174,7 @@ export default function TeamNotificationsScreen() {
             onPress={() => open(item)}
             chevron={Boolean(notificationHref(item))}
           />
+          </Reveal>
         )}
       />
     </SafeAreaView>
@@ -171,5 +184,18 @@ export default function TeamNotificationsScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { paddingHorizontal: layout.screenPadding, paddingBottom: space.giant },
-  hint: { ...type.caption, color: colors.textTertiary, paddingVertical: space.md },
+  intro: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    padding: space.md,
+    marginVertical: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  introTexts: { flex: 1, gap: space.xxs },
+  introTitle: { ...type.h4, color: colors.textPrimary },
+  hint: { ...type.caption, color: colors.textTertiary },
 });

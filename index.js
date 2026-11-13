@@ -22,6 +22,7 @@ import React, { useEffect, useState } from "react";
 import * as SplashScreen from "expo-splash-screen";
 import { renderRootComponent } from "expo-router/build/renderRootComponent";
 import { THEME_STORAGE_KEY, setStoredTheme } from "./constants/themePreference";
+import { THEME_SNAPSHOT_KEY } from "./lib/themeTransition";
 import { useAppFonts } from "./theme/fonts";
 
 // Splash'i biz kapatacağız; hata yutulur çünkü splash zaten kapalıysa reddeder.
@@ -29,14 +30,21 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 function ThemedGate() {
   const [themeReady, setThemeReady] = useState(false);
+  /* Tema değişiminden sonraki açılış: eski temanın görüntüsü (bkz. lib/themeTransition.ts). */
+  const [snapshot, setSnapshot] = useState(null);
   const fontsReady = useAppFonts();
   const ready = themeReady && fontsReady;
 
   useEffect(() => {
-    AsyncStorage.getItem(THEME_STORAGE_KEY)
-      .catch(() => null)
-      .then((value) => {
-        setStoredTheme(value ?? null);
+    AsyncStorage.multiGet([THEME_STORAGE_KEY, THEME_SNAPSHOT_KEY])
+      .catch(() => [])
+      .then((pairs) => {
+        const map = Object.fromEntries(pairs ?? []);
+        setStoredTheme(map[THEME_STORAGE_KEY] ?? null);
+        if (map[THEME_SNAPSHOT_KEY]) {
+          setSnapshot(map[THEME_SNAPSHOT_KEY]);
+          AsyncStorage.removeItem(THEME_SNAPSHOT_KEY).catch(() => {});
+        }
         setThemeReady(true);
       });
   }, []);
@@ -50,7 +58,8 @@ function ThemedGate() {
   // Asıl uygulama ancak tema ve font hazır olduktan sonra yüklenir
   // (satır-içi require kasıtlı).
   const { App } = require("expo-router/build/qualified-entry");
-  return React.createElement(App);
+  const { ThemeSwitchOverlay } = require("./components/ThemeSwitchOverlay");
+  return React.createElement(ThemeSwitchOverlay, { uri: snapshot }, React.createElement(App));
 }
 
 renderRootComponent(ThemedGate);

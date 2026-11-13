@@ -70,13 +70,17 @@ import type { LayoutChangeEvent, SectionListData, SectionListRenderItemInfo } fr
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { CalendarSheet, type DayMarker } from "@/components/scores/CalendarSheet";
+import { DaySummary, type SummaryKey } from "@/components/scores/DaySummary";
 import { FollowedHint, FollowedSpotlight } from "@/components/scores/FollowedSpotlight";
 import { GoalBand } from "@/components/scores/GoalBand";
 import { MatchesDock } from "@/components/scores/MatchesDock";
+import { MatchStage } from "@/components/scores/MatchStage";
 import {
   byKickoff,
   dayPhrase,
   detectGoal,
+  fromIso,
+  MONTHS_TR,
   matchDay,
   normalizeName,
   scoreKey,
@@ -91,8 +95,11 @@ import {
   LeagueGroupHeader,
   MatchCard,
   matchDayLabel,
+  Reveal,
   ScreenHeader,
+  SectionHeader,
   SegmentedControl,
+  Skeleton,
   SkeletonMatchRow,
   matchCardHeight,
   useHeaderScroll,
@@ -588,6 +595,61 @@ export default function ScoresScreen() {
     return list;
   }, [visibleMatches, followedMatches, collapsedKeys, isPinnedLeague, followedLeagueIds, cities]);
 
+  /* ─────────────────────── ÖZET VE SAHNE ─────────────────────── */
+
+  /**
+   * Seçili günün özeti — özet bloğu ve segment hapları aynı sayımı kullanır.
+   * Canlı segmentinde gün yoktur: akıştaki lig ve şehir sayısı.
+   */
+  const dayStats = useMemo(() => {
+    let live = 0;
+    let finished = 0;
+    let scheduled = 0;
+    const leagues = new Set<string>();
+    for (const match of allMatches) {
+      if (matchDay(match) !== date) continue;
+      const state = matchState(match);
+      if (state === "live") live += 1;
+      else if (state === "finished") finished += 1;
+      else scheduled += 1;
+      leagues.add(match.league_id != null ? `id-${match.league_id}` : normalizeName(match.league_name));
+    }
+    return { total: live + finished + scheduled, live, finished, scheduled, leagueCount: leagues.size };
+  }, [allMatches, date]);
+
+  const liveStats = useMemo(() => {
+    const leagues = new Set<string>();
+    const cities = new Set<string>();
+    for (const match of liveSource) {
+      leagues.add(match.league_id != null ? `id-${match.league_id}` : normalizeName(match.league_name));
+      const city = normalizeName(match.city);
+      if (city) cities.add(city);
+    }
+    return { leagueCount: leagues.size, cityCount: cities.size };
+  }, [liveSource]);
+
+  /** "12 Kasım Perşembe" — özet bloğunun uzun tarihi. */
+  const dateLong = useMemo(() => {
+    const d = fromIso(date);
+    const weekday = d.toLocaleDateString("tr-TR", { weekday: "long" });
+    return `${d.getDate()} ${MONTHS_TR[d.getMonth()]} ${weekday}`;
+  }, [date]);
+
+  /**
+   * ÖNE ÇIKAN CANLI MAÇ — takip vitrini yokken sahneye çıkan maç: kapsamdaki
+   * en erken başlamış canlı maç. Yalnız Tümü (bugün) ve Canlı segmentinde.
+   */
+  const featuredPool = useMemo(() => {
+    if (spotlight) return [];
+    if (isLive) return [...liveSource].sort(byKickoff);
+    if (tab === "tumu" && date === todayIso) return [...scopedLive].sort(byKickoff);
+    return [];
+  }, [spotlight, isLive, liveSource, tab, date, todayIso, scopedLive]);
+  const featured = featuredPool.length ? featuredPool[0] : null;
+
+  const pickSummary = useCallback((key: SummaryKey) => setTab(tab === key ? "tumu" : key), [setTab, tab]);
+  const showLiveTab = useCallback(() => setTab("canli"), [setTab]);
+
   /* ───────────────────────── SON GOL BANDI ───────────────────────── */
 
   const previousScores = useRef<{ source: string; map: Map<number, string> } | null>(null);
@@ -761,6 +823,7 @@ export default function ScoresScreen() {
   const renderItem = useCallback(
     ({ item, index, section }: SectionListRenderItemInfo<ApiMatch, ScoreSectionMeta>) => (
       <MatchListItem
+        index={index}
         match={item}
         last={index === section.data.length - 1}
         homeLogo={logoFor(item.home_team_id, item.first_team_name)}
@@ -908,13 +971,36 @@ export default function ScoresScreen() {
    */
   const followedHint = useMemo(() => {
     if (spotlight || followedMatches.length) return null;
-    if (!hasAnyFollow) return { text: "Takip ettiğin takım yok", action: "Takip et" };
-    if (isLive) return { text: "Takip ettiklerinin canlı maçı yok", action: "Takip et" };
-    return { text: `${dayPhrase(date, todayIso)} takip ettiklerinin maçı yok`, action: "Takip et" };
+    if (!hasAnyFollow) return { text: "Takip ettiğin takım yok", action: "Takım seç", invite: true };
+    if (isLive) return { text: "Takip ettiklerinin canlı maçı yok", action: "Takip", invite: false };
+    return { text: `${dayPhrase(date, todayIso)} takip ettiklerinin maçı yok`, action: "Takip", invite: false };
   }, [spotlight, followedMatches.length, hasAnyFollow, isLive, date, todayIso]);
+
+  /** Liste başlığındaki bölüm etiketi — gruplar başlamadan önce ne listelendiğini söyler. */
+  const listTitle = isLive
+    ? "Canlı maçlar"
+    : tab === "bitti"
+      ? "Sonuçlar"
+      : tab === "yaklasan"
+        ? "Fikstür"
+        : `${dayPhrase(date, todayIso)} oynanan maçlar`;
+  const leagueSections = sections.filter((section) => section.kind === "league").length;
 
   const listHeader = (
     <View onLayout={onListHeaderLayout}>
+      <DaySummary
+        dayLabel={matchDayLabel(date)}
+        dateLong={dateLong}
+        total={dayStats.total}
+        live={isLive ? liveCount : dayStats.live}
+        finished={dayStats.finished}
+        scheduled={dayStats.scheduled}
+        leagueCount={isLive ? liveStats.leagueCount : dayStats.leagueCount}
+        cityCount={liveStats.cityCount}
+        liveMode={isLive}
+        active={tab}
+        onPick={pickSummary}
+      />
       {spotlight ? (
         <FollowedSpotlight
           match={spotlight}
@@ -922,14 +1008,39 @@ export default function ScoresScreen() {
           awayLogo={logoFor(spotlight.away_team_id, spotlight.second_team_name)}
           onOpen={openMatch}
         />
+      ) : featured ? (
+        <MatchStage
+          match={featured}
+          homeLogo={logoFor(featured.home_team_id, featured.first_team_name)}
+          awayLogo={logoFor(featured.away_team_id, featured.second_team_name)}
+          eyebrow="Öne çıkan maç"
+          onOpen={openMatch}
+          moreLive={isLive ? 0 : featuredPool.length - 1}
+          onMoreLive={showLiveTab}
+          testID="scores-featured"
+        />
       ) : null}
-      {followedHint ? (
+      {followedHint && !followedHint.invite ? (
         <FollowedHint text={followedHint.text} actionLabel={followedHint.action} onAction={openFollow} />
       ) : null}
       {/* Reklam alanı "app_home": açılış ekranında maç listesinin üstünde. */}
       <AdBanner zone="app_home" style={styles.homeAd} />
+      {sections.length > 0 ? (
+        <SectionHeader
+          title={listTitle}
+          meta={`${visibleMatches.length} maç · ${leagueSections} lig`}
+          inset="flush"
+          style={styles.listTitle}
+        />
+      ) : null}
     </View>
   );
+
+  /** Hiç takip yokken davet kartı listenin SONUNDA: maçları aşağı itmez. */
+  const listFooter =
+    followedHint?.invite ? (
+      <FollowedHint variant="invite" text={followedHint.text} actionLabel={followedHint.action} onAction={openFollow} />
+    ) : null;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -968,8 +1079,11 @@ export default function ScoresScreen() {
           />
         ) : loading ? (
           <View style={styles.skeletonWrap}>
+            {/* İskelet sayfanın şeklini taklit eder: özet şeridi, sahne, lig grubu. */}
+            <Skeleton height={132} radius="xl" />
+            <Skeleton height={176} radius="xxl" style={styles.skeletonStage} />
             <View style={styles.skeletonGroup}>
-              <SkeletonMatchRow count={6} />
+              <SkeletonMatchRow count={4} />
             </View>
           </View>
         ) : failed ? (
@@ -986,6 +1100,7 @@ export default function ScoresScreen() {
             contentContainerStyle={styles.list}
             ListHeaderComponent={listHeader}
             ListEmptyComponent={listEmpty}
+            ListFooterComponent={listFooter}
             refreshControl={refresh.control}
             initialNumToRender={12}
             maxToRenderPerBatch={12}
@@ -1008,6 +1123,10 @@ export default function ScoresScreen() {
         onNextDay={goToNextDay}
         onToday={goToToday}
         onOpenCalendar={openCalendar}
+        date={date}
+        todayIso={todayIso}
+        markers={markers}
+        onSelectDate={setDate}
       />
 
       <CalendarSheet
@@ -1033,6 +1152,7 @@ const keyExtractor = (item: ApiMatch) => String(item.id);
  * iki fonksiyon geçer.
  */
 const MatchListItem = memo(function MatchListItem({
+  index,
   match,
   last,
   homeLogo,
@@ -1041,6 +1161,8 @@ const MatchListItem = memo(function MatchListItem({
   onOpen,
   onToggleStar,
 }: {
+  /** Grup içi sıra — ilk satırlar sırayla belirir (Reveal). */
+  index: number;
   match: ApiMatch;
   /** Grubun son satırı — kartın alt köşelerini çizer. */
   last: boolean;
@@ -1054,17 +1176,19 @@ const MatchListItem = memo(function MatchListItem({
   const handleStar = useCallback(() => onToggleStar(match), [onToggleStar, match]);
 
   return (
-    <MatchCard
-      variant="compact"
-      dense
-      position={last ? "last" : "middle"}
-      match={match}
-      homeLogo={homeLogo}
-      awayLogo={awayLogo}
-      isFavorite={isFollowing}
-      onToggleFavorite={handleStar}
-      onPress={handlePress}
-    />
+    <Reveal index={index} limit={7} distance={8}>
+      <MatchCard
+        variant="compact"
+        dense
+        position={last ? "last" : "middle"}
+        match={match}
+        homeLogo={homeLogo}
+        awayLogo={awayLogo}
+        isFavorite={isFollowing}
+        onToggleFavorite={handleStar}
+        onPress={handlePress}
+      />
+    </Reveal>
   );
 });
 
@@ -1172,7 +1296,14 @@ const styles = StyleSheet.create({
 
   skeletonWrap: {
     paddingHorizontal: layout.screenPadding,
-    paddingTop: GROUP_GAP,
+    paddingTop: space.md,
+    gap: space.md,
+  },
+  skeletonStage: {
+    marginBottom: space.xs,
+  },
+  listTitle: {
+    marginTop: space.xl,
   },
   skeletonGroup: {
     borderRadius: radius.xl,

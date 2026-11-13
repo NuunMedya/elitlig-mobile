@@ -12,9 +12,14 @@ import * as Linking from "expo-linking";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
-import { ActionSheet, AdminList, AdminScreen, RecordCard, confirmAction, useAdminMutation } from "@/components/admin";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { StyleSheet, Text, View } from "react-native";
+
+import { ActionSheet, AdminList, AdminScreen, confirmAction, useAdminMutation } from "@/components/admin";
+import { InfoPill, StatusTiles } from "@/components/admin/matches/opsKit";
 import { PortalEditor } from "@/components/admin/portals/PortalEditor";
-import { Button, FAB, useToast } from "@/components/ui";
+import { Badge, Button, FAB, TeamLogo, Touchable, useToast } from "@/components/ui";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { timeAgo } from "@/lib/admin/format";
 import { WEB_BASE_URL } from "@/lib/config";
@@ -129,19 +134,18 @@ export default function LeaguePortalsScreen() {
         emptyTitle="Henüz lig sayfası yok"
         emptyBody="Seçtiğin ligleri kendi logosu, renkleri ve düzeniyle kısa bir adreste yayınla."
         keyExtractor={(p) => String(p.id)}
-        renderItem={({ item }) => (
-          <RecordCard
-            title={item.name}
-            subtitle={`elitlig.com/${item.slug}`}
-            meta={[(item.leagues ?? []).map((l) => l.label).join(", ") || "Lig seçilmedi", item.updatedAt ? timeAgo(item.updatedAt) : null].filter(Boolean).join(" · ")}
-            avatar={{ name: item.shortName || item.name, image: mediaUrl(item.logoUrl) }}
-            accentColor={item.theme?.light?.primary || null}
-            muted={!item.active}
-            badges={[item.active ? { label: "Yayında", tone: "win" } : { label: "Kapalı", tone: "neutral" }, { label: `${item.leagueIds.length} lig`, tone: "info" }]}
-            onPress={() => setEditing(item)}
-            onLongPress={() => setMenu(item)}
-          />
-        )}
+        extraHeader={
+          list.data?.length ? (
+            <StatusTiles
+              items={[
+                { key: "live", label: "Yayında", value: list.data.filter((p) => p.active).length, tone: "win", icon: "globe-outline" },
+                { key: "off", label: "Kapalı", value: list.data.filter((p) => !p.active).length, tone: "neutral", icon: "eye-off-outline" },
+                { key: "leagues", label: "Bağlı lig", value: list.data.reduce((n, p) => n + p.leagueIds.length, 0), tone: "info", icon: "trophy-outline" },
+              ]}
+            />
+          ) : null
+        }
+        renderItem={({ item }) => <PortalCard portal={item} onPress={() => setEditing(item)} onLongPress={() => setMenu(item)} />}
       />
       <ActionSheet
         visible={menu != null}
@@ -166,3 +170,106 @@ export default function LeaguePortalsScreen() {
     </AdminScreen>
   );
 }
+
+/**
+ * Lig sayfası kartı — küçük bir tarayıcı penceresi gibi: üstte adres çubuğu
+ * (kilit + elitlig.com/adres + yayın ışığı), gövdede logo, ad ve bağlı ligler.
+ * Basılı tutunca eylem menüsü açılır.
+ */
+function PortalCard({ portal, onPress, onLongPress }: { portal: LeaguePortal; onPress: () => void; onLongPress: () => void }) {
+  const leagues = portal.leagues ?? [];
+  return (
+    <Touchable
+      feedback="card"
+      onPress={onPress}
+      onLongPress={onLongPress}
+      style={[styles.card, portal.active ? null : styles.cardOff]}
+      accessibilityRole="button"
+      accessibilityLabel={`${portal.name}, elitlig.com/${portal.slug}, ${portal.active ? "yayında" : "kapalı"}`}
+      accessibilityHint="Eylemler için basılı tut"
+    >
+      <View style={styles.bar}>
+        <View style={styles.dots}>
+          <View style={[styles.dot, { backgroundColor: colors.danger }]} />
+          <View style={[styles.dot, { backgroundColor: colors.warn }]} />
+          <View style={[styles.dot, { backgroundColor: colors.win }]} />
+        </View>
+        <View style={styles.url}>
+          <Ionicons name="lock-closed" size={10} color={colors.textTertiary} />
+          <Text style={styles.urlText} numberOfLines={1} {...textScale.badge}>
+            elitlig.com/<Text style={styles.urlSlug}>{portal.slug}</Text>
+          </Text>
+        </View>
+        <View style={[styles.liveDot, { backgroundColor: portal.active ? colors.win : colors.textDisabled }]} />
+      </View>
+      <View style={styles.body}>
+        <TeamLogo name={portal.shortName || portal.name} logo={mediaUrl(portal.logoUrl)} size={48} dimmed={!portal.active} />
+        <View style={styles.flex}>
+          <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
+            {portal.name}
+          </Text>
+          <Text style={styles.meta} numberOfLines={2} {...textScale.dense}>
+            {portal.seoDescription || "Açıklama yok"}
+          </Text>
+        </View>
+        <Badge label={portal.active ? "Yayında" : "Kapalı"} tone={portal.active ? "win" : "neutral"} size="xs" dot={portal.active} />
+      </View>
+      <View style={styles.leagues}>
+        {leagues.length ? (
+          leagues.slice(0, 3).map((l) => <InfoPill key={l.id} icon="trophy-outline" label={l.label} />)
+        ) : (
+          <InfoPill icon="alert-circle" label="Lig seçilmedi" tone="warn" />
+        )}
+        {leagues.length > 3 ? <InfoPill label={`+${leagues.length - 3}`} /> : null}
+        <View style={styles.flex} />
+        {portal.updatedAt ? (
+          <Text style={styles.time} {...textScale.badge}>
+            {timeAgo(portal.updatedAt)}
+          </Text>
+        ) : null}
+      </View>
+    </Touchable>
+  );
+}
+
+const styles = StyleSheet.create({
+  flex: { flex: 1, minWidth: 0 },
+  card: {
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+    overflow: "hidden",
+  },
+  cardOff: { opacity: 0.8 },
+  bar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.s,
+    backgroundColor: colors.surface2,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.separator,
+  },
+  dots: { flexDirection: "row", gap: 4 },
+  dot: { width: 7, height: 7, borderRadius: 4, opacity: 0.7 },
+  url: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    paddingHorizontal: space.sm,
+    height: 22,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface3,
+  },
+  urlText: { ...type.caption, color: colors.textTertiary, flexShrink: 1 },
+  urlSlug: { color: colors.textPrimary },
+  liveDot: { width: 8, height: 8, borderRadius: 4 },
+  body: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md },
+  title: { ...type.h3, color: colors.textPrimary },
+  meta: { ...type.caption, color: colors.textTertiary, marginTop: space.xxs },
+  leagues: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs, paddingHorizontal: space.md, paddingBottom: space.md },
+  time: { ...type.caption, color: colors.textTertiary },
+});

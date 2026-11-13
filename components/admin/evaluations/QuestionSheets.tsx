@@ -178,9 +178,10 @@ export function QuestionSheet({
       footer={<Button label={question ? "Kaydet" : "Soru ekle"} onPress={() => void submit()} loading={busy} haptic="success" />}
     >
       <View style={styles.form}>
+        <Group title="Soru" icon="help-circle">
         <Input label="Soru *" value={form.text} maxLength={300} onChangeText={(t) => set({ text: t })} placeholder="Örn. Maça zamanında geldi mi?" multiline />
-        <Input label="Açıklama (isteğe bağlı)" value={form.help} maxLength={500} onChangeText={(t) => set({ help: t })} placeholder="Formu dolduran kişiye ipucu" />
-        <Input label="Kategori" value={form.category} maxLength={60} onChangeText={(t) => set({ category: t })} placeholder="Örn. Dakiklik" />
+        <Input floating label="Açıklama (isteğe bağlı)" value={form.help} maxLength={500} onChangeText={(t) => set({ help: t })} />
+        <Input floating label="Kategori" value={form.category} maxLength={60} onChangeText={(t) => set({ category: t })} />
         {categories.length ? (
           <ChipGroup scrollable contentPadding={0}>
             {categories.map((c) => (
@@ -188,6 +189,8 @@ export function QuestionSheet({
             ))}
           </ChipGroup>
         ) : null}
+        </Group>
+        <Group title="Puanlama" icon="speedometer">
         <ChipsField<string>
           label="Ağırlık (skora etkisi)"
           value={form.weight}
@@ -203,6 +206,14 @@ export function QuestionSheet({
           ]}
           onChange={(v) => set({ answerType: v as QForm["answerType"] })}
         />
+        <ToggleField
+          label="“Uygulanamaz” cevabına izin ver"
+          hint="Örn. sakatlık olmayan maçta müdahale sorusu; skora ve tutara girmez."
+          value={form.allowNa}
+          onChange={(v) => set({ allowNa: v })}
+        />
+        </Group>
+        <Group title="Bonus / kesinti" icon="cash">
         {form.answerType === "yes_no" ? (
           <>
             <AmountRow label="Yapıldı" kind={form.yesKind} amount={form.yesAmount} onKind={(k) => set({ yesKind: k })} onAmount={(v) => set({ yesAmount: v })} />
@@ -221,12 +232,7 @@ export function QuestionSheet({
             />
           </>
         )}
-        <ToggleField
-          label="“Uygulanamaz” cevabına izin ver"
-          hint="Örn. sakatlık olmayan maçta müdahale sorusu; skora ve tutara girmez."
-          value={form.allowNa}
-          onChange={(v) => set({ allowNa: v })}
-        />
+        </Group>
         {failure ? (
           <Text style={styles.error} {...textScale.long}>
             {failure}
@@ -287,16 +293,17 @@ export function SettingSheet({
         <Text style={styles.hint} {...textScale.long}>
           Hakediş = taban ücret + bonuslar − kesintiler. Kayıtlı formlar da yeni ücretle güncellenir.
         </Text>
-        <Input label="Taban ücret (her form için)" value={baseFee} onChangeText={setBaseFee} keyboardType="decimal-pad" placeholder="Örn. 1000" />
-        <Text style={styles.label} {...textScale.dense}>
-          Toplam skora göre bonus / kesinti
-        </Text>
+        <Group title="Taban ücret" icon="wallet">
+          <Input floating label="Taban ücret (her form için)" value={baseFee} onChangeText={setBaseFee} keyboardType="decimal-pad" />
+        </Group>
+        <Group title="Toplam skora göre bonus / kesinti" icon="trending-up">
         <RangeRules
           rules={rules}
           onChange={setRules}
           unit="%"
           addDefaults={(n) => (n ? { min: "90", max: "100", kind: "bonus", amount: "" } : { min: "0", max: "49", kind: "kesinti", amount: "" })}
         />
+        </Group>
         {failure ? (
           <Text style={styles.error} {...textScale.long}>
             {failure}
@@ -307,8 +314,26 @@ export function SettingSheet({
   );
 }
 
+/** Cam grup kartı: versal başlık + küçük ikon; form alanları içinde. */
+function Group({ title, icon, children }: { title: string; icon: React.ComponentProps<typeof Ionicons>["name"]; children: React.ReactNode }) {
+  return (
+    <View style={styles.group}>
+      <View style={styles.groupHead}>
+        <Ionicons name={icon} size={13} color={colors.brandAccent} />
+        <Text style={styles.groupTitle} accessibilityRole="header" {...textScale.badge}>
+          {title.toLocaleUpperCase("tr-TR")}
+        </Text>
+      </View>
+      {children}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   form: { gap: space.md },
+  group: { gap: space.md, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.glass, borderWidth: hairline, borderColor: colors.glassLine },
+  groupHead: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  groupTitle: { ...type.overline, color: colors.textSecondary },
   flex: { flex: 1 },
   amount: { gap: space.sm },
   rules: { gap: space.sm },

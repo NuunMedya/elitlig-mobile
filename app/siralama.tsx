@@ -19,6 +19,14 @@
  * elle yazılmış modal + sabit hex yerine `BottomSheet`, `SegmentedControl`,
  * `Button` ve tema tokenları.
  *
+ * İKİNCİ TUR (Gece teması): podyum `StageCard` sahnesinde (mürekkep +
+ * aurora), avatarların altında kitin madalya rozetleri, birincinin skoru
+ * dönen sayaç (`Odometer`), basamak tepelerinde madalya degradesi. Liste
+ * `ListRow` yerine bu ekranın sıralama satırıdır: sıra · avatar · ad + takım
+ * · VURGULU SKOR HAPI (+ tarih). Kendi satırın `brandDim` zemin ve solda
+ * imza degradesi taşır. Başlığın altında "Sen" özeti (sıra · skor · oyuncu
+ * sayısı) tek cam satırda durur.
+ *
  * ESKİ KAPILAR KAPATILDI: `components/ScreenHeader` → `components/ui`
  * `ScreenHeader`, `components/States` → `components/ui`, `constants/theme` →
  * `@/theme`, ham `Pressable` → `Touchable`/`Chip`/`ListRow`.
@@ -40,18 +48,21 @@ import {
   Chip,
   EmptyState,
   ErrorState,
-  GradientFill,
-  ListRow,
+  Odometer,
+  RankBadge as MedalBadge,
+  Reveal,
   ScreenHeader,
   SectionHeader,
   SegmentedControl,
   SkeletonListRow,
+  Touchable,
   refreshControlProps,
   useHeaderScroll,
   useRefresh,
   type SegmentedItem,
 } from "@/components/ui";
-import { BoardFooter, PeriodBar, PinnedMe, RankBadge, useBoardPages, useRowVisibility } from "@/components/leaderboards";
+import { BoardFooter, PeriodBar, PinnedMe, useBoardPages, useRowVisibility } from "@/components/leaderboards";
+import { SignatureStripe, StageCard, StatPill } from "@/components/league/kit";
 import {
   getArenaLeaderboard,
   getMyArenaRank,
@@ -67,7 +78,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import {
   colors,
-  elevate,
+  dividers,
   fonts,
   hairline,
   layout,
@@ -105,11 +116,8 @@ const GAMES: GameMeta[] = [
 
 type ScopeMode = "city" | "turkey";
 
-/**
- * Podyum basamağı renkleri — altın, gümüş, bronz. Podyum sahnede (grafit)
- * durduğu için tokenlar koyu zeminde okunanlardan seçildi.
- */
-const PODIUM_TONES = [colors.yellowCard, colors.onDarkMuted, colors.zoneRelegationPlayoff] as const;
+/** Podyum basamağı madalya degradeleri — altın, gümüş, bronz (kit tokenları). */
+const PODIUM_TONES = [colors.medalGold, colors.medalSilver, colors.medalBronze] as const;
 /** Basamak yükseklikleri: 1 · 2 · 3. */
 const PLINTH_HEIGHT = [58, 40, 28] as const;
 
@@ -173,12 +181,17 @@ const PodiumStep = React.memo(function PodiumStep({
   unit: string;
   mine: boolean;
 }) {
-  const tone = PODIUM_TONES[place - 1] ?? colors.onDarkMuted;
+  const tone = PODIUM_TONES[place - 1] ?? colors.medalSilver;
   const first = place === 1;
 
   return (
     <View style={styles.step}>
-      <Avatar name={name} size={first ? 56 : 44} ring={mine ? "brand" : "none"} />
+      <View style={styles.stepAvatar}>
+        <View style={[styles.stepRing, { borderColor: tone[0] }]}>
+          <Avatar name={name} size={first ? 56 : 44} ring={mine ? "brand" : "none"} />
+        </View>
+        <MedalBadge rank={place} size={first ? 24 : 20} style={styles.stepMedal} />
+      </View>
 
       <Text style={styles.stepName} numberOfLines={1} {...textScale.dense}>
         {mine ? "Sen" : name}
@@ -189,19 +202,21 @@ const PodiumStep = React.memo(function PodiumStep({
 
       {/* Rakam kahramandır: skor Archivo ile basamağın üstünde. */}
       <View style={styles.stepScoreRow}>
-        <Text style={[styles.stepScore, first ? styles.stepScoreFirst : null]} {...textScale.dense}>
-          {formatCount(score)}
-        </Text>
+        {first ? (
+          <Odometer value={formatCount(score)} style={[styles.stepScore, styles.stepScoreFirst]} />
+        ) : (
+          <Text style={styles.stepScore} {...textScale.dense}>
+            {formatCount(score)}
+          </Text>
+        )}
         <Text style={styles.stepUnit} {...textScale.badge}>
           {unit}
         </Text>
       </View>
 
-      {/* BASAMAK — yükseklik sırayı söyler; üst kenardaki renkli çizgi
-          madalya rengidir (altın · gümüş · bronz). Rakam beyaz, sahnede
-          her temada okunur. */}
+      {/* BASAMAK — yükseklik sırayı söyler; tepedeki degrade madalya rengidir. */}
       <View style={[styles.plinth, PLINTH_HEIGHT[place - 1] != null ? { height: PLINTH_HEIGHT[place - 1] } : null]}>
-        <View style={[styles.plinthTop, { backgroundColor: tone }]} />
+        <LinearGradient colors={tone} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.plinthTop} />
         <Text style={styles.plinthPlace} {...textScale.badge}>
           {place}
         </Text>
@@ -226,6 +241,58 @@ const EmptyStep = React.memo(function EmptyStep({ place }: { place: 2 | 3 }) {
       <View style={[styles.plinth, styles.plinthEmpty, { height: PLINTH_HEIGHT[place - 1] }]}>
         <Text style={[styles.plinthPlace, styles.plinthPlaceEmpty]} {...textScale.badge}>
           {place}
+        </Text>
+      </View>
+    </View>
+  );
+});
+
+/* ═════════════════════════ SIRALAMA SATIRI ═════════════════════════ */
+
+/** [sıra] · [avatar] · [ad + takım · şehir] · [skor hapı + tarih] */
+const BoardRow = React.memo(function BoardRow({
+  rank,
+  name,
+  meta,
+  score,
+  date,
+  mine,
+  first,
+  last,
+}: {
+  rank: number;
+  name: string;
+  meta?: string;
+  score: string;
+  date: string;
+  mine: boolean;
+  first: boolean;
+  last: boolean;
+}) {
+  return (
+    <View
+      style={[styles.boardRow, first ? styles.boardFirst : null, last ? styles.boardLast : null, mine ? styles.boardMine : null]}
+      accessibilityLabel={`${rank}. ${name}, ${score}`}
+    >
+      {mine ? <SignatureStripe inset={space.sm} /> : null}
+      <Text style={[styles.boardRank, mine ? styles.boardRankMine : null]} numberOfLines={1} {...textScale.dense}>
+        {rank}
+      </Text>
+      <Avatar name={name} size={36} ring={mine ? "brand" : "none"} />
+      <View style={styles.flex}>
+        <Text style={styles.boardName} numberOfLines={1} {...textScale.dense}>
+          {name}
+        </Text>
+        {meta ? (
+          <Text style={styles.boardMeta} numberOfLines={1} {...textScale.dense}>
+            {meta}
+          </Text>
+        ) : null}
+      </View>
+      <View style={styles.rowScore}>
+        <StatPill value={score} tone={mine ? "brand" : "neutral"} minWidth={56} />
+        <Text style={styles.rowScoreMeta} numberOfLines={1} {...textScale.badge}>
+          {date}
         </Text>
       </View>
     </View>
@@ -420,25 +487,19 @@ export default function ArenaLeaderboardScreen() {
     ({ item, index }: { item: ArenaEntry; index: number }) => {
       const mine = myId != null && Number(item.userId) === myId;
       return (
-        <ListRow
-          leading={<RankBadge rank={item.rank} mine={mine} />}
-          title={mine ? `${item.name} (sen)` : item.name}
-          subtitle={[item.teamName, item.city].filter(Boolean).join(" · ") || undefined}
-          highlighted={mine}
-          position={
-            rest.length === 1 ? "single" : index === 0 ? "first" : index === rest.length - 1 ? "last" : "middle"
-          }
-          trailing={
-            <View style={styles.rowScore}>
-              <Text style={styles.rowScoreValue} {...textScale.dense}>
-                {formatCount(item.score)}
-              </Text>
-              <Text style={styles.rowScoreMeta} numberOfLines={1} {...textScale.badge}>
-                {formatDateShort(item.date)}
-              </Text>
-            </View>
-          }
-        />
+        <>
+          {index > 0 ? <View style={styles.boardDivider} /> : null}
+          <BoardRow
+            rank={item.rank}
+            name={mine ? `${item.name} (sen)` : item.name}
+            meta={[item.teamName, item.city].filter(Boolean).join(" · ") || undefined}
+            score={formatCount(item.score)}
+            date={formatDateShort(item.date)}
+            mine={mine}
+            first={index === 0}
+            last={index === rest.length - 1}
+          />
+        </>
       );
     },
     [myId, rest.length]
@@ -460,8 +521,8 @@ export default function ArenaLeaderboardScreen() {
 
       {podium.length > 0 ? (
         <>
-          <View style={styles.podium}>
-            <GradientFill tone="ink" radius="xxl" />
+          <Reveal index={0} scaleFrom={0.97}>
+          <StageCard style={styles.podium}>
             <Text style={styles.podiumOverline} {...textScale.badge}>
               {upperTR(`${meta.label} · ${caption}`)}
             </Text>
@@ -502,10 +563,55 @@ export default function ArenaLeaderboardScreen() {
                 <EmptyStep place={3} />
               )}
             </View>
-          </View>
+          </StageCard>
+          </Reveal>
+
+          {auth.user && myRank != null ? (
+            <Touchable
+              feedback="card"
+              haptic="light"
+              onPress={myIndex >= 0 || inPodium ? jumpToMe : undefined}
+              disabled={!(myIndex >= 0 || inPodium)}
+              style={styles.meCard}
+              accessibilityRole="button"
+              accessibilityLabel={`Senin sıran ${myRank}`}
+            >
+              <View style={styles.meCell}>
+                <Text style={styles.meLabel} {...textScale.badge}>
+                  {upperTR("Sıran")}
+                </Text>
+                <Text style={styles.meValue} {...textScale.dense}>
+                  {`${formatCount(myRank)}.`}
+                </Text>
+              </View>
+              <View style={styles.meDivider} />
+              <View style={styles.meCell}>
+                <Text style={styles.meLabel} {...textScale.badge}>
+                  {upperTR("En iyi skorun")}
+                </Text>
+                <Text style={styles.meValue} {...textScale.dense}>
+                  {myScore != null ? formatCount(myScore) : "—"}
+                </Text>
+              </View>
+              <View style={styles.meDivider} />
+              <View style={styles.meCell}>
+                <Text style={styles.meLabel} {...textScale.badge}>
+                  {upperTR("Oyuncu")}
+                </Text>
+                <Text style={styles.meValue} {...textScale.dense}>
+                  {formatCount(total ?? entries.length)}
+                </Text>
+              </View>
+            </Touchable>
+          ) : null}
 
           {rest.length > 0 ? (
-            <SectionHeader title="Sıralama" meta={`${formatCount(total ?? entries.length)} oyuncu`} />
+            <SectionHeader
+              title="Sıralama"
+              meta={`${formatCount(total ?? entries.length)} oyuncu`}
+              inset="flush"
+              size="group"
+            />
           ) : null}
         </>
       ) : null}
@@ -775,12 +881,102 @@ const styles = StyleSheet.create({
 
   /* — Podyum: ekranın tek sahnesi — */
   podium: {
-    borderRadius: radius.xxl,
-    backgroundColor: colors.inkBlock,
-    overflow: "hidden",
     paddingTop: space.lg,
     paddingHorizontal: space.md,
-    ...elevate(2),
+  },
+  stepAvatar: {
+    alignItems: "center",
+    marginBottom: space.s,
+  },
+  stepRing: {
+    padding: 2,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+  },
+  stepMedal: {
+    position: "absolute",
+    bottom: -9,
+    alignSelf: "center",
+  },
+
+  /* — "Sen" özeti — */
+  meCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+  },
+  meCell: {
+    flex: 1,
+    alignItems: "center",
+    gap: space.xxs,
+  },
+  meDivider: {
+    width: hairline,
+    alignSelf: "stretch",
+    backgroundColor: colors.brandBorder,
+  },
+  meLabel: {
+    ...type.overline,
+    color: colors.textTertiary,
+  },
+  meValue: {
+    ...type.metricSm,
+    color: colors.brandAccent,
+  },
+
+  /* — Sıralama satırı (tek kart, satır satır) — */
+  boardRow: {
+    minHeight: 64,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.m,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    backgroundColor: colors.surface1,
+    borderLeftWidth: hairline,
+    borderRightWidth: hairline,
+    borderColor: colors.border,
+  },
+  boardFirst: {
+    borderTopWidth: hairline,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+  },
+  boardLast: {
+    borderBottomWidth: hairline,
+    borderBottomLeftRadius: radius.xl,
+    borderBottomRightRadius: radius.xl,
+  },
+  boardMine: {
+    backgroundColor: colors.brandDim,
+  },
+  boardDivider: {
+    ...dividers.inset,
+    marginLeft: 0,
+    borderLeftWidth: hairline,
+    borderRightWidth: hairline,
+    borderColor: colors.border,
+  },
+  boardRank: {
+    ...type.tableNumStrong,
+    width: 30,
+    textAlign: "center",
+    color: colors.textTertiary,
+  },
+  boardRankMine: {
+    color: colors.brandAccent,
+  },
+  boardName: {
+    ...type.h4,
+    color: colors.textPrimary,
+  },
+  boardMeta: {
+    ...type.caption,
+    color: colors.textTertiary,
   },
   podiumOverline: {
     ...type.overline,
@@ -871,10 +1067,6 @@ const styles = StyleSheet.create({
   rowScore: {
     alignItems: "flex-end",
     gap: space.xxs,
-  },
-  rowScoreValue: {
-    ...type.scoreSm,
-    color: colors.textPrimary,
   },
   rowScoreMeta: {
     ...type.micro,

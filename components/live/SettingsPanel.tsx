@@ -58,7 +58,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
     .map((z) => ({ value: z, label: zoomLabel(z) }));
   const nearest = zoomOptions.reduce((best, o) => (Math.abs(o.value - props.zoom) < Math.abs(best - props.zoom) ? o.value : best), 1);
   const estimate = estimateStorage(props.encoder, props.storage?.freeBytes, props.storage?.minFreeBytes);
-  const bitrateOptions = [{ value: 0, label: "Oto" }, ...BITRATE_OPTIONS.filter((b) => b !== 1000 && b !== 6000).map((b) => ({ value: b as number, label: `${b / 1000}`.replace(".", ",") }))];
+  const bitrateOptions = [{ value: 0, label: "Oto" }, ...BITRATE_OPTIONS.filter((b) => b !== 3500).map((b) => ({ value: b as number, label: `${b / 1000}`.replace(".", ",") }))];
 
   return (
     <View style={styles.stack}>
@@ -146,9 +146,13 @@ export function SettingsPanel(props: SettingsPanelProps) {
         label="Bit hızı"
       />
       <Hint>
-        Gönderilecek: {props.encoder.width}×{props.encoder.height} · {props.encoder.fps} fps · {props.encoder.videoBitrateKbps} kbps görüntü + 128 kbps ses. Yükleme
-        hızın bunun en az 1,5 katı olmalı.
+        Gönderilecek: {props.encoder.width}×{props.encoder.height} · {props.encoder.fps} fps · {props.encoder.videoBitrateKbps} kbps görüntü + 128 kbps ses (H.264 High,
+        2 sn anahtar kare). Yükleme hızın bunun en az 1,5 katı olmalı.
       </Hint>
+      {settings.bitrateKbps != null && settings.bitrateKbps !== props.encoder.videoBitrateKbps ? (
+        <Hint>Seçtiğin bit hızı bu çözünürlük için düşük; görüntü bozulmasın diye {props.encoder.videoBitrateKbps} kbps kullanılıyor.</Hint>
+      ) : null}
+      <Hint>Görüntü bulanık ya da bloklu görünüyorsa bit hızını yükselt; bağlantı sık kopuyorsa bir alt kaliteye geç.</Hint>
       {props.encoderOn ? (
         <Note tone="warn" icon="lock-closed" text="Kalite yayın sürerken değişmez. Değiştirmek için Yayın sekmesinden görüntüyü durdurup yeniden başlat." />
       ) : props.encoder.height >= 1080 ? (

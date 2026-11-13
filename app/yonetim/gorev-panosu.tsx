@@ -61,6 +61,8 @@ import {
   Chip,
   EmptyState,
   ErrorState,
+  GradientBar,
+  IconTile,
   Input,
   SkeletonListRow,
   Touchable,
@@ -85,7 +87,7 @@ import {
   type TodoTask,
 } from "@/lib/api/todos";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 import Ionicons from "@expo/vector-icons/Ionicons";
 
 const MODE_KEY = "todo:view";
@@ -500,7 +502,7 @@ export default function TodoBoardScreen() {
         />
       ) : null}
       <View style={styles.titleRow}>
-        <Ionicons name={meta.icon} size={22} color={colors.brandAccent} />
+        <IconTile icon={meta.icon} tone={current === "done" ? "mint" : current === "today" ? "gold" : currentLabel ? "pink" : "violet"} size={40} glow={false} />
         <View style={styles.flex}>
           <Text style={styles.listTitle} {...textScale.dense}>
             {meta.title}
@@ -532,7 +534,7 @@ export default function TodoBoardScreen() {
       {quickAdd === "assign" ? (
         canAssign ? (
           <Touchable feedback="card" onPress={() => openComposer({ audience: "team" })} style={styles.assignCta} accessibilityRole="button">
-            <Ionicons name="paper-plane-outline" size={22} color={colors.brandAccent} />
+            <IconTile icon="paper-plane" tone="violet" size={40} />
             <View style={styles.flex}>
               <Text style={styles.h4} {...textScale.dense}>
                 Ekibe yeni görev ver
@@ -580,7 +582,7 @@ export default function TodoBoardScreen() {
     body = (
       <ScrollView contentContainerStyle={[styles.list, styles.gapMd]} refreshControl={refreshControl}>
         <View style={styles.titleRow}>
-          <Ionicons name="people-outline" size={22} color={colors.brandAccent} />
+          <IconTile icon="people-outline" tone="cyan" size={40} glow={false} />
           <View style={styles.flex}>
             <Text style={styles.listTitle} {...textScale.dense}>
               Ekip takibi
@@ -810,37 +812,39 @@ export default function TodoBoardScreen() {
 
 function GroupHeader({ group, closed, onToggle, onArchive }: { group: RowGroup; closed: boolean; onToggle: () => void; onArchive?: () => void }) {
   const share = group.person && group.cards.length ? (group.done ?? 0) / group.cards.length : null;
+  const toneColor = group.tone === "danger" ? colors.danger : group.tone === "accent" ? colors.brandAccent : colors.textSecondary;
   return (
     <View style={styles.group}>
-      <Touchable feedback="row" onPress={onToggle} style={styles.groupMain} accessibilityRole="button" accessibilityState={{ expanded: !closed }}>
-        <Ionicons name={closed ? "chevron-forward" : "chevron-down"} size={16} color={colors.textTertiary} />
-        {group.person ? <PersonDot person={group.person} size={22} /> : null}
-        <Text style={[styles.groupTitle, group.tone === "danger" ? styles.dangerText : group.tone === "accent" ? styles.accentText : null]} numberOfLines={1} {...textScale.dense}>
-          {group.title}
-        </Text>
-        <Text style={styles.colCount} {...textScale.badge}>
-          {group.cards.length}
-        </Text>
-        {group.hint ? (
-          <Text style={[styles.muted, styles.flex]} numberOfLines={1} {...textScale.dense}>
-            {group.hint}
+      <View style={styles.groupLine}>
+        <Touchable feedback="row" onPress={onToggle} style={styles.groupMain} accessibilityRole="button" accessibilityState={{ expanded: !closed }}>
+          <View style={[styles.groupRail, { backgroundColor: toneColor }]} />
+          {group.person ? <PersonDot person={group.person} size={22} /> : null}
+          <Text style={[styles.groupTitle, { color: toneColor }]} numberOfLines={1} {...textScale.dense}>
+            {upperTR(group.title)}
           </Text>
-        ) : (
-          <View style={styles.flex} />
-        )}
-      </Touchable>
-      {onArchive && !closed ? (
-        <Touchable feedback="none" onPress={onArchive} accessibilityRole="button" accessibilityLabel="Tamamlananları arşivle">
-          <Text style={styles.link} {...textScale.dense}>
-            Arşivle
-          </Text>
+          <View style={[styles.groupCount, group.tone === "danger" ? styles.groupCountDanger : null]}>
+            <Text style={[styles.colCount, group.tone === "danger" ? styles.dangerText : null]} {...textScale.badge}>
+              {group.cards.length}
+            </Text>
+          </View>
+          {group.hint ? (
+            <Text style={[styles.muted, styles.flex]} numberOfLines={1} {...textScale.dense}>
+              {group.hint}
+            </Text>
+          ) : (
+            <View style={styles.flex} />
+          )}
+          <Ionicons name={closed ? "chevron-down" : "chevron-up"} size={16} color={colors.textTertiary} />
         </Touchable>
-      ) : null}
-      {share != null ? (
-        <View style={styles.groupBar}>
-          <View style={[styles.groupBarFill, { width: `${share * 100}%` }]} />
-        </View>
-      ) : null}
+        {onArchive && !closed ? (
+          <Touchable feedback="none" onPress={onArchive} accessibilityRole="button" accessibilityLabel="Tamamlananları arşivle">
+            <Text style={styles.link} {...textScale.dense}>
+              Arşivle
+            </Text>
+          </Touchable>
+        ) : null}
+      </View>
+      {share != null ? <GradientBar value={share} height={4} gradient={colors.tileTones.mint} /> : null}
     </View>
   );
 }
@@ -911,9 +915,13 @@ const styles = StyleSheet.create({
     borderColor: colors.brandBorder,
     backgroundColor: colors.brandDim,
   },
-  group: { gap: space.xs, paddingTop: space.sm },
-  groupMain: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  groupTitle: { ...type.h4, color: colors.textPrimary, maxWidth: "55%" },
+  group: { gap: space.s, paddingTop: space.lg, paddingBottom: space.xxs },
+  groupLine: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  groupMain: { flex: 1, flexDirection: "row", alignItems: "center", gap: space.sm },
+  groupRail: { width: 3, height: 13, borderRadius: radius.pill },
+  groupTitle: { ...type.overline, maxWidth: "55%" },
+  groupCount: { minWidth: 22, paddingHorizontal: space.s, height: 20, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface3 },
+  groupCountDanger: { backgroundColor: colors.dangerDim },
   dangerText: { color: colors.danger },
   accentText: { color: colors.brandAccent },
   groupBar: { height: 3, borderRadius: radius.pill, backgroundColor: colors.surface3, overflow: "hidden" },

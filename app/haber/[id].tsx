@@ -20,6 +20,17 @@
  *      Gövdenin sonundaki ikinci "Haberi paylaş" düğmesi kaldırıldı (tek
  *      eylem, tek yer).
  *
+ * İKİNCİ TUR — OKUMA DÜZENİ:
+ *   · Kapak tam genişlikte; alt kenarı kâğıda erir (zemine degrade) ve
+ *     başlık bloğu kapağın üstüne hafifçe biner — görsel ile metin tek parça.
+ *   · Üst satır: kategori `Badge`ı + takvim/saat ikonlu tarih ve okuma süresi.
+ *   · Kaynak satırı cam hap (marka işareti + "Elitlig Haber Merkezi").
+ *   · ÖZET (lead) solda imza degradeli şeritle ayrılır; gövde makale
+ *     puntosunda, paragraf arası 16px.
+ *   · İlgili sayfalar degrade ikon karolu kartlardır (`IconTile`).
+ *   · Metnin sonu marka işaretli ince bir bitiş çizgisiyle kapanır (paylaş
+ *     eylemi yalnız başlıkta — tek eylem, tek yer).
+ *
  * İÇERİK HTML: sunucu içeriği temizlenmiş HTML olarak saklar. React Native
  * HTML render etmediği için blok etiketleri paragraf sınırı sayılıp düz metne
  * indirgenir. GÖVDEDEKİ GÖRSELLER (`<img>`) artık atılmaz: kendi blokları
@@ -47,15 +58,19 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import {
+  Badge,
   BrandMark,
-  Divider,
   EmptyState,
   ErrorState,
-  ListRow,
+  IconTile,
   ScreenHeader,
   SectionHeader,
   Skeleton,
+  Touchable,
+  withAlpha,
   useHeaderScroll,
   useRefresh,
   useToast,
@@ -65,9 +80,11 @@ import { formatDateLong, mediaUrl, stripHtml } from "@/lib/format";
 import { webNewsUrl } from "@/lib/links";
 import { queryKeys } from "@/lib/queryKeys";
 import type { NewsItem } from "@/lib/types";
+import { SignatureStripe } from "@/components/league/kit";
 import {
   colors,
   fonts,
+  hairline,
   layout,
   radius,
   space,
@@ -108,7 +125,8 @@ type NewsDetail = NewsItem & { meta?: NewsRelation | null };
 /** Kartta gösterilecek tek bir bağlantı satırı. */
 interface RelatedLink {
   key: string;
-  icon: "football-outline" | "shield-outline" | "person-outline";
+  icon: "football" | "shield" | "person";
+  tone: "cyan" | "violet" | "pink";
   title: string;
   subtitle: string;
   href: string;
@@ -196,7 +214,8 @@ function relatedLinks(item: NewsDetail): RelatedLink[] {
   if (meta.match_id) {
     links.push({
       key: `match-${meta.match_id}`,
-      icon: "football-outline",
+      icon: "football",
+      tone: "cyan",
       title: "Maç detayı",
       subtitle: "Kadro, olaylar ve istatistikler",
       href: `/mac/${meta.match_id}`,
@@ -205,7 +224,8 @@ function relatedLinks(item: NewsDetail): RelatedLink[] {
   if (meta.team_id) {
     links.push({
       key: `team-${meta.team_id}`,
-      icon: "shield-outline",
+      icon: "shield",
+      tone: "violet",
       title: meta.team_name?.trim() || "Takım sayfası",
       subtitle: "Kadro, fikstür ve form",
       href: `/takim/${meta.team_id}`,
@@ -214,20 +234,14 @@ function relatedLinks(item: NewsDetail): RelatedLink[] {
   if (meta.player_id) {
     links.push({
       key: `player-${meta.player_id}`,
-      icon: "person-outline",
+      icon: "person",
+      tone: "pink",
       title: meta.player_name?.trim() || "Oyuncu sayfası",
       subtitle: "Sezon istatistikleri ve kariyer",
       href: `/oyuncu/${meta.player_id}`,
     });
   }
   return links;
-}
-
-function rowPosition(index: number, total: number): "single" | "first" | "middle" | "last" {
-  if (total <= 1) return "single";
-  if (index === 0) return "first";
-  if (index === total - 1) return "last";
-  return "middle";
 }
 
 /* ================================= EKRAN ================================== */
@@ -352,20 +366,22 @@ export default function NewsDetailScreen() {
       >
         <Hero cover={cover} width={width} />
 
-        <View style={styles.body}>
+        <View style={[styles.body, cover ? styles.bodyOverlap : null]}>
           <View style={styles.titleBlock}>
             <View style={styles.kickerRow}>
-              <Text style={styles.kicker} {...textScale.badge}>
-                {upperTR(category)}
-              </Text>
-              <View style={styles.metaDot} />
-              <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
-                {formatDateLong(item.published_at)}
-              </Text>
-              <View style={styles.metaDot} />
-              <Text style={styles.meta} {...textScale.dense}>
-                {minutes} dk okuma
-              </Text>
+              <Badge label={category} tone="brand" variant="solid" size="xs" />
+              <View style={styles.metaItem}>
+                <Ionicons name="calendar-outline" size={12} color={colors.textTertiary} />
+                <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+                  {formatDateLong(item.published_at)}
+                </Text>
+              </View>
+              <View style={styles.metaItem}>
+                <Ionicons name="time-outline" size={12} color={colors.textTertiary} />
+                <Text style={styles.meta} {...textScale.dense}>
+                  {minutes} dk okuma
+                </Text>
+              </View>
             </View>
             <Text style={styles.title} accessibilityRole="header" {...textScale.long}>
               {item.title}
@@ -379,12 +395,13 @@ export default function NewsDetailScreen() {
           </View>
 
           {item.summary ? (
-            <Text style={styles.lead} {...textScale.long}>
-              {item.summary.trim()}
-            </Text>
+            <View style={styles.leadBox}>
+              <SignatureStripe />
+              <Text style={styles.lead} {...textScale.long}>
+                {item.summary.trim()}
+              </Text>
+            </View>
           ) : null}
-
-          <Divider variant="section" />
 
           {blocks.length ? (
             blocks.map((block, index) =>
@@ -406,23 +423,42 @@ export default function NewsDetailScreen() {
             />
           )}
 
+          <View style={styles.endMark}>
+            <View style={styles.endLine} />
+            <BrandMark size="sm" />
+            <View style={styles.endLine} />
+          </View>
+
           {/* Reklam alanı "app_inline": haber metninin sonunda. */}
           <AdBanner zone="app_inline" />
 
           {links.length ? (
             <View style={styles.related}>
-              {/* Liste kart içine SARILMAZ (§4.2): başlık + ListRow grubu. */}
-              <SectionHeader title="İlgili sayfalar" style={styles.relatedHeader} />
-              {links.map((link, index) => (
-                <ListRow
-                  key={link.key}
-                  leading={{ icon: link.icon, tone: "brand" }}
-                  title={link.title}
-                  subtitle={link.subtitle}
-                  position={rowPosition(index, links.length)}
-                  onPress={() => openLink(link.href)}
-                />
-              ))}
+              <SectionHeader title="İlgili sayfalar" inset="flush" size="group" />
+              <View style={styles.relatedList}>
+                {links.map((link) => (
+                  <Touchable
+                    key={link.key}
+                    feedback="card"
+                    haptic="selection"
+                    onPress={() => openLink(link.href)}
+                    style={styles.relatedCard}
+                    accessibilityRole="button"
+                    accessibilityLabel={link.title}
+                  >
+                    <IconTile icon={link.icon} tone={link.tone} size={40} />
+                    <View style={styles.flex}>
+                      <Text style={styles.relatedTitle} numberOfLines={1} {...textScale.dense}>
+                        {link.title}
+                      </Text>
+                      <Text style={styles.relatedSub} numberOfLines={1} {...textScale.dense}>
+                        {link.subtitle}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={colors.textDisabled} />
+                  </Touchable>
+                ))}
+              </View>
             </View>
           ) : null}
         </View>
@@ -446,6 +482,13 @@ const Hero = React.memo(function Hero({ cover, width }: { cover: string | null; 
         style={StyleSheet.absoluteFill}
         resizeMode="cover"
         accessibilityIgnoresInvertColors
+      />
+      {/* Alt kenar kâğıda erir: başlık bloğu kapağın üstüne biner. */}
+      <LinearGradient
+        colors={[withAlpha(colors.bg, 0), colors.bg]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={styles.heroFade}
       />
     </View>
   );
@@ -475,36 +518,46 @@ const styles = StyleSheet.create({
   hero: {
     backgroundColor: colors.surface3,
   },
+  heroFade: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: "45%",
+  },
 
   /* — Gövde — */
+  flex: {
+    flex: 1,
+    minWidth: 0,
+  },
   body: {
     paddingHorizontal: layout.screenPadding + space.xxs,
     paddingTop: space.lg,
     gap: space.lg,
   },
+  /** Kapak varken başlık bloğu kapağın erimiş alt kenarına biner. */
+  bodyOverlap: {
+    marginTop: -space.lg,
+    paddingTop: 0,
+  },
   titleBlock: {
-    gap: space.sm,
+    gap: space.m,
   },
   kickerRow: {
     flexDirection: "row",
     alignItems: "center",
     flexWrap: "wrap",
-    gap: space.sm,
+    gap: space.md,
   },
-  kicker: {
-    ...type.overline,
-    color: colors.brandAccent,
+  metaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
   },
   meta: {
     ...type.caption,
     color: colors.textTertiary,
-  },
-  /** Meta parçaları arasındaki 3px ayraç noktası. */
-  metaDot: {
-    width: 3,
-    height: 3,
-    borderRadius: radius.pill,
-    backgroundColor: colors.textTertiary,
   },
   title: {
     ...type.display,
@@ -512,14 +565,25 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   sourceRow: {
+    alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
-    marginTop: space.xxs,
+    paddingLeft: space.xs,
+    paddingRight: space.md,
+    paddingVertical: space.xs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.glass,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
   },
   source: {
-    ...type.label,
+    ...type.labelSm,
     color: colors.textSecondary,
+  },
+  leadBox: {
+    paddingLeft: space.lg,
+    paddingVertical: space.xxs,
   },
   lead: {
     ...type.article,
@@ -532,15 +596,43 @@ const styles = StyleSheet.create({
   },
   bodyImage: {
     width: "100%",
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     overflow: "hidden",
     backgroundColor: colors.surface3,
+  },
+  endMark: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    marginTop: space.sm,
+  },
+  endLine: {
+    flex: 1,
+    height: hairline,
+    backgroundColor: colors.border,
   },
   related: {
     marginTop: space.sm,
   },
-  /** SectionHeader kendi yatay boşluğunu taşır; gövdenin boşluğu geri alınır. */
-  relatedHeader: {
-    marginHorizontal: -layout.screenPadding,
+  relatedList: {
+    gap: space.sm,
+  },
+  relatedCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  relatedTitle: {
+    ...type.h3,
+    color: colors.textPrimary,
+  },
+  relatedSub: {
+    ...type.caption,
+    color: colors.textTertiary,
   },
 });

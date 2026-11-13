@@ -63,11 +63,19 @@ export function bugEventOf(ev: MatchEvent | null | undefined): { kind: BugEventK
 /** Alt bandın ekranda kalma süresi. */
 export const BUG_EVENT_MS = 12_000;
 
-/** Yayın kalite seçenekleri (telefon yükleme hızına göre). */
+/**
+ * Yayın kalite seçenekleri (telefon yükleme hızına göre).
+ *
+ * Bit hızları YouTube'un H.264 önerilerine göre (720p30 ≈ 4–6 Mbps, 1080p30 ≈
+ * 6–8 Mbps; yerel modülün üst sınırı 8 Mbps). Halı saha görüntüsü (çim dokusu,
+ * hızlı top) sıkıştırmaya en zor içeriklerden biridir: eski 2,5 Mbps / 720p
+ * "çamur" görüntünün nedenlerinden biriydi. `minKbps` elle seçilen bit hızının
+ * bu çözünürlükte inebileceği alt sınırdır.
+ */
 export const QUALITY_PRESETS = [
-  { key: "720p", label: "720p · 30 fps", hint: "Önerilen (≥ 4 Mbps yükleme)", width: 1280, height: 720, fps: 30, videoBitrateKbps: 2500 },
-  { key: "540p", label: "540p · 30 fps", hint: "Zayıf mobil veri", width: 960, height: 540, fps: 30, videoBitrateKbps: 1500 },
-  { key: "1080p", label: "1080p · 30 fps", hint: "Güçlü Wi-Fi / 5G (≥ 8 Mbps)", width: 1920, height: 1080, fps: 30, videoBitrateKbps: 4500 },
+  { key: "720p", label: "720p · 30 fps", hint: "Önerilen · 4,5 Mbps (yükleme hızı ≥ 7 Mbps)", width: 1280, height: 720, fps: 30, videoBitrateKbps: 4500, minKbps: 2500 },
+  { key: "1080p", label: "1080p · 30 fps", hint: "En net · 7 Mbps (güçlü Wi-Fi / 5G, yükleme ≥ 11 Mbps)", width: 1920, height: 1080, fps: 30, videoBitrateKbps: 7000, minKbps: 4500 },
+  { key: "540p", label: "540p · 30 fps", hint: "Zayıf mobil veri · 2,5 Mbps (yükleme ≥ 4 Mbps)", width: 960, height: 540, fps: 30, videoBitrateKbps: 2500, minKbps: 1500 },
 ] as const;
 
 export type QualityKey = (typeof QUALITY_PRESETS)[number]["key"];
@@ -76,7 +84,10 @@ export const FPS_OPTIONS = [25, 30] as const;
 export type FpsOption = (typeof FPS_OPTIONS)[number];
 
 /** Elle bit hızı seçenekleri (kbps). null = kalite ön ayarının değeri. */
-export const BITRATE_OPTIONS = [1000, 1500, 2500, 3500, 4500, 6000] as const;
+export const BITRATE_OPTIONS = [2500, 3500, 4500, 6000, 8000] as const;
+
+/** Yerel modülün kabul ettiği en yüksek görüntü bit hızı (kbps). */
+export const MAX_VIDEO_KBPS = 8000;
 
 export interface EncoderConfig {
   key: QualityKey;
@@ -87,11 +98,17 @@ export interface EncoderConfig {
   videoBitrateKbps: number;
 }
 
-/** Kalite ön ayarı + (varsa) elle seçilen kare hızı / bit hızı → kodlayıcı ayarı. */
+/**
+ * Kalite ön ayarı + (varsa) elle seçilen kare hızı / bit hızı → kodlayıcı ayarı.
+ * Elle bit hızı çözünürlüğün alt sınırının altına inemez (1080p'yi 1,5 Mbps'e
+ * sıkıştırmak 720p'den daha kötü görüntü verir).
+ */
 export function resolveEncoder(quality: QualityKey, fps?: number | null, bitrateKbps?: number | null): EncoderConfig {
   const preset = QUALITY_PRESETS.find((q) => q.key === quality) ?? QUALITY_PRESETS[0];
   const f = FPS_OPTIONS.includes(fps as FpsOption) ? (fps as number) : preset.fps;
-  const b = Number(bitrateKbps) > 0 ? Math.min(8000, Math.max(300, Math.round(Number(bitrateKbps)))) : preset.videoBitrateKbps;
+  const manual = Number(bitrateKbps);
+  const base = manual > 0 ? Math.round(manual) : preset.videoBitrateKbps;
+  const b = Math.min(MAX_VIDEO_KBPS, Math.max(preset.minKbps, base));
   return { key: preset.key, label: preset.label, width: preset.width, height: preset.height, fps: f, videoBitrateKbps: b };
 }
 

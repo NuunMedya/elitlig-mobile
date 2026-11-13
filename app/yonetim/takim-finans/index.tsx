@@ -16,7 +16,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 
-import { AdminList, AdminScreen, RecordCard, SelectField, StatRow, useAdminMutation } from "@/components/admin";
+import { StyleSheet, Text, View } from "react-native";
+
+import { AdminList, AdminScreen, SelectField, useAdminMutation } from "@/components/admin";
+import { ToolStage } from "@/components/admin/tools/ToolKit";
+import { Badge, GradientBar, TeamLogo, Touchable } from "@/components/ui";
 import { FfpSettingsSheet } from "@/components/admin/accounting/TeamFinanceSheets";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { listCities } from "@/lib/api/admin/accounting";
@@ -31,7 +35,9 @@ import {
   type TeamFinanceRow,
 } from "@/lib/api/admin/teamFinance";
 import { formatEtl } from "@/lib/api/marketValue";
+import { mediaUrl } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
+import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
 
 type Filter = "all" | FfpStatus;
 
@@ -99,11 +105,16 @@ export default function TeamFinanceScreen() {
                 onChange={(v) => setCityId(v || "")}
               />
             ) : null}
-            <StatRow
-              items={[
+            <ToolStage
+              icon="shield-half"
+              tone="gold"
+              overline="Toplam kadro değeri"
+              value={formatEtl(stats.value)}
+              caption={query.data?.settings?.enabled ? `FFP açık · net harcama sınırı ${teamMoney(query.data.settings.maxNetSpend)}` : "FFP sınırı kapalı"}
+              stats={[
                 { label: "Takım", value: stats.count },
-                { label: "Toplam kadro değeri", value: formatEtl(stats.value) },
-                { label: "FFP uyarı / ihlal", value: stats.warning + stats.breach, tone: stats.warning + stats.breach > 0 ? "danger" : undefined },
+                { label: "Sınırda", value: stats.warning, tone: stats.warning ? "warn" : undefined, onPress: () => setFilter("WARNING") },
+                { label: "İhlal", value: stats.breach, tone: stats.breach ? "danger" : undefined, onPress: () => setFilter("BREACH") },
               ]}
             />
           </>
@@ -113,12 +124,9 @@ export default function TeamFinanceScreen() {
         emptyIcon="wallet-outline"
         emptyTitle="Takım bulunamadı"
         renderItem={({ item: t }) => (
-          <RecordCard
-            title={t.teamName}
-            subtitle={`${t.city || "—"} · ${t.playerCount || 0} oyuncu · ${t.squadValue != null ? formatEtl(t.squadValue) : "değer yok"}`}
-            meta={`Gelir ${teamMoney(t.income)} · Gider ${teamMoney(t.expense)}`}
-            avatar={{ name: t.teamName, image: t.logo }}
-            badges={[{ label: FFP_STATUS_LABELS[t.ffpStatus] || t.ffpStatus, tone: FFP_TONE[t.ffpStatus] || "neutral" }]}
+          <TeamFinanceCard
+            t={t}
+            limit={query.data?.settings?.enabled ? query.data.settings.maxNetSpend : null}
             onPress={() => router.push({ pathname: "/yonetim/takim-finans/[id]", params: { id: String(t.id) } } as never)}
           />
         )}
@@ -127,3 +135,74 @@ export default function TeamFinanceScreen() {
     </AdminScreen>
   );
 }
+
+/** FFP renk degradesi: uyumlu nane, sınırda altın, ihlal kırmızı. */
+const FFP_GRADIENT: Record<FfpStatus, readonly [string, string]> = {
+  COMPLIANT: [colors.tileTones.mint[1], colors.tileTones.mint[0]],
+  WARNING: [colors.tileTones.gold[1], colors.tileTones.gold[0]],
+  BREACH: [colors.tileTones.red[1], colors.tileTones.red[0]],
+  DISABLED: colors.tileTones.neutral,
+};
+
+/** Takım kartı: arma, ad, FFP durumu; gelir / gider / net harcama ve FFP sınır çubuğu. */
+function TeamFinanceCard({ t, limit, onPress }: { t: TeamFinanceRow; limit: number | null; onPress: () => void }) {
+  const usage = limit ? t.netSpend / limit : null;
+  const tone = FFP_TONE[t.ffpStatus] || "neutral";
+  return (
+    <Touchable feedback="card" onPress={onPress} style={styles.card} accessibilityRole="button" accessibilityLabel={`${t.teamName}. ${FFP_STATUS_LABELS[t.ffpStatus]}. Net harcama ${teamMoney(t.netSpend)}`}>
+      <View style={styles.head}>
+        <TeamLogo name={t.teamName} logo={mediaUrl(t.logo)} size={44} />
+        <View style={styles.flex}>
+          <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
+            {t.teamName}
+          </Text>
+          <Text style={styles.sub} numberOfLines={1} {...textScale.dense}>
+            {`${t.city || "—"} · ${t.playerCount || 0} oyuncu · ${t.squadValue != null ? formatEtl(t.squadValue) : "değer yok"}`}
+          </Text>
+        </View>
+        <Badge label={FFP_STATUS_LABELS[t.ffpStatus] || t.ffpStatus} tone={tone} size="sm" />
+      </View>
+      <View style={styles.figures}>
+        <Figure label="Satış geliri" value={teamMoney(t.income, "")} color={colors.win} />
+        <Figure label="Alım gideri" value={teamMoney(t.expense, "")} color={colors.danger} />
+        <Figure label="Net harcama" value={teamMoney(t.netSpend, "")} color={t.netSpend > 0 ? colors.textPrimary : colors.win} strong />
+      </View>
+      {usage != null ? (
+        <View style={styles.usage}>
+          <GradientBar value={Math.min(1, Math.max(0, usage))} height={6} gradient={FFP_GRADIENT[t.ffpStatus]} style={styles.flex} />
+          <Text style={[styles.usageText, { color: usage > 1 ? colors.danger : colors.textSecondary }]} {...textScale.badge}>
+            %{Math.round(usage * 100)} sınır
+          </Text>
+        </View>
+      ) : null}
+    </Touchable>
+  );
+}
+
+function Figure({ label, value, color, strong }: { label: string; value: string; color: string; strong?: boolean }) {
+  return (
+    <View style={styles.figure}>
+      <Text style={styles.figureLabel} numberOfLines={1} {...textScale.badge}>
+        {upperTR(label)}
+      </Text>
+      <Text style={[strong ? styles.figureStrong : styles.figureValue, { color }]} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  flex: { flex: 1, minWidth: 0 },
+  card: { gap: space.sm, padding: space.md, borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.border, backgroundColor: colors.surface1 },
+  head: { flexDirection: "row", alignItems: "center", gap: space.md },
+  name: { ...type.h4, color: colors.textPrimary },
+  sub: { ...type.caption, color: colors.textTertiary },
+  figures: { flexDirection: "row", gap: space.xs },
+  figure: { flex: 1, gap: 2, paddingVertical: space.xs, paddingHorizontal: space.sm, borderRadius: radius.md, backgroundColor: colors.surface2 },
+  figureLabel: { ...type.nano, color: colors.textTertiary },
+  figureValue: { ...type.numSmStrong },
+  figureStrong: { ...type.tableNumStrong },
+  usage: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  usageText: { ...type.labelXs },
+});

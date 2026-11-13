@@ -1,4 +1,5 @@
-import { ApiError, get, post } from "../http";
+import { API_TIMEOUTS } from "../config";
+import { ApiError, get, patch, post } from "../http";
 
 /**
  * YOUTUBE CANLI YAYIN — sunucu routes/liveStreams.js (`/api/admin/live-streams`).
@@ -14,6 +15,9 @@ import { ApiError, get, post } from "../http";
  *   GET  /matches/:id          → { configured, live_stream } (YouTube'dan tazelenir)
  *   POST /matches/:id/end      → yayını bitir ("complete"; hiç canlıya
  *                                 çıkmadıysa YouTube'dan silinir: "deleted")
+ *   PATCH /matches/:id/youtube → { title?, … } açık yayının başlığını değiştir
+ *   POST /matches/:id/thumbnail → çok parçalı `file` (JPEG ≤ 2 MB): YouTube
+ *                                 kapağı (maçın kapağı boşsa ona da yazılır)
  *
  * YouTube yayını "otomatik başla / bitir" ile açılır: telefon görüntü göndermeye
  * başlayınca yayın kendiliğinden canlıya geçer, ayrı bir "go-live" çağrısı yok.
@@ -124,4 +128,85 @@ export function liveErrorText(error: unknown, fallback: string): string {
   if (error instanceof ApiError) return error.userMessage || fallback;
   if (error instanceof Error && error.message) return error.message;
   return fallback;
+}
+
+/* ───────── otomatik başlık ───────── */
+
+export const TITLE_MAX = 100;
+const BRAND = "ELİTLİG";
+
+const cleanPart = (value: unknown): string => {
+  const s = String(value ?? "")
+    .replace(/[<>]/g, "") // YouTube başlıkta < > kabul etmez
+    .replace(/\s+/g, " ")
+    .trim();
+  return s && !["none", "null", "-"].includes(s.toLocaleLowerCase("tr-TR")) ? s : "";
+};
+
+const squash = (s: string) => s.toLocaleLowerCase("tr-TR").replace(/[^0-9a-zçğıöşü]/g, "");
+/** Marka yazısı boş ya da varsayılan "ELİT LİG" ise lig adı sayılmaz. */
+const isDefaultBrand = (s: string) => ["elitlig", "elitlıg", "elıtlıg"].includes(squash(s));
+
+function cut(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const room = Math.max(1, max - 1);
+  const head = text.slice(0, room);
+  const space = head.lastIndexOf(" ");
+  return `${(space > room * 0.6 ? head.slice(0, space) : head).replace(/[\s\-|·]+$/, "")}…`;
+}
+
+export interface BroadcastTitleInput {
+  /** Yayın görünümündeki marka yazısı (ayarlardan değiştirilen lig adı). */
+  brandName?: string | null;
+  /** Maçın lig adı (marka yazısı yoksa). */
+  league?: string | null;
+  season?: string | null;
+  home?: string | null;
+  away?: string | null;
+}
+
+/**
+ * YouTube yayın başlığı: `ELİTLİG {LİG ADI} - {SEZON} | {EV} - {DEPLASMAN}`
+ * (Türkçe büyük harf, en çok 100 karakter; uzunsa takımlar korunur, lig /
+ * sezon kısaltılır). Lig adı önce yayın görünümünün marka yazısından
+ * (web "Yayın Tasarımı" › Marka yazısı) gelir; böylece ayarlardan lig adı
+ * değişince başlık da değişir. Boş parçalar ayraçlarıyla birlikte atılır.
+ */
+export function broadcastTitle(input: BroadcastTitleInput): string {
+  const up = (s: string) => s.toLocaleUpperCase("tr-TR");
+  const brand = cleanPart(input.brandName);
+  let league = brand && !isDefaultBrand(brand) ? brand : cleanPart(input.league);
+  // "ELİTLİG ANKARA LİGİ" yazılmışsa marka iki kez geçmesin.
+  league = league.replace(/^[eE][lL][iİıI][tT]\s*[lL][iİıI][gGğĞ]\s*[-|·:]?\s*/, "").trim();
+  if (isDefaultBrand(league)) league = "";
+  let season = cleanPart(input.season);
+  // Sezon adı lig adını tekrar ediyorsa ("Kış Ligi 2026") ligi sezondan çıkar.
+  if (league && season && squash(season).startsWith(squash(league))) {
+    season = season.slice(league.length).replace(/^[\s\-|·]+/, "").trim();
+  }
+  const head = [BRAND, league].filter(Boolean).join(" ");
+  const competition = [head, season].filter(Boolean).join(" - ");
+  const teams = [cleanPart(input.home), cleanPart(input.away)].filter(Boolean).join(" - ");
+  if (!teams) return up(cut(competition, TITLE_MAX));
+  const tail = ` | ${teams}`;
+  const room = TITLE_MAX - tail.length;
+  const full = room >= BRAND.length + 4 ? `${cut(competition, room)}${tail}` : cut(`${BRAND}${tail}`, TITLE_MAX);
+  return up(full);
+}
+
+/** Açık yayının başlığını (ve isteğe bağlı diğer alanlarını) değiştirir. */
+export const updateMatchYoutube = (matchId: number, body: { title?: string; description?: string }) =>
+  patch<{ ok: boolean; title?: string }>(`${BASE}/matches/${matchId}/youtube`, body);
+
+/**
+ * YouTube kapağı (küçük resim) yükler — masaüstü stüdyoyla aynı uç. `fileUri`
+ * 1280×720 JPEG (≤ 2 MB). Maçın kapağı boşsa sunucu onu da bu görselle doldurur.
+ */
+export async function uploadMatchThumbnail(matchId: number, fileUri: string) {
+  const form = new FormData();
+  const uri = /^(file|content):/.test(fileUri) ? fileUri : `file://${fileUri}`;
+  form.append("file", { uri, name: `kapak-${matchId}.jpg`, type: "image/jpeg" } as unknown as Blob);
+  return post<{ ok: boolean; video_id?: string; cover?: { stored: boolean; url: string | null } }>(`${BASE}/matches/${matchId}/thumbnail`, form, {
+    timeout: API_TIMEOUTS.HEAVY,
+  });
 }

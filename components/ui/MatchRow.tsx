@@ -66,6 +66,8 @@ import { haptics } from "@/lib/haptics";
 import { formatScore, formatTime } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import type { ApiMatch } from "@/lib/types";
+import { withAlpha } from "./Badge";
+import { GlowRim } from "./GlowRim";
 import { GradientFill } from "./GradientFill";
 import { LiveBadge, useReduceMotion } from "./LiveBadge";
 import { TeamLogo } from "./TeamLogo";
@@ -322,6 +324,13 @@ export const MatchRow = memo(function MatchRow({
       {/* Işıklı yüzey — kutu `overflow: "hidden"` taşıdığı için köşeleri
           kendiliğinden kırpılır. */}
       <GradientFill />
+      {/* Canlı satır: pembe tül + kenarda dolaşan neon (GlowRim). */}
+      {live ? (
+        <>
+          <View pointerEvents="none" style={styles.liveTint} />
+          <GlowRim radius={position === "single" ? radius.lg : 0} />
+        </>
+      ) : null}
 
       {/* Gol parlaması: zemin rengi yerel sürücüyle animasyonlanamaz, sabit
           renkli örtünün opaklığı animasyonlanır. */}
@@ -418,13 +427,17 @@ export const MatchRow = memo(function MatchRow({
               </View>
             </>
           ) : played ? (
-            <Text style={styles.stateLabel} {...textScale.badge}>
-              MS
-            </Text>
+            <View style={styles.statePill}>
+              <Text style={styles.stateLabel} {...textScale.badge}>
+                MS
+              </Text>
+            </View>
           ) : (
-            <Text style={styles.time} {...textScale.badge}>
-              {formatTime(match.time)}
-            </Text>
+            <View style={styles.timePill}>
+              <Text style={styles.time} {...textScale.badge}>
+                {formatTime(match.time)}
+              </Text>
+            </View>
           )}
         </View>
 
@@ -562,7 +575,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   teamNameWinner: {
-    fontFamily: fonts.semibold,
+    fontFamily: fonts.heading,
   },
   teamNameDim: {
     color: colors.textTertiary,
@@ -634,8 +647,26 @@ const styles = StyleSheet.create({
     borderLeftColor: colors.separator,
   },
   time: {
-    ...type.tableNum,
-    color: colors.textSecondary,
+    ...type.numSmStrong,
+    color: colors.brandAccent,
+  },
+  /** Saat hapı — "henüz oynanmadı" mor tülde okunur. */
+  timePill: {
+    paddingHorizontal: space.xs,
+    paddingVertical: 2,
+    borderRadius: radius.xs,
+    backgroundColor: colors.brandDim,
+  },
+  /** "MS" hapı — tamamlandı: nane tonu. */
+  statePill: {
+    paddingHorizontal: space.s,
+    paddingVertical: 1,
+    borderRadius: radius.pill,
+    backgroundColor: colors.winDim,
+  },
+  liveTint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: withAlpha(colors.live, 0.06),
   },
   minute: {
     ...type.tableNumStrong,
@@ -646,7 +677,7 @@ const styles = StyleSheet.create({
   },
   stateLabel: {
     ...type.micro,
-    color: colors.textTertiary,
+    color: colors.win,
   },
   liveWord: {
     ...type.micro,

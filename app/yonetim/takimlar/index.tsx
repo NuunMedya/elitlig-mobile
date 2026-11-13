@@ -11,22 +11,21 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import {
   AdminList,
   AdminScreen,
   FormSheet,
-  RecordCard,
-  SelectField,
   useAdminMutation,
   type FieldDef,
   type FormValues,
 } from "@/components/admin";
 import { pickImageFile } from "@/components/admin/team/ImageUpload";
-import { Button, FAB, TeamLogo } from "@/components/ui";
+import { CountStrip, EntityCard, PickerChip } from "@/components/admin/team/ManageKit";
+import { Button, Chip, ChipGroup, FAB, TeamLogo } from "@/components/ui";
 import { hasPermission } from "@/lib/admin/access";
-import { formatDate, relativeDay } from "@/lib/admin/format";
+import { relativeDay } from "@/lib/admin/format";
 import type { UploadFile } from "@/lib/api/admin/leagues";
 import {
   fetchScopedLeagues,
@@ -48,7 +47,7 @@ import {
   type TeamOverviewRow,
 } from "@/lib/api/admin/teams";
 import { useAuth } from "@/providers/AuthProvider";
-import { space } from "@/theme";
+import { colors, radius, space, textScale, type } from "@/theme";
 
 const PERMS = ["teams.create", "teams.update", "teams.delete"];
 const KEY = ["admin", "teams"] as const;
@@ -185,6 +184,10 @@ export default function TeamsScreen() {
     ...(canContact ? CONTACT_FIELDS : []),
   ];
 
+  /* Kartın eksik bilgi uyarısı: logo, lig, sezon. */
+  const missingOf = (t: Team) =>
+    [!hasRealLogo(t) && "logo", !cleanLabel(t.current_league) && "lig", !cleanLabel(t.current_season) && "sezon"].filter(Boolean) as string[];
+
   return (
     <AdminScreen
       title="Takımlar"
@@ -210,73 +213,84 @@ export default function TeamsScreen() {
         search={q}
         onSearch={setQ}
         searchPlaceholder="Takım adı ya da no"
-        filters={[
-          { key: "all", label: "Tümü", count: counts.all },
-          { key: "active", label: "Aktif", count: counts.active },
-          { key: "passive", label: "Pasif", count: counts.passive },
-          { key: "nologo", label: "Logosuz", count: counts.nologo },
-        ]}
-        filter={status}
-        onFilter={(k) => setStatus(k as Status)}
         extraHeader={
-          <View style={styles.filters}>
-            {nationwide ? (
-              <View style={styles.filter}>
-                <SelectField<string>
+          <View style={styles.head}>
+            {/* SAYAÇLAR = DURUM SÜZGECİ: karoya dokununca liste o duruma süzülür. */}
+            <CountStrip
+              items={[
+                { key: "active", label: "Aktif", value: counts.active, tone: "win", selected: status === "active", onPress: () => setStatus(status === "active" ? "all" : "active") },
+                { key: "passive", label: "Pasif", value: counts.passive, tone: "neutral", icon: "pause-circle", selected: status === "passive", onPress: () => setStatus(status === "passive" ? "all" : "passive") },
+                { key: "nologo", label: "Logosuz", value: counts.nologo, tone: "warn", icon: "image-outline", selected: status === "nologo", onPress: () => setStatus(status === "nologo" ? "all" : "nologo") },
+              ]}
+            />
+            <ChipGroup scrollable contentPadding={0}>
+              <Chip label="Tümü" size="sm" count={counts.all} selected={status === "all"} onPress={() => setStatus("all")} />
+              {nationwide ? (
+                <PickerChip<string>
+                  icon="location-outline"
+                  placeholder="Tüm iller"
+                  title="İl"
                   value={city}
                   onChange={setCity}
                   loadOptions={loadCityOptions}
                   queryKey={["admin", "cities"]}
-                  placeholder="Tüm iller"
-                  icon="location-outline"
-                  clearable
-                  sheetTitle="İl"
                 />
-              </View>
-            ) : null}
-            <View style={styles.filter}>
-              <SelectField<string>
+              ) : null}
+              <PickerChip<string>
+                icon="trophy-outline"
+                placeholder="Tüm ligler"
+                title="Lig"
                 value={league}
                 onChange={setLeague}
                 options={leagueChoices.map((l) => ({ value: l, label: l }))}
-                placeholder="Tüm ligler"
-                icon="trophy-outline"
-                clearable
-                sheetTitle="Lig"
               />
-            </View>
-            <View style={styles.filter}>
-              <SelectField<string>
+              <PickerChip<string>
+                icon="swap-vertical"
+                placeholder="Sırala"
+                title="Sırala"
                 value={sort}
                 onChange={(v) => setSort(v ?? "created:desc")}
                 options={TEAM_SORTS.map((s) => ({ value: s.key, label: s.label }))}
-                icon="swap-vertical"
-                sheetTitle="Sırala"
+                clearable={false}
+                highlight={false}
               />
-            </View>
+            </ChipGroup>
           </View>
         }
-        summary={`${rows.length} takım`}
+        summary={`${rows.length} takım${status !== "all" || league || city ? " · süzgeç açık" : ""}`}
         keyExtractor={(t) => String(t.id)}
         emptyIcon="shield-half-outline"
         emptyTitle={q ? "Aramaya uyan takım yok" : "Takım yok"}
+        emptyBody={q ? "Takım adını kısaltarak ya da kayıt numarasıyla dene." : "Süzgeçleri temizleyince tüm takımlar görünür."}
         renderItem={({ item }) => {
           const s = stats.get(Number(item.id));
+          const passive = item.active === false;
+          const missing = missingOf(item);
+          const leagueName = cleanLabel(item.current_league);
+          const seasonName = cleanLabel(item.current_season);
           return (
-            <RecordCard
+            <EntityCard
+              leading={<TeamLogo name={item.team_name} logo={hasRealLogo(item) ? item.logo : null} size={52} dimmed={passive} />}
+              overline={[nationwide ? item.city : null, `#${item.id}`].filter(Boolean).join(" · ")}
               title={item.team_name}
-              subtitle={[nationwide ? item.city : null, cleanLabel(item.current_league), cleanLabel(item.current_season)].filter(Boolean).join(" · ") || "Lig / sezon atanmamış"}
-              meta={
+              subtitle={[leagueName, seasonName].filter(Boolean).join(" · ") || null}
+              muted={passive}
+              pills={[
+                passive ? { label: "Pasif", tone: "neutral", icon: "pause" } : { label: "Aktif", tone: "win" },
+                s && s.played_matches === 0 && { label: "Maç oynamadı", tone: "neutral" },
+              ]}
+              warning={missing.length ? `Eksik: ${missing.join(", ")}` : null}
+              stats={
                 s
-                  ? [`${s.player_count} oyuncu`, `${s.played_matches} maç`, s.last_match_date ? `son: ${formatDate(s.last_match_date)} (${relativeDay(s.last_match_date)})` : null]
-                      .filter(Boolean)
-                      .join(" · ")
-                  : `#${item.id}`
+                  ? [
+                      { label: "Oyuncu", value: s.player_count, tone: s.player_count ? "neutral" : "warn" },
+                      { label: "Maç", value: s.played_matches },
+                      { label: "Son maç", value: s.last_match_date ? relativeDay(s.last_match_date) : "—" },
+                    ]
+                  : undefined
               }
-              trailing={<TeamLogo name={item.team_name} logo={hasRealLogo(item) ? item.logo : null} size={32} dimmed={item.active === false} />}
-              muted={item.active === false}
-              badges={[item.active === false && { label: "Pasif", tone: "neutral" }, !hasRealLogo(item) && { label: "Logo yok", tone: "warn" }]}
               onPress={() => router.push(`/yonetim/takimlar/${item.id}`)}
+              accessibilityLabel={[item.team_name, leagueName, seasonName, passive ? "pasif" : "aktif"].filter(Boolean).join(", ")}
             />
           );
         }}
@@ -290,15 +304,24 @@ export default function TeamsScreen() {
           setFormLeague(null);
         }}
         title="Yeni takım"
+        intro="Takım lig ve sezonla birlikte açılır; logo ve iletişim bilgisi sonradan da eklenebilir."
         fields={createFields}
         initial={{}}
         submitLabel="Takımı ekle"
         onSubmit={(v) => create.mutateAsync(v)}
       >
         <View style={styles.logoRow}>
-          <TeamLogo name="Yeni takım" logo={logo?.uri ?? null} size={48} />
+          <TeamLogo name="Yeni takım" logo={logo?.uri ?? null} size={56} />
+          <View style={styles.logoText}>
+            <Text style={styles.logoTitle} {...textScale.dense}>
+              Takım logosu
+            </Text>
+            <Text style={styles.logoHint} {...textScale.dense}>
+              {logo ? "Seçildi · kayıtla birlikte yüklenir" : "İsteğe bağlı · kare PNG önerilir"}
+            </Text>
+          </View>
           <Button
-            label={logo ? "Logoyu değiştir" : "Logo seç (isteğe bağlı)"}
+            label={logo ? "Değiştir" : "Seç"}
             icon="image-outline"
             variant="secondary"
             size="sm"
@@ -314,7 +337,17 @@ export default function TeamsScreen() {
 }
 
 const styles = StyleSheet.create({
-  filters: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  filter: { flexGrow: 1, flexBasis: 140 },
-  logoRow: { flexDirection: "row", alignItems: "center", gap: space.md, marginTop: space.md },
+  head: { gap: space.md },
+  logoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    marginTop: space.md,
+    padding: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface2,
+  },
+  logoText: { flex: 1, minWidth: 0 },
+  logoTitle: { ...type.h4, color: colors.textPrimary },
+  logoHint: { ...type.caption, color: colors.textTertiary, marginTop: 2 },
 });

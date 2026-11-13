@@ -29,10 +29,11 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Touchable, useHeaderTone } from "@/components/ui";
-import { colors, fonts, radius, space, textScale, type } from "@/theme";
+import { colors, fonts, glowStyle, radius, space, textScale, type } from "@/theme";
 
 export interface FollowExtraAction {
   icon: keyof typeof Ionicons.glyphMap;
@@ -76,6 +77,16 @@ export const FollowActions = React.memo(function FollowActions({
         accessibilityLabel={following ? `${labels.following}. Takibi bırak` : labels.follow}
         style={[styles.button, following ? t.quiet : styles.primary]}
       >
+        {/* Birincil düğme imza degradesiyle dolar ve mor bir parıltı taşır. */}
+        {following ? null : (
+          <LinearGradient
+            colors={colors.gradientBrand}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={[StyleSheet.absoluteFill, styles.primaryFill]}
+            pointerEvents="none"
+          />
+        )}
         <Ionicons
           name={following ? "checkmark-circle" : "star"}
           size={16}
@@ -152,6 +163,10 @@ const styles = StyleSheet.create({
   },
   primary: {
     backgroundColor: colors.brand,
+    ...glowStyle(colors.glow, 1),
+  },
+  primaryFill: {
+    borderRadius: radius.pill,
   },
   label: {
     ...type.label,

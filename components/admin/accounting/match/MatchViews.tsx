@@ -19,12 +19,16 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
+import { LinearGradient } from "expo-linear-gradient";
+
 import { Panel, RecordCard, StatRow, ToggleField } from "@/components/admin";
-import { Button, Chip, ChipGroup, EmptyState, Input, MetricGrid, MetricTile, SegmentedControl, Touchable } from "@/components/ui";
+import { Delta, LineRow, Lines, StageChip, StageStats, ToolStage, categoryVisual, type StageStat } from "@/components/admin/tools/ToolKit";
+import { Badge, Button, Chip, ChipGroup, EmptyState, GradientBar, IconTile, Input, SegmentedControl, Touchable } from "@/components/ui";
 import { timeAgo } from "@/lib/admin/format";
 import {
   ageInDays,
   allAccEntries,
+  compactMoney,
   dayLabel,
   daysBetween,
   filterBookDays,
@@ -50,7 +54,7 @@ import {
   type AccStaffRow,
   type AccTeamRow,
 } from "@/lib/api/admin/accounting";
-import { colors, hairline, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
 
 import { BarRow, Muted, Note, TrendBars } from "../parts";
 import { shareCsv } from "../share";
@@ -69,22 +73,64 @@ export function SummaryKpis({ book }: { book: AccBook }) {
   const cash = s.collected - s.paidOut;
   const target = book.settings?.monthlyTarget && book.reports.monthly.length <= 1 ? book.settings.monthlyTarget : null;
   const progress = target ? Math.max(0, Math.min(100, Math.round((s.net / target) * 100))) : null;
+  const dNet = delta(s.net, prev?.net);
+  const dIncome = delta(s.income, prev?.income);
+  const dExpense = delta(s.expense, prev?.expense);
   return (
     <>
-      <MetricGrid columns={2}>
-        <MetricTile label="Toplam gelir" value={money(s.income)} hint={`${s.matchCount} maç · maç başı ${money(s.averageIncomePerMatch)}${deltaText(delta(s.income, prev?.income))}`} tone="win" icon="trending-up" />
-        <MetricTile label="Toplam gider" value={money(s.expense)} hint={`Maç başı ${money(s.averageExpensePerMatch)}${deltaText(delta(s.expense, prev?.expense))}`} tone="danger" icon="trending-down" />
-        <MetricTile label="Net kâr" value={money(s.net, { signed: true })} hint={`Marj ${percent(s.margin)} · maç başı ${money(s.averageNetPerMatch)}${deltaText(delta(s.net, prev?.net))}`} tone={s.net >= 0 ? "win" : "danger"} icon="scale-outline" />
-        <MetricTile label="Kasa (nakit akışı)" value={money(cash, { signed: true })} hint={`Tahsil ${money(s.collected)} − ödenen ${money(s.paidOut)}`} tone={cash >= 0 ? "brand" : "danger"} icon="cash-outline" />
-        <MetricTile label="Alacak" value={money(s.receivable)} hint={s.income ? `Gelirin %${Math.round((s.receivable / s.income) * 100)}'i bekliyor` : "—"} tone={s.receivable > 0 ? "warn" : "neutral"} icon="hourglass-outline" />
-        <MetricTile label="Borç" value={money(s.payable)} hint={s.expense ? `Giderin %${Math.round((s.payable / s.expense) * 100)}'i bekliyor` : "—"} tone={s.payable > 0 ? "warn" : "neutral"} icon="time-outline" />
-      </MetricGrid>
+      <ToolStage
+        icon="football"
+        tone="mint"
+        overline={`Net kâr · ${s.matchCount} maç`}
+        value={money(s.net, { signed: true })}
+        valueTone={s.net < 0 ? "danger" : undefined}
+        caption={`Marj ${percent(s.margin)} · maç başı ${money(s.averageNetPerMatch)}`}
+        chips={
+          <>
+            {dNet != null ? <StageChip icon={dNet >= 0 ? "trending-up" : "trending-down"} tone={dNet >= 0 ? "win" : "danger"} label={`Önceki döneme göre ${dNet >= 0 ? "+" : "−"}%${String(Math.abs(dNet)).replace(".", ",")}`} /> : null}
+            <StageChip icon="wallet-outline" tone={cash >= 0 ? "plain" : "danger"} label={`Kasa ${money(cash, { signed: true })}`} />
+          </>
+        }
+        stats={[
+          { label: "Gelir", value: compactMoney(s.income), tone: "win" },
+          { label: "Gider", value: compactMoney(s.expense), tone: "danger" },
+          { label: "Alacak", value: compactMoney(s.receivable), tone: s.receivable ? "warn" : undefined },
+          { label: "Borç", value: compactMoney(s.payable), tone: s.payable ? "danger" : undefined },
+        ]}
+      />
+      <View style={styles.kpiRow}>
+        <KpiTile icon="trending-up" tone="mint" label="Maç başı gelir" value={money(s.averageIncomePerMatch)} delta={dIncome} />
+        <KpiTile icon="trending-down" tone="red" label="Maç başı gider" value={money(s.averageExpensePerMatch)} delta={dExpense} goodWhenUp={false} />
+      </View>
       {target ? (
         <Panel title="Aylık hedef kâr">
-          <BarRow label={`${money(s.net)} / ${money(target)}`} value={`%${progress}`} ratio={(progress || 0) / 100} tone="brand" />
+          <View style={styles.targetHead}>
+            <Text style={styles.targetValue} {...textScale.badge}>
+              %{progress}
+            </Text>
+            <Text style={styles.targetSub} {...textScale.dense}>
+              {money(s.net)} / {money(target)}
+            </Text>
+          </View>
+          <GradientBar value={(progress || 0) / 100} height={10} />
         </Panel>
       ) : null}
     </>
+  );
+}
+
+function KpiTile({ icon, tone, label, value, delta: d, goodWhenUp = true }: { icon: keyof typeof Ionicons.glyphMap; tone: "mint" | "red"; label: string; value: string; delta: number | null; goodWhenUp?: boolean }) {
+  return (
+    <View style={styles.kpi} accessible accessibilityLabel={`${label}: ${value}`}>
+      <IconTile icon={icon} tone={tone} size={32} glow={false} />
+      <Text style={styles.kpiLabel} numberOfLines={1} {...textScale.badge}>
+        {upperTR(label)}
+      </Text>
+      <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
+        {value}
+      </Text>
+      {d != null ? <Delta value={d} text={`%${String(Math.abs(d)).replace(".", ",")}`} goodWhenUp={goodWhenUp} /> : null}
+    </View>
   );
 }
 
@@ -235,36 +281,42 @@ export function OverviewView({
             <Text style={styles.subTitle} {...textScale.dense}>
               Bugünün maçları
             </Text>
-            {todayMatches.map((m) => (
-              <RecordCard key={m.id} title={`${m.home} – ${m.away}`} meta={m.time || "—"} icon="football-outline" value={money(m.totals.net, { signed: true })} valueTone={m.totals.net >= 0 ? "win" : "danger"} onPress={() => onOpenMatch(m)} />
-            ))}
+            <Lines>
+              {todayMatches.map((m) => (
+                <LineRow key={m.id} title={`${m.home} – ${m.away}`} meta={[m.time, m.field].filter(Boolean).join(" · ") || "—"} metaIcon="time-outline" icon="football-outline" tone="cyan" value={money(m.totals.net, { signed: true })} valueTone={m.totals.net >= 0 ? "win" : "danger"} chevron onPress={() => onOpenMatch(m)} />
+              ))}
+            </Lines>
           </View>
         ) : null}
       </Panel>
 
       <Panel title="Borçlu takımlar" action={{ label: "Tümü", onPress: () => onGoTab("teams") }}>
         {debtors.length ? (
-          debtors.map((t) => {
-            const age = ageInDays(t.oldestPending);
-            return (
-              <RecordCard
-                key={String(t.teamId ?? t.name)}
-                title={t.name}
-                subtitle={age != null ? `${age} gündür bekliyor` : null}
-                icon="shield-outline"
-                value={money(t.outstanding)}
-                valueTone="danger"
-                onPress={() => onTeamStatement(t)}
-                trailing={
-                  canManage && t.pendingEntryIds.length ? (
-                    <Touchable onPress={() => onMarkPaid(t.pendingEntryIds, `${t.name} takımının ${money(t.outstanding)} alacağı tahsil edildi olarak işaretlensin mi?`)} accessibilityRole="button" accessibilityLabel={`${t.name} tahsil edildi yap`}>
-                      <Ionicons name="checkmark-circle-outline" size={22} color={colors.win} />
-                    </Touchable>
-                  ) : undefined
-                }
-              />
-            );
-          })
+          <Lines>
+            {debtors.map((t) => {
+              const age = ageInDays(t.oldestPending);
+              return (
+                <LineRow
+                  key={String(t.teamId ?? t.name)}
+                  avatar={{ name: t.name }}
+                  title={t.name}
+                  meta={age != null ? `${age} gündür bekliyor` : null}
+                  metaIcon="hourglass-outline"
+                  stripe={age != null && age > 30 ? colors.danger : null}
+                  value={money(t.outstanding)}
+                  valueTone="danger"
+                  onPress={() => onTeamStatement(t)}
+                  trailing={
+                    canManage && t.pendingEntryIds.length ? (
+                      <Touchable onPress={() => onMarkPaid(t.pendingEntryIds, `${t.name} takımının ${money(t.outstanding)} alacağı tahsil edildi olarak işaretlensin mi?`)} accessibilityRole="button" accessibilityLabel={`${t.name} tahsil edildi yap`}>
+                        <Ionicons name="checkmark-circle-outline" size={22} color={colors.win} />
+                      </Touchable>
+                    ) : undefined
+                  }
+                />
+              );
+            })}
+          </Lines>
         ) : (
           <Muted>Tahsil edilmemiş takım ücreti yok.</Muted>
         )}
@@ -272,24 +324,26 @@ export function OverviewView({
 
       <Panel title="Ödeme bekleyen personel" action={{ label: "Tümü", onPress: () => onGoTab("staff") }}>
         {staffPending.length ? (
-          staffPending.map((p) => (
-            <RecordCard
-              key={p.staffId}
-              title={p.name}
-              subtitle={`${p.tasks} görev`}
-              icon="person-outline"
-              value={money(p.pending)}
-              valueTone="danger"
-              onPress={() => onStaffStatement(p)}
-              trailing={
-                canManage && p.pendingEntryIds.length ? (
-                  <Touchable onPress={() => onMarkPaid(p.pendingEntryIds, `${p.name} için ${money(p.pending)} ödendi olarak işaretlensin mi?`)} accessibilityRole="button" accessibilityLabel={`${p.name} ödendi yap`}>
-                    <Ionicons name="checkmark-circle-outline" size={22} color={colors.win} />
-                  </Touchable>
-                ) : undefined
-              }
-            />
-          ))
+          <Lines>
+            {staffPending.map((p) => (
+              <LineRow
+                key={p.staffId}
+                avatar={{ name: p.name }}
+                title={p.name}
+                meta={`${p.tasks} görev`}
+                value={money(p.pending)}
+                valueTone="danger"
+                onPress={() => onStaffStatement(p)}
+                trailing={
+                  canManage && p.pendingEntryIds.length ? (
+                    <Touchable onPress={() => onMarkPaid(p.pendingEntryIds, `${p.name} için ${money(p.pending)} ödendi olarak işaretlensin mi?`)} accessibilityRole="button" accessibilityLabel={`${p.name} ödendi yap`}>
+                      <Ionicons name="checkmark-circle-outline" size={22} color={colors.win} />
+                    </Touchable>
+                  ) : undefined
+                }
+              />
+            ))}
+          </Lines>
         ) : (
           <Muted>Bekleyen personel ödemesi yok.</Muted>
         )}
@@ -299,18 +353,23 @@ export function OverviewView({
 
       <Panel title="Son işlemler">
         {recent.length ? (
-          recent.map((e) => (
-            <RecordCard
-              key={e.id}
-              title={e.title || e.categoryLabel}
-              subtitle={`${e.match ? `${e.match.home} – ${e.match.away}` : "Gün sonu / genel"} · ${shortDay(e.date)}`}
-              meta={timeAgo(e.updatedAt)}
-              icon={e.direction === "income" ? "arrow-down" : "arrow-up"}
-              iconTone={e.direction === "income" ? "win" : "danger"}
-              value={money(e.direction === "income" ? e.amount : -e.amount, { signed: true })}
-              valueTone={e.direction === "income" ? "win" : "danger"}
-            />
-          ))
+          <Lines>
+            {recent.map((e) => {
+              const visual = categoryVisual(e.categoryLabel, e.direction);
+              return (
+                <LineRow
+                  key={e.id}
+                  icon={visual.icon}
+                  tone={visual.tone}
+                  title={e.title || e.categoryLabel}
+                  sub={`${e.match ? `${e.match.home} – ${e.match.away}` : "Gün sonu / genel"} · ${shortDay(e.date)}`}
+                  meta={timeAgo(e.updatedAt)}
+                  value={money(e.direction === "income" ? e.amount : -e.amount, { signed: true })}
+                  valueTone={e.direction === "income" ? "win" : "danger"}
+                />
+              );
+            })}
+          </Lines>
         ) : (
           <Muted>Bu dönemde kayıt yok.</Muted>
         )}
@@ -321,10 +380,9 @@ export function OverviewView({
 }
 
 function Todo({ icon, tone, title, body, children }: { icon: keyof typeof Ionicons.glyphMap; tone: "warn" | "win" | "danger"; title: string; body: string; children?: React.ReactNode }) {
-  const color = tone === "win" ? colors.win : tone === "danger" ? colors.danger : colors.warn;
   return (
     <View style={styles.todo}>
-      <Ionicons name={icon} size={20} color={color} />
+      <IconTile icon={icon} tone={tone === "win" ? "mint" : tone === "danger" ? "red" : "gold"} size={36} glow={false} />
       <View style={styles.flex}>
         <Text style={styles.todoTitle} {...textScale.dense}>
           {title}
@@ -332,8 +390,8 @@ function Todo({ icon, tone, title, body, children }: { icon: keyof typeof Ionico
         <Text style={styles.todoBody} {...textScale.dense}>
           {body}
         </Text>
+        {children ? <View style={styles.todoActions}>{children}</View> : null}
       </View>
-      <View style={styles.todoActions}>{children}</View>
     </View>
   );
 }
@@ -381,15 +439,15 @@ export function LedgerView({
 
   return (
     <View style={styles.gap}>
-      <StatRow
-        items={[
-          { label: "Gelir", value: money(s.income), tone: "win" },
-          { label: "Gider", value: money(s.expense), tone: "danger" },
-          { label: `Net · ${percent(s.margin)}`, value: money(s.net, { signed: true }), tone: s.net >= 0 ? "win" : "danger" },
-          ...(filling != null ? [{ label: "Doluluk", value: `%${filling}` }] : []),
+      <StageStatsCard
+        stats={[
+          { label: "Gelir", value: compactMoney(s.income), tone: "win" },
+          { label: "Gider", value: compactMoney(s.expense), tone: "danger" },
+          { label: `Net · ${percent(s.margin)}`, value: compactMoney(s.net), tone: s.net >= 0 ? "win" : "danger" },
+          ...(filling != null ? [{ label: "Doluluk", value: `%${filling}`, tone: "accent" as const }] : []),
         ]}
+        footer={`Alacak ${money(s.receivable)} · Borç ${money(s.payable)}`}
       />
-      <StatRow items={[{ label: "Alacak", value: money(s.receivable) }, { label: "Borç", value: money(s.payable) }]} />
       <Input variant="search" leadingIcon="search" value={query} onChangeText={setQuery} placeholder="Takım, saha ya da kalem ara" autoCapitalize="none" />
       <View style={styles.row}>
         <SegmentedControl
@@ -424,66 +482,69 @@ export function LedgerView({
                 accessibilityRole="button"
                 accessibilityLabel={`${dayLabel(day.date)}. Net ${money(full.totals.net)}`}
               >
-                <Ionicons name={isCollapsed ? "chevron-forward" : "chevron-down"} size={16} color={colors.textTertiary} />
-                <View style={styles.flex}>
-                  <Text style={styles.dayTitle} {...textScale.dense}>
-                    {dayLabel(day.date)}
-                    {day.date === today ? " · Bugün" : ""}
-                    {locked ? " · kilitli" : ""}
+                <View style={[styles.dayBlock, day.date === today ? styles.dayBlockToday : null]}>
+                  <Text style={[styles.dayNum, day.date === today ? styles.dayNumToday : null]} {...textScale.badge}>
+                    {day.date.slice(8, 10)}
                   </Text>
-                  <Text style={styles.daySub} {...textScale.dense}>
-                    {full.matches.length} maç · %{Math.round(ratio * 100)} dolu · Gelir {money(full.totals.income)} · Gider {money(full.totals.expense)}
+                  <Text style={[styles.dayMon, day.date === today ? styles.dayNumToday : null]} {...textScale.badge}>
+                    {upperTR(dayLabel(day.date).split(" ")[1]?.slice(0, 3) || "")}
                   </Text>
                 </View>
-                <Text style={[styles.dayNet, { color: full.totals.net >= 0 ? colors.win : colors.danger }]} {...textScale.dense}>
+                <View style={styles.flex}>
+                  <Text style={styles.dayTitle} numberOfLines={1} {...textScale.dense}>
+                    {day.date === today ? "Bugün" : dayLabel(day.date).split(", ")[1] || dayLabel(day.date)}
+                    {locked ? " · kilitli" : ""}
+                  </Text>
+                  <View style={styles.dayFill}>
+                    <GradientBar value={ratio} height={4} style={styles.flex} />
+                    <Text style={styles.daySub} {...textScale.badge}>
+                      {full.matches.length} maç · %{Math.round(ratio * 100)}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={[styles.dayNet, { color: full.totals.net >= 0 ? colors.win : colors.danger }]} {...textScale.badge}>
                   {money(full.totals.net, { signed: true })}
                 </Text>
                 {canManage ? (
                   <Touchable onPress={() => onDayMenu(full)} accessibilityRole="button" accessibilityLabel={`${dayLabel(day.date)} işlemleri`}>
                     <Ionicons name="ellipsis-horizontal" size={20} color={colors.textSecondary} />
                   </Touchable>
-                ) : null}
+                ) : (
+                  <Ionicons name={isCollapsed ? "chevron-forward" : "chevron-down"} size={16} color={colors.textTertiary} />
+                )}
               </Touchable>
               {isCollapsed ? null : (
                 <View style={styles.gap}>
-                  {day.matches.map((m) => {
-                    const pct = Math.round(completion(m, fixedKeys) * 100);
-                    return (
-                      <RecordCard
-                        key={m.id}
-                        title={`${m.home} – ${m.away}`}
-                        subtitle={[m.time, m.field, m.league && m.season ? `${m.league} · ${m.season}` : m.league].filter(Boolean).join(" · ") || null}
-                        meta={`Gelir ${money(m.totals.income)} · Gider ${money(m.totals.expense)}${m.score ? ` · Skor ${m.score}` : ""}`}
-                        icon="football-outline"
-                        iconTone={pct === 100 ? "win" : pct ? "warn" : "neutral"}
-                        value={money(m.totals.net, { signed: true })}
-                        valueTone={m.totals.net >= 0 ? "win" : "danger"}
-                        badges={[
-                          { label: `%${pct}`, tone: pct === 100 ? "win" : "neutral" },
-                          matchIsMissing(m) ? { label: "Eksik giriş", tone: "warn" } : null,
-                          matchHasPending(m) ? { label: "Bekleyen var", tone: "info" } : null,
-                          m.locked ? { label: "Kilitli", tone: "neutral", icon: "lock-closed-outline" } : null,
-                          m.status === "taslak" ? { label: "Taslak", tone: "neutral" } : null,
-                        ]}
-                        onPress={() => onOpenMatch(m, visibleMatches)}
-                        onLongPress={canManage ? () => onMatchMenu(m) : undefined}
-                      />
-                    );
-                  })}
-                  {day.entries.map((e) => (
-                    <RecordCard
-                      key={e.id}
-                      title={`Gün sonu: ${e.title || e.categoryLabel}`}
-                      subtitle={[e.categoryLabel, e.staffName].filter(Boolean).join(" · ")}
-                      icon={e.direction === "income" ? "arrow-down" : "arrow-up"}
-                      iconTone={e.direction === "income" ? "win" : "danger"}
-                      value={money(e.direction === "income" ? e.amount : -e.amount, { signed: true })}
-                      valueTone={e.direction === "income" ? "win" : "danger"}
-                      badges={[{ label: e.status === "paid" ? "Ödendi" : "Bekliyor", tone: e.status === "paid" ? "win" : "warn" }]}
-                      onPress={canManage && !locked ? () => onEditEntry(e) : undefined}
-                      onLongPress={canManage ? () => onToggleEntry(e) : undefined}
+                  {day.matches.map((m) => (
+                    <MatchLedgerCard
+                      key={m.id}
+                      m={m}
+                      pct={Math.round(completion(m, fixedKeys) * 100)}
+                      onPress={() => onOpenMatch(m, visibleMatches)}
+                      onLongPress={canManage ? () => onMatchMenu(m) : undefined}
                     />
                   ))}
+                  {day.entries.length ? (
+                    <Lines>
+                      {day.entries.map((e) => {
+                        const visual = categoryVisual(e.title || e.categoryLabel, e.direction);
+                        return (
+                          <LineRow
+                            key={e.id}
+                            icon={visual.icon}
+                            tone={visual.tone}
+                            title={`Gün sonu: ${e.title || e.categoryLabel}`}
+                            sub={[e.categoryLabel, e.staffName].filter(Boolean).join(" · ")}
+                            value={money(e.direction === "income" ? e.amount : -e.amount, { signed: true })}
+                            valueTone={e.direction === "income" ? "win" : "danger"}
+                            badge={{ label: e.status === "paid" ? "Ödendi" : "Bekliyor", tone: e.status === "paid" ? "win" : "warn" }}
+                            onPress={canManage && !locked ? () => onEditEntry(e) : undefined}
+                            onLongPress={canManage ? () => onToggleEntry(e) : undefined}
+                          />
+                        );
+                      })}
+                    </Lines>
+                  ) : null}
                 </View>
               )}
             </View>
@@ -491,6 +552,85 @@ export function LedgerView({
         })
       )}
       <Muted>Maça dokunun: kutucuklar, durum, personel, yöntem ve not. Basılı tutun: varsayılanla doldur, tahsil et, öde. Gün başlığındaki menüden gün sonu kalemi eklenir.</Muted>
+    </View>
+  );
+}
+
+/** Defterdeki maç kartı: saat · saha, iki takım ve skor, gelir / gider / net, doluluk çubuğu. */
+function MatchLedgerCard({ m, pct, onPress, onLongPress }: { m: AccMatch; pct: number; onPress: () => void; onLongPress?: () => void }) {
+  const missing = matchIsMissing(m);
+  const pending = matchHasPending(m);
+  return (
+    <Touchable
+      feedback="card"
+      onPress={onPress}
+      onLongPress={onLongPress}
+      style={[styles.match, missing ? styles.matchMissing : null]}
+      accessibilityRole="button"
+      accessibilityLabel={`${m.home} – ${m.away}. Net ${money(m.totals.net)}. Doluluk yüzde ${pct}`}
+    >
+      <View style={styles.matchTop}>
+        <Ionicons name="time-outline" size={12} color={colors.textTertiary} />
+        <Text style={styles.matchMeta} numberOfLines={1} {...textScale.dense}>
+          {[m.time, m.field, m.league].filter(Boolean).join(" · ") || "—"}
+        </Text>
+        {m.locked ? <Badge label="Kilitli" icon="lock-closed-outline" size="xs" /> : null}
+        {m.status === "taslak" ? <Badge label="Taslak" size="xs" /> : null}
+      </View>
+      <View style={styles.matchTeams}>
+        <Text style={[styles.matchTeam, styles.matchHome]} numberOfLines={2} {...textScale.dense}>
+          {m.home}
+        </Text>
+        <View style={styles.matchScore}>
+          <Text style={styles.matchScoreText} {...textScale.badge}>
+            {m.score || "–"}
+          </Text>
+        </View>
+        <Text style={styles.matchTeam} numberOfLines={2} {...textScale.dense}>
+          {m.away}
+        </Text>
+      </View>
+      <View style={styles.matchFigures}>
+        <Figure label="Gelir" value={compactMoney(m.totals.income)} color={colors.win} />
+        <Figure label="Gider" value={compactMoney(m.totals.expense)} color={colors.danger} />
+        <Figure label="Net" value={money(m.totals.net, { signed: true })} color={m.totals.net >= 0 ? colors.win : colors.danger} strong />
+      </View>
+      <View style={styles.matchFoot}>
+        <GradientBar value={pct / 100} height={5} style={styles.flex} gradient={pct === 100 ? [colors.tileTones.mint[1], colors.tileTones.mint[0]] : undefined} />
+        <Text style={styles.matchPct} {...textScale.badge}>
+          %{pct}
+        </Text>
+        {missing ? <Badge label="Eksik giriş" tone="warn" size="xs" /> : null}
+        {pending ? <Badge label="Bekleyen" tone="info" size="xs" /> : null}
+      </View>
+    </Touchable>
+  );
+}
+
+function Figure({ label, value, color, strong }: { label: string; value: string; color: string; strong?: boolean }) {
+  return (
+    <View style={styles.figure}>
+      <Text style={styles.figureLabel} {...textScale.badge}>
+        {upperTR(label)}
+      </Text>
+      <Text style={[strong ? styles.figureStrong : styles.figureValue, { color }]} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+/** Koyu cam sayaç şeridi tek başına (defter sekmesinin tepesi). */
+function StageStatsCard({ stats, footer }: { stats: StageStat[]; footer?: string }) {
+  return (
+    <View style={styles.statsCard}>
+      <LinearGradient colors={colors.gradientAdminStage} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
+      <StageStats stats={stats} />
+      {footer ? (
+        <Text style={styles.statsFoot} {...textScale.dense}>
+          {footer}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -875,14 +1015,45 @@ const styles = StyleSheet.create({
   inline: { flexDirection: "row", marginTop: space.xs },
   actionsRow: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: space.xs },
   subTitle: { ...type.label, color: colors.textPrimary },
-  todo: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.xs, borderBottomWidth: hairline, borderBottomColor: colors.separator },
-  todoTitle: { ...type.bodySm, color: colors.textPrimary },
+  todo: { flexDirection: "row", alignItems: "flex-start", gap: space.md, paddingVertical: space.sm, borderBottomWidth: hairline, borderBottomColor: colors.separator },
+  todoTitle: { ...type.h4, color: colors.textPrimary },
   todoBody: { ...type.caption, color: colors.textTertiary },
-  todoActions: { flexDirection: "row", gap: space.xs },
-  collapse: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: radius.md, backgroundColor: colors.surface2 },
-  day: { gap: space.sm },
-  dayHead: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.sm, borderBottomWidth: hairline, borderBottomColor: colors.separator },
-  dayTitle: { ...type.label, color: colors.textPrimary },
-  daySub: { ...type.caption, color: colors.textTertiary },
-  dayNet: { ...type.numSmStrong },
+  todoActions: { flexDirection: "row", gap: space.xs, marginTop: space.xs },
+  collapse: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: radius.pill, backgroundColor: colors.glass, borderWidth: hairline, borderColor: colors.glassLine },
+  day: { gap: space.sm, marginTop: space.xs },
+  dayHead: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.xs },
+  dayBlock: { width: 44, height: 46, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface2, borderWidth: hairline, borderColor: colors.border },
+  dayBlockToday: { backgroundColor: colors.brand, borderColor: colors.brand },
+  dayNum: { ...type.metricSm, color: colors.textPrimary },
+  dayNumToday: { color: colors.textOnBrand },
+  dayMon: { ...type.nano, color: colors.textTertiary },
+  dayTitle: { ...type.h4, color: colors.textPrimary },
+  dayFill: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.xs },
+  daySub: { ...type.micro, color: colors.textTertiary },
+  dayNet: { ...type.tableNumStrong },
+  kpiRow: { flexDirection: "row", gap: space.sm },
+  kpi: { flex: 1, gap: space.xs, padding: space.md, borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.border, backgroundColor: colors.surface1 },
+  kpiLabel: { ...type.nano, color: colors.textTertiary, marginTop: space.xxs },
+  kpiValue: { ...type.metricSm, color: colors.textPrimary },
+  targetHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginBottom: space.sm },
+  targetValue: { ...type.scoreMd, color: colors.brandAccent },
+  targetSub: { ...type.bodySm, color: colors.textSecondary },
+  match: { gap: space.sm, padding: space.md, borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.border, backgroundColor: colors.surface1 },
+  matchMissing: { borderColor: colors.warn },
+  matchTop: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  matchMeta: { ...type.caption, color: colors.textTertiary, flex: 1 },
+  matchTeams: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  matchTeam: { ...type.h4, color: colors.textPrimary, flex: 1 },
+  matchHome: { textAlign: "right" },
+  matchScore: { minWidth: 56, paddingHorizontal: space.sm, paddingVertical: space.xs, borderRadius: radius.md, backgroundColor: colors.surface3, alignItems: "center" },
+  matchScoreText: { ...type.scoreSm, color: colors.textPrimary },
+  matchFigures: { flexDirection: "row", gap: space.xs },
+  figure: { flex: 1, gap: 1, paddingVertical: space.xs, paddingHorizontal: space.sm, borderRadius: radius.md, backgroundColor: colors.surface2 },
+  figureLabel: { ...type.nano, color: colors.textTertiary },
+  figureValue: { ...type.numSmStrong },
+  figureStrong: { ...type.tableNumStrong },
+  matchFoot: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  matchPct: { ...type.numSmStrong, color: colors.textSecondary },
+  statsCard: { borderRadius: radius.xl, overflow: "hidden", padding: space.sm, gap: space.sm, backgroundColor: colors.adminBar },
+  statsFoot: { ...type.caption, color: colors.onDarkMuted, textAlign: "center", paddingBottom: space.xxs },
 });

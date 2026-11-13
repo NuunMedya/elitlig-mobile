@@ -15,10 +15,11 @@ import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AudioPlayerRow } from "@/components/chat/ChatBubbles";
-import { Badge, Chip, ChipGroup, EmptyState, ErrorState, MetricGrid, MetricTile, ScreenHeader, SkeletonListRow, Touchable, useHeaderScroll, useRefresh } from "@/components/ui";
+import { CountStrip, DangerNote } from "@/components/admin/team/ManageKit";
+import { Avatar, Badge, Chip, ChipGroup, EmptyState, ErrorState, ScreenHeader, SkeletonListRow, Touchable, useHeaderScroll, useRefresh } from "@/components/ui";
 import { adminChat, formatDurationMs, type AdminCallRecord } from "@/lib/api/chat";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, elevate, layout, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 const dateTime = (value?: string | null) => {
   if (!value) return "";
@@ -54,19 +55,25 @@ export default function RecordsScreen() {
     </View>
   );
 
+  const list = calls.data?.calls ?? [];
+  const missed = list.filter((c) => c.status !== "ended" && c.status !== "accepted").length;
   const listHeader = (
     <View style={styles.listHeader}>
       {stats.data ? (
-        <MetricGrid>
-          <MetricTile label="Sohbet" value={String(stats.data.conversations)} />
-          <MetricTile label="Arama" value={String(stats.data.calls)} />
-          <MetricTile label="Kayıtlı" value={String(stats.data.recorded_calls)} />
-        </MetricGrid>
+        <CountStrip
+          items={[
+            { key: "calls", label: "Arama", value: stats.data.calls, icon: "call" },
+            { key: "rec", label: "Kayıtlı", value: stats.data.recorded_calls, tone: "brand", icon: "recording", selected: onlyRecorded, onPress: () => setOnlyRecorded((v) => !v) },
+            { key: "missed", label: "Cevapsız", value: missed, tone: "danger", icon: "call-outline", hint: "bu listede" },
+          ]}
+        />
       ) : null}
-      <Text style={styles.lead} {...textScale.dense}>
-        Yalnızca üyelerin yönetimle yaptığı aramalar kaydedilir; üyelerin kendi aralarındaki aramalar ve yazışmalar yönetime görünmez.
-        {calls.data && !canListen ? " Kayıtları dinlemek için kayıt dinleme yetkisi gerekir." : ""}
-      </Text>
+      <DangerNote
+        tone="info"
+        icon="shield-checkmark"
+        title="Yalnız yönetim aramaları"
+        body={`Üyelerin kendi aralarındaki aramalar ve yazışmalar yönetime görünmez.${calls.data && !canListen ? " Kayıtları dinlemek için kayıt dinleme yetkisi gerekir." : ""}`}
+      />
     </View>
   );
 
@@ -79,7 +86,7 @@ export default function RecordsScreen() {
         <ErrorState error={calls.error} onRetry={refetch} />
       ) : (
         <FlatList
-          data={calls.data?.calls ?? []}
+          data={list}
           keyExtractor={(item) => String(item.id)}
           renderItem={({ item }) => <CallRow call={item} onOpen={openConversation} />}
           onScroll={scrollProps.onScroll}
@@ -117,26 +124,37 @@ const CALL_STATUS_LABELS: Record<AdminCallRecord["status"], string> = {
 const CallRow = memo(function CallRow({ call, onOpen }: { call: AdminCallRecord; onOpen: (id: number) => void }) {
   const ok = call.status === "ended" || call.status === "accepted";
   const statusLabel = call.label ?? CALL_STATUS_LABELS[call.status] ?? call.status;
+  const avatarOf = (u: AdminCallRecord["caller"]) => ("avatar" in u ? u.avatar : null);
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, ok ? null : styles.rowFailed]}>
+      {ok ? null : <View style={styles.failRail} />}
       <View style={styles.rowHead}>
-        <View style={[styles.icon, ok ? null : styles.iconFailed]}>
-          <Ionicons name={ok ? "call-outline" : "call"} size={16} color={ok ? colors.textSecondary : colors.danger} />
+        {/* ARAYAN → ARANAN: iki avatar ve aradaki yön oku. */}
+        <View style={styles.pair}>
+          <Avatar name={call.caller.name} image={avatarOf(call.caller)} size={34} />
+          <View style={[styles.dir, ok ? null : styles.dirFailed]}>
+            <Ionicons name={ok ? "arrow-forward" : "close"} size={10} color={ok ? colors.textOnBrand : colors.onDark} />
+          </View>
+          <Avatar name={call.callee.name} image={avatarOf(call.callee)} size={34} />
         </View>
         <View style={styles.rowBody}>
           <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
             {call.caller.name}
-            <Text style={styles.arrow}>{"  →  "}</Text>
-            {call.callee.name}
           </Text>
           <Text style={styles.subtitle} numberOfLines={1} {...textScale.dense}>
-            {dateTime(call.started_at)} · <Text style={ok ? null : styles.failed}>{statusLabel}</Text>
-            {call.duration_seconds ? ` · ${formatDurationMs(call.duration_seconds * 1000)}` : ""}
+            → {call.callee.name}
           </Text>
         </View>
         <Touchable feedback="icon" haptic="selection" onPress={() => onOpen(call.conversation_id)} accessibilityLabel="Sohbete git" style={styles.goto}>
           <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.brandAccent} />
         </Touchable>
+      </View>
+      <View style={styles.meta}>
+        <Badge label={statusLabel} tone={ok ? "neutral" : "danger"} icon={ok ? "checkmark" : "close"} size="xs" />
+        {call.duration_seconds ? <Badge label={formatDurationMs(call.duration_seconds * 1000)} icon="time-outline" size="xs" /> : null}
+        <Text style={styles.when} {...textScale.dense}>
+          {dateTime(call.started_at)}
+        </Text>
       </View>
       {call.recording_url ? (
         <View style={styles.player}>
@@ -157,29 +175,38 @@ const styles = StyleSheet.create({
   skeleton: { paddingHorizontal: layout.screenPadding, paddingTop: space.sm },
   list: { flexGrow: 1, paddingHorizontal: layout.screenPadding, paddingTop: space.md, paddingBottom: space.giant },
   listHeader: { gap: space.md, marginBottom: space.md },
-  lead: { ...type.bodySm, color: colors.textSecondary, paddingHorizontal: space.xxs },
   separator: { height: space.sm },
   row: {
     gap: space.md,
-    padding: space.md + space.xxs,
+    padding: space.md,
     borderRadius: radius.xl,
-    ...elevate(1),
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    overflow: "hidden",
   },
+  rowFailed: { borderColor: colors.dangerDim },
+  failRail: { position: "absolute", left: 0, top: space.md, bottom: space.md, width: 3, borderTopRightRadius: radius.pill, borderBottomRightRadius: radius.pill, backgroundColor: colors.danger },
   rowHead: { flexDirection: "row", alignItems: "center", gap: space.md },
-  icon: {
-    width: 36,
-    height: 36,
+  pair: { flexDirection: "row", alignItems: "center" },
+  dir: {
+    width: 18,
+    height: 18,
+    marginHorizontal: -space.xs,
+    zIndex: 1,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surface3,
+    backgroundColor: colors.brand,
+    borderWidth: 2,
+    borderColor: colors.surface1,
   },
-  iconFailed: { backgroundColor: colors.dangerDim },
-  rowBody: { flex: 1, minWidth: 0, gap: space.xxs },
-  title: { ...type.h3, color: colors.textPrimary },
-  arrow: { color: colors.textTertiary },
+  dirFailed: { backgroundColor: colors.danger },
+  rowBody: { flex: 1, minWidth: 0, gap: 1 },
+  title: { ...type.h4, color: colors.textPrimary },
   subtitle: { ...type.bodySm, color: colors.textSecondary },
-  failed: { color: colors.danger },
+  meta: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.xs },
+  when: { ...type.caption, color: colors.textTertiary, marginLeft: space.xxs },
   goto: {
     width: 36,
     height: 36,

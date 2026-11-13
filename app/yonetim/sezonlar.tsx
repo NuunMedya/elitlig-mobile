@@ -18,9 +18,7 @@ import {
   AdminScreen,
   FormSheet,
   OptionSheet,
-  RecordCard,
   SelectField,
-  StatRow,
   confirmAction,
   useAdminMutation,
   type FieldDef,
@@ -28,6 +26,7 @@ import {
   type Option,
 } from "@/components/admin";
 import { FAB } from "@/components/ui";
+import { OpsRecord, StatusTiles } from "@/components/admin/matches/opsKit";
 import { hasAnyPermission, hasPermission } from "@/lib/admin/access";
 import {
   RULE_BOOK_STATUS_LABELS,
@@ -257,12 +256,11 @@ export default function SeasonsScreen() {
         onFilter={(k) => setFilter(k as Filter)}
         extraHeader={
           <>
-            <StatRow
+            <StatusTiles
               items={[
-                { label: "Aktif sezon", value: stats.active, tone: "brand" },
-                { label: "Özel puanlamalı", value: stats.custom },
-                { label: "Kadro kurallı", value: stats.ruleSet },
-                { label: "Arşivde", value: stats.archived },
+                { key: "active", label: "Aktif", value: stats.active, tone: "brand", icon: "calendar-outline" },
+                { key: "custom", label: "Özel puan", value: stats.custom, tone: "info", icon: "calculator-outline" },
+                { key: "rules", label: "Kadro kurallı", value: stats.ruleSet, tone: "win", icon: "people-outline" },
               ]}
             />
             <SelectField<number>
@@ -289,17 +287,20 @@ export default function SeasonsScreen() {
           const book = bookOf(item);
           const rs = ruleSetName(item);
           return (
-            <RecordCard
+            <OpsRecord
               title={item.season_name}
               subtitle={[leagueName(item), nationwide ? item.city : null].filter(Boolean).join(" · ")}
-              meta={[seasonScoringText(item), rs ?? "Kadro kuralı yok"].join(" · ")}
-              icon="calendar-outline"
-              iconTone={isArchived(item) ? "neutral" : "brand"}
+              icon="calendar"
+              tone="violet"
               muted={isArchived(item)}
-              badges={[
-                item.season_priority != null && { label: `#${item.season_priority}` },
-                can.book && { label: book ? book.title : "Kitapçık yok", tone: book ? "info" : "neutral", icon: "book-outline" },
-                isArchived(item) && { label: "Arşivde", icon: "archive-outline" },
+              rail={isArchived(item) ? null : book ? "win" : "warn"}
+              value={item.season_priority != null ? `#${item.season_priority}` : null}
+              valueLabel={item.season_priority != null ? "öncelik" : undefined}
+              status={isArchived(item) ? { label: "Arşivde", tone: "neutral" } : null}
+              specs={[
+                { icon: "calculator-outline", label: seasonScoringText(item) },
+                { icon: "people-outline", label: rs ?? "Kadro kuralı yok", tone: rs ? undefined : "warn" },
+                can.book && { icon: "book-outline", label: book ? book.title : "Kitapçık yok", tone: book ? "info" : "warn" },
               ]}
               onPress={() => setSelected(item)}
             />

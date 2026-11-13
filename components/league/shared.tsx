@@ -97,7 +97,7 @@ export const PaneLabel = React.memo(function PaneLabel({
  * Lig sekmesi YOĞUN dildedir: kart köşesi 18 değil 14 (`radius.lg`); küçük
  * puntolu satırların yanında iri köşe kartı şişkin gösteriyordu.
  */
-export const GROUP_RADIUS = radius.lg;
+export const GROUP_RADIUS = radius.xl;
 const GROUP_SHELL = {
   backgroundColor: colors.surface1,
   borderColor: colors.border,

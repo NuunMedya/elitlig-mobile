@@ -27,7 +27,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { colors, fonts, hairline, layout, radius, space, textScale, touchSlop, type } from "@/theme";
+import { colors, fonts, glowStyle, hairline, layout, radius, space, textScale, touchSlop, type } from "@/theme";
 import { toneColors, withAlpha, type Tone } from "./Badge";
 import { useHeaderTone } from "./HeaderTone";
 import { Touchable } from "./Pressable";
@@ -88,7 +88,8 @@ export const Chip = React.memo(function Chip({
        renginde metin — orada anlam RENKTEN okunur. */
     if (tone === "brand" || tone === "neutral") {
       return {
-        boxStyle: { backgroundColor: colors.brand, borderColor: colors.brand },
+        /* Gece teması: seçili çip mor dolgu + hafif parıltı. */
+        boxStyle: { backgroundColor: colors.brand, borderColor: colors.brand, ...glowStyle(colors.glow, 1) },
         fg: colors.textOnBrand,
       };
     }

@@ -1,26 +1,28 @@
 /**
- * FollowedSpotlight · FollowedHint — Skorlar listesinin tepesi.
+ * FollowedSpotlight · FollowedHint — Maçlar listesinin tepesindeki takip
+ * parçaları.
  *
- *   FollowedSpotlight  Takip edilen takımın CANLI ya da BUGÜNKÜ maçı, grafit
- *                      sahnede (`SpotlightCard`). Ekrandaki TEK sahne budur ve
- *                      listenin en üstündedir (Arena: sahne bir kez, tepede).
- *                      Takip edilen takımın o gün maçı yoksa vitrin YOKTUR —
- *                      yerine "sıradaki lig maçı" gibi bir yedek uydurulmaz.
- *   FollowedHint       "Takip ettiklerin" grubu boşken çizilen tek satırlık
- *                      ince ipucu. Boş bir kart ya da yer tutucu satır yerine
- *                      durumu söyler ve tek eylem verir.
+ *   FollowedSpotlight  Takip edilen takımın CANLI ya da BUGÜNKÜ maçı; ekranın
+ *                      tek sahnesi (`MatchStage`). Takımın o gün maçı yoksa
+ *                      vitrin YOKTUR — yedek uydurulmaz (ekran bunun yerine
+ *                      öne çıkan canlı maçı gösterebilir).
+ *   FollowedHint       "Takip ettiklerin" grubu boşken çizilen kart.
+ *                      · `invite` (hiç takip yok): davetkâr cam kart — degrade
+ *                        yıldız karosu, iki satır gerekçe, birincil düğme ve
+ *                        takip edince ne kazanılacağını söyleyen üç küçük hap.
+ *                      · `quiet` (takip var ama o gün maç yok): tek satırlık
+ *                        sakin bilgi satırı; yer kaplamaz.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { memo, useCallback } from "react";
+import { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { SpotlightCard, Touchable, matchDayLabel } from "@/components/ui";
-import { formatDayHeading, formatTime } from "@/lib/format";
+import { Button, IconTile, Touchable } from "@/components/ui";
 import { matchState } from "@/lib/match";
 import type { ApiMatch } from "@/lib/types";
-import { colors, fonts, hairline, radius, space, textScale, type } from "@/theme";
-import { matchDay } from "./scoreUtils";
+import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
+import { MatchStage } from "./MatchStage";
 
 export interface FollowedSpotlightProps {
   match: ApiMatch;
@@ -36,36 +38,19 @@ export const FollowedSpotlight = memo(function FollowedSpotlight({
   onOpen,
 }: FollowedSpotlightProps) {
   const state = matchState(match);
-  const live = state === "live";
-  const scheduled = state === "scheduled";
-  const handlePress = useCallback(() => onOpen(match), [onOpen, match]);
-
   // Etiket "Canlı" OLAMAZ: rozet zaten "CANLI" yazıyor.
-  const eyebrow = live ? "Takımın sahada" : scheduled ? "Takımının bugünkü maçı" : "Takımın bugün oynadı";
+  const eyebrow =
+    state === "live" ? "Takımın sahada" : state === "scheduled" ? "Takımının bugünkü maçı" : "Takımın bugün oynadı";
 
   return (
-    <View style={styles.spotWrap}>
-      <SpotlightCard
-        eyebrow={eyebrow}
-        context={match.league_name || undefined}
-        live={live}
-        home={{
-          name: match.first_team_name || "Ev sahibi",
-          logo: homeLogo,
-          score: scheduled ? null : match.first_team_score,
-        }}
-        away={{
-          name: match.second_team_name || "Deplasman",
-          logo: awayLogo,
-          score: scheduled ? null : match.second_team_score,
-        }}
-        statusText={formatTime(match.time) || undefined}
-        statusCaption={matchDayLabel(match.date) || undefined}
-        footnote={[formatDayHeading(matchDay(match)), match.match_field].filter(Boolean).join(" · ")}
-        onPress={handlePress}
-        testID="scores-spotlight"
-      />
-    </View>
+    <MatchStage
+      match={match}
+      homeLogo={homeLogo}
+      awayLogo={awayLogo}
+      eyebrow={eyebrow}
+      onOpen={onOpen}
+      testID="scores-spotlight"
+    />
   );
 });
 
@@ -73,65 +58,150 @@ export interface FollowedHintProps {
   text: string;
   actionLabel?: string;
   onAction?: () => void;
+  /** `invite`: hiç takip yokken davet kartı; `quiet` (varsayılan): tek satır. */
+  variant?: "invite" | "quiet";
 }
 
-export const FollowedHint = memo(function FollowedHint({ text, actionLabel, onAction }: FollowedHintProps) {
+const PERKS: { icon: keyof typeof Ionicons.glyphMap; label: string }[] = [
+  { icon: "football-outline", label: "Gol bildirimi" },
+  { icon: "flash-outline", label: "Maçın en üstte" },
+  { icon: "trophy-outline", label: "Sonuç özeti" },
+];
+
+export const FollowedHint = memo(function FollowedHint({
+  text,
+  actionLabel,
+  onAction,
+  variant = "quiet",
+}: FollowedHintProps) {
+  if (variant === "invite") {
+    return (
+      <View style={styles.invite} testID="followed-hint">
+        <View style={styles.inviteHead}>
+          <IconTile icon="star" tone="signature" size={44} />
+          <View style={styles.flex}>
+            <Text style={styles.inviteOverline} {...textScale.badge}>
+              {upperTR(text)}
+            </Text>
+            <Text style={styles.inviteTitle} numberOfLines={2} {...textScale.dense}>
+              Takımını seç, maçı kaçırma
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.inviteBody} {...textScale.long}>
+          Takip ettiğin takımın maçı her gün listenin tepesinde, canlıysa sahnede durur.
+        </Text>
+        <View style={styles.perks}>
+          {PERKS.map((perk) => (
+            <View key={perk.label} style={styles.perk}>
+              <Ionicons name={perk.icon} size={12} color={colors.brandAccent} />
+              <Text style={styles.perkText} numberOfLines={1} {...textScale.badge}>
+                {perk.label}
+              </Text>
+            </View>
+          ))}
+        </View>
+        {actionLabel && onAction ? (
+          <Button label={actionLabel} icon="star-outline" size="md" onPress={onAction} fullWidth />
+        ) : null}
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.hint} testID="followed-hint">
-      <Ionicons name="star-outline" size={14} color={colors.textTertiary} />
-      <Text style={styles.hintText} numberOfLines={1} {...textScale.dense}>
+    <Touchable
+      feedback="row"
+      haptic="selection"
+      onPress={onAction}
+      disabled={!onAction}
+      accessibilityRole="button"
+      accessibilityLabel={actionLabel ? `${text}. ${actionLabel}` : text}
+      style={styles.quiet}
+      testID="followed-hint"
+    >
+      <IconTile icon="star" tone="neutral" size={28} glow={false} />
+      <Text style={styles.quietText} numberOfLines={1} {...textScale.dense}>
         {text}
       </Text>
-      {actionLabel && onAction ? (
-        <Touchable
-          feedback="chip"
-          haptic="selection"
-          onPress={onAction}
-          accessibilityRole="button"
-          accessibilityLabel={actionLabel}
-          style={styles.hintAction}
-        >
-          <Text style={styles.hintActionText} {...textScale.dense}>
-            {actionLabel}
-          </Text>
-        </Touchable>
+      {actionLabel ? (
+        <Text style={styles.quietAction} {...textScale.dense}>
+          {actionLabel}
+        </Text>
       ) : null}
-    </View>
+      <Ionicons name="chevron-forward" size={14} color={colors.textTertiary} />
+    </Touchable>
   );
 });
 
 const styles = StyleSheet.create({
-  spotWrap: {
-    paddingTop: space.lg,
+  flex: { flex: 1, minWidth: 0 },
+
+  invite: {
+    marginTop: space.xl,
+    padding: space.lg,
+    gap: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.glass,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
   },
-  hint: {
-    marginTop: space.lg,
-    height: 40,
+  inviteHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+  },
+  inviteOverline: {
+    ...type.overline,
+    color: colors.brandAccent,
+  },
+  inviteTitle: {
+    ...type.h2,
+    color: colors.textPrimary,
+    marginTop: space.xxs,
+  },
+  inviteBody: {
+    ...type.bodySm,
+    color: colors.textSecondary,
+  },
+  perks: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.s,
+  },
+  perk: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    paddingHorizontal: space.sm,
+    height: 24,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brandDim,
+  },
+  perkText: {
+    ...type.labelXs,
+    color: colors.textPrimary,
+  },
+
+  quiet: {
+    marginTop: space.md,
+    minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
-    paddingLeft: space.md,
-    paddingRight: space.xs,
-    borderRadius: radius.md,
+    paddingLeft: space.sm,
+    paddingRight: space.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface1,
     borderWidth: hairline,
     borderColor: colors.border,
-    borderStyle: "dashed",
   },
-  hintText: {
+  quietText: {
     ...type.bodySm,
     color: colors.textSecondary,
     flex: 1,
   },
-  hintAction: {
-    height: 32,
-    paddingHorizontal: space.md,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  hintActionText: {
+  quietAction: {
     ...type.label,
-    fontFamily: fonts.semibold,
     color: colors.brandAccent,
   },
 });

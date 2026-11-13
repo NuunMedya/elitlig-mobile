@@ -12,9 +12,10 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import React, { useMemo } from "react";
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { colors, radius, space, textScale, type } from "@/theme";
+import React, { useEffect, useMemo, useRef } from "react";
+import { Animated, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { colors, radius, space, spring, textScale, type } from "@/theme";
+import { useReduceMotion } from "./useReduceMotion";
 
 /** Anlamsal renk tonu — tüm ui bileşenlerinin ortak sözlüğü (§4.3). */
 export type Tone = "neutral" | "brand" | "accent" | "live" | "win" | "warn" | "danger" | "info";
@@ -123,6 +124,19 @@ export const Badge = React.memo(function Badge({
   const text = label == null ? null : formatLabel(label);
   const numeric = typeof label === "number";
 
+  /* GECE TEMASI — BADGE HOP: sayı değişince rozet zıplayıp yaylanarak oturur. */
+  const reduceMotion = useReduceMotion();
+  const hop = useRef(new Animated.Value(0)).current;
+  const lastText = useRef(text);
+  useEffect(() => {
+    if (lastText.current === text) return;
+    const grew = numeric && lastText.current != null;
+    lastText.current = text;
+    if (reduceMotion || !grew) return;
+    hop.setValue(1);
+    Animated.spring(hop, { toValue: 0, ...spring.pop }).start();
+  }, [hop, numeric, reduceMotion, text]);
+
   const boxStyle = useMemo<ViewStyle>(() => {
     if (effectiveVariant === "solid") return { backgroundColor: t.solidBg };
     if (effectiveVariant === "outline") {
@@ -150,10 +164,16 @@ export const Badge = React.memo(function Badge({
   }
 
   return (
-    <View
+    <Animated.View
       accessibilityRole="text"
       accessibilityLabel={accessibilityLabel ?? (text ?? undefined)}
       style={[
+        {
+          transform: [
+            { translateY: hop.interpolate({ inputRange: [0, 1], outputRange: [0, -5] }) },
+            { scale: hop.interpolate({ inputRange: [0, 1], outputRange: [1, 1.25] }) },
+          ],
+        },
         styles.box,
         size === "xs" ? styles.boxXs : styles.boxSm,
         numeric ? styles.pill : null,
@@ -168,7 +188,7 @@ export const Badge = React.memo(function Badge({
           {text}
         </Text>
       ) : null}
-    </View>
+    </Animated.View>
   );
 });
 

@@ -4,6 +4,11 @@
  * NE: lig, sezon, takım, oyuncu, kişi gibi uzun listelerden seçim. `options`
  * sabit listedir; `loadOptions(q)` verilirse arama sunucuya gider (takım ve
  * oyuncu araması gibi). Çoklu seçimde altta "Seç (3)" düğmesi çıkar.
+ *
+ * SATIR ANATOMİSİ (yönetim tasarım dili): solda ikon pulu (ya da ad baş
+ * harfi), başlık + ipucu, sağda seçim işareti. Seçili satır `brandDim`
+ * zemin + solda 3 px imza degrade şerit taşır; çoklu seçimde üstte seçili
+ * sayısı ve "Temizle" kısayolu durur.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -11,8 +16,10 @@ import { useQuery } from "@tanstack/react-query";
 import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 
+import { LinearGradient } from "expo-linear-gradient";
+
 import { BottomSheet, Button, EmptyState, Input, SkeletonListRow, Touchable } from "@/components/ui";
-import { colors, hairline, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
 
 export interface Option<V extends string | number = string | number> {
   value: V;
@@ -111,7 +118,7 @@ export function OptionSheet<V extends string | number>({
       scrollable={false}
       footer={
         multiple ? (
-          <Button label={picked.length ? `Seç (${picked.length})` : "Seç"} onPress={confirm} fullWidth />
+          <Button label={picked.length ? `Seç (${picked.length})` : "Seç"} onPress={confirm} fullWidth size="lg" />
         ) : undefined
       }
     >
@@ -127,6 +134,20 @@ export function OptionSheet<V extends string | number>({
             autoCapitalize="none"
             containerStyle={styles.search}
           />
+        ) : null}
+        {multiple ? (
+          <View style={styles.pickedBar}>
+            <Text style={styles.pickedText} {...textScale.dense}>
+              {picked.length ? `${picked.length} seçili` : "Birden fazla seçebilirsin"}
+            </Text>
+            {picked.length ? (
+              <Touchable feedback="none" onPress={() => setPicked([])} accessibilityRole="button" accessibilityLabel="Seçimleri temizle">
+                <Text style={styles.pickedClear} {...textScale.dense}>
+                  Temizle
+                </Text>
+              </Touchable>
+            ) : null}
+          </View>
         ) : null}
         <FlatList
           data={list}
@@ -183,9 +204,29 @@ const Row = React.memo(function Row({
   multiple?: boolean;
   onPress: () => void;
 }) {
+  const initial = upperTR(label.trim().charAt(0) || "·");
   return (
-    <Touchable onPress={onPress} haptic="selection" style={styles.row} accessibilityRole="button" accessibilityState={{ selected }}>
-      {icon ? <Ionicons name={icon} size={18} color={colors.textSecondary} /> : null}
+    <Touchable
+      feedback="row"
+      onPress={onPress}
+      haptic="selection"
+      style={[styles.row, selected ? styles.rowOn : null]}
+      accessibilityRole={multiple ? "checkbox" : "radio"}
+      accessibilityState={multiple ? { checked: Boolean(selected) } : { selected: Boolean(selected) }}
+      accessibilityLabel={hint ? `${label}, ${hint}` : label}
+    >
+      {selected ? (
+        <LinearGradient colors={colors.gradientSignature} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={styles.rowStripe} />
+      ) : null}
+      <View style={[styles.lead, selected ? styles.leadOn : null]}>
+        {icon ? (
+          <Ionicons name={icon} size={17} color={selected ? colors.brandAccent : colors.textSecondary} />
+        ) : (
+          <Text style={[styles.leadText, selected ? styles.labelOn : null]} {...textScale.badge}>
+            {initial}
+          </Text>
+        )}
+      </View>
       <View style={styles.rowText}>
         <Text style={[styles.label, selected ? styles.labelOn : null]} numberOfLines={2} {...textScale.dense}>
           {label}
@@ -198,8 +239,8 @@ const Row = React.memo(function Row({
       </View>
       <Ionicons
         name={multiple ? (selected ? "checkbox" : "square-outline") : selected ? "checkmark-circle" : "ellipse-outline"}
-        size={20}
-        color={selected ? colors.brandAccent : colors.textTertiary}
+        size={22}
+        color={selected ? colors.brandAccent : colors.textDisabled}
       />
     </Touchable>
   );
@@ -208,18 +249,40 @@ const Row = React.memo(function Row({
 const styles = StyleSheet.create({
   body: { flex: 1 },
   search: { marginBottom: space.sm },
+  pickedBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: space.xs,
+    paddingBottom: space.sm,
+  },
+  pickedText: { ...type.caption, color: colors.textTertiary },
+  pickedClear: { ...type.labelSm, color: colors.brandAccent },
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
-    paddingVertical: space.md,
-    paddingHorizontal: space.xs,
+    minHeight: 56,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
     borderBottomWidth: hairline,
     borderBottomColor: colors.separator,
-    borderRadius: radius.none,
+    overflow: "hidden",
   },
+  rowOn: { backgroundColor: colors.brandDim, borderRadius: radius.md, borderBottomColor: "transparent" },
+  rowStripe: { position: "absolute", left: 0, top: space.sm, bottom: space.sm, width: 3, borderRadius: radius.pill },
+  lead: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface3,
+  },
+  leadOn: { backgroundColor: colors.surface1 },
+  leadText: { ...type.labelSm, color: colors.textSecondary },
   rowText: { flex: 1, gap: 2 },
-  label: { ...type.body, color: colors.textPrimary },
+  label: { ...type.h4, color: colors.textPrimary },
   labelOn: { color: colors.brandAccent },
   hint: { ...type.caption, color: colors.textTertiary },
 });

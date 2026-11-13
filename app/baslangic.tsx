@@ -34,16 +34,20 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { BackHandler, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { TeamPickerGrid } from "@/components/follow/TeamPickerGrid";
+import { LinearGradient } from "expo-linear-gradient";
+import { MenuGroup } from "@/components/account/MenuBlocks";
 import {
+  Aurora,
   Button,
   EmptyState,
-  ListRow,
+  IconTile,
   Reveal,
   ScreenHeader,
   SkeletonListRow,
-  Surface,
+  Touchable,
   useHeaderScroll,
   useToast,
+  type IconTileTone,
 } from "@/components/ui";
 import { runPushRegistration, usePushStatus } from "@/hooks/usePushStatus";
 import {
@@ -57,7 +61,7 @@ import { INTRO_SEEN_KEY } from "@/lib/storage";
 import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite, type FavoriteTeam } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, elevate, glowStyle, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 type Step = "lig" | "takim" | "bildirim";
 const STEPS: Step[] = ["lig", "takim", "bildirim"];
@@ -70,12 +74,18 @@ const TITLES: Record<Step, { title: string; subtitle: string }> = {
   bildirim: { title: "Bildirimler", subtitle: "Gol, sonuç ve maç başlangıcını kaçırma" },
 };
 
+/** Bildirim adımındaki izin kartının üç "an"ı. */
+const MOMENTS: { icon: keyof typeof Ionicons.glyphMap; label: string }[] = [
+  { icon: "football", label: "Gol" },
+  { icon: "play", label: "Maç başladı" },
+  { icon: "flag", label: "Son düdük" },
+];
+
+const GROUP_MAC = { icon: "football" as const, tone: "pink" as IconTileTone };
+const GROUP_HABER = { icon: "newspaper" as const, tone: "gold" as IconTileTone };
+
 /** Genel tercihlerden ilk açılışta sorulan gruplar — ayrıntısı Bildirim tercihleri'nde. */
 const ONBOARDING_GROUPS = ["mac", "haber"];
-
-type Position = "single" | "first" | "middle" | "last";
-const rowPosition = (index: number, total: number): Position =>
-  total <= 1 ? "single" : index === 0 ? "first" : index === total - 1 ? "last" : "middle";
 
 /* ═════════════════════════ İLERLEME ═════════════════════════ */
 
@@ -93,7 +103,12 @@ const Progress = React.memo(function Progress({ current }: { current: number }) 
               axis="x"
               style={styles.progressOn}
             >
-              {null}
+              <LinearGradient
+                colors={colors.gradientSignature}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={StyleSheet.absoluteFill}
+              />
             </Reveal>
           ) : null}
         </View>
@@ -120,27 +135,48 @@ function LeagueStep() {
     );
   }
   return (
-    <View>
+    <View style={styles.leagueList}>
       {scope.leagues.map((league, index) => {
         const selected = league.id === scope.leagueId;
         return (
-          <ListRow
-            key={league.id}
-            leading={{ icon: selected ? "trophy" : "trophy-outline", tone: selected ? "brand" : "neutral" }}
-            title={league.label}
-            subtitle={selected && scope.seasonLabel ? scope.seasonLabel : undefined}
-            highlighted={selected}
-            chevron={false}
-            trailing={selected ? <Ionicons name="checkmark-circle" size={20} color={colors.brandAccent} /> : undefined}
-            position={rowPosition(index, scope.leagues.length)}
-            onPress={() => scope.selectLeague(league.id)}
-            testID={`intro-league-${league.id}`}
-          />
+          <Reveal key={league.id} index={index} limit={8} distance={8}>
+            <Touchable
+              feedback="card"
+              haptic="selection"
+              onPress={() => scope.selectLeague(league.id)}
+              accessibilityRole="radio"
+              accessibilityState={{ selected }}
+              accessibilityLabel={selected && scope.seasonLabel ? `${league.label}, ${scope.seasonLabel}` : league.label}
+              testID={`intro-league-${league.id}`}
+              style={[styles.leagueCard, selected ? styles.leagueCardOn : null]}
+            >
+              <IconTile
+                icon="trophy"
+                tone={selected ? "signature" : LEAGUE_TONES[index % LEAGUE_TONES.length]}
+                size={40}
+                glow={selected}
+              />
+              <View style={styles.leagueBody}>
+                <Text style={styles.leagueName} numberOfLines={1} {...textScale.dense}>
+                  {league.label}
+                </Text>
+                <Text style={[styles.leagueMeta, selected ? styles.leagueMetaOn : null]} numberOfLines={1} {...textScale.dense}>
+                  {selected ? (scope.seasonLabel ?? "Seçili") : "Dokun, bu ligi seç"}
+                </Text>
+              </View>
+              <View style={[styles.radio, selected ? styles.radioOn : null]}>
+                {selected ? <Ionicons name="checkmark" size={14} color={colors.textOnBrand} /> : null}
+              </View>
+            </Touchable>
+          </Reveal>
         );
       })}
     </View>
   );
 }
+
+/** Seçili olmayan lig karolarının sırayla aldığı tonlar. */
+const LEAGUE_TONES: IconTileTone[] = ["violet", "cyan", "pink", "gold", "mint"];
 
 /* ═════════════════════════ ADIM 4 · BİLDİRİM ═════════════════════════ */
 
@@ -195,9 +231,24 @@ function NotificationStep() {
 
   return (
     <View style={styles.stepBody}>
-      <Surface level={1} radius="xl" style={styles.permission}>
-        <View style={styles.permissionIcon}>
-          <Ionicons name={granted ? "notifications" : "notifications-outline"} size={22} color={colors.brandAccent} />
+      <View style={styles.permission}>
+        <LinearGradient
+          colors={colors.gradientInk}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <Aurora variant="stage" style={StyleSheet.absoluteFill} />
+        <IconTile icon={granted ? "checkmark-circle" : "notifications"} tone={granted ? "mint" : "signature"} size={56} />
+        <View style={styles.permissionMoments}>
+          {MOMENTS.map((moment) => (
+            <View key={moment.label} style={styles.moment}>
+              <Ionicons name={moment.icon} size={12} color={colors.brandOnDark} />
+              <Text style={styles.momentText} {...textScale.badge}>
+                {moment.label}
+              </Text>
+            </View>
+          ))}
         </View>
         <Text style={styles.permissionTitle} {...textScale.dense}>
           {granted ? "Bu telefon bildirim alıyor" : "Bildirimlere izin ver"}
@@ -215,33 +266,34 @@ function NotificationStep() {
             testID="intro-permission"
           />
         )}
-      </Surface>
+      </View>
 
       {signedIn ? (
         query.isLoading ? (
           <SkeletonListRow count={3} avatar={false} />
         ) : sections.length ? (
-          sections.map((section) => (
-            <View key={section.group.key} style={styles.group}>
-              <Text style={styles.groupLabel} {...textScale.badge}>
-                {upperTR(section.group.label)}
-              </Text>
-              <View>
-                {section.items.map((item, index) => (
-                  <ListRow
-                    key={item.key}
-                    title={item.label}
-                    subtitle={item.description}
-                    position={rowPosition(index, section.items.length)}
-                    toggle={{
-                      value: item.value,
-                      onValueChange: (value) => mutation.mutate({ [item.key]: value }),
-                    }}
-                  />
-                ))}
-              </View>
-            </View>
-          ))
+          sections.map((section) => {
+            const look = section.group.key === "haber" ? GROUP_HABER : GROUP_MAC;
+            return (
+              <MenuGroup
+                key={section.group.key}
+                title={section.group.label}
+                icon={look.icon}
+                tone={look.tone}
+                items={section.items.map((item) => ({
+                  key: item.key,
+                  icon: look.icon,
+                  tone: "neutral",
+                  title: item.label,
+                  subtitle: item.description,
+                  toggle: {
+                    value: item.value,
+                    onValueChange: (value: boolean) => mutation.mutate({ [item.key]: value }),
+                  },
+                }))}
+              />
+            );
+          })
         ) : (
           <Text style={styles.note} {...textScale.long}>
             Bildirim türleri şu an yüklenemedi; Profil → Ayarlar'dan sonra seçebilirsin.
@@ -249,7 +301,7 @@ function NotificationStep() {
         )
       ) : (
         <View style={styles.guestNote}>
-          <Ionicons name="information-circle-outline" size={16} color={colors.textSecondary} />
+          <IconTile icon="person" tone="violet" size={32} glow={false} />
           <Text style={styles.note} {...textScale.long}>
             Bildirim türleri hesabına bağlıdır. Giriş yapınca hangi anlarda bildirim alacağını seçebilirsin.
           </Text>
@@ -381,17 +433,28 @@ export default function BaslangicScreen() {
         {step === "lig" ? (
           <>
             {scope.cityLabel ? (
-              <Text style={styles.lead} {...textScale.long}>
-                {scope.cityLabel} ligleri
-              </Text>
+              <View style={styles.cityPill}>
+                <Ionicons name="location" size={12} color={colors.accentText} />
+                <Text style={styles.cityPillText} {...textScale.badge}>
+                  {scope.cityLabel} · {scope.leagues.length} lig
+                </Text>
+              </View>
             ) : null}
             <LeagueStep />
           </>
         ) : step === "takim" ? (
           <>
-            <Text style={styles.lead} {...textScale.long}>
-              {[scope.leagueLabel, scope.seasonLabel].filter(Boolean).join(" · ")} — birden çok takım seçebilirsin.
-            </Text>
+            <View style={styles.pickHead}>
+              <Text style={[styles.lead, styles.flex]} {...textScale.long}>
+                {[scope.leagueLabel, scope.seasonLabel].filter(Boolean).join(" · ")} — birden çok takım seçebilirsin.
+              </Text>
+              <View style={[styles.pickCount, picked.size ? styles.pickCountOn : null]}>
+                <Ionicons name="star" size={11} color={picked.size ? colors.textOnBrand : colors.textTertiary} />
+                <Text style={[styles.pickCountText, picked.size ? styles.pickCountTextOn : null]} {...textScale.badge}>
+                  {picked.size}
+                </Text>
+              </View>
+            </View>
             <TeamPickerGrid isSelected={isPicked} onPress={togglePick} testID="intro-team-grid" />
           </>
         ) : (
@@ -442,8 +505,69 @@ const styles = StyleSheet.create({
   progressOn: {
     flex: 1,
     borderRadius: radius.pill,
-    backgroundColor: colors.brand,
+    overflow: "hidden",
   },
+  flex: { flex: 1, minWidth: 0 },
+  leagueList: { gap: space.sm },
+  leagueCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    minHeight: 64,
+    paddingHorizontal: space.md,
+    paddingVertical: space.m,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    ...elevate(1),
+  },
+  leagueCardOn: {
+    backgroundColor: colors.brandDim,
+    borderColor: colors.brand,
+    borderWidth: 1.5,
+    ...glowStyle(colors.glow, 1),
+  },
+  leagueBody: { flex: 1, minWidth: 0, gap: 1 },
+  leagueName: { ...type.h3, color: colors.textPrimary },
+  leagueMeta: { ...type.bodySm, color: colors.textTertiary },
+  leagueMetaOn: { color: colors.brandAccent },
+  radio: {
+    width: 22,
+    height: 22,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+  },
+  radioOn: { backgroundColor: colors.brand, borderColor: colors.brand },
+  cityPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: space.xs,
+    paddingHorizontal: space.sm,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accentDim,
+    borderWidth: hairline,
+    borderColor: colors.accentBorder,
+  },
+  cityPillText: { ...type.labelXs, color: colors.accentText },
+  pickHead: { flexDirection: "row", alignItems: "center", gap: space.md },
+  pickCount: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: space.sm,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface3,
+  },
+  pickCountOn: { backgroundColor: colors.brand },
+  pickCountText: { ...type.numSmStrong, color: colors.textTertiary },
+  pickCountTextOn: { color: colors.textOnBrand },
   step: {
     gap: space.md,
   },
@@ -463,44 +587,47 @@ const styles = StyleSheet.create({
   permission: {
     alignItems: "center",
     gap: space.sm,
-    padding: space.lg,
-    borderRadius: radius.xl,
+    padding: space.xl,
+    borderRadius: radius.xxl,
+    overflow: "hidden",
+    backgroundColor: colors.inkBlock,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
+    ...elevate(2),
   },
-  permissionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.pill,
+  permissionMoments: { flexDirection: "row", gap: space.xs, marginTop: space.sm },
+  moment: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.brandDim,
-    marginBottom: space.xs,
+    gap: 3,
+    paddingHorizontal: space.sm,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.inkPillBorder,
   },
+  momentText: { ...type.micro, color: colors.onDark },
   permissionTitle: {
-    ...type.h2,
-    color: colors.textPrimary,
+    ...type.h1,
+    color: colors.onDark,
     textAlign: "center",
   },
   permissionBody: {
     ...type.bodySm,
-    color: colors.textSecondary,
+    color: colors.onDarkMuted,
     textAlign: "center",
     marginBottom: space.sm,
   },
-  group: {
-    gap: space.sm,
-  },
-  groupLabel: {
-    ...type.overline,
-    color: colors.textTertiary,
-    paddingHorizontal: space.xxs,
-  },
   guestNote: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: space.sm,
+    alignItems: "center",
+    gap: space.md,
     padding: space.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface2,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
   },
   note: {
     ...type.bodySm,

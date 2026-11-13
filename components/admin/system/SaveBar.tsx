@@ -6,6 +6,8 @@
  * `overlay` alanına verilir; yalnız değişiklik varken çizilir.
  */
 
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -39,12 +41,31 @@ export function SaveBar({
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, space.md) }]}>
+      <LinearGradient colors={colors.gradientSignature} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.rule} />
       <View style={styles.summary}>
         <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
           {title}
-          {added ? <Text style={styles.plus}>  +{added} açılacak</Text> : null}
-          {removed ? <Text style={styles.minus}>  −{removed} kapanacak</Text> : null}
         </Text>
+        {added || removed ? (
+          <View style={styles.deltas}>
+            {added ? (
+              <View style={[styles.delta, { backgroundColor: colors.winDim }]}>
+                <Ionicons name="add" size={11} color={colors.win} />
+                <Text style={[styles.deltaText, { color: colors.win }]} {...textScale.badge}>
+                  {added} açılacak
+                </Text>
+              </View>
+            ) : null}
+            {removed ? (
+              <View style={[styles.delta, { backgroundColor: colors.dangerDim }]}>
+                <Ionicons name="remove" size={11} color={colors.danger} />
+                <Text style={[styles.deltaText, { color: colors.danger }]} {...textScale.badge}>
+                  {removed} kapanacak
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
         {extra ? (
           <Text style={styles.list} numberOfLines={1} {...textScale.dense}>
             {extra}
@@ -85,8 +106,10 @@ const styles = StyleSheet.create({
   },
   summary: { flex: 1, gap: 2 },
   title: { ...type.h4, color: colors.textPrimary },
-  plus: { ...type.caption, color: colors.win },
-  minus: { ...type.caption, color: colors.danger },
+  rule: { position: "absolute", top: 0, left: space.xl, right: space.xl, height: 2, borderRadius: 1 },
+  deltas: { flexDirection: "row", gap: space.xs },
+  delta: { flexDirection: "row", alignItems: "center", gap: 2, paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.pill },
+  deltaText: { ...type.labelXs },
   list: { ...type.caption, color: colors.textTertiary },
   actions: { flexDirection: "row", gap: space.xs },
 });

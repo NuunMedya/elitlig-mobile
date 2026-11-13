@@ -6,14 +6,29 @@
  * Uzun basma ikinci eylem için (ActionSheet açmak gibi).
  *
  * Panel: başlıklı yüzey (bölüm kartı). Ayrıntı ekranlarında alanları gruplar.
+ *
+ * YÖNETİM TASARIM DİLİ (kayıt satırı — ~90 aracın listesi bu anatomiyle okunur):
+ *   · Önde 40 px degrade `IconTile` (rozet tonu → karo tonu: brand mor,
+ *     accent/info camgöbeği, live pembe, win nane, warn altın, danger kırmızı),
+ *     ya da `Avatar`. İkon verilmezse önde hiçbir şey durmaz.
+ *   · Başlık `h4` (tek/iki satır) → alt metin `bodySm` ikincil → meta satırı
+ *     `caption` üçüncül, saat ikonuyla. Durum hapları en altta (`Badge` soft).
+ *   · Sağda değer (Archivo `metricSm`, ton renginde) ya da chevron; eylem
+ *     düğmesi `trailing` ile gelir.
+ *   · `accentColor`: solda 3 px yuvarlak uçlu şerit (kartın kimlik rengi).
+ *   · `muted`: arşiv/pasif kayıt — başlık soluk, ikon gri.
+ *   · Panel: radius xl kart; başlıkta degrade ray + versal `overline`, sağda
+ *     "Eylem ›". InfoLine: etiket solda %38 sütun, değer sağda, aralarında
+ *     ince ayraç. StatRow: cam karo şeridi, Archivo rakam + versal etiket.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 
-import { Avatar, Badge, Touchable, type Tone } from "@/components/ui";
-import { colors, hairline, radius, space, textScale, type } from "@/theme";
+import { Avatar, Badge, IconTile, Touchable, type IconTileTone, type Tone } from "@/components/ui";
+import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
 
 export interface BadgeSpec {
   label: string;
@@ -54,15 +69,16 @@ const TONE_FG: Record<Tone, string> = {
   info: colors.info,
 };
 
-const TONE_BG: Record<Tone, string> = {
-  neutral: colors.surface3,
-  brand: colors.brandDim,
-  accent: colors.accentDim,
-  live: colors.liveDim,
-  win: colors.winDim,
-  warn: colors.warnDim,
-  danger: colors.dangerDim,
-  info: colors.infoDim,
+/** Rozet tonu → IconTile degradesi (önde duran karo). */
+const TONE_TILE: Record<Tone, IconTileTone> = {
+  neutral: "neutral",
+  brand: "violet",
+  accent: "cyan",
+  live: "pink",
+  win: "mint",
+  warn: "gold",
+  danger: "red",
+  info: "cyan",
 };
 
 export const RecordCard = React.memo(function RecordCard({
@@ -91,9 +107,7 @@ export const RecordCard = React.memo(function RecordCard({
       {avatar ? (
         <Avatar name={avatar.name} image={avatar.image} size={40} />
       ) : icon ? (
-        <View style={[styles.icon, { backgroundColor: TONE_BG[iconTone] }]}>
-          <Ionicons name={icon} size={18} color={TONE_FG[iconTone]} />
-        </View>
+        <IconTile icon={icon} tone={muted ? "neutral" : TONE_TILE[iconTone]} size={40} glow={false} />
       ) : null}
       <View style={styles.main}>
         <Text style={[styles.title, muted ? styles.muted : null]} numberOfLines={numberOfLines} {...textScale.dense}>
@@ -105,9 +119,12 @@ export const RecordCard = React.memo(function RecordCard({
           </Text>
         ) : null}
         {meta ? (
-          <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
-            {meta}
-          </Text>
+          <View style={styles.metaRow}>
+            <Ionicons name="time-outline" size={12} color={colors.textTertiary} />
+            <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+              {meta}
+            </Text>
+          </View>
         ) : null}
         {shownBadges.length ? (
           <View style={styles.badges}>
@@ -119,22 +136,27 @@ export const RecordCard = React.memo(function RecordCard({
         {children}
       </View>
       {value ? (
-        <Text style={[styles.value, { color: TONE_FG[valueTone] }]} numberOfLines={1} {...textScale.dense}>
+        <Text style={[styles.value, { color: valueTone === "neutral" ? colors.textPrimary : TONE_FG[valueTone] }]} numberOfLines={1} {...textScale.dense}>
           {value}
         </Text>
       ) : null}
       {trailing}
-      {onPress && !trailing ? <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} /> : null}
+      {onPress && !trailing ? (
+        <View style={styles.chevron}>
+          <Ionicons name="chevron-forward" size={14} color={colors.textTertiary} />
+        </View>
+      ) : null}
     </>
   );
 
-  if (!onPress && !onLongPress) return <View style={[styles.card, style]}>{body}</View>;
+  if (!onPress && !onLongPress) return <View style={[styles.card, muted ? styles.cardMuted : null, style]}>{body}</View>;
   return (
     <Touchable
+      feedback="card"
       onPress={onPress}
       onLongPress={onLongPress}
       haptic="selection"
-      style={[styles.card, style]}
+      style={[styles.card, muted ? styles.cardMuted : null, style]}
       accessibilityRole="button"
       accessibilityLabel={[title, subtitle, meta, value].filter(Boolean).join(", ")}
     >
@@ -161,15 +183,19 @@ export function Panel({
       {title || action ? (
         <View style={[styles.panelHead, padded ? null : styles.panelHeadInset]}>
           {title ? (
-            <Text style={styles.panelTitle} {...textScale.dense}>
-              {title}
-            </Text>
+            <View style={styles.panelTitleRow}>
+              <LinearGradient colors={colors.gradientSignature} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={styles.panelRail} />
+              <Text style={styles.panelTitle} numberOfLines={1} accessibilityRole="header" accessibilityLabel={title} {...textScale.dense}>
+                {upperTR(title)}
+              </Text>
+            </View>
           ) : <View />}
           {action ? (
-            <Touchable onPress={action.onPress} accessibilityRole="button">
+            <Touchable onPress={action.onPress} accessibilityRole="button" feedback="none" style={styles.panelActionBox}>
               <Text style={styles.panelAction} {...textScale.dense}>
                 {action.label}
               </Text>
+              <Ionicons name="chevron-forward" size={13} color={colors.brandAccent} />
             </Touchable>
           ) : null}
         </View>
@@ -238,48 +264,73 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
-    padding: space.md,
-    borderRadius: radius.lg,
+    minHeight: 64,
+    paddingVertical: space.md,
+    paddingHorizontal: space.md,
+    borderRadius: radius.xl,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
     borderColor: colors.border,
     overflow: "hidden",
   },
-  accent: { position: "absolute", left: 0, top: 0, bottom: 0, width: 4 },
-  icon: { width: 36, height: 36, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
-  main: { flex: 1, gap: 2 },
+  cardMuted: { backgroundColor: colors.surface2 },
+  accent: { position: "absolute", left: 0, top: space.md, bottom: space.md, width: 3, borderTopRightRadius: radius.pill, borderBottomRightRadius: radius.pill },
+  main: { flex: 1, gap: 3 },
   title: { ...type.h4, color: colors.textPrimary },
   muted: { color: colors.textTertiary },
   subtitle: { ...type.bodySm, color: colors.textSecondary },
-  meta: { ...type.caption, color: colors.textTertiary },
-  badges: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: space.xs },
-  value: { ...type.numSmStrong, maxWidth: 140 },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  meta: { ...type.caption, color: colors.textTertiary, flexShrink: 1 },
+  badges: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: space.xxs },
+  value: { ...type.metricSm, maxWidth: 140, textAlign: "right" },
+  chevron: {
+    width: 24,
+    height: 24,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface2,
+  },
   panel: {
     borderRadius: radius.xl,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
     borderColor: colors.border,
-    gap: space.sm,
+    gap: space.md,
     overflow: "hidden",
   },
   panelPadded: { padding: space.lg },
-  panelHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  panelHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md },
   panelHeadInset: { paddingHorizontal: space.lg, paddingTop: space.md },
-  panelTitle: { ...type.overline, color: colors.textTertiary },
-  panelAction: { ...type.label, color: colors.brandAccent },
-  info: { flexDirection: "row", gap: space.md, paddingVertical: space.xs, alignItems: "flex-start" },
-  infoLabel: { ...type.bodySm, color: colors.textTertiary, width: 120 },
-  infoValue: { ...type.bodySm, color: colors.textPrimary, flex: 1 },
+  panelTitleRow: { flexDirection: "row", alignItems: "center", gap: space.sm, flexShrink: 1 },
+  panelRail: { width: 3, height: 13, borderRadius: radius.pill },
+  panelTitle: { ...type.overline, color: colors.textSecondary, flexShrink: 1 },
+  panelActionBox: { flexDirection: "row", alignItems: "center", gap: 2 },
+  panelAction: { ...type.labelSm, color: colors.brandAccent },
+  info: {
+    flexDirection: "row",
+    gap: space.md,
+    paddingVertical: space.xs,
+    alignItems: "flex-start",
+  },
+  infoLabel: { ...type.bodySm, color: colors.textTertiary, width: "38%" },
+  infoValue: { ...type.bodySm, fontFamily: type.label.fontFamily, color: colors.textPrimary, flex: 1 },
   stats: {
     flexDirection: "row",
+    gap: space.sm,
+  },
+  stat: {
+    flex: 1,
+    alignItems: "flex-start",
+    gap: space.xxs,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
     borderRadius: radius.lg,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
     borderColor: colors.border,
-    paddingVertical: space.md,
   },
-  stat: { flex: 1, alignItems: "center", gap: 2, paddingHorizontal: space.xs },
-  statDivided: { borderLeftWidth: hairline, borderLeftColor: colors.separator },
+  statDivided: {},
   statValue: { ...type.metricSm, color: colors.textPrimary },
-  statLabel: { ...type.micro, color: colors.textTertiary, textAlign: "center" },
+  statLabel: { ...type.micro, color: colors.textTertiary },
 });

@@ -15,7 +15,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { memo } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 
-import { TeamLogo, Touchable } from "@/components/ui";
+import { IconTile, TeamLogo, Touchable, type IconTileTone } from "@/components/ui";
 import { colors, elevate, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 /** Kâğıt kart — beyaz dolgu, saç teli kenar, çok hafif gölge. */
@@ -38,6 +38,7 @@ export const PaperCard = memo(function PaperCard({
  */
 export const InfoRow = memo(function InfoRow({
   icon,
+  tone,
   label,
   value,
   first = false,
@@ -45,6 +46,8 @@ export const InfoRow = memo(function InfoRow({
   accessory,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
+  /** Verilirse ikon degrade dolgulu `IconTile` karosunda çizilir. */
+  tone?: IconTileTone;
   label: string;
   value?: string;
   first?: boolean;
@@ -54,9 +57,13 @@ export const InfoRow = memo(function InfoRow({
 }) {
   const body = (
     <>
-      <View style={styles.infoIcon}>
-        <Ionicons name={icon} size={16} color={colors.textTertiary} />
-      </View>
+      {tone ? (
+        <IconTile icon={icon} tone={tone} size={30} glow={false} />
+      ) : (
+        <View style={styles.infoIcon}>
+          <Ionicons name={icon} size={16} color={colors.textTertiary} />
+        </View>
+      )}
       <Text style={styles.infoLabel} numberOfLines={1} {...textScale.dense}>
         {label}
       </Text>

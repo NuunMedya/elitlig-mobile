@@ -12,6 +12,12 @@
  *      duruyordu. Tek panel "bunlar bir cümlenin parçaları" der.
  *   3. Eylem şeridi (takip et, takım sayfası …) — çağıran verir.
  *
+ * İKİNCİ TUR: fotoğraf 96px, mevki renginden camgöbeğine akan degrade
+ * halkada ve parıltılı; forma numarası halkanın sağ altında degrade rozet,
+ * takım arması sol altta küçük rozet. Sayı şeridi dört cam karoya ayrıldı,
+ * rakamlar `Odometer` ile döner; ortalama puan karosu reyting renginde ve
+ * imza çizgisiyle vurgulu.
+ *
  * KENDİ YÜZEYİ YOK: sahne gradyanı başlığındır (Arena §1.2 — sahne ekranda
  * bir kez). Bu bileşen yalnız ekran kenarı dolgusu ve iç ritmi taşır.
  *
@@ -20,13 +26,16 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { Avatar, TeamLogo, Touchable } from "@/components/ui";
+import { Avatar, Reveal, TeamLogo, Touchable } from "@/components/ui";
+import { HaloFrame, StageStat } from "@/components/teampage/ProfileKit";
 import { positionLabel, positionLine } from "@/lib/api/team";
 import {
   colors,
   dark,
+  glowStyle,
   hairline,
   layout,
   positionColor,
@@ -66,10 +75,20 @@ export interface PlayerHeroProps {
   actions?: React.ReactNode;
 }
 
-/** Fotoğraf çapı — sahnenin tek büyük görseli; 56 kimliği taşımıyordu. */
-const AVATAR = 76;
-const RING = 2;
-const RING_GAP = 3;
+/** Fotoğraf çapı — sahnenin tek büyük görseli. */
+const AVATAR = 92;
+
+/** Bilinen sayı anahtarlarının ikonları — anahtar tanınmazsa ikon çizilmez. */
+const FACT_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
+  matches: "shirt",
+  goals: "football",
+  assists: "git-branch",
+  rating: "star",
+};
+
+/* Degrade rozet yatay, sağdan sola (yüzey gradyanı kuralı). */
+const BADGE_START = { x: 1, y: 0.5 };
+const BADGE_END = { x: 0, y: 0.5 };
 
 export const PlayerHero = React.memo(function PlayerHero({
   name,
@@ -87,13 +106,14 @@ export const PlayerHero = React.memo(function PlayerHero({
   /*
    * Mevki YOKSA hat da yok — `positionLine` boş girdide "MID" döndürür (saha
    * dizilişi için doğru varsayım), ama bilinmeyen bir oyuncuyu "Orta saha"
-   * diye etiketlemek yanlış bilgi olurdu; halka o zaman nötr kalır.
+   * diye etiketlemek yanlış bilgi olurdu; halka o zaman imza degradesi kalır.
    */
   const line: PositionLine | null = useMemo(
     () => (position && String(position).trim() ? (positionLine(position) as PositionLine) : null),
     [position],
   );
   const lineColor = positionColor(dark, line);
+  const ring: readonly [string, string] = line ? [lineColor, colors.gradientSignature[1]] : colors.gradientSignature;
 
   /* Etikette insan-okur ad: kod gelirse ("STP") karşılığı, metin gelirse kendisi. */
   const positionText = position ? positionLabel(String(position).trim()) : "";
@@ -102,29 +122,32 @@ export const PlayerHero = React.memo(function PlayerHero({
   return (
     <View style={styles.root}>
       <View style={styles.identity}>
-        {/* Halka avatarın DIŞINDA: `borderWidth` verilseydi fotoğrafın görsel
-            çapı küçülürdü. Ayrı bir kap ölçüyü sabit tutar. */}
-        <View>
-          <View style={[styles.ring, { borderColor: lineColor }]}>
-            <Avatar name={name} image={image} size={AVATAR} />
+        <Reveal scaleFrom={0.86} distance={0}>
+          <View>
+            <HaloFrame size={AVATAR} ring={ring} thickness={3} gap={3}>
+              <Avatar name={name} image={image} size={AVATAR} />
+            </HaloFrame>
+            {jersey != null ? (
+              <View style={[styles.jersey, glowStyle(colors.glow, 1)]} accessible accessibilityLabel={`Forma numarası ${jersey}`}>
+                <LinearGradient colors={colors.gradientBrand} start={BADGE_START} end={BADGE_END} style={StyleSheet.absoluteFill} />
+                <Text style={styles.jerseyText} {...textScale.badge}>
+                  {jersey}
+                </Text>
+              </View>
+            ) : null}
+            {teamName ? (
+              <View style={styles.crestBadge} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                <TeamLogo name={teamName} logo={teamLogo ?? null} size={22} plain onDark />
+              </View>
+            ) : null}
           </View>
-          {jersey != null ? (
-            <View style={styles.jersey} accessible accessibilityLabel={`Forma numarası ${jersey}`}>
-              <Text style={styles.jerseyText} {...textScale.badge}>
-                {jersey}
-              </Text>
-            </View>
-          ) : null}
-        </View>
+        </Reveal>
 
         <View style={styles.body}>
-          {/* MEVKİ ÜST ETİKET: mevki renginde nokta + tam ad. Üç harfli kod
-              ("FOR") tam adın yanında aynı şeyi iki kez söylüyordu; kod
-              yalnız dar listelerde (kadro satırı) işe yarar. Mevki yoksa
-              satır hiç çizilmez. */}
+          {/* MEVKİ ÜST ETİKET: mevki renginde kapsül. Mevki yoksa çizilmez. */}
           {line ? (
             <View
-              style={styles.positionRow}
+              style={[styles.positionChip, { borderColor: lineColor }]}
               accessible
               accessibilityLabel={`Mevki: ${positionText || positionLineLabel(line)}`}
             >
@@ -139,8 +162,7 @@ export const PlayerHero = React.memo(function PlayerHero({
             {name}
           </Text>
 
-          {/* KULÜP HAPI — sahnede hap dili dokunulan şeye ayrılmıştır; kulüp
-              adı takım sayfasına götürdüğü için haptır, düz metin değil. */}
+          {/* KULÜP HAPI — dokununca takım sayfası. */}
           {teamName ? (
             <Touchable
               feedback="chip"
@@ -155,9 +177,7 @@ export const PlayerHero = React.memo(function PlayerHero({
               <Text style={styles.teamName} numberOfLines={1} {...textScale.dense}>
                 {teamName}
               </Text>
-              {onOpenTeam ? (
-                <Ionicons name="chevron-forward" size={12} color={colors.onDarkMuted} />
-              ) : null}
+              {onOpenTeam ? <Ionicons name="chevron-forward" size={12} color={colors.onDarkMuted} /> : null}
             </Touchable>
           ) : null}
 
@@ -176,29 +196,15 @@ export const PlayerHero = React.memo(function PlayerHero({
 
       {facts.length ? (
         <View style={styles.strip}>
-          {facts.map((fact, index) => (
-            <View
+          {facts.map((fact) => (
+            <StageStat
               key={fact.key}
-              style={[styles.cell, index > 0 && styles.cellDivider]}
-              accessible
-              accessibilityLabel={`${fact.label.toLocaleLowerCase("tr-TR")} ${fact.value}`}
-            >
-              <Text
-                style={[
-                  styles.cellValue,
-                  fact.rating != null ? { color: stageRatingColor(fact.rating) } : null,
-                ]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.7}
-                {...textScale.dense}
-              >
-                {fact.value}
-              </Text>
-              <Text style={styles.cellLabel} numberOfLines={1} {...textScale.badge}>
-                {fact.label}
-              </Text>
-            </View>
+              value={fact.value}
+              label={fact.label}
+              icon={FACT_ICON[fact.key]}
+              color={fact.rating != null ? stageRatingColor(fact.rating) : undefined}
+              highlight={fact.rating != null}
+            />
           ))}
         </View>
       ) : null}
@@ -220,35 +226,39 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: space.lg,
   },
-  ring: {
-    width: AVATAR + (RING + RING_GAP) * 2,
-    height: AVATAR + (RING + RING_GAP) * 2,
-    borderRadius: radius.pill,
-    borderWidth: RING,
-    padding: RING_GAP,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  /* Forma numarası halkanın sağ altına biner; mürekkep zemin + ince cam
-     kenar onu hem fotoğraftan hem halkadan ayırır. Dokunulmaz → hap değil. */
+  /* Forma numarası halkanın sağ altına biner: degrade rozet + parıltı. */
   jersey: {
     position: "absolute",
-    right: -space.xxs,
-    bottom: 0,
-    minWidth: 24,
-    height: 22,
-    paddingHorizontal: space.xs,
-    borderRadius: radius.xs,
-    backgroundColor: colors.inkBlock,
-    borderWidth: 1,
-    borderColor: colors.inkPillBorder,
+    right: -space.xs,
+    bottom: space.xxs,
+    minWidth: 30,
+    height: 26,
+    paddingHorizontal: space.s,
+    borderRadius: radius.pill,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: colors.inkBlock,
     alignItems: "center",
     justifyContent: "center",
   },
   /* Forma numarası bir SAYIDIR: Archivo, etiket fontu değil. */
   jerseyText: {
     ...type.tableNumStrong,
-    color: colors.onDark,
+    color: colors.textOnBrand,
+  },
+  crestBadge: {
+    position: "absolute",
+    left: -space.xxs,
+    bottom: space.xxs,
+    width: 30,
+    height: 30,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkBlock,
+    borderWidth: 1,
+    borderColor: colors.inkPillBorder,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
   },
   body: {
     flex: 1,
@@ -256,10 +266,15 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: space.s,
   },
-  positionRow: {
+  positionChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.s,
+    gap: space.xs,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xxs,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    backgroundColor: colors.inkTile,
   },
   positionDot: {
     width: 6,
@@ -304,31 +319,9 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
 
-  /* — Sayı şeridi: tek cam panel, hücreler ince ayraçla — */
+  /* — Sayı şeridi: dört cam karo — */
   strip: {
     flexDirection: "row",
-    borderRadius: radius.md,
-    backgroundColor: colors.inkTile,
-    borderWidth: hairline,
-    borderColor: colors.inkTileBorder,
-    paddingVertical: space.m,
-  },
-  cell: {
-    flex: 1,
-    alignItems: "center",
-    paddingHorizontal: space.xs,
-    gap: space.xxs,
-  },
-  cellDivider: {
-    borderLeftWidth: hairline,
-    borderLeftColor: colors.borderOnDark,
-  },
-  cellValue: {
-    ...type.metric,
-    color: colors.onDark,
-  },
-  cellLabel: {
-    ...type.overline,
-    color: colors.onDarkMuted,
+    gap: space.sm,
   },
 });

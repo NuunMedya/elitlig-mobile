@@ -11,8 +11,11 @@
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { FieldLabel, InfoLine, SelectField, ToggleField, useAdminMutation } from "@/components/admin";
-import { BottomSheet, Button, Input } from "@/components/ui";
+import Ionicons from "@expo/vector-icons/Ionicons";
+
+import { SelectField, ToggleField, useAdminMutation } from "@/components/admin";
+import { DangerNote, FactRow, GroupCard } from "@/components/admin/team/ManageKit";
+import { Avatar, Badge, BottomSheet, Button, Input } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { formatDateTime } from "@/lib/admin/format";
 import {
@@ -30,7 +33,7 @@ import {
   type PenaltyUpdate,
   type ReviewStatus,
 } from "@/lib/api/admin/penalties";
-import { colors, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 import { durationBody, PenaltyDecisionFields, type DecisionValue } from "./PenaltyBits";
 import { RadioGroup } from "./RadioRow";
@@ -105,14 +108,24 @@ export function SubmissionReviewSheet({
       onClose={review.isPending ? () => undefined : onClose}
       title={submission ? `${SUBMISSION_TYPE_LABELS[submission.event_type as "defense"] ?? "Başvuru"} · ${SIDE_LABELS[side] ?? "Taraf"}` : "Başvuru"}
       snap="full"
-      footer={<Button label="Kararı kaydet ve bildir" onPress={submit} loading={review.isPending} haptic="success" fullWidth />}
+      footer={<Button label="Kararı kaydet ve bildir" icon="checkmark" size="lg" onPress={submit} loading={review.isPending} haptic="success" fullWidth />}
     >
       {submission ? (
         <View style={styles.body}>
-          <Text style={styles.meta} {...textScale.dense}>
-            {penalty?.player_name ?? "Oyuncu"} · {formatDateTime(submission.createdAt)}
-          </Text>
+          <View style={styles.from}>
+            <Avatar name={penalty?.player_name} image={penalty?.player_img} size={44} />
+            <View style={styles.grow}>
+              <Text style={styles.fromName} numberOfLines={1} {...textScale.dense}>
+                {penalty?.player_name ?? "Oyuncu"}
+              </Text>
+              <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+                {[penalty?.team_name, formatDateTime(submission.createdAt)].filter(Boolean).join(" · ")}
+              </Text>
+            </View>
+            <Badge label={SUBMISSION_TYPE_LABELS[submission.event_type as "defense"] ?? "Başvuru"} tone={submission.event_type === "objection" ? "info" : "warn"} size="sm" />
+          </View>
           <View style={styles.quote}>
+            <Ionicons name="chatbox-ellipses" size={16} color={colors.warn} />
             <Text style={styles.quoteText} selectable {...textScale.long}>
               {submission.description || "Metin yok."}
             </Text>
@@ -120,47 +133,45 @@ export function SubmissionReviewSheet({
 
           {penalty ? <PenaltyFacts penalty={penalty} /> : null}
 
-          <View style={styles.field}>
-            <FieldLabel label="Kararın" />
+          <GroupCard title="Kararın" step={1}>
             <RadioGroup options={REVIEW_DECISIONS.map((d) => ({ value: d.value, label: d.label, hint: d.hint }))} value={decision} onChange={setDecision} />
-          </View>
+          </GroupCard>
 
-          <Input
-            label="Gerekçe / karar notu"
-            value={note}
-            onChangeText={setNote}
-            multiline
-            numberOfLines={4}
-            placeholder="Bu metin ilgili takıma ve oyuncuya iletilir."
-            maxLength={3000}
-          />
+          <GroupCard title="Gerekçe" step={2}>
+            <Input
+              label="Gerekçe / karar notu"
+              value={note}
+              onChangeText={setNote}
+              multiline
+              numberOfLines={4}
+              placeholder="Bu metin ilgili takıma ve oyuncuya iletilir."
+              maxLength={3000}
+            />
+          </GroupCard>
 
-          <ToggleField
-            label="Aynı anda ceza dosyasını da güncelle"
-            hint="Aşamayı ilerlet ve/veya ceza süresini yeniden belirle."
-            value={alsoUpdate}
-            onChange={setAlsoUpdate}
-          />
+          <GroupCard title="Ceza dosyası" step={3}>
+            <ToggleField
+              label="Aynı anda ceza dosyasını da güncelle"
+              hint="Aşamayı ilerlet ve/veya ceza süresini yeniden belirle."
+              value={alsoUpdate}
+              onChange={setAlsoUpdate}
+            />
+            {alsoUpdate ? (
+              <View style={styles.field}>
+                <SelectField<PenaltyStatus>
+                  label="Ceza aşaması"
+                  value={stage}
+                  options={PENALTY_STATUS_ORDER.map((st) => ({ value: st, label: PENALTY_STATUS_LABELS[st] }))}
+                  placeholder="Değiştirme"
+                  clearable
+                  onChange={setStage}
+                />
+                <PenaltyDecisionFields value={duration} onChange={setDuration} showStatus={false} forceDuration />
+              </View>
+            ) : null}
+          </GroupCard>
 
-          {alsoUpdate ? (
-            <View style={styles.field}>
-              <SelectField<PenaltyStatus>
-                label="Ceza aşaması"
-                value={stage}
-                options={PENALTY_STATUS_ORDER.map((s) => ({ value: s, label: PENALTY_STATUS_LABELS[s] }))}
-                placeholder="Değiştirme"
-                clearable
-                onChange={setStage}
-              />
-              <PenaltyDecisionFields value={duration} onChange={setDuration} showStatus={false} forceDuration />
-            </View>
-          ) : null}
-
-          {failure ? (
-            <Text style={styles.failure} {...textScale.long}>
-              {failure}
-            </Text>
-          ) : null}
+          {failure ? <DangerNote title="Kaydedilemedi" body={failure} /> : null}
         </View>
       ) : null}
     </BottomSheet>
@@ -170,30 +181,36 @@ export function SubmissionReviewSheet({
 /** Başvurunun bağlı olduğu ceza dosyasının kısa özeti. */
 export function PenaltyFacts({ penalty }: { penalty: Penalty }) {
   return (
-    <View style={styles.facts}>
-      <InfoLine label="Güncel aşama" value={PENALTY_STATUS_LABELS[penalty.status] ?? penalty.status} />
-      <InfoLine label="Ceza süresi" value={durationText(penalty)} />
-      <InfoLine label="Savunma süresi" value={penalty.defense_deadline_at ? formatDateTime(penalty.defense_deadline_at) : "—"} />
-      <InfoLine label="İtiraz süresi" value={penalty.objection_deadline_at ? formatDateTime(penalty.objection_deadline_at) : "—"} />
+    <GroupCard title="Bağlı ceza dosyası" icon="hammer" tone="red">
       <Text style={styles.meta} {...textScale.dense}>
         {banSummary(penalty)}
       </Text>
+      <View>
+        <FactRow icon="flag-outline" label="Güncel aşama" value={PENALTY_STATUS_LABELS[penalty.status] ?? penalty.status} />
+        <FactRow icon="timer-outline" label="Ceza süresi" value={durationText(penalty)} />
+        <FactRow icon="shield-outline" label="Savunma süresi" value={penalty.defense_deadline_at ? formatDateTime(penalty.defense_deadline_at) : null} />
+        <FactRow icon="git-pull-request-outline" label="İtiraz süresi" value={penalty.objection_deadline_at ? formatDateTime(penalty.objection_deadline_at) : null} last />
+      </View>
       {penalty.disiplin_karari ? (
-        <Text style={styles.karar} selectable {...textScale.long}>
-          {penalty.disiplin_karari}
-        </Text>
+        <View style={styles.karar}>
+          <Text style={styles.kararText} selectable numberOfLines={6} {...textScale.long}>
+            {penalty.disiplin_karari}
+          </Text>
+        </View>
       ) : null}
-    </View>
+    </GroupCard>
   );
 }
 
 const styles = StyleSheet.create({
-  facts: { padding: space.md, borderRadius: radius.md, backgroundColor: colors.surface2, gap: space.xxs },
-  karar: { ...type.bodySm, color: colors.textPrimary, marginTop: space.xs },
-  body: { gap: space.lg },
+  grow: { flex: 1, minWidth: 0 },
+  karar: { padding: space.md, borderRadius: radius.md, backgroundColor: colors.surface2, borderLeftWidth: 3, borderLeftColor: colors.brandAccent },
+  kararText: { ...type.bodySm, color: colors.textPrimary },
+  body: { gap: space.md },
   meta: { ...type.caption, color: colors.textTertiary },
-  quote: { padding: space.md, borderRadius: radius.md, backgroundColor: colors.warnDim },
-  quoteText: { ...type.body, color: colors.textPrimary },
-  field: { gap: space.sm },
-  failure: { ...type.bodySm, color: colors.danger },
+  from: { flexDirection: "row", alignItems: "center", gap: space.md },
+  fromName: { ...type.h3, color: colors.textPrimary },
+  quote: { flexDirection: "row", gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.warnDim, borderWidth: hairline, borderColor: colors.warn },
+  quoteText: { ...type.body, color: colors.textPrimary, flex: 1 },
+  field: { gap: space.md },
 });

@@ -18,6 +18,11 @@
  * 403 / hata dönerse diğeri çizilmeye devam eder. Sayaç sorgusu hata verirse
  * bölüm SESSİZCE gizlenir (`retry: false`) — ekran düşmez.
  *
+ * KURGU (ikinci tur): arama → BEKLEYEN ONAYLAR (dört renkli sayaç kartı,
+ * IconTile + dönen rakam + "İncele ›"; sıfırsa kart sakinleşir) → BUGÜN
+ * (canlı kart GlowRim ile, saat/skor Archivo) → araç grupları (grup başlığı
+ * IconTile'lı, modül karoları degrade IconTile + ad + açıklama).
+ *
  * İKİ KULLANIM: `app/yonetim/lig.tsx` yığın ekranı olarak (geri oklu) ya da
  * yönetim sekme çubuğunda sekme kökü olarak (`asTab`: geri oku yok, sekme
  * çubuğu kadar alt boşluk).
@@ -34,16 +39,19 @@ import { LeaguePicker } from "@/components/LeaguePicker";
 import {
   Badge,
   EmptyState,
+  GlowRim,
   HubGrid,
-  HubTile,
+  IconTile,
   Input,
   ListRow,
+  LiveBadge,
+  Odometer,
   SectionHeader,
   Skeleton,
   TeamLogo,
   Touchable,
   useReduceMotion,
-  type HubTone,
+  type IconTileTone,
   type Tone,
 } from "@/components/ui";
 import { useAppActive } from "@/hooks/useLiveFavoriteCount";
@@ -75,14 +83,14 @@ export const LEAGUE_OPS_PERMISSIONS: string[] = Array.from(
 );
 
 /** Grup kimliği rengi — renkli ikon pulu yalnız kategori kimliği taşır. */
-const GROUP_TONE: Record<string, HubTone> = {
-  maclar: "brand",
-  ligler: "accent",
-  takimlar: "info",
-  oyuncular: "win",
-  disiplin: "danger",
-  icerik: "warn",
-  uyeler: "neutral",
+const GROUP_TONE: Record<string, IconTileTone> = {
+  maclar: "violet",
+  ligler: "signature",
+  takimlar: "cyan",
+  oyuncular: "mint",
+  disiplin: "red",
+  icerik: "gold",
+  uyeler: "pink",
 };
 
 const MATCH_PERMS = ["matches.view", "matches.create", "matches.update", "matches.lineup", "matches.live", "matches.stats"];
@@ -91,12 +99,32 @@ const MATCH_PERMS = ["matches.view", "matches.create", "matches.update", "matche
  * Bekleyen iş sayaçları: sunucu kategorisi → modül. Sayaç yalnız kullanıcının
  * o modüle yetkisi varsa çizilir; modül karosunda da rozet olarak görünür.
  */
-const PENDING: { category: string; moduleKey: string; label: string; icon: keyof typeof Ionicons.glyphMap; route: string; permission: string[] }[] = [
-  { category: "roster", moduleKey: "kadrolar", label: "Kadro onayı", icon: "checkmark-done-outline", route: "/yonetim/kadrolar", permission: ["roster_rules.requests"] },
-  { category: "transfer", moduleKey: "transfer-onaylari", label: "Transfer onayı", icon: "swap-horizontal-outline", route: "/yonetim/transfer-onaylari", permission: ["transfers.view", "transfers.review"] },
-  { category: "penalty", moduleKey: "savunmalar", label: "Savunma ve itiraz", icon: "document-attach-outline", route: "/yonetim/savunmalar", permission: ["penalties.review"] },
-  { category: "match_request", moduleKey: "sahalar", label: "Maç talebi", icon: "location-outline", route: "/yonetim/sahalar", permission: ["venues.view", "venues.manage"] },
+const PENDING: {
+  category: string;
+  moduleKey: string;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  route: string;
+  permission: string[];
+  tone: IconTileTone;
+}[] = [
+  { category: "roster", moduleKey: "kadrolar", label: "Kadro onayı", icon: "people", route: "/yonetim/kadrolar", permission: ["roster_rules.requests"], tone: "violet" },
+  { category: "transfer", moduleKey: "transfer-onaylari", label: "Transfer onayı", icon: "swap-horizontal", route: "/yonetim/transfer-onaylari", permission: ["transfers.view", "transfers.review"], tone: "cyan" },
+  { category: "penalty", moduleKey: "savunmalar", label: "Savunma ve itiraz", icon: "document-attach", route: "/yonetim/savunmalar", permission: ["penalties.review"], tone: "red" },
+  { category: "match_request", moduleKey: "sahalar", label: "Maç talebi", icon: "location", route: "/yonetim/sahalar", permission: ["venues.view", "venues.manage"], tone: "gold" },
 ];
+
+/** IconTile tonu → sayaç kartının çerçeve/rakam rengi (metin AA geçen token). */
+const TONE_INK: Record<IconTileTone, string> = {
+  violet: colors.brandAccent,
+  cyan: colors.accentText,
+  red: colors.danger,
+  gold: colors.warn,
+  mint: colors.win,
+  pink: colors.live,
+  signature: colors.brandAccent,
+  neutral: colors.textSecondary,
+};
 
 const STATUS_META: Record<MacDurumu, { label: string; tone: Tone }> = {
   taslak: { label: "Taslak", tone: "neutral" },
@@ -354,9 +382,32 @@ export function LeagueOpsHome({ asTab = false }: LeagueOpsHomeProps) {
         )
       ) : (
         <>
+          {/* ── BEKLEYEN İŞLER ── (sorgu hata verirse bölüm sessizce gizlenir) */}
+          {pendingDefs.length > 0 && !requestsQuery.isError ? (
+            <Reveal index={0}>
+              <SectionHeader
+                title="Bekleyen onaylar"
+                meta={requestsQuery.isLoading ? undefined : pendingTotal ? `${pendingTotal} iş seni bekliyor` : "Hepsi tamam"}
+              />
+              <View style={[styles.pad, styles.pendingGrid]}>
+                {pendingDefs.map((def, index) => (
+                  <PendingTile
+                    key={def.category}
+                    label={def.label}
+                    icon={def.icon}
+                    tone={def.tone}
+                    index={index}
+                    count={requestsQuery.isLoading ? null : pendingByCategory.get(def.category) ?? 0}
+                    onPress={() => go(def.route)}
+                  />
+                ))}
+              </View>
+            </Reveal>
+          ) : null}
+
           {/* ── BUGÜN ── */}
           {canMatches ? (
-            <Reveal index={0}>
+            <Reveal index={1}>
               <SectionHeader
                 title={todays.length || !upcoming.length ? "Bugün" : "Sıradaki maçlar"}
                 meta={
@@ -385,7 +436,7 @@ export function LeagueOpsHome({ asTab = false }: LeagueOpsHomeProps) {
               ) : matchesQuery.isError && !matchesQuery.data ? (
                 <View style={styles.pad}>
                   <Touchable style={styles.notice} onPress={() => void matchesQuery.refetch()} accessibilityRole="button">
-                    <Ionicons name="cloud-offline-outline" size={18} color={colors.textTertiary} />
+                    <IconTile icon="cloud-offline-outline" tone="neutral" size={36} glow={false} />
                     <Text style={styles.noticeText} {...textScale.long}>
                       Bugünün maçları yüklenemedi. Tekrar denemek için dokun.
                     </Text>
@@ -394,7 +445,7 @@ export function LeagueOpsHome({ asTab = false }: LeagueOpsHomeProps) {
               ) : strip.length === 0 ? (
                 <View style={styles.pad}>
                   <View style={styles.notice}>
-                    <Ionicons name="calendar-clear-outline" size={18} color={colors.textTertiary} />
+                    <IconTile icon="calendar-clear-outline" tone="neutral" size={36} glow={false} />
                     <Text style={styles.noticeText} {...textScale.long}>
                       Bu kapsamda bugün ve önümüzdeki {UPCOMING_DAYS} günde maç yok.
                     </Text>
@@ -427,43 +478,31 @@ export function LeagueOpsHome({ asTab = false }: LeagueOpsHomeProps) {
             </Reveal>
           ) : null}
 
-          {/* ── BEKLEYEN İŞLER ── (sorgu hata verirse bölüm sessizce gizlenir) */}
-          {pendingDefs.length > 0 && !requestsQuery.isError ? (
-            <Reveal index={1}>
-              <SectionHeader
-                title="Bekleyen işler"
-                meta={requestsQuery.isLoading ? undefined : pendingTotal ? `${pendingTotal} iş` : "Hepsi tamam"}
-              />
-              <View style={[styles.pad, styles.pendingGrid]}>
-                {pendingDefs.map((def) => (
-                  <PendingTile
-                    key={def.category}
-                    label={def.label}
-                    icon={def.icon}
-                    count={requestsQuery.isLoading ? null : pendingByCategory.get(def.category) ?? 0}
-                    onPress={() => go(def.route)}
-                  />
-                ))}
-              </View>
-            </Reveal>
-          ) : null}
-
           {/* ── MODÜLLER ── */}
           {groups.map((group, index) => (
             <Reveal key={group.key} index={index + 2}>
-              <SectionHeader
-                title={group.title}
-                meta={group.description}
-                leading={<Ionicons name={group.icon} size={16} color={colors.textSecondary} />}
-              />
+              <View style={[styles.pad, styles.groupHead]}>
+                <IconTile icon={group.icon} tone={GROUP_TONE[group.key] ?? "violet"} size={30} glow={false} />
+                <View style={styles.flex}>
+                  <Text style={styles.groupTitle} accessibilityRole="header" {...textScale.dense}>
+                    {group.title}
+                  </Text>
+                  <Text style={styles.groupMeta} numberOfLines={1} {...textScale.dense}>
+                    {group.description}
+                  </Text>
+                </View>
+                <Text style={styles.groupCount} {...textScale.badge}>
+                  {group.modules.length}
+                </Text>
+              </View>
               <HubGrid>
                 {group.modules.map((module) => (
-                  <HubTile
+                  <ModuleTile
                     key={module.key}
                     icon={module.icon}
                     title={module.title}
                     subtitle={module.description}
-                    tone={GROUP_TONE[group.key] ?? "brand"}
+                    tone={GROUP_TONE[group.key] ?? "violet"}
                     badge={badgeFor(module)}
                     onPress={() => go(module.route)}
                   />
@@ -515,9 +554,10 @@ const TodayCard = memo(function TodayCard({
       accessibilityRole="button"
       accessibilityLabel={`${match.first_team_name} – ${match.second_team_name}, ${meta.label}, ${when}. ${cta}`}
     >
+      {live ? <GlowRim /> : null}
       <View style={styles.cardTop}>
-        <Badge label={meta.label.toLocaleUpperCase("tr-TR")} tone={meta.tone} size="xs" dot={false} />
-        <Text style={styles.cardWhen} numberOfLines={1} {...textScale.dense}>
+        {live ? <LiveBadge /> : <Badge label={meta.label.toLocaleUpperCase("tr-TR")} tone={meta.tone} size="xs" dot={false} />}
+        <Text style={[styles.cardWhen, live ? styles.cardWhenLive : null]} numberOfLines={1} {...textScale.badge}>
           {when || "Saat yok"}
         </Text>
       </View>
@@ -584,45 +624,106 @@ function TeamLine({ name, logo, score }: { name: string; logo: string | null; sc
   );
 }
 
-/** Bekleyen iş sayacı — rakam kahramandır; sıfırsa sakin, doluysa marka rengi. */
+/**
+ * Bekleyen onay kartı — kategori IconTile'ı, dönen büyük rakam, "İncele ›".
+ * Sayı varsa çerçeve ve rakam kategori renginde; sıfırsa kart sakinleşir ve
+ * "Bekleyen yok" der. Kart sırayla (index) yaylanarak girer.
+ */
 const PendingTile = memo(function PendingTile({
   label,
   icon,
+  tone,
+  index,
   count,
   onPress,
 }: {
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
+  tone: IconTileTone;
+  index: number;
   /** null = yükleniyor. */
   count: number | null;
   onPress: () => void;
 }) {
   const active = Boolean(count);
+  const ink = TONE_INK[tone];
   return (
     <Touchable
       feedback="card"
       haptic="selection"
       onPress={onPress}
-      style={styles.pending}
+      style={[styles.pending, active ? { borderColor: ink } : styles.pendingIdle]}
       accessibilityRole="button"
       accessibilityLabel={count == null ? label : `${label}: ${count} bekleyen`}
+      testID={`league-pending-${index}`}
     >
+      {active ? <View style={[styles.pendingWash, { backgroundColor: ink }]} /> : null}
       <View style={styles.pendingHead}>
-        <Ionicons name={icon} size={14} color={active ? colors.brandAccent : colors.textTertiary} />
-        <Text style={styles.pendingLabel} numberOfLines={1} {...textScale.dense}>
-          {label.toLocaleUpperCase("tr-TR")}
-        </Text>
+        <IconTile icon={icon} tone={active ? tone : "neutral"} size={34} glow={active} />
+        {count == null ? (
+          <Skeleton width={36} height={30} radius="sm" />
+        ) : (
+          <Odometer value={count > 999 ? 999 : count} style={[styles.pendingCount, { color: active ? ink : colors.textDisabled }]} />
+        )}
       </View>
-      {count == null ? (
-        <Skeleton width={36} height={24} radius="sm" />
-      ) : (
-        <Text style={[styles.pendingCount, active ? styles.pendingCountActive : null]} {...textScale.badge}>
-          {count > 999 ? "999+" : count}
-        </Text>
-      )}
-      <Text style={styles.pendingHint} numberOfLines={1} {...textScale.dense}>
-        {count == null ? "Yükleniyor" : active ? "İncele" : "Bekleyen yok"}
+      <Text style={styles.pendingLabel} numberOfLines={1} {...textScale.dense}>
+        {label}
       </Text>
+      <View style={styles.pendingFoot}>
+        <Text style={[styles.pendingHint, active ? { color: ink } : null]} numberOfLines={1} {...textScale.dense}>
+          {count == null ? "Yükleniyor" : active ? "İncele" : "Bekleyen yok"}
+        </Text>
+        {active ? <Ionicons name="arrow-forward" size={13} color={ink} /> : <Ionicons name="checkmark" size={13} color={colors.textTertiary} />}
+      </View>
+    </Touchable>
+  );
+});
+
+/** Modül karosu — degrade IconTile + ad + iki satır açıklama, köşede bekleyen sayısı. */
+const ModuleTile = memo(function ModuleTile({
+  icon,
+  title,
+  subtitle,
+  tone,
+  badge,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  subtitle?: string;
+  tone: IconTileTone;
+  badge?: number | null;
+  onPress: () => void;
+}) {
+  return (
+    <Touchable
+      feedback="card"
+      haptic="selection"
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}${subtitle ? `, ${subtitle}` : ""}${badge ? `, ${badge} bekleyen` : ""}`}
+      style={styles.module}
+    >
+      <View style={styles.moduleTop}>
+        <IconTile icon={icon} tone={tone} size={36} glow={false} />
+        {badge ? (
+          <View style={styles.moduleBadge}>
+            <Text style={styles.moduleBadgeText} {...textScale.badge}>
+              {badge > 99 ? "99+" : badge}
+            </Text>
+          </View>
+        ) : (
+          <Ionicons name="chevron-forward" size={15} color={colors.textTertiary} />
+        )}
+      </View>
+      <Text style={styles.moduleTitle} numberOfLines={1} {...textScale.dense}>
+        {title}
+      </Text>
+      {subtitle ? (
+        <Text style={styles.moduleSub} numberOfLines={2} {...textScale.dense}>
+          {subtitle}
+        </Text>
+      ) : null}
     </Touchable>
   );
 });
@@ -646,12 +747,13 @@ const styles = StyleSheet.create({
     borderWidth: hairline,
     borderColor: colors.border,
   },
-  cardLive: { borderColor: colors.live },
+  cardLive: { borderColor: colors.live, overflow: "hidden" },
   cardTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm },
-  cardWhen: { ...type.caption, color: colors.textSecondary, flexShrink: 1 },
+  cardWhen: { ...type.numSmStrong, color: colors.textSecondary, flexShrink: 1 },
+  cardWhenLive: { color: colors.live },
   teamLine: { flexDirection: "row", alignItems: "center", gap: space.sm },
   teamName: { ...type.label, color: colors.textPrimary, flex: 1 },
-  teamScore: { ...type.scoreSm, color: colors.textPrimary },
+  teamScore: { ...type.scoreSm, color: colors.textPrimary, minWidth: 20, textAlign: "right" },
   cardFoot: {
     flexDirection: "row",
     alignItems: "center",
@@ -688,11 +790,35 @@ const styles = StyleSheet.create({
   },
   noticeText: { ...type.bodySm, color: colors.textSecondary, flex: 1 },
 
+  flex: { flex: 1 },
   pendingGrid: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   pending: {
     flexGrow: 1,
     flexBasis: "45%",
-    minHeight: 88,
+    minHeight: 118,
+    padding: space.md,
+    gap: space.xs,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+  },
+  pendingIdle: { backgroundColor: colors.surface2 },
+  pendingWash: { ...StyleSheet.absoluteFillObject, opacity: 0.07 },
+  pendingHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: space.xs },
+  pendingLabel: { ...type.h4, color: colors.textPrimary },
+  pendingCount: { ...type.scoreMd },
+  pendingFoot: { flexDirection: "row", alignItems: "center", gap: space.xxs },
+  pendingHint: { ...type.labelSm, color: colors.textTertiary },
+
+  groupHead: { flexDirection: "row", alignItems: "center", gap: space.md, marginTop: space.lg, marginBottom: space.xs },
+  groupTitle: { ...type.h3, color: colors.textPrimary },
+  groupMeta: { ...type.caption, color: colors.textTertiary },
+  groupCount: { ...type.numSmStrong, color: colors.textTertiary },
+  module: {
+    flex: 1,
+    minHeight: 120,
     padding: space.md,
     gap: space.xs,
     borderRadius: radius.xl,
@@ -700,9 +826,17 @@ const styles = StyleSheet.create({
     borderWidth: hairline,
     borderColor: colors.border,
   },
-  pendingHead: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  pendingLabel: { ...type.micro, color: colors.textTertiary, flex: 1 },
-  pendingCount: { ...type.metric, color: colors.textTertiary },
-  pendingCountActive: { color: colors.brandAccent },
-  pendingHint: { ...type.caption, color: colors.textTertiary },
+  moduleTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: space.xs },
+  moduleBadge: {
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: space.s,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brand,
+  },
+  moduleBadgeText: { ...type.micro, letterSpacing: 0, color: colors.textOnBrand },
+  moduleTitle: { ...type.h4, color: colors.textPrimary },
+  moduleSub: { ...type.caption, color: colors.textTertiary },
 });

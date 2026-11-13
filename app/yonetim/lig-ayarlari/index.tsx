@@ -10,14 +10,15 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { StyleSheet, Text } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
-import { AdminScreen, RecordCard } from "@/components/admin";
-import { EmptyState } from "@/components/ui";
+import { AdminScreen } from "@/components/admin";
+import { OpsRecord, OpsStage, StageTile } from "@/components/admin/matches/opsKit";
+import { EmptyState, IconTile } from "@/components/ui";
 import { hasAnyPermission, hasPermission } from "@/lib/admin/access";
 import { listRuleBooks } from "@/lib/api/admin/leagues";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, textScale, type } from "@/theme";
+import { colors, space, textScale, type } from "@/theme";
 
 const PERMS = [
   "groups.view",
@@ -52,39 +53,75 @@ export default function LeagueSettingsScreen() {
   });
   const bookCount = books.data?.length;
 
+  const published = (books.data ?? []).filter((b) => b.status === "published").length;
+  const inUse = (books.data ?? []).reduce((n, b) => n + (b.seasons ?? []).filter((x) => !x.archived).length, 0);
+
   return (
     <AdminScreen title="Lig ayarları ve kurallar" permission={PERMS} onRefresh={books.refetch} refreshing={books.isRefetching}>
-      <Text style={styles.intro} {...textScale.long}>
-        Kuralları, puanlama sistemini ve kadro kurallarını kural kitapçığında belirle. Kitapçığın hangi sezonda geçerli olacağını Sezonlar ekranından seç.
-      </Text>
-      {showBooks ? (
-        <RecordCard
-          title="Kural kitapçıkları"
-          subtitle="Kuralları, puanlama sistemini ve kadro kurallarını yaz"
-          meta={bookCount == null ? (books.isLoading ? "Yükleniyor…" : null) : bookCount ? `${bookCount} kitapçık` : "Kitapçık yok"}
-          icon="book-outline"
-          iconTone="brand"
-          onPress={() => router.push("/yonetim/lig-ayarlari/kural-kitapciklari")}
-        />
-      ) : null}
-      {showStructure ? (
-        <RecordCard
-          title="Lig statüsü"
-          subtitle="Sezonun grupları, eleme turları ve kimin hangi etaba kalacağı"
-          meta="Puan tablosu ve ağaç şeması buna göre çalışır"
-          icon="git-network-outline"
-          iconTone="accent"
-          onPress={() => router.push("/yonetim/lig-ayarlari/statu")}
-        />
-      ) : null}
-      {showSeasons ? (
-        <RecordCard
-          title="Sezonlar"
-          subtitle="Her sezonun kural kitapçığını seç"
-          icon="calendar-outline"
-          onPress={() => router.push("/yonetim/sezonlar")}
-        />
-      ) : null}
+      {/* Kural motoru sahnesi: kitapçık → sezon → puan tablosu akışı ve sayaçlar. */}
+      <OpsStage height={190}>
+        <View style={styles.stageHead}>
+          <IconTile icon="library" tone="signature" size={44} />
+          <View style={styles.flex}>
+            <Text style={styles.stageTitle} {...textScale.dense}>
+              Kural motoru
+            </Text>
+            <Text style={styles.stageBody} {...textScale.long}>
+              Kitapçık yazılır → sezona atanır → puan tablosu ve kadro buna göre çalışır.
+            </Text>
+          </View>
+        </View>
+        <View style={styles.stageTiles}>
+          <StageTile icon="book-outline" label="Kitapçık" value={bookCount ?? "—"} />
+          <StageTile icon="checkmark-circle-outline" label="Yayında" value={books.data ? published : "—"} tone="win" />
+          <StageTile icon="calendar-outline" label="Sezonda" value={books.data ? inUse : "—"} tone="info" />
+        </View>
+      </OpsStage>
+
+      <View style={styles.list}>
+        {showBooks ? (
+          <OpsRecord
+            title="Kural kitapçıkları"
+            subtitle="Kurallar, puanlama sistemi ve kadro kuralları"
+            icon="book"
+            tone="violet"
+            rail="brand"
+            value={bookCount ?? null}
+            valueLabel={bookCount != null ? "kitapçık" : undefined}
+            specs={[
+              { icon: "calculator-outline", label: "Puanlama" },
+              { icon: "people-outline", label: "Kadro kuralı" },
+              { icon: "document-text-outline", label: "Serbest metin" },
+            ]}
+            onPress={() => router.push("/yonetim/lig-ayarlari/kural-kitapciklari")}
+          />
+        ) : null}
+        {showStructure ? (
+          <OpsRecord
+            title="Lig statüsü"
+            subtitle="Gruplar, eleme turları, kim hangi etaba kalır"
+            icon="git-network"
+            tone="cyan"
+            rail="info"
+            specs={[
+              { icon: "grid-outline", label: "Gruplar" },
+              { icon: "git-merge-outline", label: "Eleme ağacı" },
+              { icon: "podium-outline", label: "Bölge renkleri" },
+            ]}
+            onPress={() => router.push("/yonetim/lig-ayarlari/statu")}
+          />
+        ) : null}
+        {showSeasons ? (
+          <OpsRecord
+            title="Sezonlar"
+            subtitle="Her sezonun kural kitapçığını seç"
+            icon="calendar"
+            tone="gold"
+            rail="warn"
+            onPress={() => router.push("/yonetim/sezonlar")}
+          />
+        ) : null}
+      </View>
       {!showBooks && !showStructure ? (
         <EmptyState
           icon="lock-closed-outline"
@@ -98,5 +135,10 @@ export default function LeagueSettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  intro: { ...type.bodySm, color: colors.textSecondary },
+  flex: { flex: 1, minWidth: 0 },
+  list: { gap: space.sm },
+  stageHead: { flexDirection: "row", alignItems: "center", gap: space.md },
+  stageTitle: { ...type.h2, color: colors.onDark },
+  stageBody: { ...type.caption, color: colors.onDarkMuted, marginTop: space.xxs },
+  stageTiles: { flexDirection: "row", gap: space.sm },
 });

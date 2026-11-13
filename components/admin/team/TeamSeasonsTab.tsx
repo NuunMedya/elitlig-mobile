@@ -14,14 +14,13 @@ import { StyleSheet, Text, View } from "react-native";
 
 import {
   FormSheet,
-  Panel,
   RecordCard,
-  StatRow,
   confirmAction,
   useAdminMutation,
   type FormValues,
 } from "@/components/admin";
-import { Button, Chip, ChipGroup, EmptyState } from "@/components/ui";
+import { Badge, Button, Chip, ChipGroup, EmptyState } from "@/components/ui";
+import { GroupCard, ListLine, PositionAvatar, QuotaBar } from "./ManageKit";
 import { formatDate } from "@/lib/admin/format";
 import { leagueOptionsLoader, seasonOptionsLoader } from "@/lib/api/admin/lookups";
 import { positionLabel } from "@/lib/api/admin/players";
@@ -29,7 +28,6 @@ import {
   MEMBERSHIP_STATUS_LABELS,
   addSeasonRosterPlayer,
   addTeamSeason,
-  capText,
   removeSeasonRosterPlayer,
   removeTeamSeason,
   type TeamOverview,
@@ -114,11 +112,22 @@ export function TeamSeasonsTab({
     if (ok) removeMember.mutate(playerId);
   };
 
+  const capNum = (cap?: { cap?: number | null; unlimited?: boolean; none?: boolean } | null) =>
+    !status?.applies || !cap || cap.unlimited ? null : cap.none ? 0 : cap.cap ?? null;
+  const activeCount = season?.members.filter((m) => m.membership_status === "active").length ?? 0;
+  const licensedCount = season?.members.filter((m) => m.is_licensed).length ?? 0;
+  const draftTone = season?.draft?.status === "submitted" ? "warn" : season?.draft?.last_decision === "approved" ? "win" : season?.draft?.last_decision === "rejected" ? "danger" : "neutral";
+
   return (
     <View style={styles.stack}>
-      <Button label="Lig / sezon ekle" icon="add" variant="secondary" size="sm" onPress={() => setAdding(true)} />
       {!data.seasons.length ? (
-        <EmptyState icon="calendar-outline" variant="inline" title="Sezon katılımı yok" body="Takımı bir lig ve sezona ekle." />
+        <EmptyState
+          icon="calendar-outline"
+          variant="inline"
+          title="Sezon katılımı yok"
+          body="Takımı bir lig ve sezona ekleyince sezon kadrosu burada kurulur."
+          action={{ label: "Lig / sezon ekle", onPress: () => setAdding(true) }}
+        />
       ) : (
         <>
           <ChipGroup scrollable contentPadding={0}>
@@ -132,78 +141,91 @@ export function TeamSeasonsTab({
                 onPress={() => setSeasonId(s.season_id)}
               />
             ))}
+            <Chip label="Ekle" icon="add" size="sm" onPress={() => setAdding(true)} />
           </ChipGroup>
 
           {season ? (
             <>
-              <StatRow
-                items={[
-                  {
-                    label: "Kadroda",
-                    value: `${season.members.filter((m) => m.membership_status === "active").length}${status?.applies ? ` / ${capText(status.general)}` : ""}`,
-                  },
-                  { label: "Lisanslı", value: `${season.members.filter((m) => m.is_licensed).length}${status?.applies ? ` / ${capText(status.licensed)}` : ""}` },
-                  { label: "Transfer hakkı", value: rights },
-                  { label: "Taslak", value: draftText, tone: season.draft?.status === "submitted" ? "warn" : undefined },
-                ]}
-              />
+              {/* SEZON ÖZETİ — kota çubukları + taslak durumu. */}
+              <GroupCard
+                title={[season.season?.season_name ?? `Sezon #${season.season_id}`, season.season?.league_name].filter(Boolean).join(" · ")}
+                icon="calendar"
+                tone="cyan"
+                action={{ label: "Katılımı kaldır", onPress: () => void askRemoveSeason() }}
+              >
+                <View style={styles.quotas}>
+                  <QuotaBar label="Kadroda" used={activeCount} cap={capNum(status?.general)} />
+                  <QuotaBar label="Lisanslı" used={licensedCount} cap={capNum(status?.licensed)} />
+                </View>
+                <View style={styles.metaRow}>
+                  <Badge label={`Transfer hakkı: ${rights}`} tone="info" icon="swap-horizontal" size="sm" />
+                  <Badge label={`Taslak: ${draftText}`} tone={draftTone} icon="document-text-outline" size="sm" />
+                  {season.season?.is_archived ? <Badge label="Arşiv" size="sm" /> : null}
+                </View>
+              </GroupCard>
+
               {season.draft?.status === "submitted" ? (
                 <RecordCard
                   title="Kadro taslağı onay bekliyor"
                   subtitle="Takımın gönderdiği taslağı Kadrolar ekranında incele."
                   icon="hourglass-outline"
                   iconTone="warn"
+                  accentColor={colors.warn}
                   onPress={() => router.push(`/yonetim/kadrolar?taslak=${season.draft!.id}`)}
                 />
               ) : null}
 
-              <Panel title="SEZON KADROSU" action={{ label: "Katılımı kaldır", onPress: () => void askRemoveSeason() }}>
+              <GroupCard title={`Sezon kadrosu · ${season.members.length}`} icon="people" tone="violet" padded={false}>
                 {season.members.length ? (
-                  season.members.map((m) => (
-                    <RecordCard
-                      key={m.id}
-                      title={m.name}
-                      subtitle={[positionLabel(m.position) || "Mevki yok", m.joined_at ? `Giriş: ${formatDate(m.joined_at)}` : null].filter(Boolean).join(" · ")}
-                      avatar={{ name: m.name, image: m.image }}
-                      badges={[
-                        m.is_licensed && { label: "Lisanslı", tone: "info" },
-                        m.membership_kind === "loan" && { label: "Kiralık", tone: "warn" },
-                        m.membership_status !== "active" && { label: MEMBERSHIP_STATUS_LABELS[m.membership_status] ?? m.membership_status },
-                      ]}
-                      onPress={() => router.push(`/yonetim/oyuncular/${m.player_id}`)}
-                      onLongPress={() => void askRemoveMember(m.player_id, m.name)}
-                    />
-                  ))
+                  <View>
+                    {season.members.map((m, i) => (
+                      <ListLine
+                        key={m.id}
+                        leading={<PositionAvatar name={m.name} image={m.image} position={m.position} size={36} />}
+                        title={m.name}
+                        subtitle={[positionLabel(m.position) || "Mevki yok", m.joined_at ? `Giriş ${formatDate(m.joined_at)}` : null].filter(Boolean).join(" · ")}
+                        pills={[
+                          m.is_licensed && { label: "Lisanslı", tone: "info", icon: "id-card" },
+                          m.membership_kind === "loan" && { label: "Kiralık", tone: "warn" },
+                          m.membership_status !== "active" && { label: MEMBERSHIP_STATUS_LABELS[m.membership_status] ?? m.membership_status },
+                        ]}
+                        onPress={() => router.push(`/yonetim/oyuncular/${m.player_id}`)}
+                        onLongPress={() => void askRemoveMember(m.player_id, m.name)}
+                        last={i === season.members.length - 1}
+                      />
+                    ))}
+                  </View>
                 ) : (
-                  <Text style={styles.muted} {...textScale.long}>
+                  <Text style={[styles.muted, styles.inset]} {...textScale.long}>
                     Bu sezon kadrosunda oyuncu yok.
                   </Text>
                 )}
-                {season.members.length ? (
-                  <Text style={styles.muted} {...textScale.dense}>
-                    Kadrodan çıkarmak için oyuncuya basılı tut.
-                  </Text>
-                ) : null}
-              </Panel>
+                <Text style={[styles.muted, styles.inset, styles.foot]} {...textScale.dense}>
+                  {season.members.length ? "Kadrodan çıkarmak için oyuncuya basılı tut." : "Aşağıdaki takım oyuncularından ekleyebilirsin."}
+                </Text>
+              </GroupCard>
 
               {outside.length ? (
-                <Panel title="SEZON KADROSUNDA OLMAYAN TAKIM OYUNCULARI">
-                  {outside.map((p) => (
-                    <RecordCard
-                      key={p.id}
-                      title={p.name}
-                      subtitle={positionLabel(p.position) || "Mevki yok"}
-                      avatar={{ name: p.name, image: p.image }}
-                      badges={[p.is_loan && { label: "Kiralık", tone: "warn" }]}
-                      trailing={
-                        <View style={styles.addBtns}>
-                          <Button label="Ekle" size="sm" variant="secondary" onPress={() => addMember.mutate({ playerId: p.id, licensed: false })} />
-                          <Button label="Lisanslı" size="sm" variant="ghost" onPress={() => addMember.mutate({ playerId: p.id, licensed: true })} />
-                        </View>
-                      }
-                    />
-                  ))}
-                </Panel>
+                <GroupCard title={`Sezon kadrosunda olmayanlar · ${outside.length}`} icon="person-add" tone="mint" padded={false}>
+                  <View style={styles.foot}>
+                    {outside.map((p, i) => (
+                      <ListLine
+                        key={p.id}
+                        leading={<PositionAvatar name={p.name} image={p.image} position={p.position} size={36} />}
+                        title={p.name}
+                        subtitle={positionLabel(p.position) || "Mevki yok"}
+                        pills={[p.is_loan && { label: "Kiralık", tone: "warn" }]}
+                        last={i === outside.length - 1}
+                        trailing={
+                          <View style={styles.addBtns}>
+                            <Button label="Ekle" icon="add" size="sm" variant="secondary" onPress={() => addMember.mutate({ playerId: p.id, licensed: false })} />
+                            <Button label="Lisanslı" size="sm" variant="ghost" onPress={() => addMember.mutate({ playerId: p.id, licensed: true })} />
+                          </View>
+                        }
+                      />
+                    ))}
+                  </View>
+                </GroupCard>
               ) : null}
             </>
           ) : null}
@@ -249,7 +271,11 @@ export function TeamSeasonsTab({
 }
 
 const styles = StyleSheet.create({
-  stack: { gap: space.sm },
+  stack: { gap: space.md },
+  quotas: { gap: space.md },
+  metaRow: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
   muted: { ...type.bodySm, color: colors.textTertiary },
-  addBtns: { flexDirection: "row", gap: space.xs },
+  inset: { paddingHorizontal: space.lg },
+  foot: { paddingBottom: space.md },
+  addBtns: { flexDirection: "row", gap: space.xxs },
 });

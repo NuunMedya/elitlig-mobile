@@ -104,16 +104,19 @@ export const Touchable = React.memo(function Touchable({
 }: TouchableProps) {
   const [isPressed, setIsPressed] = useState(false);
 
+  /* GECE TEMASI — PRESS DOWN: buton ve kart basılınca hafifçe çöker ve
+     yaylanarak geri kalkar; buton artık sönmez, küçülür. */
   const targetScale =
-    feedback === "card" ? press.cardScale : feedback === "fab" ? press.fabScale : 1;
-  const targetOpacity =
-    feedback === "icon"
-      ? press.iconOpacity
-      : feedback === "chip"
-        ? press.chipOpacity
+    feedback === "card"
+      ? press.cardScale
+      : feedback === "fab"
+        ? press.fabScale
         : feedback === "button"
-          ? press.buttonOpacity
-          : 1;
+          ? press.buttonScale
+          : feedback === "chip"
+            ? press.chipScale
+            : 1;
+  const targetOpacity = feedback === "icon" ? press.iconOpacity : 1;
 
   // Android'de ripple zaten geri bildirim veriyor; tint katmanı yalnız iOS/web'de.
   const tinted = feedback === "row" && Platform.OS !== "android";
