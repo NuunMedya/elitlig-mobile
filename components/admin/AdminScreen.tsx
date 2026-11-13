@@ -113,6 +113,9 @@ export function AdminScreen({
   const { scrollY, scrollProps } = useHeaderScroll();
   const refresh = useRefresh(onRefresh ?? noop, { refreshing });
 
+  /* Oturum açılışta yüklenirken (soğuk başlangıç, bildirimden derin bağlantı)
+     kullanıcı henüz yok: giriş sayfasına ATMA, yüklenmesini bekle. */
+  if (!auth.user && auth.initializing) return <View style={styles.screen} />;
   if (!auth.user) return <Redirect href="/giris" />;
 
   const allowed =

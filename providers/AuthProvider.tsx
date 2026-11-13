@@ -309,6 +309,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+/** Oturum kapısının en uzun bekleme süresi (ağsız yavaş cihaz için emniyet). */
+const AUTH_GATE_MAX_MS = 1500;
+
+/**
+ * OTURUM KAPISI — yalnız ekran yığınını sarar (app/_layout.tsx).
+ *
+ * Saklı oturum okunmadan rotalar çizilmez. Çizilseydi, giriş gerektiren
+ * ekranlar (≈30 ekran + tüm yönetim araçları) ilk karede `user === null` görüp
+ * kullanıcıyı /giris'e atıyordu — özellikle bildirime dokunarak soğuk açılışta
+ * derin bağlantıyla gelen, aslında girişli kullanıcı. Okuma milisaniyeler sürer
+ * (güvenli depo + önbellekteki kullanıcı); ağ doğrulaması beklenmez. Yine de en
+ * fazla AUTH_GATE_MAX_MS beklenir. Sağlayıcıların bağlanma sırasını değiştirmemek
+ * için kapı sağlayıcıların DIŞINA değil, yalnız `<Stack>`in çevresine konur.
+ */
+export function AuthGate({ children }: { children: ReactNode }) {
+  const { initializing } = useAuth();
+  const [open, setOpen] = useState(!initializing);
+  useEffect(() => {
+    if (!initializing) {
+      setOpen(true);
+      return;
+    }
+    const timer = setTimeout(() => setOpen(true), AUTH_GATE_MAX_MS);
+    return () => clearTimeout(timer);
+  }, [initializing]);
+  return open ? <>{children}</> : null;
+}
+
 export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
   if (!context) throw new Error("useAuth, AuthProvider içinde kullanılmalıdır.");
