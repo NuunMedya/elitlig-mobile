@@ -437,7 +437,7 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
   const streamKey = ["live-stream", "match", matchId] as const;
   const streamQuery = useQuery({
     queryKey: streamKey,
-    queryFn: async () => (await getMatchLiveStream(matchId)).live_stream,
+    queryFn: async () => (await getMatchLiveStream(matchId))?.live_stream ?? null,
     enabled: Boolean(config.data?.configured),
     // YouTube kotası (her sorgu ≈2 birim): açılışta bir kez, sonra yalnız
     // telefon görüntü gönderirken 30 sn'de bir.
