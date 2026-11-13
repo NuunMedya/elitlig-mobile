@@ -146,17 +146,6 @@ function Cell({ icon, value, label, ratio, warn }: { icon: keyof typeof Ionicons
   );
 }
 
-function Stat({ icon, value, label }: { icon: keyof typeof Ionicons.glyphMap; value: string | number; label: string }) {
-  return (
-    <View style={styles.stat} accessibilityLabel={`${value} ${label}`}>
-      <Ionicons name={icon} size={12} color={colors.textTertiary} />
-      <Text style={styles.statText} {...textScale.badge}>
-        {value}
-      </Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   card: {
     padding: space.md,
@@ -193,9 +182,6 @@ const styles = StyleSheet.create({
   cellBar: { height: 3, borderRadius: 2, backgroundColor: colors.surface3, overflow: "hidden" },
   cellBarFill: { height: 3, borderRadius: 2, backgroundColor: colors.brandAccent },
   meta: { ...type.bodySm, color: colors.textSecondary },
-  stats: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.sm, marginTop: space.xxs },
-  stat: { flexDirection: "row", alignItems: "center", gap: space.xxs },
-  statText: { ...type.numSm, color: colors.textSecondary },
   record: { flexDirection: "row", gap: space.xxs },
   pill: { ...type.numSmStrong, paddingHorizontal: space.xs, borderRadius: radius.xs, overflow: "hidden" },
   win: { color: colors.win, backgroundColor: colors.winDim },

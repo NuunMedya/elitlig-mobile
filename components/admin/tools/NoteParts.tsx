@@ -8,6 +8,7 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { memo, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 
@@ -35,8 +36,24 @@ export function ChecklistEditor({ items, onChange }: { items: ChecklistItem[]; o
     ...items.map((item, index) => ({ item, index })).filter(({ item }) => !item.done),
     ...items.map((item, index) => ({ item, index })).filter(({ item }) => item.done),
   ];
+  const doneCount = items.filter((i) => i.done).length;
   return (
     <View style={styles.check}>
+      {items.length ? (
+        <View style={styles.checkHead}>
+          <Text style={styles.checkHeadText} {...textScale.badge}>
+            {doneCount}/{items.length} TAMAM
+          </Text>
+          <View style={styles.progress}>
+            <LinearGradient
+              colors={doneCount === items.length ? [colors.win, colors.win] : colors.gradientSignature}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={[styles.progressFill, { width: `${(doneCount / items.length) * 100}%` }]}
+            />
+          </View>
+        </View>
+      ) : null}
       {ordered.map(({ item, index }) => (
         <View key={index} style={styles.checkRow}>
           <Touchable
@@ -240,8 +257,18 @@ export const NoteCard = memo(function NoteCard({
               +{note.checklist.length - 8} madde
             </Text>
           ) : null}
-          <View style={styles.progress} accessibilityLabel={`${note.checklist.length} maddeden ${done} tanesi tamam`}>
-            <View style={[styles.progressFill, { width: `${(done / note.checklist.length) * 100}%` }]} />
+          <View style={styles.progressRow} accessible accessibilityLabel={`${note.checklist.length} maddeden ${done} tanesi tamam`}>
+            <View style={styles.progress}>
+              <LinearGradient
+                colors={done === note.checklist.length ? [colors.win, colors.win] : colors.gradientSignature}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={[styles.progressFill, { width: `${(done / note.checklist.length) * 100}%` }]}
+              />
+            </View>
+            <Text style={[styles.progressText, done === note.checklist.length ? { color: colors.win } : null]} {...textScale.badge}>
+              {done}/{note.checklist.length}
+            </Text>
           </View>
         </View>
       ) : null}
@@ -309,8 +336,12 @@ const styles = StyleSheet.create({
   cardList: { gap: space.xxs },
   cardItem: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.xxs },
   cardItemText: { flex: 1, ...type.bodySm, color: colors.textPrimary },
-  progress: { height: 4, borderRadius: radius.pill, backgroundColor: colors.surface3, overflow: "hidden", marginTop: space.xs },
-  progressFill: { height: 4, backgroundColor: colors.brandAccent },
+  checkHead: { flexDirection: "row", alignItems: "center", gap: space.sm, marginBottom: space.xs },
+  checkHeadText: { ...type.overline, color: colors.textTertiary },
+  progressRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.xs },
+  progress: { flex: 1, height: 5, borderRadius: radius.pill, backgroundColor: colors.surface3, overflow: "hidden" },
+  progressFill: { height: 5, borderRadius: radius.pill },
+  progressText: { ...type.numSmStrong, color: colors.textTertiary },
   cardTags: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
   tagPill: { paddingHorizontal: space.sm, paddingVertical: space.xxs, borderRadius: radius.pill, backgroundColor: colors.surface3 },
   tagPillText: { ...type.caption, color: colors.textSecondary },

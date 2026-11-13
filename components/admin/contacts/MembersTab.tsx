@@ -18,7 +18,8 @@ import React, { forwardRef, useCallback, useImperativeHandle, useMemo, useState 
 import { StyleSheet, Text, View } from "react-native";
 
 import { AdminList, OptionSheet, RecordCard, type BadgeSpec } from "@/components/admin";
-import { Chip, ChipGroup, useToast } from "@/components/ui";
+import { Chip, ChipGroup, IconTile, TeamLogo, useToast } from "@/components/ui";
+import { CountStrip } from "@/components/admin/team/ManageKit";
 import { errorText } from "@/lib/admin/errors";
 import { timeAgo } from "@/lib/admin/format";
 import {
@@ -38,7 +39,7 @@ import {
   type MemberStatus,
   type PersonalContact,
 } from "@/lib/api/admin/contacts";
-import { colors, space, textScale, type } from "@/theme";
+import { colors, hairline, space, textScale, type } from "@/theme";
 
 import { shareCsv, shareVcard } from "../sheets/shareFile";
 import { ContactButtons } from "./ContactButtons";
@@ -148,6 +149,16 @@ export const MembersTab = forwardRef<MembersTabHandle, { actions: ContactActions
 
     const header = (
       <View style={styles.extra}>
+        {counts ? (
+          <CountStrip
+            items={[
+              { key: "all", label: "Üye", value: counts.all, icon: "people-outline", selected: category === "all" && !newOnly, onPress: () => { setCategory("all"); setNewOnly(false); } },
+              { key: "oyuncu", label: "Oyuncu", value: counts.oyuncu, tone: "info", icon: "football-outline", selected: category === "oyuncu", onPress: () => setCategory(category === "oyuncu" ? "all" : "oyuncu") },
+              { key: "baskan", label: "Başkan", value: counts.takim_baskani, tone: "brand", icon: "shield-half-outline", selected: category === "takim_baskani", onPress: () => setCategory(category === "takim_baskani" ? "all" : "takim_baskani") },
+              { key: "new", label: "Bu hafta", value: counts.new_week, tone: "win", icon: "sparkles-outline", selected: newOnly, onPress: () => setNewOnly((v) => !v) },
+            ]}
+          />
+        ) : null}
         <ChipGroup scrollable contentPadding={0}>
           {CATEGORIES.map((key) => (
             <Chip
@@ -211,11 +222,16 @@ export const MembersTab = forwardRef<MembersTabHandle, { actions: ContactActions
           renderItem={({ item }) =>
             item.kind === "header" ? (
               <View style={styles.groupHead}>
-                <Ionicons name={item.label === "Takımsız" ? "people-outline" : "shield-half-outline"} size={14} color={colors.textTertiary} />
+                {item.label === "Takımsız" ? (
+                  <IconTile icon="people-outline" tone="neutral" size={26} glow={false} />
+                ) : (
+                  <TeamLogo name={item.label} size={26} />
+                )}
                 <Text style={styles.groupTitle} numberOfLines={1} {...textScale.dense}>
-                  {item.label}
+                  {item.label.toLocaleUpperCase("tr-TR")}
                 </Text>
-                <Text style={styles.groupCount} {...textScale.dense}>
+                <View style={styles.groupLine} />
+                <Text style={styles.groupCount} {...textScale.badge}>
                   {item.count}
                 </Text>
               </View>
@@ -282,6 +298,7 @@ export const MemberRow = React.memo(function MemberRow({
     <RecordCard
       title={member.name}
       subtitle={sub}
+      accentColor={member.status && member.status !== "approved" && member.status !== "active" ? colors.warn : member.isNew ? colors.win : null}
       meta={member.createdAt ? `Kayıt ${timeAgo(member.createdAt)}` : null}
       avatar={{ name: member.name }}
       badges={badges}
@@ -303,7 +320,8 @@ export const MemberRow = React.memo(function MemberRow({
 
 const styles = StyleSheet.create({
   extra: { gap: space.sm },
-  groupHead: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingTop: space.sm },
-  groupTitle: { ...type.overline, color: colors.textTertiary, flex: 1 },
-  groupCount: { ...type.caption, color: colors.textTertiary },
+  groupHead: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingTop: space.md, paddingBottom: space.xxs },
+  groupTitle: { ...type.overline, color: colors.textSecondary, flexShrink: 1 },
+  groupLine: { flex: 1, height: hairline, backgroundColor: colors.separator },
+  groupCount: { ...type.numSmStrong, color: colors.textTertiary },
 });

@@ -12,13 +12,14 @@ import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { EmptyState, ErrorState, SkeletonListRow, Touchable, WaHeader, errorMessage, useRefresh } from "@/components/chat/kit";
+import { InboxAvatar } from "@/components/chat/AvatarArt";
 import { useToast } from "@/components/ui";
 import { patchMessageCache } from "@/hooks/useChat";
 import { getStarred, starMessage, type StarredMessage } from "@/lib/api/chat";
 import { listTime, messageSummary } from "@/lib/chatUtils";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors } from "@/lib/chatPalette";
-import { hairline, layout, space, textScale, type } from "@/theme";
+import { chatPalette, colors } from "@/lib/chatPalette";
+import { hairline, layout, radius, space, textScale, type } from "@/theme";
 
 const KEY = ["chat", "starred"] as const;
 
@@ -72,26 +73,40 @@ export function StarredMessages({ conversationId }: { conversationId: number | n
   );
 }
 
+/**
+ * Yıldızlı mesaj kartı (Gece dili): üstte gönderen avatarı + ad + sohbet adı +
+ * zaman; altında mesajın kendisi küçük bir balon olarak (giden mor, gelen
+ * yüzey); sağ üstte altın yıldız düğmesi (dokununca yıldız kalkar).
+ */
 const StarredRow = memo(function StarredRow({ item, showChat, onPress, onUnstar }: { item: StarredMessage; showChat: boolean; onPress: (item: StarredMessage) => void; onUnstar: (item: StarredMessage) => void }) {
   const summary = messageSummary(item);
+  const who = item.sender.is_me ? "Sen" : item.sender.is_management ? "ElitLig Yönetimi" : item.sender.name ?? "Üye";
   return (
-    <Touchable feedback="row" haptic="selection" onPress={() => onPress(item)} accessibilityRole="button" accessibilityLabel={`${item.sender.is_me ? "Sen" : item.sender.name ?? "Üye"}: ${summary.text}. Mesaja gitmek için dokun`} style={styles.row}>
-      <View style={styles.body}>
-        <View style={styles.line}>
-          <Text style={styles.who} numberOfLines={1} {...textScale.dense}>
-            {item.sender.is_me ? "Sen" : item.sender.is_management ? "ElitLig Yönetimi" : item.sender.name ?? "Üye"}
-            {showChat && item.conversation_title ? <Text style={styles.chat}> · {item.conversation_title}</Text> : null}
-          </Text>
-          <Text style={styles.time} {...textScale.badge}>{listTime(item.created_at)}</Text>
+    <Touchable feedback="card" haptic="selection" onPress={() => onPress(item)} accessibilityRole="button" accessibilityLabel={`${who}: ${summary.text}. Mesaja gitmek için dokun`} style={styles.card}>
+      <View style={styles.head}>
+        <InboxAvatar type={item.sender.is_management ? "management" : "person"} title={who} image={item.sender.avatar} size={30} />
+        <View style={styles.body}>
+          <Text style={styles.who} numberOfLines={1} {...textScale.dense}>{who}</Text>
+          {showChat && item.conversation_title ? (
+            <View style={styles.line}>
+              <Ionicons name="chatbubbles-outline" size={11} color={colors.textTertiary} />
+              <Text style={styles.chat} numberOfLines={1} {...textScale.dense}>{item.conversation_title}</Text>
+            </View>
+          ) : null}
         </View>
-        <View style={styles.line}>
-          {summary.icon ? <Ionicons name={summary.icon} size={14} color={colors.textTertiary} /> : null}
-          <Text style={styles.text} numberOfLines={3} {...textScale.long}>{summary.text}</Text>
-        </View>
+        <Text style={styles.time} {...textScale.badge}>{listTime(item.created_at)}</Text>
+        <Touchable feedback="icon" haptic="light" onPress={() => onUnstar(item)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Yıldızı kaldır" style={styles.star}>
+          <Ionicons name="star" size={16} color={colors.star} />
+        </Touchable>
       </View>
-      <Touchable feedback="icon" haptic="light" onPress={() => onUnstar(item)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Yıldızı kaldır" style={styles.star}>
-        <Ionicons name="star" size={20} color={colors.star} />
-      </Touchable>
+      <View style={[styles.bubble, item.sender.is_me ? styles.bubbleMine : styles.bubbleTheirs]}>
+        {summary.icon ? <Ionicons name={summary.icon} size={14} color={chatPalette.bubbleMeta} /> : null}
+        <Text style={styles.text} numberOfLines={4} {...textScale.long}>{summary.text}</Text>
+      </View>
+      <View style={styles.footer}>
+        <Text style={styles.go} {...textScale.badge}>Mesaja git</Text>
+        <Ionicons name="arrow-forward" size={12} color={colors.brandAccent} />
+      </View>
     </Touchable>
   );
 });
@@ -99,13 +114,19 @@ const StarredRow = memo(function StarredRow({ item, showChat, onPress, onUnstar 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   pad: { paddingHorizontal: layout.screenPadding, paddingTop: space.sm },
-  list: { flexGrow: 1, paddingBottom: space.giant },
-  row: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingLeft: layout.screenPadding, paddingVertical: space.m, borderBottomWidth: hairline, borderBottomColor: colors.separator },
-  body: { flex: 1, minWidth: 0, gap: space.xxs },
+  list: { flexGrow: 1, gap: space.sm, paddingHorizontal: layout.screenPadding, paddingTop: space.md, paddingBottom: space.giant },
+  card: { gap: space.sm, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
+  head: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  body: { flex: 1, minWidth: 0 },
   line: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  who: { ...type.label, color: colors.textPrimary, flex: 1 },
-  chat: { ...type.caption, color: colors.textTertiary },
+  who: { ...type.label, color: colors.textPrimary },
+  chat: { ...type.caption, color: colors.textTertiary, flexShrink: 1 },
   time: { ...type.numSm, color: colors.textTertiary },
-  text: { ...type.body, color: colors.textSecondary, flex: 1 },
-  star: { width: 48, height: 44, alignItems: "center", justifyContent: "center" },
+  star: { width: 30, height: 30, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.warnDim },
+  bubble: { flexDirection: "row", alignItems: "flex-start", gap: space.xs, paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.lg },
+  bubbleMine: { backgroundColor: chatPalette.bubbleMine, borderTopRightRadius: radius.xs - 3, alignSelf: "flex-end", maxWidth: "92%" },
+  bubbleTheirs: { backgroundColor: chatPalette.bubbleTheirs, borderTopLeftRadius: radius.xs - 3, alignSelf: "flex-start", maxWidth: "92%", borderWidth: hairline, borderColor: chatPalette.bubbleLine },
+  text: { ...type.body, color: chatPalette.bubbleText, flexShrink: 1 },
+  footer: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: space.xs },
+  go: { ...type.labelXs, color: colors.brandAccent },
 });
