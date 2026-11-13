@@ -23,9 +23,6 @@ import { StyleSheet, Text, View } from "react-native";
 import {
   AdminList,
   AdminScreen,
-  InfoLine,
-  Panel,
-  RecordCard,
   SelectField,
   confirmAction,
   useAdminMutation,

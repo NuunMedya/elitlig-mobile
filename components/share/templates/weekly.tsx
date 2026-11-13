@@ -8,8 +8,9 @@ import React from "react";
 import { View } from "react-native";
 import Svg, { Circle, Defs, Line, LinearGradient, Rect, Stop } from "react-native-svg";
 
-import { shortName, splitName, upper } from "@/lib/share/format";
+import { shortName, splitName } from "@/lib/share/format";
 import { alpha } from "@/lib/share/palette";
+import { upperTR } from "@/theme";
 import { Poster, Spacer } from "../canvas/Layout";
 import { CText, Crest, FillBox, FitName, Glass, Glyph, Halo, Overline, Portrait, SigBar, StatTile, useSvgId } from "../canvas/Primitives";
 import type { ShareFrame, ShareTemplateDef } from "../canvas/types";
@@ -147,7 +148,7 @@ function PitchPlayer({ f, p, size }: { f: ShareFrame; p: WeeklyPerson; size: num
           </FillBox>
         ) : null}
       </View>
-      <FitName f={f} k="row" text={upper(shortName(p.name))} room={10} lines={1} scale={0.82} min={0.6} style={{ marginTop: u(3) }} />
+      <FitName f={f} k="row" text={upperTR(shortName(p.name))} room={10} lines={1} scale={0.82} min={0.6} style={{ marginTop: u(3) }} />
     </View>
   );
 }
@@ -171,7 +172,9 @@ function WeeklySquad({ f, d }: { f: ShareFrame; d: WeeklyShareData }) {
       </View>
       <Spacer f={f} grow={0.4} min={story ? 12 : 8} />
       <View style={{ width: pw, height: ph, justifyContent: "space-around", paddingVertical: u(story ? 14 : 8) }}>
-        <Pitch f={f} w={pw} h={ph} />
+        <View style={{ position: "absolute", width: pw, height: ph, borderRadius: u(22), overflow: "hidden" }}>
+          <Pitch f={f} w={pw} h={ph} />
+        </View>
         {byLine.map((row, index) => (
           <View key={index} style={{ flexDirection: "row", justifyContent: "space-evenly", alignItems: "flex-start" }}>
             {row.map((p) => (

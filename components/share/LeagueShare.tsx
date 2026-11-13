@@ -20,10 +20,9 @@ import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { getMatches } from "@/lib/api/matches";
 import { getPlayerRankings } from "@/lib/api/players";
 import { getStandings } from "@/lib/api/standings";
-import { formatDayHeading } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import { queryKeys } from "@/lib/queryKeys";
-import { clampRange, focusWindow, num } from "@/lib/share/format";
+import { clampRange, dayMonth, focusWindow, num, weekday } from "@/lib/share/format";
 import type { ApiMatch, PlayerRankRow, PlayerSort } from "@/lib/types";
 import { useScope } from "@/providers/ScopeProvider";
 import { space } from "@/theme";
@@ -175,8 +174,9 @@ export function LeagueShare({ visible, onClose, tab, initialSort }: LeagueShareP
   const day = pickedDay && days.some(([key]) => key === pickedDay) ? pickedDay : defaultDay;
   /* Gün şeridi: seçili günün çevresindeki 12 gün (sezon yüzlerce gün olabilir). */
   const dayChips = useMemo(() => {
+    // Seçili gün şeridin başında görünsün (yatay şerit kendiliğinden kaymaz).
     const index = Math.max(0, days.findIndex(([key]) => key === day));
-    const start = Math.max(0, Math.min(index - 5, days.length - 12));
+    const start = Math.max(0, Math.min(index - 1, days.length - 12));
     return days.slice(start, start + 12);
   }, [day, days]);
 
@@ -211,7 +211,8 @@ export function LeagueShare({ visible, onClose, tab, initialSort }: LeagueShareP
     if (!list.length) return [];
     const allDone = list.every((m) => matchState(m) === "finished");
     return fixturesTemplates({
-      title: formatDayHeading(day),
+      // Görselde göreli gün ("Dün", "Bugün") yazılmaz: paylaşım günler sonra da okunur.
+      title: [dayMonth(day), weekday(day)].filter(Boolean).join(" "),
       kicker: allDone ? "Sonuçlar" : "Maç programı",
       matches: list.map((m) => ({
         id: m.id,
@@ -240,7 +241,7 @@ export function LeagueShare({ visible, onClose, tab, initialSort }: LeagueShareP
       dayChips.length > 1 ? (
         <ChipGroup contentPadding={0}>
           {dayChips.map(([key]) => (
-            <Chip key={key} size="sm" label={formatDayHeading(key)} selected={key === day} onPress={() => setPickedDay(key)} />
+            <Chip key={key} size="sm" label={`${dayMonth(key)} · ${weekday(key).slice(0, 3)}`} selected={key === day} onPress={() => setPickedDay(key)} />
           ))}
         </ChipGroup>
       ) : null

@@ -12,8 +12,9 @@ import React from "react";
 import { View } from "react-native";
 import Svg, { Defs, LinearGradient, Polygon, Stop } from "react-native-svg";
 
-import { clock, dayMonth, groupScorers, shortName, splitName, upper, weekday, type ScorerGroup } from "@/lib/share/format";
+import { clock, dayMonth, groupScorers, shortName, splitName, weekday, type ScorerGroup } from "@/lib/share/format";
 import { alpha } from "@/lib/share/palette";
+import { upperTR } from "@/theme";
 import { Poster, Spacer } from "../canvas/Layout";
 import {
   CText,
@@ -166,7 +167,7 @@ function ScorerColumn({
             <FitName
               f={f}
               k="row"
-              text={`${upper(shortName(group.name))}${group.ownGoal ? " (K.K.)" : ""}`}
+              text={`${upperTR(shortName(group.name))}${group.ownGoal ? " (K.K.)" : ""}`}
               room={compact ? 17 : 15}
               lines={1}
               align={align}
@@ -203,8 +204,8 @@ function MatchDayPoster({ f, d }: { f: ShareFrame; d: MatchShareData }) {
           </>
         ) : (
           <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" }}>
-            <CText f={f} k="poster" scale={0.8}>
-              MAÇ <CText f={f} k="poster" scale={0.8} color={t.accent}>GÜNÜ</CText>
+            <CText f={f} k="poster" scale={0.62}>
+              MAÇ <CText f={f} k="poster" scale={0.62} color={t.accent}>GÜNÜ</CText>
             </CText>
             <View style={{ alignItems: "flex-end", paddingBottom: u(4) }}>
               <Overline f={f} color={t.inkMuted}>{weekday(d.date)}</Overline>
@@ -233,19 +234,19 @@ function MatchDayPoster({ f, d }: { f: ShareFrame; d: MatchShareData }) {
         {story ? (
           <InfoCell f={f} label="Tarih" value={dayMonth(d.date)} sub={weekday(d.date)} />
         ) : null}
-        <InfoCell f={f} label="Saat" value={clock(d.time) || "—"} big divider={story} />
+        <InfoCell f={f} label="Saat" value={clock(d.time) || "—"} big divider={story} weight={1.2} />
         <InfoCell f={f} label="Saha" value={d.venue || "—"} divider wide />
       </Glass>
     </Poster>
   );
 }
 
-function InfoCell({ f, label, value, sub, big, divider, wide }: { f: ShareFrame; label: string; value: string; sub?: string; big?: boolean; divider?: boolean; wide?: boolean }) {
+function InfoCell({ f, label, value, sub, big, divider, wide, weight }: { f: ShareFrame; label: string; value: string; sub?: string; big?: boolean; divider?: boolean; wide?: boolean; weight?: number }) {
   const { u, t } = f;
   return (
     <View
       style={{
-        flex: wide ? 1.5 : 1,
+        flex: weight ?? (wide ? 1.4 : 1),
         paddingHorizontal: u(12),
         borderLeftWidth: divider ? Math.max(1, u(0.7)) : 0,
         borderLeftColor: t.line,
@@ -254,7 +255,7 @@ function InfoCell({ f, label, value, sub, big, divider, wide }: { f: ShareFrame;
     >
       <Overline f={f} color={t.inkMuted}>{label}</Overline>
       {big ? (
-        <CText f={f} k="score" scale={0.4} style={{ marginTop: u(4) }}>{value}</CText>
+        <CText f={f} k="score" scale={0.3} style={{ marginTop: u(4) }}>{value}</CText>
       ) : (
         <FitName f={f} k="name" text={value} room={12} lines={2} align="left" scale={0.9} min={0.7} style={{ marginTop: u(4) }} />
       )}
@@ -610,7 +611,7 @@ function ResultStar({ f, d }: { f: ShareFrame; d: MatchShareData }) {
   const { first, last } = splitName(mvp.name);
   return (
     <Poster f={f} mood="center" title={d.league} meta={meta(d)} footer={d.footer}>
-      <Spacer f={f} grow={story ? 0.5 : 0.1} />
+      <Spacer f={f} grow={story ? 0.5 : 0.5} />
       <View style={{ flexDirection: story ? "column" : "row", alignItems: "center", gap: u(story ? 0 : 16) }}>
         <View style={{ alignItems: "center" }}>
           <Halo f={f} size={story ? 300 : 190} color={t.gold[1]} power={0.6} />

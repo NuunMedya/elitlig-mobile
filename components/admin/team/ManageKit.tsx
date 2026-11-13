@@ -276,15 +276,18 @@ export function IdentityStage({
   );
 }
 
-const STAGE_TONE = { warn: colors.adminAccent, win: colors.win, danger: colors.danger } as const;
+/* Sahne iki temada da koyudur: tonlar koyu zemin üstünde okunan karşılıklarıyla. */
+const STAGE_TONE = { warn: colors.adminAccent, win: colors.onDark, danger: colors.liveOnDark } as const;
 
 /** Koyu sahne üstünde küçük hap (rol, durum, lig). */
 export function StagePill({ label, icon, tone = "plain" }: { label: string; icon?: IconName; tone?: "plain" | "gold" | "win" | "warn" | "danger" }) {
-  const fg =
-    tone === "gold" ? colors.adminAccent : tone === "win" ? colors.win : tone === "warn" ? colors.warn : tone === "danger" ? colors.danger : colors.onDark;
+  /* Metin daima açık (koyu sahne); anlam rengi yalnız nokta / ikonda. */
+  const mark =
+    tone === "gold" || tone === "warn" ? colors.adminAccent : tone === "win" ? colors.win : tone === "danger" ? colors.liveOnDark : colors.onDarkMuted;
+  const fg = tone === "gold" ? colors.adminAccent : colors.onDark;
   return (
     <View style={kit.stagePill}>
-      {icon ? <Ionicons name={icon} size={11} color={fg} /> : <View style={[kit.stagePillDot, { backgroundColor: fg }]} />}
+      {icon ? <Ionicons name={icon} size={11} color={mark} /> : <View style={[kit.stagePillDot, { backgroundColor: mark }]} />}
       <Text style={[kit.stagePillText, { color: fg }]} numberOfLines={1} {...textScale.badge}>
         {label}
       </Text>

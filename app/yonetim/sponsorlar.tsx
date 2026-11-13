@@ -9,11 +9,15 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMemo, useState } from "react";
+import { Image, StyleSheet, Text, View } from "react-native";
 
-import { ActionSheet, AdminList, AdminScreen, RecordCard, confirmAction, useAdminMutation } from "@/components/admin";
+
+import { ActionSheet, AdminList, AdminScreen, confirmAction, useAdminMutation } from "@/components/admin";
+import { SysStage } from "@/components/admin/system/SysKit";
 import { SponsorEditor } from "@/components/admin/broadcast/SponsorEditor";
-import { FAB, MetricGrid, MetricTile } from "@/components/ui";
+import { FAB, Touchable, withAlpha } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { formatDate } from "@/lib/admin/format";
 import {
@@ -28,6 +32,7 @@ import {
 import { getCities } from "@/lib/api/meta";
 import { mediaUrl } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 const PERMS = ["sponsors.view", "sponsors.manage"] as const;
 
@@ -75,6 +80,13 @@ export default function SponsorsScreen() {
     return true;
   });
 
+  // Logo ızgarası: iki sütun; liste satırı bir çift karodur.
+  const pairs = useMemo(() => {
+    const out: Sponsor[][] = [];
+    for (let i = 0; i < visible.length; i += 2) out.push(visible.slice(i, i + 2));
+    return out;
+  }, [visible]);
+
   const invalidate = [["admin", "sponsors", "list"]];
   const save = useAdminMutation(
     (body: Partial<SponsorPayload>) => (editing && editing !== "new" ? updateSponsor(editing.id, body) : createSponsor(body)),
@@ -109,8 +121,8 @@ export default function SponsorsScreen() {
       scroll={false}
       overlay={canManage ? <FAB icon="add" label="Yeni sponsor" extended onPress={() => setEditing("new")} accessibilityLabel="Yeni sponsor" /> : null}
     >
-      <AdminList
-        data={visible}
+      <AdminList<Sponsor[]>
+        data={pairs}
         loading={list.isLoading || catalog.isLoading}
         error={list.error || catalog.error}
         onRetry={() => {
@@ -126,40 +138,38 @@ export default function SponsorsScreen() {
         filter={filter}
         onFilter={setFilter}
         extraHeader={
-          <MetricGrid columns={2}>
-            <MetricTile label="Toplam" value={String(stats.total)} icon="megaphone-outline" />
-            <MetricTile label="Aktif" value={String(stats.live)} icon="checkmark-circle-outline" tone="win" />
-            <MetricTile label="Yayında" value={String(stats.broadcast)} icon="tv-outline" tone="brand" />
-            <MetricTile label="Web / uygulamada" value={String(stats.web)} icon="globe-outline" tone="accent" />
-          </MetricGrid>
+          <SysStage
+            eyebrow="Sponsor vitrini"
+            title="Markalar nerede görünüyor"
+            icon="megaphone"
+            tone="gold"
+            value={stats.total}
+            valueLabel="sponsor"
+            stats={[
+              { label: "Aktif", value: stats.live, icon: "checkmark-circle", tone: "win" },
+              { label: "Yayında", value: stats.broadcast, icon: "tv", tone: "danger" },
+              { label: "Web/uygulama", value: stats.web, icon: "globe", tone: "info" },
+            ]}
+          />
         }
         emptyIcon="megaphone-outline"
         emptyTitle={items.length ? "Süzgeçle eşleşen sponsor yok" : "Henüz sponsor eklenmedi"}
-        keyExtractor={(s) => String(s.id)}
-        renderItem={({ item }) => (
-          <RecordCard
-            title={item.name}
-            subtitle={[tierLabel(item.tier), item.tagline].filter(Boolean).join(" · ") || null}
-            meta={[
-              item.startDate || item.endDate ? `${item.startDate ? formatDate(item.startDate) : "…"} – ${item.endDate ? formatDate(item.endDate) : "…"}` : null,
-              item.cityId == null ? "Tüm iller" : nationwide ? cities.data?.find((c) => c.id === item.cityId)?.label : null,
-            ]
-              .filter(Boolean)
-              .join(" · ") || null}
-            avatar={{ name: item.name, image: mediaUrl(item.images?.logo) }}
-            accentColor={item.brandColor || null}
-            muted={!item.live}
-            badges={[
-              item.live ? { label: "Yayında", tone: "win" } : { label: item.active ? "Süresi dışında" : "Pasif", tone: "neutral" },
-              item.placements.some((k) => groupOf(k) === "broadcast") ? { label: "Yayın", tone: "brand", icon: "tv-outline" } : null,
-              item.placements.some((k) => groupOf(k) === "led") ? { label: "LED", tone: "accent" } : null,
-              item.placements.some((k) => groupOf(k) === "web") ? { label: "Web", tone: "info", icon: "globe-outline" } : null,
-              item.placements.some((k) => groupOf(k) === "app") ? { label: "Uygulama", tone: "info", icon: "phone-portrait-outline" } : null,
-              item.editable === false ? { label: "Salt okunur", tone: "neutral", icon: "lock-closed-outline" } : null,
-            ]}
-            onPress={() => setEditing(item)}
-            onLongPress={canManage || canDelete ? () => setMenu(item) : undefined}
-          />
+        keyExtractor={(row) => row.map((s) => s.id).join("-")}
+        renderItem={({ item: row }) => (
+          <View style={styles.gridRow}>
+            {row.map((item) => (
+              <SponsorTile
+                key={item.id}
+                item={item}
+                tier={tierLabel(item.tier)}
+                city={item.cityId == null ? "Tüm iller" : nationwide ? cities.data?.find((c) => c.id === item.cityId)?.label ?? null : null}
+                groups={[...new Set(item.placements.map((k) => groupOf(k)).filter(Boolean) as string[])]}
+                onPress={() => setEditing(item)}
+                onLongPress={canManage || canDelete ? () => setMenu(item) : undefined}
+              />
+            ))}
+            {row.length === 1 ? <View style={styles.gridGhost} /> : null}
+          </View>
         )}
       />
 
@@ -190,3 +200,77 @@ export default function SponsorsScreen() {
     </AdminScreen>
   );
 }
+
+const GROUP_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = { broadcast: "tv", led: "tablet-landscape", web: "globe", app: "phone-portrait" };
+
+/** Logo karosu: marka renginde yumuşak zemin üstünde logo (yoksa monogram), ad, seviye, yerleşim ikonları. */
+function SponsorTile({
+  item,
+  tier,
+  city,
+  groups,
+  onPress,
+  onLongPress,
+}: {
+  item: Sponsor;
+  tier?: string;
+  city: string | null;
+  groups: string[];
+  onPress: () => void;
+  onLongPress?: () => void;
+}) {
+  const logo = mediaUrl(item.images?.logo);
+  const brand = item.brandColor || colors.brand;
+  return (
+    <Touchable feedback="card" onPress={onPress} onLongPress={onLongPress} style={[styles.tile, !item.live ? styles.tileMuted : null]} accessibilityRole="button" accessibilityLabel={`${item.name}${item.live ? ", yayında" : ""}`}>
+      <View style={[styles.logo, { backgroundColor: withAlpha(brand, 0.14), borderColor: withAlpha(brand, 0.4) }]}>
+        {logo ? (
+          <Image source={{ uri: logo }} style={styles.logoImage} resizeMode="contain" accessibilityIgnoresInvertColors />
+        ) : (
+          <Text style={[styles.monogram, { color: brand }]} {...textScale.badge}>
+            {item.name.slice(0, 2).toLocaleUpperCase("tr-TR")}
+          </Text>
+        )}
+        <View style={[styles.liveDot, { backgroundColor: item.live ? colors.win : colors.textTertiary }]} />
+      </View>
+      <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
+        {item.name}
+      </Text>
+      <Text style={styles.tier} numberOfLines={1} {...textScale.dense}>
+        {[tier, city].filter(Boolean).join(" · ") || item.tagline || "—"}
+      </Text>
+      <View style={styles.tileFoot}>
+        <View style={styles.groups}>
+          {groups.map((g) => (
+            <View key={g} style={styles.groupIcon}>
+              <Ionicons name={GROUP_ICONS[g] ?? "ellipse"} size={11} color={colors.textSecondary} />
+            </View>
+          ))}
+        </View>
+        {item.editable === false ? <Ionicons name="lock-closed" size={12} color={colors.textTertiary} /> : null}
+      </View>
+      {item.startDate || item.endDate ? (
+        <Text style={styles.dates} numberOfLines={1} {...textScale.badge}>
+          {item.startDate ? formatDate(item.startDate) : "…"} – {item.endDate ? formatDate(item.endDate) : "…"}
+        </Text>
+      ) : null}
+    </Touchable>
+  );
+}
+
+const styles = StyleSheet.create({
+  gridRow: { flexDirection: "row", gap: space.sm },
+  gridGhost: { flex: 1 },
+  tile: { flex: 1, minWidth: 0, gap: 3, padding: space.sm, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
+  tileMuted: { opacity: 0.7 },
+  logo: { height: 92, borderRadius: radius.lg, borderWidth: hairline, alignItems: "center", justifyContent: "center", marginBottom: space.xs, overflow: "hidden" },
+  logoImage: { width: "78%", height: "70%" },
+  monogram: { ...type.scoreLg },
+  liveDot: { position: "absolute", top: 8, right: 8, width: 8, height: 8, borderRadius: 4 },
+  name: { ...type.h4, color: colors.textPrimary },
+  tier: { ...type.caption, color: colors.textTertiary },
+  tileFoot: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 2 },
+  groups: { flexDirection: "row", gap: 4 },
+  groupIcon: { width: 22, height: 22, borderRadius: 7, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface3 },
+  dates: { ...type.micro, color: colors.textTertiary },
+});

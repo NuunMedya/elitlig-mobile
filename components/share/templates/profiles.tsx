@@ -9,6 +9,7 @@ import React from "react";
 import { View } from "react-native";
 
 import { formLetters, splitName } from "@/lib/share/format";
+import { alpha } from "@/lib/share/palette";
 import { Poster, Spacer } from "../canvas/Layout";
 import { CText, Crest, FillBox, FitName, FormRow, Glass, Halo, Overline, Portrait, SigBar, StatTile } from "../canvas/Primitives";
 import type { ShareFrame, ShareTemplateDef } from "../canvas/types";
@@ -56,9 +57,9 @@ function TeamSeason({ f, d }: { f: ShareFrame; d: TeamShareData }) {
   const gd = d.goalsFor - d.goalsAgainst;
   return (
     <Poster f={f} mood="top" title={d.league} meta={[d.city, d.season].filter(Boolean).join(" · ")} footer={d.footer}>
-      <Spacer f={f} grow={story ? 0.5 : 0.1} />
+      <Spacer f={f} grow={story ? 0.5 : 0.7} />
       <View style={{ flexDirection: story ? "column" : "row", alignItems: "center", gap: u(story ? 14 : 14) }}>
-        <Crest f={f} logo={d.logo} name={d.name} size={story ? 128 : 78} halo />
+        <Crest f={f} logo={d.logo} name={d.name} size={story ? 112 : 78} halo />
         <View style={{ alignItems: story ? "center" : "flex-start", flex: story ? undefined : 1 }}>
           <Overline f={f}>Sezon kartı</Overline>
           <FitName f={f} k="hero" text={d.name} room={14} lines={2} caps scale={story ? 1.15 : 0.85} align={story ? "center" : "left"} style={{ marginTop: u(4) }} />
@@ -84,9 +85,9 @@ function TeamSeason({ f, d }: { f: ShareFrame; d: TeamShareData }) {
 
       <View style={{ flexDirection: "row", gap: u(8), marginTop: u(story ? 10 : 6) }}>
         <StatTile f={f} value={d.played} label="Maç" scale={story ? 0.9 : 0.66} />
-        <StatTile f={f} value={d.wins} label="Galibiyet" accent={t.win} scale={story ? 0.9 : 0.66} />
-        <StatTile f={f} value={d.draws} label="Beraberlik" accent={t.draw} scale={story ? 0.9 : 0.66} />
-        <StatTile f={f} value={d.losses} label="Mağlubiyet" accent={t.loss} scale={story ? 0.9 : 0.66} />
+        <StatTile f={f} value={d.wins} label="Galip" accent={t.win} scale={story ? 0.9 : 0.66} />
+        <StatTile f={f} value={d.draws} label="Beraber" accent={t.draw} scale={story ? 0.9 : 0.66} />
+        <StatTile f={f} value={d.losses} label="Mağlup" accent={t.loss} scale={story ? 0.9 : 0.66} />
       </View>
 
       {story ? (
@@ -126,13 +127,13 @@ function TeamRank({ f, d }: { f: ShareFrame; d: TeamShareData }) {
   const { u, t, story, W } = f;
   return (
     <Poster f={f} mood="center" title={d.league} meta={[d.city, d.season].filter(Boolean).join(" · ")} footer={d.footer}>
-      <Spacer f={f} grow={story ? 0.6 : 0.2} />
+      <Spacer f={f} grow={story ? 0.6 : 0.6} />
       <View style={{ alignItems: "center", justifyContent: "center", height: u(story ? 280 : 180) }}>
         <CText
           f={f}
           k="mega"
           scale={story ? 2.4 : 1.55}
-          color={t.dark ? t.glassStrong : t.line}
+          color={alpha(t.sigA, t.dark ? 0.34 : 0.16)}
           align="center"
           style={{ position: "absolute", width: W, textAlign: "center" }}
         >
@@ -207,7 +208,7 @@ function PlayerCard({ f, d }: { f: ShareFrame; d: PlayerShareData }) {
   const cardPad = story ? 18 : 12;
   return (
     <Poster f={f} mood="center" title={d.league} meta={d.city} footer={d.footer}>
-      <Spacer f={f} grow={story ? 0.4 : 0.1} />
+      <Spacer f={f} grow={story ? 0.4 : 0.8} />
       <FillBox f={f} radius={28} tone="soft" vertical style={{ borderWidth: Math.max(1, u(1)), borderColor: t.glassLine, padding: u(cardPad), alignItems: story ? "center" : "stretch" }}>
         <View style={{ flexDirection: story ? "column" : "row", alignItems: "center", gap: u(story ? 0 : 14) }}>
           <View>
@@ -272,25 +273,30 @@ function PlayerPoster({ f, d }: { f: ShareFrame; d: PlayerShareData }) {
         </View>
       ) : null}
       <Spacer f={f} />
-      <View style={{ flexDirection: "row", alignItems: "flex-end", gap: u(10) }}>
+      <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" }}>
         <View>
-          <CText f={f} k="mega" scale={story ? 0.9 : 0.62} color={t.accent}>{d.goals}</CText>
+          <CText f={f} k="mega" scale={story ? 0.82 : 0.56} color={t.accent}>{d.goals}</CText>
           <Overline f={f} color={t.inkMuted}>Kariyer golü</Overline>
         </View>
-        <View style={{ flex: 1, gap: u(story ? 8 : 5), paddingBottom: u(4) }}>
-          <RecordBar f={f} w={d.wins} d={d.draws} l={d.losses} />
+        <View style={{ alignItems: "flex-end", paddingBottom: u(2) }}>
+          <CText f={f} k="score" scale={story ? 0.42 : 0.32}>{d.matches}</CText>
+          <Overline f={f} color={t.inkMuted}>Maç</Overline>
+        </View>
+      </View>
+      <Glass f={f} radius={18} style={{ marginTop: u(story ? 12 : 8), padding: u(story ? 12 : 9), gap: u(story ? 8 : 6) }}>
+        <RecordBar f={f} w={d.wins} d={d.draws} l={d.losses} />
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: u(10) }}>
           <CText f={f} k="body" color={t.inkSoft}>
-            {d.matches} maç · {d.wins}G {d.draws}B {d.losses}M
-            {d.assists != null ? ` · ${d.assists} asist` : ""}
+            {d.wins}G · {d.draws}B · {d.losses}M{d.assists != null ? `  ·  ${d.assists} asist` : ""}
           </CText>
           {d.teamName ? (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: u(6) }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: u(6), flexShrink: 1 }}>
               <Crest f={f} logo={d.teamLogo} name={d.teamName} size={16} />
-              <FitName f={f} k="row" text={d.teamName} room={22} lines={1} align="left" color={t.ink} />
+              <FitName f={f} k="row" text={d.teamName} width={120} lines={1} align="left" color={t.ink} style={{ flexShrink: 1 }} />
             </View>
           ) : null}
         </View>
-      </View>
+      </Glass>
     </Poster>
   );
 }

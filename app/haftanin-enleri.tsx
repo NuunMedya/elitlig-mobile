@@ -376,7 +376,7 @@ export default function WeeklyAwardsScreen() {
         visible={shareOpen}
         onClose={() => setShareOpen(false)}
         set={current}
-        weekLabel={current ? current.title || weekLabel(current.start_date, current.end_date) : ""}
+        weekLabel={current ? weekLabel(current.start_date, current.end_date) : ""}
       />
     </SafeAreaView>
   );

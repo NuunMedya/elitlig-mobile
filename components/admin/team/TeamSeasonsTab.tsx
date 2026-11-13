@@ -28,7 +28,6 @@ import {
   MEMBERSHIP_STATUS_LABELS,
   addSeasonRosterPlayer,
   addTeamSeason,
-  capText,
   removeSeasonRosterPlayer,
   removeTeamSeason,
   type TeamOverview,

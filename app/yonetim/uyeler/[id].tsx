@@ -20,8 +20,7 @@ import React, { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { AdminScreen, confirmAction, FormSheet, useAdminMutation, type FieldDef } from "@/components/admin";
-import { openExternal } from "@/components/admin/members/contact";
-import { memberBadges, STATUS_TONE } from "@/components/admin/members/MemberCard";
+import { ContactActions, memberBadges, STATUS_TONE } from "@/components/admin/members/MemberCard";
 import { MembershipPlanCard, ResetCodeCard } from "@/components/admin/members/MemberSections";
 import { REVIEW_TONE } from "@/components/admin/members/RequestParts";
 import { DangerNote, FactRow, GroupCard, IdentityStage, ListLine, StagePill } from "@/components/admin/team/ManageKit";
@@ -43,7 +42,6 @@ import {
   reviewMember,
   setMembership,
   updateMember,
-  whatsappUrl,
   type MemberUpdate,
 } from "@/lib/api/admin/users";
 import { useAuth } from "@/providers/AuthProvider";
@@ -170,7 +168,6 @@ export default function MemberDetailScreen() {
   };
 
   const st = String(user?.status ?? "").toLowerCase();
-  const wa = whatsappUrl(user?.phone);
 
   return (
     <AdminScreen
@@ -209,15 +206,7 @@ export default function MemberDetailScreen() {
                   ))}
                 </>
               }
-              footer={
-                user.phone || user.email ? (
-                  <View style={styles.row}>
-                    {user.phone ? <Button label="Ara" icon="call" size="sm" onDark variant="secondary" onPress={() => void openExternal(`tel:${user.phone}`)} style={styles.grow} /> : null}
-                    {wa ? <Button label="WhatsApp" icon="logo-whatsapp" size="sm" onDark variant="secondary" onPress={() => void openExternal(wa)} style={styles.grow} /> : null}
-                    {user.email ? <Button label="E-posta" icon="mail" size="sm" onDark variant="secondary" onPress={() => void openExternal(`mailto:${user.email}`)} style={styles.grow} /> : null}
-                  </View>
-                ) : null
-              }
+              footer={<ContactActions phone={user.phone} email={user.email} />}
             />
           </Reveal>
 

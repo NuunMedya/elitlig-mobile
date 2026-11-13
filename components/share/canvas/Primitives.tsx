@@ -18,6 +18,7 @@ import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Rect, Stop } f
 import { CANVAS_TYPE, font, fitScale, type CanvasTypeKey } from "@/lib/share/canvas";
 import { formLetters, upper } from "@/lib/share/format";
 import { alpha } from "@/lib/share/palette";
+import { fonts } from "@/theme";
 import { initials, mediaUrl } from "@/lib/format";
 import type { ShareFrame } from "./types";
 
@@ -327,7 +328,7 @@ export function Footer({ f, right }: { f: ShareFrame; right?: string | null }) {
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: u(6) }}>
         <SigBar f={f} width={18} height={2.4} />
-        <CText f={f} k="body" color={t.ink} style={{ fontFamily: font(u, "numStrong").fontFamily }}>
+        <CText f={f} k="body" color={t.ink} style={{ fontFamily: fonts.bold }}>
           elitlig.com
         </CText>
       </View>

@@ -35,7 +35,7 @@ import {
 } from "@/components/admin";
 import { FolderCard, PresetCard, TemplateCard } from "@/components/admin/broadcast/PoolParts";
 import { CountTiles } from "@/components/admin/system/SysKit";
-import { Button, FAB, IconTile, SegmentedControl, useToast } from "@/components/ui";
+import { Button, FAB, SegmentedControl, useToast } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { formatDate } from "@/lib/admin/format";
 import {
@@ -59,7 +59,7 @@ import {
 } from "@/lib/api/admin/contentPool";
 import { openLink } from "@/lib/links";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, space, textScale, type } from "@/theme";
+import { colors, radius, space, textScale, type } from "@/theme";
 
 type Tab = "turler" | "klasorler";
 
@@ -340,7 +340,6 @@ export default function ContentPoolScreen() {
           extraHeader={
             <View style={styles.folderHead}>
               <Button label="Klasörler" icon="chevron-back" variant="ghost" size="sm" onPress={() => setFolderId(null)} />
-              <IconTile icon="folder-open" tone="violet" size={40} />
               <View style={styles.folderTitle}>
                 <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
                   {folder.name}
@@ -401,7 +400,7 @@ export default function ContentPoolScreen() {
 
 const styles = StyleSheet.create({
   tabs: { paddingHorizontal: space.lg, paddingBottom: space.sm },
-  folderHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  folderHead: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.sm, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.brandDim },
   folderTitle: { flex: 1, gap: 2 },
   title: { ...type.h3, color: colors.textPrimary },
   meta: { ...type.caption, color: colors.textTertiary },

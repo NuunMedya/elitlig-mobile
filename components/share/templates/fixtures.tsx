@@ -81,11 +81,11 @@ function ProgramRow({ f, m, h }: { f: ShareFrame; m: FixtureItem; h: number }) {
   return (
     <View style={{ height: u(h), justifyContent: "center", paddingHorizontal: u(10) }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: u(8) }}>
-        <FitName f={f} k="row" text={m.home.name} room={13} lines={2} align="right" scale={story ? 1 : 0.9} min={0.7} style={{ flex: 1 }} />
+        <FitName f={f} k="row" text={m.home.name} room={13} lines={2} caps align="right" scale={story ? 1 : 0.9} min={0.7} style={{ flex: 1 }} />
         <Crest f={f} logo={m.home.logo} name={m.home.name} size={crest} />
         <Middle f={f} m={m} scale={story ? 1 : 0.85} />
         <Crest f={f} logo={m.away.logo} name={m.away.name} size={crest} />
-        <FitName f={f} k="row" text={m.away.name} room={13} lines={2} align="left" scale={story ? 1 : 0.9} min={0.7} style={{ flex: 1 }} />
+        <FitName f={f} k="row" text={m.away.name} room={13} lines={2} caps align="left" scale={story ? 1 : 0.9} min={0.7} style={{ flex: 1 }} />
       </View>
       {story && m.venue ? (
         <CText f={f} k="body" scale={0.82} color={t.inkMuted} align="center" style={{ marginTop: u(4) }}>
@@ -98,10 +98,12 @@ function ProgramRow({ f, m, h }: { f: ShareFrame; m: FixtureItem; h: number }) {
 
 function FixturesProgram({ f, d }: { f: ShareFrame; d: FixturesShareData }) {
   const { u, t, story } = f;
-  const cap = story ? 8 : 5;
+  // Taşma satırı ("+n maç daha") da yer kaplar: sığmayan varsa bir maç az.
+  const fit = story ? 8 : 5;
+  const cap = d.matches.length > fit ? fit - 1 : fit;
   const shown = d.matches.slice(0, cap);
   const rest = d.matches.length - shown.length;
-  const h = story ? (shown.length > 6 ? 50 : 58) : 46;
+  const h = story ? (shown.length > 6 ? 48 : 58) : 46;
   return (
     <Poster f={f} mood="top" title={d.league} meta={d.city} footer={d.footer}>
       <Heading f={f} d={d} />
@@ -123,14 +125,14 @@ function FixturesProgram({ f, d }: { f: ShareFrame; d: FixturesShareData }) {
   );
 }
 
-function FixtureCard({ f, m }: { f: ShareFrame; m: FixtureItem }) {
+function FixtureCard({ f, m, wide }: { f: ShareFrame; m: FixtureItem; wide?: boolean }) {
   const { u, t, story } = f;
   const line = (team: ShareTeamRef, score: number | null, win: boolean) => (
     <View style={{ flexDirection: "row", alignItems: "center", gap: u(6) }}>
-      <Crest f={f} logo={team.logo} name={team.name} size={story ? 20 : 16} />
-      <FitName f={f} k="row" text={team.name} room={12} lines={1} align="left" scale={story ? 0.95 : 0.85} min={0.62} color={win || !m.finished ? t.ink : t.inkSoft} style={{ flex: 1 }} />
+      <Crest f={f} logo={team.logo} name={team.name} size={story ? (wide ? 28 : 20) : 16} />
+      <FitName f={f} k="row" text={team.name} room={wide ? 24 : 12} lines={1} caps align="left" scale={story ? (wide ? 1.15 : 0.95) : 0.85} min={0.62} color={win || !m.finished ? t.ink : t.inkSoft} style={{ flex: 1 }} />
       {m.finished ? (
-        <CText f={f} k="numStrong" scale={story ? 1.2 : 1} color={win ? t.accent : t.ink}>
+        <CText f={f} k="numStrong" scale={story ? (wide ? 1.6 : 1.2) : 1} color={win ? t.accent : t.ink}>
           {score ?? "-"}
         </CText>
       ) : null}
@@ -139,7 +141,7 @@ function FixtureCard({ f, m }: { f: ShareFrame; m: FixtureItem }) {
   const h = m.homeScore ?? 0;
   const a = m.awayScore ?? 0;
   return (
-    <Glass f={f} radius={16} style={{ width: "48.5%", padding: u(story ? 10 : 7), gap: u(story ? 7 : 4) }}>
+    <Glass f={f} radius={16} style={{ width: wide ? "100%" : "48.5%", padding: u(story ? (wide ? 14 : 10) : 7), gap: u(story ? (wide ? 10 : 7) : 4) }}>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <Overline f={f} color={m.finished ? t.inkMuted : t.accent} scale={0.9}>
           {m.finished ? "Maç sonu" : clock(m.time) || "Saat yok"}
@@ -153,7 +155,7 @@ function FixtureCard({ f, m }: { f: ShareFrame; m: FixtureItem }) {
 
 function FixturesCards({ f, d }: { f: ShareFrame; d: FixturesShareData }) {
   const { u, t, story } = f;
-  const cap = story ? 10 : 6;
+  const cap = d.matches.length > (story ? 8 : 6) ? (story ? 6 : 4) : story ? 8 : 6;
   const shown = d.matches.slice(0, cap);
   const rest = d.matches.length - shown.length;
   return (
@@ -162,7 +164,7 @@ function FixturesCards({ f, d }: { f: ShareFrame; d: FixturesShareData }) {
       <Spacer f={f} grow={0.4} min={story ? 14 : 8} />
       <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: u(story ? 8 : 6) }}>
         {shown.map((m) => (
-          <FixtureCard key={m.id} f={f} m={m} />
+          <FixtureCard key={m.id} f={f} m={m} wide={story && shown.length <= 5} />
         ))}
       </View>
       {rest > 0 ? (

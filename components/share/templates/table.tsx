@@ -12,7 +12,7 @@ import React from "react";
 import { View } from "react-native";
 
 import { num } from "@/lib/share/format";
-import { fonts } from "@/theme/fonts";
+import { fonts } from "@/theme";
 import { defaultZoneRules, zoneColor, zoneForRank } from "@/theme/zones";
 import { Poster, Spacer } from "../canvas/Layout";
 import { CText, Crest, FillBox, FitName, FormRow, Glass, Overline, RankChip, SigBar } from "../canvas/Primitives";
@@ -90,7 +90,7 @@ function TableLine({
   compact: boolean;
 }) {
   const { u, t } = f;
-  const h = compact ? 25 : 38;
+  const h = compact ? 25 : 37;
   const col = colWidth("O", compact);
   const zone = zoneOf(f, rank, total);
   const inner = (
@@ -249,7 +249,7 @@ function StandingsFocus({ f, d }: { f: ShareFrame; d: TableShareData }) {
 
       <Spacer f={f} grow={0.4} min={story ? 14 : 8} />
 
-      <View style={{ gap: u(story ? 4 : 1) }}>
+      <View style={{ gap: u(story ? 3 : 1) }}>
         {slice.map((row, index) => {
           const r = d.from + index;
           const isHero = r === rank;
@@ -259,7 +259,7 @@ function StandingsFocus({ f, d }: { f: ShareFrame; d: TableShareData }) {
               style={{
                 flexDirection: "row",
                 alignItems: "center",
-                height: u(story ? 30 : 21),
+                height: u(story ? 28 : 21),
                 paddingHorizontal: u(10),
                 borderRadius: u(10),
                 backgroundColor: isHero ? f.t.glassStrong : "transparent",

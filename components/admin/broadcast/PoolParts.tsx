@@ -44,7 +44,8 @@ const RATIO: Record<TemplateSize, number> = { portrait: 4 / 5, story: 9 / 16, sq
 export function Canvas({ category, size, height = 76 }: { category: TemplateCategory | string; size: TemplateSize; height?: number }) {
   const tile = categoryTile(category);
   const ratio = RATIO[size] ?? 1;
-  const w = Math.round(Math.min(height * ratio, height * 1.4));
+  // Tuval karesel yuvaya sığar: yatay oranlarda en, dikeylerde boy sınırdır.
+  const w = Math.round(ratio >= 1 ? height : height * ratio);
   const h = Math.round(w / ratio);
   return (
     <View style={[styles.canvas, { width: w, height: Math.min(h, height) }]}>
