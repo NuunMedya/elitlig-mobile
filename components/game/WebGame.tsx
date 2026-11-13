@@ -26,6 +26,19 @@ export type GameCommand =
   | { type: "pause" }
   | { type: "resume" }
   | { type: "city"; levels?: Record<string, number>; kit?: { primary: string; secondary: string }; marks?: Record<string, string>; tier?: string; focus?: string | null }
+  | {
+      /** Kulüp Şehri 2.0 (games/sehir.js v2 köprüsü). */
+      type: "city2";
+      buildings: Record<string, number>;
+      rung: number;
+      kit?: { primary: string; secondary: string };
+      marks?: Record<string, string>;
+      landmarks: { id: string; key: string; slot: string; tier: string }[];
+      grid: { cols: number; rows: number; open_rows: number };
+      place: { key: string } | null;
+      focus?: string | null;
+    }
+  | { type: "build"; key: string }
   | { type: "focus"; key: string | null }
   | { type: "celebrate" }
   | {

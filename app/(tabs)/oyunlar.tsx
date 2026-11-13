@@ -10,7 +10,11 @@
  *     (XP vermez): bulmaca seviyeleri (1–3 yıldız), bilgi ve arcade skorları
  *     (skora göre, günlük tavanlı), Tahmin Ligi ve Fantezi puanları (haftalık
  *     tavanlı). XP yalnız SAHADAN ve GÖREVLERDEN gelir; o da yıldıza çevrilir
- *     (10 XP = 1 yıldız, Kulüp Şehri'nde "Yıldızları topla").
+ *     (10 XP = 1 yıldız, Kulüp Şehri'nde "Yıldızları topla"; 3 gün bekler).
+ *     Gerçek maçlar da doğrudan yıldız verir (maç başı 25 + bonus, haftada 2).
+ *   · Günlük giriş ödülü + seri kartı (components/city/DailyReward): yıldız,
+ *     jeton, joker; uzun seri ödülleri ve seri koruyucu (eski "Lig Yolu
+ *     günlük ödülü" bunun içindedir).
  *   · Oyunlar EŞİT satırlar halinde, yalnız kategori başlıkları altında:
  *       Bilgi yarışmaları · Bulmacalar · Arcade · Lig yarışmaları
  *     Hiçbir oyun ötekinden büyük ya da önde değildir. Her satır aynı bilgiyi
@@ -36,7 +40,8 @@ import { RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Ellipse, Path, Polygon, Rect } from "react-native-svg";
 
-import { DailySheet } from "@/components/puzzle/sheets";
+import { DailyRewardEntry } from "@/components/city/DailyReward";
+import { XpTransferBanner } from "@/components/city/XpTransferBanner";
 import { Touchable } from "@/components/ui";
 import { getMyArenaSummary, type ArenaGame } from "@/lib/api/arena";
 import { ARENA_BEST_KEYS } from "@/lib/game/arenaKeys";
@@ -52,6 +57,8 @@ const BOTTOM = { x: 0.5, y: 1 } as const;
 const LEFT = { x: 0, y: 0.5 } as const;
 const RIGHT = { x: 1, y: 0.5 } as const;
 const fmt = (n: number) => n.toLocaleString("tr-TR");
+/** Bilgi + arcade oyunlarının günlük şehir yıldızı tavanı (sunucu ARENA_STARS_PER_DAY). */
+const ARENA_DAILY_CAP = 30;
 
 /* ═══════════════════════ OYUN KATALOĞU (saf veri) ═══════════════════════ */
 
@@ -211,7 +218,6 @@ export default function OyunlarScreen() {
     setRefreshing(false);
   }, [loadLocal, puzzle, queryClient]);
 
-  const [daily, setDaily] = useState(false);
   const go = useCallback((route: string, needsAuth?: boolean) => router.push((needsAuth && !signedIn ? "/giris" : route) as never), [router, signedIn]);
 
   const metaOf = (g: GameRow): { line: string; stars: number | null; badge?: string | null; lives?: number | null } => {
@@ -268,23 +274,24 @@ export default function OyunlarScreen() {
           onRank={() => go("/kulup-sehri-siralama", true)}
         />
 
+        {/* Günlük giriş ödülü ve seri (yıldız + jeton + joker; seri koruyucu) */}
+        {signedIn ? <DailyRewardEntry /> : null}
+
+        {city ? <XpTransferBanner transfer={city.xp.transfer} perStar={city.xp.per_star} /> : null}
+
         {/* Yıldız kaynakları */}
         <View style={styles.sources}>
           <Source icon="extension-puzzle" tint={HUB.ribbon.puzzle[0]} title="Bulmaca" text="1–3 yıldız / seviye" />
-          <Source icon="game-controller" tint={HUB.ribbon.arcade[0]} title="Bilgi · Arcade" text={city ? `bugün +${city.stars.arena_today ?? 0}/45 yıldız` : "skora göre yıldız"} />
+          <Source icon="game-controller" tint={HUB.ribbon.arcade[0]} title="Bilgi · Arcade" text={city ? `bugün +${city.stars.arena_today ?? 0}/${ARENA_DAILY_CAP} yıldız` : "skora göre yıldız"} />
+          <Source
+            icon="football"
+            tint={HUB.ribbon.quiz[0]}
+            title="Maç"
+            text={city?.stars.match_detail ? `bu hafta ${city.stars.match_detail.week.matches}/${city.stars.match_detail.week.cap_matches} maç` : "25+ yıldız / maç"}
+          />
           <Source icon="podium" tint={HUB.ribbon.league[0]} title="Lig oyunları" text="Tahmin · Fantezi puanı" />
           <Source icon="flash" tint={HUB.ribbon.career[0]} title="Saha · Görev" text="10 XP = 1 yıldız" />
         </View>
-
-        {me?.profile.daily.available ? (
-          <Touchable onPress={() => setDaily(true)} style={styles.dailyBar} haptic="medium" accessibilityRole="button" accessibilityLabel="Günlük ödülü al">
-            <Ionicons name="gift" size={22} color={HUB.star} />
-            <Text style={styles.dailyText} {...textScale.dense}>
-              Günlük ödülün hazır · {me.profile.daily.reward.coins} jeton
-            </Text>
-            <Ionicons name="chevron-forward" size={18} color={HUB.muted} />
-          </Touchable>
-        ) : null}
 
         {/* 2) OYUNLAR — eşit satırlar, yalnız kategori başlıkları */}
         {CATEGORIES.map((cat) => (
@@ -326,7 +333,6 @@ export default function OyunlarScreen() {
           </View>
         </View>
       </ScrollView>
-      <DailySheet visible={daily} onClose={() => setDaily(false)} me={me} />
     </View>
   );
 }
@@ -609,14 +615,12 @@ const styles = StyleSheet.create({
   goldText: { ...type.h3, fontFamily: fonts.bold, color: HUB.goldInk, letterSpacing: 1 },
   ghostBtn: { width: 56, height: 52, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: HUB.card, borderWidth: 2, borderColor: HUB.cardEdge },
 
-  sources: { flexDirection: "row", gap: space.s },
-  source: { flex: 1, alignItems: "center", gap: 2, paddingVertical: space.sm, paddingHorizontal: space.xxs, borderRadius: radius.lg, backgroundColor: HUB.card, borderWidth: 1, borderColor: HUB.cardEdge },
+  sources: { flexDirection: "row", flexWrap: "wrap", gap: space.s },
+  source: { width: "30%", flexGrow: 1, alignItems: "center", gap: 2, paddingVertical: space.sm, paddingHorizontal: space.xxs, borderRadius: radius.lg, backgroundColor: HUB.card, borderWidth: 1, borderColor: HUB.cardEdge },
   sourceIcon: { width: 28, height: 28, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", marginBottom: 2 },
   sourceTitle: { ...type.micro, fontFamily: fonts.bold, color: HUB.white },
   sourceText: { ...type.micro, color: HUB.muted, textAlign: "center" },
 
-  dailyBar: { flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: HUB.card, borderWidth: 2, borderColor: HUB.star },
-  dailyText: { ...type.label, fontFamily: fonts.bold, color: HUB.white, flex: 1 },
 
   section: { gap: space.sm },
   ribbonRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
