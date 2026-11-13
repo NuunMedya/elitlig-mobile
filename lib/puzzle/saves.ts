@@ -28,7 +28,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 
 import { ARENA_BEST_KEYS } from "@/lib/game/arenaKeys";
-import { CITY_KIT_KEY, CLUB_KITS, type ClubKit } from "@/lib/puzzle/cityPalette";
+import { CITY_KIT_KEY, CLUB_KITS, PREMIUM_KITS, type ClubKit } from "@/lib/puzzle/cityPalette";
 import { currentAuthToken, get, put } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
 
@@ -455,7 +455,7 @@ export function useGameSave<K extends SaveKey>(key: K | null) {
  */
 export function useClubKit(): [ClubKit, (next: ClubKit) => void] {
   const save = useGameSave("city_kit");
-  const kit = CLUB_KITS.find((k) => k.key === save.data?.kit) ?? CLUB_KITS[0];
+  const kit = [...CLUB_KITS, ...PREMIUM_KITS].find((k) => k.key === save.data?.kit) ?? CLUB_KITS[0];
   const { update } = save;
   const choose = useCallback((next: ClubKit) => update({ kit: next.key }), [update]);
   return [kit, choose];

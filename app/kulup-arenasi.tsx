@@ -88,6 +88,12 @@ export default function ClubArenaScreen() {
             <Text style={styles.heroBody} {...textScale.long}>
               Takımındaki oyuncuların her doğrulanmış oyunu takımına puan getirir. En çok katılan takım kazanır.
             </Text>
+            {board.data?.rules.rewards?.length ? (
+              <Text style={styles.heroBody} {...textScale.long}>
+                Hafta sonunda ilindeki sıraya göre o hafta oynayan her takım üyesi Kulüp Şehri yıldızı alır:{" "}
+                {board.data.rules.rewards.map((r) => `${r.from === r.to ? `${r.from}.` : `${r.from}–${r.to}.`} ${r.stars} yıldız`).join(" · ")}
+              </Text>
+            ) : null}
             <View style={styles.heroStats}>
               <StageStat label="Puan / oyun" value={board.data?.rules.pointsPerGame ?? 2} accent />
               <View style={styles.heroDivider} />

@@ -7,13 +7,14 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import React from "react";
+import React, { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { useAdminMutation } from "@/components/admin";
 import { BottomSheet, Button, Touchable } from "@/components/ui";
 import { buyItem, livesFor, type PuzzleMe } from "@/lib/puzzle/api";
 import { usePuzzleCache } from "@/lib/puzzle/usePuzzle";
+import { CoinShopSheet } from "./CoinShop";
 import { WatchAdForLife } from "./RewardedLife";
 import type { PuzzleGameKey } from "@/lib/puzzle/types";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
@@ -34,6 +35,7 @@ export function ShopSheet({
   focus?: "lives" | null;
 }) {
   const cache = usePuzzleCache();
+  const [coinShop, setCoinShop] = useState(false);
   const buy = useAdminMutation((item: string) => buyItem(item, game), {
     success: (res) => (res.item === "can_doldur" ? (game ? "Bu oyunun canları doldu." : "Bütün oyunların canları doldu.") : "Güçlendirici alındı."),
     onSuccess: (res) => cache(res.profile),
@@ -102,6 +104,10 @@ export function ShopSheet({
       <Text style={styles.foot} {...textScale.long}>
         Jeton, seviye geçerek ve günlük ödülle kazanılır. Canın bitince reklam izleyip can da alabilirsin.
       </Text>
+      {me.profile.coin_shop ? (
+        <Button label="Jeton mağazası: yıldız takası, kulüp renkleri" icon="storefront-outline" variant="secondary" size="sm" onPress={() => setCoinShop(true)} />
+      ) : null}
+      <CoinShopSheet visible={coinShop} onClose={() => setCoinShop(false)} />
     </BottomSheet>
   );
 }

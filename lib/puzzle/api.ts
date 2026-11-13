@@ -125,7 +125,22 @@ export interface PuzzleProfile {
   lives_by_game?: Partial<Record<PuzzleGameKey, { lives: number; next_life_at: string | null }>>;
   /** `livesFor` ile üretilen görünümde: canların ait olduğu oyun. */
   life_game?: PuzzleGameKey;
+  /** Şehir 2.1: jeton harcama yerleri (eski sunucuda yok). */
+  coin_shop?: CoinShop;
 }
+
+export interface CoinShop {
+  trade: { week: string; used: number; left: number; per_week: number; coins: number; stars: number };
+  saver_coins: number;
+  kits: { key: string; title: string; price: number; owned: boolean }[];
+}
+
+/** 1.000 jeton → 10 Kulüp Şehri yıldızı (haftada sınırlı). */
+export const tradeCoinsForStars = () => post<{ stars: number; coins: number; profile: PuzzleProfile }>("/api/puzzle/coins/stars", undefined, { retry: false });
+/** Özel kulüp rengi (kozmetik). */
+export const buyClubKit = (key: string) => post<{ kit: string; price: number; profile: PuzzleProfile }>(`/api/puzzle/kits/${encodeURIComponent(key)}`, undefined, { retry: false });
+/** Seri koruyucu jetonla (reklam yerine). */
+export const saveStreakWithCoins = () => post<{ saved: true; coins: number; streak: number; missed_day: string; daily: DailyStatus }>("/api/puzzle/daily/save-streak/coins", undefined, { retry: false });
 
 /**
  * Profilin bir oyuna göre görünümü: `lives` / `next_life_at` o oyunun canı olur.

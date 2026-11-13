@@ -52,10 +52,12 @@ import { WebGame, type WebGameHandle } from "@/components/game/WebGame";
 import { BottomSheet, Button, ErrorState, SkeletonCard, Touchable, refreshControlProps, useRefresh, useToast } from "@/components/ui";
 import { collectCityStars } from "@/lib/puzzle/api";
 import { buildingMark, incomeOf, type City2CollectResult, type City2OwnedLandmark, type City2State } from "@/lib/puzzle/city2";
-import { CITY_SKY, CLUB_KITS, type ClubKit } from "@/lib/puzzle/cityPalette";
+import { CITY_SKY, CLUB_KITS, PREMIUM_KITS, type ClubKit } from "@/lib/puzzle/cityPalette";
 import { useClubKit } from "@/lib/puzzle/saves";
 import { useCity2, useCity2Actions } from "@/lib/puzzle/useCity2";
 import { useDailyStatus } from "@/lib/puzzle/useDaily";
+import { usePuzzleMe } from "@/lib/puzzle/usePuzzle";
+import { CoinShopSheet } from "@/components/puzzle/CoinShop";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
 
@@ -83,6 +85,8 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
   // Forma rengi hesaba bağlıdır (lib/puzzle/saves): başka telefonda da aynı.
   const [kit, setKit] = useClubKit();
   const [kitSheet, setKitSheet] = useState(false);
+  const [coinShop, setCoinShop] = useState(false);
+  const puzzleMe = usePuzzleMe();
   const [howSheet, setHowSheet] = useState(false);
   const [matchSheet, setMatchSheet] = useState(false);
   const [marksSheet, setMarksSheet] = useState(false);
@@ -244,6 +248,7 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
         { key: "siralama", icon: "podium-outline", title: "Sıralama", meta: "Türkiye ve il", onPress: () => router.push("/kulup-sehri-siralama") },
         { key: "merdiven", icon: "trending-up-outline", title: "Bütün ligler", meta: `${ladder?.current.label ?? 1}/${ladder?.steps[ladder.steps.length - 1]?.label ?? 18}`, onPress: () => router.push("/kulup-sehri-merdiven") },
         { key: "renk", icon: "color-palette-outline", title: "Kulüp renkleri", meta: kit.name, onPress: () => setKitSheet(true) },
+        { key: "jeton", icon: "disc-outline", title: "Jeton mağazası", meta: puzzleMe.data ? `${puzzleMe.data.profile.coins.toLocaleString("tr-TR")} jeton` : "Yıldız takası", onPress: () => setCoinShop(true) },
       ]
     : [];
 
@@ -506,19 +511,38 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
           Formalar, çatılar, bayraklar ve tabelalar bu renklerle boyanır.
         </Text>
         <View style={styles.kits}>
-          {CLUB_KITS.map((k) => (
-            <Touchable key={k.key} onPress={() => chooseKit(k)} style={[styles.kit, k.key === kit.key ? styles.kitOn : null]} accessibilityRole="button" accessibilityLabel={k.name}>
-              <View style={styles.kitSwatch}>
-                <View style={[styles.kitHalf, { backgroundColor: k.primary }]} />
-                <View style={[styles.kitHalf, { backgroundColor: k.secondary }]} />
-              </View>
-              <Text style={styles.kitName} numberOfLines={1} {...textScale.dense}>
-                {k.name}
-              </Text>
-            </Touchable>
-          ))}
+          {[...CLUB_KITS, ...PREMIUM_KITS].map((k) => {
+            const premium = PREMIUM_KITS.includes(k);
+            const owned = !premium || Boolean(puzzleMe.data?.profile.coin_shop?.kits.find((x) => x.key === k.key)?.owned);
+            return (
+              <Touchable
+                key={k.key}
+                onPress={() => (owned ? chooseKit(k) : (setKitSheet(false), setCoinShop(true)))}
+                style={[styles.kit, k.key === kit.key ? styles.kitOn : null]}
+                accessibilityRole="button"
+                accessibilityLabel={owned ? k.name : `${k.name}, jeton mağazasında açılır`}
+              >
+                <View style={styles.kitSwatch}>
+                  <View style={[styles.kitHalf, { backgroundColor: k.primary }]} />
+                  <View style={[styles.kitHalf, { backgroundColor: k.secondary }]} />
+                </View>
+                <Text style={styles.kitName} numberOfLines={1} {...textScale.dense}>
+                  {k.name}
+                </Text>
+                {!owned ? <Ionicons name="lock-closed" size={13} color={colors.textTertiary} /> : null}
+              </Touchable>
+            );
+          })}
         </View>
       </BottomSheet>
+      <CoinShopSheet
+        visible={coinShop}
+        onClose={() => setCoinShop(false)}
+        onKitBought={(key) => {
+          const next = PREMIUM_KITS.find((k) => k.key === key);
+          if (next) chooseKit(next);
+        }}
+      />
       <MatchStarsSheet visible={matchSheet} onClose={() => setMatchSheet(false)} detail={city2?.stars.sources.match_detail} total={city2?.stars.sources.match ?? 0} />
       <HowSheet
         visible={howSheet}
