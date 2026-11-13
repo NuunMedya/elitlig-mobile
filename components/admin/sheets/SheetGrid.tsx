@@ -408,7 +408,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   inRange: { backgroundColor: colors.brandDim },
-  active: { borderWidth: 2, borderColor: colors.brand },
+  active: { borderWidth: 2, borderColor: colors.brandAccent },
   cellText: { ...type.bodySm, color: colors.textPrimary },
   bold: { fontFamily: fonts.heading },
   italic: { fontStyle: "italic" },
