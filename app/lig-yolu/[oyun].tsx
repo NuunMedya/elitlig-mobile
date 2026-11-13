@@ -86,7 +86,7 @@ export default function PuzzleMapScreen() {
       const pre = selected.join(",");
       setLevel(null);
       setSelected([]);
-      router.push({ pathname: "/lig-yolu/oyna", params: { oyun: module.key, seviye: String(level), on: pre } });
+      router.push({ pathname: "/lig-yolu/oyna", params: { oyun: module.key, seviye: String(level), on: pre, oturum: res.play ?? "" } });
     } catch (error) {
       toast.show({ message: errorText(error), tone: "danger" });
       if ((error as { code?: string }).code === "NO_LIVES") setShop("lives");

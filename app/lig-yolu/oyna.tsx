@@ -1,5 +1,5 @@
 /**
- * LİG YOLU ▸ OYUN EKRANI — /lig-yolu/oyna?oyun=<anahtar>&seviye=<n>&on=<güçlendiriciler>
+ * LİG YOLU ▸ OYUN EKRANI — /lig-yolu/oyna?oyun=<anahtar>&seviye=<n>&on=<güçlendiriciler>&oturum=<oyun jetonu>
  *
  * Çerçeve ile oyun arasındaki köprü:
  *   · oyunun Game bileşenini çizer (tahta + oyunun kendi hedef çubuğu);
@@ -39,7 +39,9 @@ export default function PuzzlePlayScreen() {
   const navigation = useNavigation();
   const toast = useToast();
   const cache = usePuzzleCache();
-  const params = useLocalSearchParams<{ oyun?: string; seviye?: string; on?: string }>();
+  const params = useLocalSearchParams<{ oyun?: string; seviye?: string; on?: string; oturum?: string }>();
+  /** /start'ın verdiği oyun jetonu: kazanç yalnız bununla yazılır. */
+  const playToken = params.oturum ? String(params.oturum) : undefined;
   const module = puzzleGame(params.oyun);
   const level = Math.max(1, Number(params.seviye) || 1);
   const preBoosters = useMemo(() => String(params.on || "").split(",").filter(Boolean), [params.on]);
@@ -91,6 +93,7 @@ export default function PuzzlePlayScreen() {
           won: res.won,
           stars: res.won ? Math.max(1, res.stars) : 0,
           boosters_used: used.current,
+          ...(playToken ? { play: playToken } : {}),
         });
         cache(server.profile, server.game);
         setResult({ res, server });
@@ -99,7 +102,7 @@ export default function PuzzlePlayScreen() {
         setResult({ res, server: null });
       }
     },
-    [cache, level, module, toast]
+    [cache, level, module, playToken, toast]
   );
 
   /** Seviyeden çıkış: oyun sürüyorsa onay ve can kaybı. */
