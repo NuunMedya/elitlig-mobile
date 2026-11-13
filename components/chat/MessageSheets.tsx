@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { memo, useMemo, useRef, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 
+import { InboxAvatar } from "@/components/chat/AvatarArt";
 import { Avatar, BottomSheet, Button, EmptyState, ErrorState, Input, SkeletonListRow, Touchable } from "@/components/chat/kit";
 import { useConversations } from "@/hooks/useChat";
 import { getMessageInfo, type ChatConversation, type ChatMessage, type ChatParticipant } from "@/lib/api/chat";
@@ -326,25 +327,25 @@ const ForwardRow = memo(function ForwardRow({ conversation, picked, onPress }: {
 
 /* ---------- sohbet avatarı ---------- */
 
-const TYPE_ICON: Partial<Record<ChatConversation["type"], keyof typeof Ionicons.glyphMap>> = {
-  management: "shield-checkmark",
-  admin: "notifications",
-  team: "people",
-  group: "people",
-};
-
-/** Kişide fotoğraf / baş harf; grup, takım ve yönetim sohbetinde (fotoğraf yoksa) simgeli daire. */
-export const ChatAvatar = memo(function ChatAvatar({ conversation, size = 48, online }: { conversation: Pick<ChatConversation, "type" | "title" | "avatar" | "entity">; size?: number; online?: boolean }) {
+/**
+ * Sohbetin avatarı (başlık, bilgi, iletme listesi): gelen kutusuyla aynı Gece
+ * avatarı — grup / takım degrade karo, resmî sohbet mor degrade daire, kişi
+ * baş harf ya da fotoğraf. `ring` imza degradesi halkayı açar.
+ */
+export const ChatAvatar = memo(function ChatAvatar({ conversation, size = 48, online, ring = false, dotRing }: { conversation: Pick<ChatConversation, "type" | "title" | "avatar" | "entity">; size?: number; online?: boolean; ring?: boolean; dotRing?: string }) {
   const image = conversation.avatar ?? conversation.entity?.avatar ?? null;
-  const icon = TYPE_ICON[conversation.type];
-  if (icon && !image && !(conversation.type === "management" && conversation.entity)) {
-    return (
-      <View style={[styles.iconAvatar, { width: size, height: size }, isGroupChat(conversation) ? null : styles.iconAvatarBrand]}>
-        <Ionicons name={icon} size={Math.round(size * 0.5)} color={isGroupChat(conversation) ? avatarTone.glyph : colors.textOnBrand} />
-      </View>
-    );
-  }
-  return <Avatar name={conversation.title} image={image} size={size} status={online ? "online" : "none"} />;
+  return (
+    <InboxAvatar
+      type={conversation.type}
+      title={conversation.title}
+      image={image}
+      owner={conversation.type === "management" && Boolean(conversation.entity)}
+      online={online}
+      ring={ring}
+      size={Math.max(24, size - 6)}
+      dotRing={dotRing}
+    />
+  );
 });
 
 const styles = StyleSheet.create({
@@ -375,6 +376,4 @@ const styles = StyleSheet.create({
 
   search: { paddingHorizontal: layout.screenPadding, paddingBottom: space.sm },
   forwardRow: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 60, paddingHorizontal: layout.screenPadding },
-  iconAvatar: { borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: avatarTone.bg },
-  iconAvatarBrand: { backgroundColor: colors.brand },
 });

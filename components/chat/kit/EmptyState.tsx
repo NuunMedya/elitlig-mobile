@@ -27,6 +27,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { IconTile } from "@/components/ui";
 import { fonts, hairline, radius, space, textScale, type } from "@/theme";
 import { colors, elevate } from "@/lib/chatPalette";
 import { Button, type ButtonProps } from "./Button";
@@ -74,8 +75,13 @@ export const EmptyState = React.memo(function EmptyState({
       ]}
     >
       {illustration ?? (
-        <View style={styles.iconTile}>
-          <Ionicons name={icon} size={22} color={colors.textSecondary} />
+        /* Gece teması: cam halka içinde mor degrade ikon karosu, yanında iki
+           küçük "mesaj kabarcığı" süsü. */
+        <View style={styles.halo}>
+          <View style={styles.haloInner} />
+          <IconTile icon={icon} tone="violet" size={compact ? 44 : 56} />
+          <View style={[styles.spark, styles.sparkA]} />
+          <View style={[styles.spark, styles.sparkB]} />
         </View>
       )}
 
@@ -93,7 +99,7 @@ export const EmptyState = React.memo(function EmptyState({
         <Button
           label={action.label}
           onPress={action.onPress}
-          variant="secondary"
+          variant="primary"
           size="md"
           haptic={action.haptic}
           style={styles.action}
@@ -164,6 +170,28 @@ const styles = StyleSheet.create({
     marginBottom: space.sm,
     ...elevate(1),
   },
+  halo: {
+    width: 104,
+    height: 104,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: space.sm,
+    backgroundColor: colors.glass,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  haloInner: {
+    position: "absolute",
+    width: 80,
+    height: 80,
+    borderRadius: radius.pill,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+  },
+  spark: { position: "absolute", borderRadius: radius.pill },
+  sparkA: { top: 12, right: 10, width: 12, height: 12, backgroundColor: colors.brand },
+  sparkB: { bottom: 16, left: 12, width: 8, height: 8, backgroundColor: colors.gradientSignature[1] },
   title: {
     ...type.h2,
     color: colors.textPrimary,

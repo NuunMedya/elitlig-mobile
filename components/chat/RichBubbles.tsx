@@ -11,6 +11,12 @@
  *   SignupCard     "Ben talibim" görev anketi: satır satır talip ol / vazgeç
  *   AwardPollCard  Haftanın Enleri aday çağrısı → Yapılacaklar'daki aday kartı
  *
+ * GECE DİLİ (ikinci tur): kart 20 px köşeli; giden kart mor degrade, gelen
+ * kart yüzey + ışıklı kenar. Başlıkta degrade ikon karosu + tür etiketi.
+ * Anket seçenekleri yüzde ve imza degradesi çubuk (GradientBar) taşır; en çok
+ * oy alan seçenek "önde" işaretlenir. Maç kartı saat karosu + alt alta iki
+ * takım + saha / lig satırıyla bilet gibi okunur.
+ *
  * Oylar ve talipler sunucudan `chat:message:updated` olayıyla canlı güncellenir
  * (hooks/useChat.ts); kartlar yalnız `message.meta`yı çizer.
  */
@@ -20,10 +26,17 @@ import { useQuery } from "@tanstack/react-query";
 import React, { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
+import { LinearGradient } from "expo-linear-gradient";
+
 import { Touchable } from "@/components/chat/kit";
+import { GradientBar, IconTile, type IconTileTone } from "@/components/ui";
 import { getAwardStatus, type ChatMessage } from "@/lib/api/chat";
 import { chatPalette, colors } from "@/lib/chatPalette";
-import { hairline, radius, space, textScale, type } from "@/theme";
+import { fonts, glowStyle, hairline, palette, radius, space, textScale, type } from "@/theme";
+
+/** Degrade yönü: sağdan sola (açık uç sağda). */
+const G_START = { x: 1, y: 0.5 } as const;
+const G_END = { x: 0, y: 0.5 } as const;
 
 /**
  * Kartlar balon renklerinde durur (giden yeşil, gelen beyaz / gri). Vurgu rengi
@@ -42,14 +55,23 @@ const dayLabel = (ymd: string | null | undefined) => {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" });
 };
 
+/** Kart türüne göre başlık karosunun tonu. */
+const TONE_BY_ICON: Partial<Record<keyof typeof Ionicons.glyphMap, IconTileTone>> = {
+  "stats-chart": "violet",
+  football: "mint",
+  "hand-left": "gold",
+  trophy: "gold",
+};
+
 function Frame({ message, showSender, icon, label, children }: { message: ChatMessage; showSender?: boolean; icon: keyof typeof Ionicons.glyphMap; label: string; children: React.ReactNode }) {
   const mine = message.sender.is_me;
   return (
     <View style={[styles.card, mine ? styles.mine : styles.theirs]}>
+      {mine ? <LinearGradient pointerEvents="none" colors={[chatPalette.bubbleMine, chatPalette.bubbleMineEdge]} start={G_START} end={G_END} style={[StyleSheet.absoluteFill, styles.cardFill]} /> : null}
       <View style={styles.head}>
-        <Ionicons name={icon} size={14} color={ACCENT} />
+        <IconTile icon={icon} tone={TONE_BY_ICON[icon] ?? "violet"} size={26} glow={false} />
         <Text style={styles.kind} numberOfLines={1} {...textScale.badge}>
-          {label}
+          {label.toLocaleUpperCase("tr-TR")}
         </Text>
         <Text style={styles.stamp} {...textScale.badge}>
           {showSender || !mine ? `${message.sender.is_management ? "ElitLig Yönetimi" : message.sender.name ?? "Üye"} · ` : ""}
@@ -86,6 +108,7 @@ export const PollBubble = memo(function PollBubble({
   Object.values(votes).forEach((list) => (list ?? []).forEach((id) => voters.add(Number(id))));
   const total = voters.size;
   const mineIds = poll.options.filter((o) => (votes[o.id] ?? []).some((id) => Number(id) === Number(viewerId))).map((o) => o.id);
+  const top = Math.max(0, ...poll.options.map((o) => (votes[o.id] ?? []).length));
 
   const press = (optionId: string) => {
     if (busy) return;
@@ -116,18 +139,34 @@ export const PollBubble = memo(function PollBubble({
               accessibilityLabel={`${option.text}, ${count} oy`}
               style={[styles.option, selected ? styles.optionSelected : null]}
             >
-              <View style={[styles.optionFill, { width: `${Math.round(share * 100)}%` }]} pointerEvents="none" />
-              <Ionicons
-                name={selected ? (poll.multiple ? "checkbox" : "radio-button-on") : poll.multiple ? "square-outline" : "radio-button-off"}
-                size={18}
-                color={selected ? ACCENT : chatPalette.bubbleMeta}
-              />
-              <Text style={styles.optionText} {...textScale.dense}>
-                {option.text}
-              </Text>
-              <Text style={styles.optionCount} {...textScale.badge}>
-                {count}
-              </Text>
+              <View style={styles.optionLine}>
+                {selected ? (
+                  <View style={[styles.check, poll.multiple ? styles.checkSquare : null]}>
+                    <LinearGradient colors={colors.gradientBrand} start={G_START} end={G_END} style={[StyleSheet.absoluteFill, poll.multiple ? styles.checkSquare : styles.checkRound]} />
+                    <Ionicons name="checkmark" size={12} color={palette.textOnBrand} />
+                  </View>
+                ) : (
+                  <View style={[styles.check, styles.checkIdle, poll.multiple ? styles.checkSquare : null]} />
+                )}
+                <Text style={styles.optionText} numberOfLines={2} {...textScale.dense}>
+                  {option.text}
+                </Text>
+                {count > 0 && count === top ? (
+                  <View style={styles.lead}>
+                    <Ionicons name="trending-up" size={10} color={colors.win} />
+                    <Text style={styles.leadText} {...textScale.badge}>önde</Text>
+                  </View>
+                ) : null}
+                <Text style={styles.optionPct} {...textScale.badge}>
+                  %{Math.round(share * 100)}
+                </Text>
+              </View>
+              <View style={styles.optionBarRow}>
+                <GradientBar value={share} height={5} track={chatPalette.bubbleInset} style={styles.flex} />
+                <Text style={styles.optionCount} {...textScale.badge}>
+                  {count} oy
+                </Text>
+              </View>
             </Touchable>
           );
         })}
@@ -175,20 +214,34 @@ export const MatchesCard = memo(function MatchesCard({ message, showSender, onOp
               accessibilityRole="link"
               accessibilityLabel={`${match.home} - ${match.away}${match.time ? `, saat ${match.time}` : ""}`}
             >
-              <Text style={styles.matchTime} {...textScale.badge}>
-                {played ? `${match.home_score}-${match.away_score}` : match.time ?? "—"}
-              </Text>
-              <View style={styles.flex}>
-                <Text style={styles.matchTeams} numberOfLines={2} {...textScale.dense}>
-                  {match.home} – {match.away}
+              {/* Bilet: solda saat (ya da skor) karosu, ortada alt alta iki takım. */}
+              <View style={[styles.ticket, played ? styles.ticketPlayed : null]}>
+                <Text style={styles.matchTime} {...textScale.badge}>
+                  {played ? `${match.home_score}-${match.away_score}` : match.time ?? "—"}
                 </Text>
+                <Text style={styles.ticketLabel} {...textScale.badge}>{played ? "SKOR" : "SAAT"}</Text>
+              </View>
+              <View style={styles.flex}>
+                <View style={styles.teamLine}>
+                  <View style={[styles.side, styles.sideHome]} />
+                  <Text style={styles.matchTeams} numberOfLines={1} {...textScale.dense}>{match.home}</Text>
+                </View>
+                <View style={styles.teamLine}>
+                  <View style={[styles.side, styles.sideAway]} />
+                  <Text style={styles.matchTeams} numberOfLines={1} {...textScale.dense}>{match.away}</Text>
+                </View>
                 {match.field || match.league ? (
-                  <Text style={styles.muted} numberOfLines={1} {...textScale.dense}>
-                    {[match.field, match.league].filter(Boolean).join(" · ")}
-                  </Text>
+                  <View style={styles.teamLine}>
+                    <Ionicons name="location-outline" size={11} color={chatPalette.bubbleMeta} />
+                    <Text style={styles.muted} numberOfLines={1} {...textScale.dense}>
+                      {[match.field, match.league].filter(Boolean).join(" · ")}
+                    </Text>
+                  </View>
                 ) : null}
               </View>
-              <Ionicons name="chevron-forward" size={16} color={chatPalette.bubbleMeta} />
+              <View style={styles.go}>
+                <Ionicons name="chevron-forward" size={14} color={chatPalette.bubbleText} />
+              </View>
             </Touchable>
           );
         })}
@@ -322,8 +375,8 @@ export const AwardPollCard = memo(function AwardPollCard({ message, showSender, 
       ) : null}
       {total ? (
         <View style={styles.progressBox}>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${Math.round((submitted / total) * 100)}%` }]} />
+          <View>
+            <GradientBar value={total ? submitted / total : 0} height={6} track={chatPalette.bubbleInset} />
           </View>
           <Text style={styles.muted} {...textScale.dense}>
             {submitted === total ? `${total}/${total} öneri geldi · hepsi tamam` : `${submitted}/${total} öneri geldi`}
@@ -353,48 +406,58 @@ export const AwardPollCard = memo(function AwardPollCard({ message, showSender, 
 const styles = StyleSheet.create({
   slotIcon: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
   progressBox: { gap: space.xs },
-  progressTrack: { height: 6, borderRadius: 3, backgroundColor: chatPalette.bubbleInset, overflow: "hidden" },
-  progressFill: { height: 6, borderRadius: 3, backgroundColor: colors.brand },
   flex: { flex: 1, minWidth: 0 },
   card: {
     width: "86%",
-    gap: space.sm,
+    gap: space.md,
     padding: space.md,
-    borderRadius: radius.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: chatPalette.bubbleShade,
+    borderRadius: radius.xl,
   },
-  mine: { alignSelf: "flex-end", backgroundColor: chatPalette.bubbleMine },
-  theirs: { alignSelf: "flex-start", backgroundColor: chatPalette.bubbleTheirs },
-  head: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  kind: { ...type.micro, color: ACCENT, flex: 1 },
+  cardFill: { borderRadius: radius.xl },
+  mine: { alignSelf: "flex-end", backgroundColor: chatPalette.bubbleMine, ...glowStyle(colors.glow, 1), shadowOpacity: 0.18 },
+  theirs: { alignSelf: "flex-start", backgroundColor: chatPalette.bubbleTheirs, borderWidth: hairline, borderColor: chatPalette.bubbleLine },
+  head: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  kind: { ...type.overline, color: ACCENT, flex: 1 },
   stamp: { ...type.meta, color: chatPalette.bubbleMeta },
   title: { ...type.h3, color: chatPalette.bubbleText },
   body: { ...type.bodySm, color: chatPalette.bubbleText },
   muted: { ...type.caption, color: chatPalette.bubbleMeta },
   assigned: { color: colors.win },
-  options: { gap: space.xs },
+  options: { gap: space.sm },
   option: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-    minHeight: 44,
+    gap: space.s,
     paddingHorizontal: space.md,
-    borderRadius: radius.sm,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: "transparent",
+    borderColor: chatPalette.bubbleLine,
     backgroundColor: chatPalette.bubbleInset,
-    overflow: "hidden",
   },
-  optionSelected: { borderColor: colors.brand },
-  optionFill: { position: "absolute", left: 0, top: 0, bottom: 0, backgroundColor: chatPalette.pollFill },
-  optionText: { ...type.body, color: chatPalette.bubbleText, flex: 1, paddingVertical: space.sm },
-  optionCount: { ...type.numSmStrong, color: chatPalette.bubbleText },
-  rows: { borderRadius: radius.sm, borderWidth: hairline, borderColor: chatPalette.bubbleLine, backgroundColor: chatPalette.bubbleInset, overflow: "hidden" },
+  optionSelected: { borderColor: colors.brandBorder },
+  optionLine: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  optionBarRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  check: { width: 20, height: 20, alignItems: "center", justifyContent: "center", borderRadius: radius.pill },
+  checkRound: { borderRadius: radius.pill },
+  checkSquare: { borderRadius: radius.xs - 1 },
+  checkIdle: { borderWidth: 1.5, borderColor: chatPalette.bubbleMeta },
+  optionText: { ...type.label, color: chatPalette.bubbleText, flex: 1 },
+  optionPct: { ...type.numSmStrong, color: chatPalette.bubbleText },
+  optionCount: { ...type.numSm, color: chatPalette.bubbleMeta, minWidth: 34, textAlign: "right" },
+  lead: { flexDirection: "row", alignItems: "center", gap: space.xxs, paddingHorizontal: space.xs, height: 16, borderRadius: radius.pill, backgroundColor: colors.winDim },
+  leadText: { ...type.micro, color: colors.win },
+  rows: { borderRadius: radius.lg, borderWidth: hairline, borderColor: chatPalette.bubbleLine, backgroundColor: chatPalette.bubbleInset, overflow: "hidden" },
   divided: { borderTopWidth: hairline, borderTopColor: chatPalette.bubbleLine },
-  matchRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.md, paddingVertical: space.sm, minHeight: 48 },
-  matchTime: { ...type.numSmStrong, color: chatPalette.bubbleText, width: 44 },
-  matchTeams: { ...type.labelSm, color: chatPalette.bubbleText },
+  matchRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.sm, paddingVertical: space.sm, minHeight: 64 },
+  ticket: { width: 52, paddingVertical: space.s, borderRadius: radius.sm, alignItems: "center", gap: space.px, backgroundColor: chatPalette.bubbleInset, borderWidth: hairline, borderColor: colors.brandBorder },
+  ticketPlayed: { borderColor: colors.win },
+  ticketLabel: { ...type.micro, color: chatPalette.bubbleMeta },
+  matchTime: { ...type.scoreXs, color: chatPalette.bubbleText },
+  teamLine: { flexDirection: "row", alignItems: "center", gap: space.s, minWidth: 0 },
+  side: { width: 6, height: 6, borderRadius: radius.pill },
+  sideHome: { backgroundColor: colors.gradientSignature[0] },
+  sideAway: { backgroundColor: colors.gradientSignature[1] },
+  matchTeams: { ...type.labelSm, fontFamily: fonts.semibold, color: chatPalette.bubbleText, flexShrink: 1 },
+  go: { width: 26, height: 26, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: chatPalette.bubbleInset },
   slot: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, paddingVertical: space.sm },
   slotBtn: {
     flexDirection: "row",

@@ -15,6 +15,11 @@
  *   4. TEKLİFLER — GET /api/transfer-offers/outbox?status=…: web'deki durum
  *      sekmeleriyle aynı süzgeç; satır teklif belgesini açar (geri çek /
  *      revize et belgede, sunucunun `actions` alanına göre).
+ *
+ * TASARIM (gece teması): koyu mor masa sahnesi (dönen sayaçlar: cevap
+ * bekleyen · revizyon · kabul · toplam, birincil "Yeni teklif ver"); izin ve
+ * ilan blokları IconTile/avatar satırlı tek kartlar; teklifler OfferCard
+ * (durum hapı, süreç adımları, süre/izin notları).
  */
 
 import { useQuery } from "@tanstack/react-query";
@@ -23,8 +28,9 @@ import React, { useMemo, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { PanelCard, PanelEmpty, PanelRow, PanelSection } from "@/components/club/Panel";
 import { useTeamAccess } from "@/components/club/team/useTeamAccess";
+import { InkStage, ListCard, StagePill, StageStats, ToneRow } from "@/components/team/ClubKit";
+import { OfferCard } from "@/components/team/OfferCard";
 import {
   Avatar,
   Badge,
@@ -33,13 +39,12 @@ import {
   ChipGroup,
   EmptyState,
   ErrorState,
-  GradientFill,
-  ListRow,
+  Reveal,
   ScreenHeader,
-  SkeletonListRow,
+  SectionHeader,
+  Skeleton,
   useHeaderScroll,
   useRefresh,
-  type Tone,
 } from "@/components/ui";
 import { isReleaseRequest } from "@/lib/api/club/notifications";
 import { OFFER_STATUS_LABELS, OUTBOX_STATUSES, getOutboxPage, type OutboxStatus } from "@/lib/api/club/offers";
@@ -47,20 +52,7 @@ import { getPanelNotifications } from "@/lib/api/panel";
 import { getMyListings, formatMoney } from "@/lib/api/transfers";
 import { formatDateShort, mediaUrl } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, radius, space, textScale, type } from "@/theme";
-
-const STATUS_TONE: Record<string, Tone> = {
-  SENT: "warn",
-  REVISION_REQUESTED: "info",
-  ACCEPTED: "win",
-  REJECTED: "danger",
-  WITHDRAWN: "neutral",
-  EXPIRED: "neutral",
-  CANCELLED: "neutral",
-};
-
-const positionOf = (index: number, length: number) =>
-  length === 1 ? "single" : index === 0 ? "first" : index === length - 1 ? "last" : "middle";
+import { colors, layout, space, textScale, type } from "@/theme";
 
 export default function TransferDeskScreen() {
   const auth = useAuth();
@@ -142,97 +134,107 @@ export default function TransferDeskScreen() {
 
   const items = offers.data?.items ?? [];
 
+  const inProgress = counts.sent + counts.revision;
   const header = (
     <View style={styles.header}>
       {/* Birincil eylem: "teklif gönderemiyorum" şikâyetinin yanıtı. */}
-      <View style={styles.hero}>
-        <GradientFill tone="ink" radius="xxl" />
-        <Text style={styles.heroEyebrow} {...textScale.badge}>
-          TRANSFER MASASI
-        </Text>
-        <Text style={styles.heroTitle} {...textScale.dense}>
-          {counts.sent + counts.revision > 0
-            ? `${counts.sent + counts.revision} teklif süreçte`
-            : "Kadronu güçlendir"}
-        </Text>
-        <Text style={styles.heroBody} {...textScale.long}>
-          Oyuncuyu ara, şartları belirle, teklifi gönder. Oyuncu revizyon isterse yeni sürümü buradan hazırlarsın.
-        </Text>
-        <View style={styles.heroStats}>
-          <HeroStat label="Cevap bekleyen" value={counts.sent} />
-          <HeroStat label="Revizyon" value={counts.revision} />
-          <HeroStat label="Kabul" value={counts.accepted} />
-          <HeroStat label="Toplam" value={counts.total} />
-        </View>
-        <View style={styles.heroActions}>
-          <Button
-            label="Yeni teklif ver"
-            icon="add-circle-outline"
-            onPress={() => router.push("/takimim/oyuncu-ara" as Href)}
-            style={styles.flex}
-            onDark
-            haptic="medium"
+      <Reveal index={0} scaleFrom={0.97}>
+        <InkStage>
+          <View style={styles.pills}>
+            <StagePill label="Transfer masası" icon="swap-horizontal" />
+            {counts.revision ? <StagePill label={`${counts.revision} revizyon`} icon="git-compare-outline" tone="warn" /> : null}
+          </View>
+          <View>
+            <Text style={styles.heroTitle} {...textScale.dense}>
+              {inProgress > 0 ? `${inProgress} teklif süreçte` : "Kadronu güçlendir"}
+            </Text>
+            <Text style={styles.heroBody} {...textScale.long}>
+              Oyuncuyu ara, şartları belirle, teklifi gönder. Oyuncu revizyon isterse yeni sürümü buradan hazırlarsın.
+            </Text>
+          </View>
+          <StageStats
+            items={[
+              { key: "sent", label: "Bekleyen", value: counts.sent, onPress: () => setStatus("SENT") },
+              { key: "rev", label: "Revizyon", value: counts.revision, color: counts.revision ? colors.yellowCard : undefined, onPress: () => setStatus("REVISION_REQUESTED") },
+              { key: "ok", label: "Kabul", value: counts.accepted, color: counts.accepted ? colors.win : undefined, onPress: () => setStatus("ACCEPTED") },
+              { key: "all", label: "Toplam", value: counts.total, onPress: () => setStatus(null) },
+            ]}
           />
-          <Button
-            label="Borsa"
-            icon="storefront-outline"
-            variant="secondary"
-            onPress={() => router.push("/takimim/borsa")}
-            onDark
-          />
-        </View>
-      </View>
+          <View style={styles.heroActions}>
+            <Button
+              label="Yeni teklif ver"
+              icon="add-circle-outline"
+              onPress={() => router.push("/takimim/oyuncu-ara" as Href)}
+              style={styles.flex}
+              onDark
+              haptic="medium"
+            />
+            <Button
+              label="Borsa"
+              icon="storefront-outline"
+              variant="secondary"
+              onPress={() => router.push("/takimim/borsa")}
+              onDark
+            />
+          </View>
+        </InkStage>
+      </Reveal>
 
       {releases.length ? (
-        <PanelSection title="İzin bekleyen transferler" meta={`${releases.length}`} style={styles.flush}>
-          <PanelCard padded={false}>
+        <View style={styles.block}>
+          <SectionHeader title="İzin bekleyen transferler" meta={`${releases.length}`} inset="flush" />
+          <ListCard>
             {releases.slice(0, 5).map((item, index) => (
-              <PanelRow
+              <ToneRow
                 key={item.id}
                 icon="hand-left"
-                tone={item.is_read ? "neutral" : "warn"}
+                tone={item.is_read ? "neutral" : "gold"}
                 title={item.title}
-                hint={item.description ?? formatDateShort(item.createdAt)}
+                meta={item.description ?? formatDateShort(item.createdAt)}
+                stripe={item.is_read ? undefined : colors.warn}
                 onPress={() => router.push(`/transfer-izni/${item.entity_public_id}` as Href)}
                 last={index === Math.min(releases.length, 5) - 1}
               />
             ))}
-          </PanelCard>
-        </PanelSection>
+          </ListCard>
+        </View>
       ) : null}
 
-      <PanelSection
-        title="Satılık / kiralık ilanlarım"
-        meta={openListings.length ? `${openListings.length} açık` : undefined}
-        action={{ label: "Yönet", onPress: () => router.push("/takimim/borsa?bolum=ilanlarim" as Href) }}
-        style={styles.flush}
-      >
-        {openListings.length ? (
-          <PanelCard padded={false}>
-            {openListings.slice(0, 3).map((item, index) => (
-              <PanelRow
+      <View style={styles.block}>
+        <SectionHeader
+          title="Satılık / kiralık ilanlarım"
+          meta={openListings.length ? `${openListings.length} açık` : undefined}
+          action={{ label: "Yönet", onPress: () => router.push("/takimim/borsa?bolum=ilanlarim" as Href) }}
+          inset="flush"
+        />
+        <ListCard>
+          {openListings.length ? (
+            openListings.slice(0, 3).map((item, index) => (
+              <ToneRow
                 key={item.public_id}
-                leading={<Avatar name={item.player.name ?? "?"} image={mediaUrl(item.player.image ?? null)} size={layout.crestMd} />}
+                leading={<Avatar name={item.player.name ?? "?"} image={mediaUrl(item.player.image ?? null)} size={38} />}
                 title={item.player.name ?? "Oyuncu"}
-                hint={[item.type_label, item.asking_fee != null ? formatMoney(item.asking_fee) : null].filter(Boolean).join(" · ")}
+                meta={[item.player.position, item.asking_fee != null ? `İstenen ${formatMoney(item.asking_fee)}` : null].filter(Boolean).join(" · ")}
+                trailing={<Badge label={item.type_label} tone={item.listing_type === "loan" ? "info" : "warn"} size="xs" />}
                 onPress={() => router.push("/takimim/borsa?bolum=ilanlarim" as Href)}
                 last={index === Math.min(openListings.length, 3) - 1}
               />
-            ))}
-          </PanelCard>
-        ) : (
-          <PanelEmpty
-            icon="pricetag-outline"
-            text="Açık ilanın yok. Kadrondan bir oyuncuyu satılık ya da kiralık listele."
-            action={{ label: "İlan aç", onPress: () => router.push("/takimim/borsa?bolum=ilanlarim" as Href) }}
-          />
-        )}
-      </PanelSection>
+            ))
+          ) : (
+            <ToneRow
+              icon="pricetag-outline"
+              tone="neutral"
+              title="Açık ilanın yok"
+              meta="Kadrondan bir oyuncuyu satılık ya da kiralık listele"
+              onPress={() => router.push("/takimim/borsa?bolum=ilanlarim" as Href)}
+              last
+            />
+          )}
+        </ListCard>
+      </View>
 
-      <View style={styles.listHead}>
-        <Text style={styles.listTitle} {...textScale.badge}>
-          GÖNDERİLEN TEKLİFLER
-        </Text>
+      <View style={styles.block}>
+        <SectionHeader title="Gönderilen teklifler" meta={counts.total ? `${counts.total}` : undefined} inset="flush" />
         <ChipGroup contentPadding={0}>
           <Chip size="sm" label="Tümü" count={counts.total || undefined} selected={!status} onPress={() => setStatus(null)} />
           {OUTBOX_STATUSES.map((key) => (
@@ -268,7 +270,10 @@ export default function TransferDeskScreen() {
         ListHeaderComponent={header}
         ListEmptyComponent={
           offers.isLoading ? (
-            <SkeletonListRow count={5} />
+            <View style={styles.skeleton}>
+              <Skeleton height={140} radius="xl" />
+              <Skeleton height={140} radius="xl" />
+            </View>
           ) : offers.isError ? (
             <ErrorState variant="inline" error={offers.error} onRetry={offers.refetch} />
           ) : (
@@ -281,76 +286,31 @@ export default function TransferDeskScreen() {
             />
           )
         }
-        renderItem={({ item, index }) => {
-          const subtitle = [
-            item.sent_at ? `Gönderildi ${formatDateShort(item.sent_at)}` : null,
-            item.expires_at && ["SENT", "REVISION_REQUESTED"].includes(item.status) ? `Son gün ${formatDateShort(item.expires_at)}` : null,
-            item.release_status === "PENDING" ? "Mevcut takımın izni bekleniyor" : null,
-            item.release_status === "REJECTED" ? "Mevcut takım izin vermedi" : null,
-            item.requires_admin_approval && (item.admin_status ?? "PENDING") === "PENDING" && ["SENT", "REVISION_REQUESTED"].includes(item.status)
-              ? "Yönetim onayında"
-              : null,
-          ]
-            .filter(Boolean)
-            .join(" · ");
-          return (
-            <ListRow
-              leading={<Avatar name={item.player?.player_name ?? "?"} image={mediaUrl(item.player?.player_img ?? null)} size={layout.crestLg} />}
-              title={item.player?.player_name ?? "Oyuncu"}
-              subtitle={subtitle || undefined}
-              badge={<Badge label={OFFER_STATUS_LABELS[item.status] ?? item.status} tone={STATUS_TONE[item.status] ?? "neutral"} size="xs" />}
-              highlighted={item.status === "REVISION_REQUESTED"}
-              position={positionOf(index, items.length)}
-              onPress={() => router.push(`/teklif/${item.public_id}` as Href)}
-            />
-          );
-        }}
+        ItemSeparatorComponent={Gap}
+        renderItem={({ item, index }) => (
+          <Reveal index={index} limit={6} distance={8}>
+            <OfferCard offer={item} onPress={(id) => router.push(`/teklif/${id}` as Href)} />
+          </Reveal>
+        )}
       />
     </SafeAreaView>
   );
 }
 
-function HeroStat({ label, value }: { label: string; value: number }) {
-  return (
-    <View style={styles.heroStat}>
-      <Text style={styles.heroStatValue} {...textScale.badge}>
-        {value}
-      </Text>
-      <Text style={styles.heroStatLabel} numberOfLines={1} {...textScale.badge}>
-        {label}
-      </Text>
-    </View>
-  );
+function Gap() {
+  return <View style={styles.gap} />;
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { paddingHorizontal: layout.screenPadding, paddingBottom: space.giant },
   header: { paddingTop: space.md, paddingBottom: space.md },
-  hero: {
-    borderRadius: radius.xxl,
-    padding: space.lg,
-    gap: space.sm,
-    backgroundColor: colors.inkBlock,
-    overflow: "hidden",
-  },
-  heroEyebrow: { ...type.overline, color: colors.brandOnDark },
-  heroTitle: { ...type.h2, color: colors.onDark },
-  heroBody: { ...type.bodySm, color: colors.onDarkMuted },
-  heroStats: { flexDirection: "row", gap: space.sm, marginTop: space.xs },
-  heroStat: {
-    flex: 1,
-    paddingVertical: space.sm,
-    borderRadius: radius.md,
-    alignItems: "center",
-    backgroundColor: colors.glassBorder,
-  },
-  heroStatValue: { ...type.metricSm, color: colors.onDark },
-  heroStatLabel: { ...type.nano, color: colors.onDarkMuted },
-  heroActions: { flexDirection: "row", gap: space.sm, marginTop: space.xs },
-  listHead: { marginTop: space.xl, gap: space.sm },
-  listTitle: { ...type.overline, color: colors.textTertiary },
+  skeleton: { gap: space.md },
+  gap: { height: space.md },
+  pills: { flexDirection: "row", alignItems: "center", gap: space.s },
+  heroTitle: { ...type.display, color: colors.onDark },
+  heroBody: { ...type.bodySm, color: colors.onDarkMuted, marginTop: space.xs },
+  heroActions: { flexDirection: "row", gap: space.sm },
+  block: { marginTop: space.xl, gap: space.sm },
   flex: { flex: 1 },
-  /* PanelSection kendi kenar payını taşır; liste zaten paylı. */
-  flush: { paddingHorizontal: 0 },
 });

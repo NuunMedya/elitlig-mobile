@@ -19,11 +19,12 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useCallback, useMemo } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { FollowBell } from "@/components/FollowControls";
-import { FormChips, Skeleton, TeamLogo, Touchable, type FormResult } from "@/components/ui";
+import { LinearGradient } from "expo-linear-gradient";
+import { FormChips, IconTile, Skeleton, TeamLogo, Touchable, type FormResult } from "@/components/ui";
 import type { FavoriteTeam } from "@/providers/FavoriteProvider";
 import { colors, elevate, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
 
-const TILE_W = 128;
+const TILE_W = 148;
 /** elevate(1) gölgesi ScrollView kenarında kırpılmasın diye dikey pay. */
 const SHADOW_TOP = space.xs;
 const SHADOW_BOTTOM = space.lg;
@@ -95,28 +96,40 @@ const TeamTile = React.memo(function TeamTile({
       accessibilityRole="button"
       accessibilityLabel={`${team.name} takım sayfası`}
       testID={`followed-team-${team.id}`}
-      style={styles.tile}
+      style={[styles.tile, summary?.live ? styles.tileLive : null]}
     >
+      {/* Üst kenarda imza ışığı — karo "takip ettiğim" kimliğini taşır. */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={summary?.live ? colors.gradientLive : colors.gradientSignature}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={styles.topLight}
+      />
       <View style={styles.tileTop}>
-        <TeamLogo name={team.name} logo={logo} size={layout.crestLg + 4} />
+        <View style={styles.crestRing}>
+          <TeamLogo name={team.name} logo={logo} size={40} />
+        </View>
         <FollowBell target={target} size={15} />
       </View>
       <Text style={styles.name} numberOfLines={2} {...textScale.dense}>
         {team.name}
       </Text>
-      {summary ? (
-        summary.form.length ? (
-          <FormChips form={summary.form} size="xs" />
+      <View style={styles.formRow}>
+        {summary ? (
+          summary.form.length ? (
+            <FormChips form={summary.form} size="xs" />
+          ) : (
+            <Text style={styles.muted} numberOfLines={1} {...textScale.dense}>
+              Form yok
+            </Text>
+          )
         ) : (
-          <Text style={styles.muted} numberOfLines={1} {...textScale.dense}>
-            Form yok
-          </Text>
-        )
-      ) : (
-        <Skeleton width={78} height={13} />
-      )}
-      <View style={styles.countdown}>
-        {summary?.live ? <View style={styles.liveDot} /> : <Ionicons name="time-outline" size={12} color={colors.textTertiary} />}
+          <Skeleton width={78} height={13} />
+        )}
+      </View>
+      <View style={[styles.countdown, summary?.live ? styles.countdownLiveBox : null]}>
+        {summary?.live ? <View style={styles.liveDot} /> : <Ionicons name="time-outline" size={12} color={colors.brandAccent} />}
         <Text
           style={[styles.countdownText, summary?.live ? styles.countdownLive : null]}
           numberOfLines={1}
@@ -140,11 +153,12 @@ const AddTile = React.memo(function AddTile({ onPress }: { onPress: () => void }
       testID="followed-team-add"
       style={[styles.tile, styles.addTile]}
     >
-      <View style={styles.addIcon}>
-        <Ionicons name="add" size={22} color={colors.brandAccent} />
-      </View>
-      <Text style={[styles.name, styles.addLabel]} numberOfLines={2} {...textScale.dense}>
-        Takip et
+      <IconTile icon="add" tone="signature" size={44} />
+      <Text style={[styles.name, styles.addLabel]} numberOfLines={1} {...textScale.dense}>
+        Takım ekle
+      </Text>
+      <Text style={styles.addHint} numberOfLines={2} {...textScale.dense}>
+        Ara, yıldızla takip et
       </Text>
     </Touchable>
   );
@@ -163,38 +177,69 @@ const styles = StyleSheet.create({
   },
   tile: {
     width: TILE_W,
-    gap: space.s,
-    padding: space.m,
+    gap: space.sm,
+    padding: space.md,
+    paddingTop: space.md + 2,
     borderRadius: radius.xl,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
     borderColor: colors.border,
+    overflow: "hidden",
     ...elevate(1),
+  },
+  tileLive: {
+    borderColor: colors.live,
+  },
+  topLight: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
   },
   tileTop: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
   },
+  crestRing: {
+    padding: 3,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
   name: {
-    ...type.h4,
+    ...type.h3,
     color: colors.textPrimary,
-    minHeight: type.h4.lineHeight * 2,
+    minHeight: type.h3.lineHeight * 2,
+  },
+  formRow: {
+    minHeight: 18,
+    justifyContent: "center",
   },
   muted: {
     ...type.caption,
     color: colors.textTertiary,
-    lineHeight: 13,
   },
   countdown: {
     flexDirection: "row",
     alignItems: "center",
+    alignSelf: "flex-start",
     gap: space.xs,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xxs + 1,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brandDim,
+    maxWidth: "100%",
+  },
+  countdownLiveBox: {
+    backgroundColor: colors.liveDim,
   },
   countdownText: {
     ...type.caption,
     fontFamily: fonts.semibold,
-    color: colors.textSecondary,
+    color: colors.brandAccent,
     flexShrink: 1,
   },
   countdownLive: {
@@ -215,17 +260,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
     elevation: 0,
   },
-  addIcon: {
-    width: layout.crestLg + 8,
-    height: layout.crestLg + 8,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.brandDim,
-  },
   addLabel: {
     color: colors.brandAccent,
     textAlign: "center",
     minHeight: 0,
+    marginTop: space.xs,
+  },
+  addHint: {
+    ...type.caption,
+    color: colors.textTertiary,
+    textAlign: "center",
   },
 });

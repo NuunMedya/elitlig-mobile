@@ -11,11 +11,12 @@
  * sihirbazında yazılır; burada sayısı görünür ve kayıtta korunur.
  */
 
+import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { ChipsField, DateField, FieldLabel, Panel, SegmentField, SelectField, ToggleField } from "@/components/admin";
-import { Button, Input } from "@/components/ui";
+import { ChipsField, DateField, FieldLabel, SegmentField, SelectField, ToggleField } from "@/components/admin";
+import { Badge, Button, Input, Touchable } from "@/components/ui";
 import {
   CARRY_LABELS,
   LEAGUE_CATEGORY_LABELS,
@@ -31,7 +32,7 @@ import {
   type RosterPeriod,
   type RosterState,
 } from "@/lib/api/admin/leagues";
-import { colors, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 const toInt = (text: string): number | null => {
   const n = parseInt(text.replace(/[^\d-]/g, ""), 10);
@@ -98,10 +99,49 @@ function PeriodCard({
   const categories = Array.isArray(period.licensed_league_categories) ? period.licensed_league_categories : [];
   const eligibility = Array.isArray(period.eligibilityRules) ? period.eligibilityRules.length : 0;
 
+  /* Başlıktaki özet hapları: sınırı sayıyla verilmiş alanlar. */
+  const limitPills = LIMIT_FIELDS.filter((f) => String(period[`${f.key}_type`] ?? f.types[0]) === "FINITE" && period[`${f.key}_value`] != null).map(
+    (f) => `${f.label} ${period[`${f.key}_value`]}`
+  );
+
   return (
-    <Panel title={`${index + 1}. DÖNEM`} action={onRemove ? { label: "Kaldır", onPress: onRemove } : undefined}>
+    <View style={styles.period}>
+      {/* Zaman çizelgesi: numaralı pul + sonraki döneme inen çizgi. */}
+      <View style={styles.timeline}>
+        <View style={styles.periodDot}>
+          <Text style={styles.periodNo} {...textScale.badge}>
+            {index + 1}
+          </Text>
+        </View>
+        {!last ? <View style={styles.periodLine} /> : null}
+      </View>
+      <View style={styles.periodCard}>
+        <View style={styles.periodHead}>
+          <View style={styles.flex}>
+            <Text style={styles.periodTitle} numberOfLines={1} {...textScale.dense}>
+              {String(period.name ?? "").trim() || `${index + 1}. dönem`}
+            </Text>
+            <Text style={styles.periodMeta} numberOfLines={2} {...textScale.dense}>
+              {START_LABELS[String(period.start_type)] ?? "Başlangıç"} → {VALIDITY_LABELS[String(period.validity_type)] ?? "Geçerlilik"}
+            </Text>
+          </View>
+          {onRemove ? (
+            <Touchable onPress={onRemove} feedback="icon" haptic="light" style={styles.remove} accessibilityRole="button" accessibilityLabel={`${index + 1}. dönemi kaldır`}>
+              <Ionicons name="trash-outline" size={16} color={colors.danger} />
+            </Touchable>
+          ) : null}
+        </View>
+        {limitPills.length || eligibility ? (
+          <View style={styles.pills}>
+            {limitPills.map((label) => (
+              <Badge key={label} label={label} tone="brand" size="xs" />
+            ))}
+            {eligibility ? <Badge label={`${eligibility} oynama şartı`} tone="info" size="xs" /> : null}
+          </View>
+        ) : null}
       <View style={styles.stack}>
-        <Input label="Dönem adı (isteğe bağlı)" value={String(period.name ?? "")} onChangeText={(t) => onPatch({ name: t })} placeholder="ör. Sezon başı" />
+        <SubHead icon="time-outline" label="Zaman" />
+        <Input label="Dönem adı (isteğe bağlı)" floating value={String(period.name ?? "")} onChangeText={(t) => onPatch({ name: t })} placeholder="ör. Sezon başı" />
 
         <SelectField<string>
           label="Başlangıç"
@@ -137,9 +177,7 @@ function PeriodCard({
           />
         ) : null}
 
-        <Text style={styles.section} {...textScale.dense}>
-          SINIRLAR
-        </Text>
+        <SubHead icon="people-outline" label="Sınırlar" />
         {LIMIT_FIELDS.map((field) => {
           const typeKey = `${field.key}_type`;
           const valueKey = `${field.key}_value`;
@@ -186,9 +224,7 @@ function PeriodCard({
           />
         ) : null}
 
-        <Text style={styles.section} {...textScale.dense}>
-          LİSANS
-        </Text>
+        <SubHead icon="id-card-outline" label="Lisans" />
         <SelectField<string>
           label="Lisans geçerliliği"
           value={(period.license_valid_from_type as string) ?? ""}
@@ -225,14 +261,64 @@ function PeriodCard({
           </View>
         ) : null}
       </View>
-    </Panel>
+      </View>
+    </View>
+  );
+}
+
+function SubHead({ icon, label }: { icon: keyof typeof Ionicons.glyphMap; label: string }) {
+  return (
+    <View style={styles.subHead}>
+      <Ionicons name={icon} size={13} color={colors.brandAccent} />
+      <Text style={styles.section} {...textScale.dense}>
+        {label.toLocaleUpperCase("tr-TR")}
+      </Text>
+      <View style={styles.subLine} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   stack: { gap: space.md },
+  flex: { flex: 1, minWidth: 0 },
+  period: { flexDirection: "row", gap: space.m },
+  timeline: { alignItems: "center", width: 28 },
+  periodDot: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brandAccent,
+  },
+  periodNo: { ...type.numSmStrong, color: colors.onDark },
+  periodLine: { flex: 1, width: 2, marginTop: space.xs, borderRadius: 1, backgroundColor: colors.brandBorder },
+  periodCard: {
+    flex: 1,
+    minWidth: 0,
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  periodHead: { flexDirection: "row", alignItems: "flex-start", gap: space.sm },
+  periodTitle: { ...type.h3, color: colors.textPrimary },
+  periodMeta: { ...type.caption, color: colors.textTertiary, marginTop: space.xxs },
+  remove: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.dangerDim,
+  },
+  pills: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
+  subHead: { flexDirection: "row", alignItems: "center", gap: space.xs, marginTop: space.xs },
+  subLine: { flex: 1, height: hairline, backgroundColor: colors.separator, marginLeft: space.xs },
   field: { gap: space.xs },
   limit: { gap: space.xs },
-  section: { ...type.overline, color: colors.textTertiary, marginTop: space.xs },
+  section: { ...type.overline, color: colors.textSecondary },
   hint: { ...type.bodySm, color: colors.textSecondary },
 });

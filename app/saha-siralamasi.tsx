@@ -28,21 +28,26 @@ import React, { useMemo, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { LinearGradient } from "expo-linear-gradient";
 import {
   Avatar,
   Chip,
   ChipGroup,
   EmptyState,
   ErrorState,
+  Odometer,
+  RankBadge,
+  Reveal,
   ScreenHeader,
   SegmentedControl,
-  SkeletonCard,
+  SkeletonHero,
+  SkeletonListRow,
   TeamLogo,
   Touchable,
   useRefresh,
-  withAlpha,
   type SegmentedItem,
 } from "@/components/ui";
+import { SignatureStripe, StageCard, StatPill } from "@/components/league/kit";
 import {
   getSahaLeaderboard,
   getXpLeaderboard,
@@ -55,7 +60,7 @@ import {
 import { formatDateShort } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, elevate, glowStyle, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 type Kind = LeaderType | "xp";
 const TYPES: SegmentedItem<Kind>[] = [
@@ -96,8 +101,6 @@ const PERIODS: SegmentedItem<PeriodKind>[] = [
   { key: "week", label: "Haftalık" },
   { key: "month", label: "Aylık" },
 ];
-// Rekor Tablosu ile aynı podyum tonları (altın · gümüş · bronz).
-const MEDALS = [colors.yellowCard, colors.onDarkMuted, colors.zoneRelegationPlayoff];
 
 export default function SahaSiralamasiScreen() {
   const router = useRouter();
@@ -147,60 +150,115 @@ export default function SahaSiralamasiScreen() {
   const header = (
     <View style={styles.head}>
       <SegmentedControl items={TYPES} value={kind} onChange={setKind} stretch />
-      {kind === "xp" ? (
-        <SegmentedControl items={XP_PERIODS} value={xpPeriod} onChange={setXpPeriod} stretch />
-      ) : (
-        <SegmentedControl items={PERIODS} value={period} onChange={(next) => { setPeriod(next); setOffset(0); }} stretch />
-      )}
-      <ChipGroup contentPadding={0}>
+      <View style={styles.controlRow}>
+        <View style={styles.flex}>
+          {kind === "xp" ? (
+            <SegmentedControl items={XP_PERIODS} value={xpPeriod} onChange={setXpPeriod} size="sm" stretch />
+          ) : (
+            <SegmentedControl items={PERIODS} value={period} onChange={(next) => { setPeriod(next); setOffset(0); }} size="sm" stretch />
+          )}
+        </View>
+        {kind !== "xp" ? (
+          <Chip
+            label={offset ? (period === "week" ? "Bu hafta" : "Bu ay") : period === "week" ? "Geçen hafta" : "Geçen ay"}
+            icon={offset ? "arrow-forward" : "time-outline"}
+            selected={offset > 0}
+            onPress={() => setOffset(offset ? 0 : 1)}
+            size="sm"
+          />
+        ) : null}
+      </View>
+      <ChipGroup contentPadding={layout.screenPadding} style={styles.bleed}>
         <Chip label="Türkiye" icon="earth-outline" selected={cityId == null} onPress={() => setCityId(null)} size="sm" />
         {cities.map((city) => (
           <Chip key={city.id} label={city.label} selected={cityId === city.id} onPress={() => setCityId(city.id)} size="sm" />
         ))}
       </ChipGroup>
-      <View style={styles.metaRow}>
-        <View style={styles.flex}>
-          <Text style={styles.metaTitle} {...textScale.dense}>
-            {`${data?.label ?? (cityId ? "İl" : "Türkiye")} · ${periodLabel}`}
-          </Text>
-          <Text style={styles.caption} {...textScale.dense}>
-            {data ? `${range}${data.total} ${unit}` : " "}
-          </Text>
-        </View>
-        {kind !== "xp" ? (
-          <Chip label={offset ? (period === "week" ? "Bu hafta" : "Bu ay") : period === "week" ? "Geçen hafta" : "Geçen ay"} icon="time-outline" onPress={() => setOffset(offset ? 0 : 1)} size="sm" />
-        ) : null}
+
+      {/* ÖZET SAHNESİ — kapsam, dönem, katılımcı sayısı ve podyum tek blokta. */}
+      {data ? (
+        <Reveal>
+          <StageCard style={styles.stage}>
+            <View style={styles.stageTop}>
+              <View style={styles.flex}>
+                <Text style={styles.stageOver} {...textScale.badge}>
+                  {upperTR(`${data.label ?? (cityId ? "İl" : "Türkiye")} · ${periodLabel}`)}
+                </Text>
+                <Text style={styles.stageRange} numberOfLines={1} {...textScale.dense}>
+                  {range ? range.replace(/ · $/, "") : kind === "xp" ? "Elit Seviye XP'si" : "Saha sıralaması"}
+                </Text>
+              </View>
+              <View style={styles.stageCount}>
+                <Odometer value={data.total} style={styles.stageCountValue} />
+                <Text style={styles.stageCountUnit} {...textScale.badge}>
+                  {upperTR(unit)}
+                </Text>
+              </View>
+            </View>
+            {data.rows.length >= 3 ? (
+              <Podium rows={data.rows.slice(0, 3)} kind={kind} onPress={open} isMine={isMine} />
+            ) : null}
+          </StageCard>
+        </Reveal>
+      ) : null}
+
+      <View style={styles.ruleRow}>
+        <Ionicons name="information-circle-outline" size={14} color={colors.textTertiary} />
+        <Text style={styles.rule} {...textScale.long}>
+          {kind === "players"
+            ? "Puan: dönemde oynadığın maçların saha XP'si (maç, gol, asist, kurtarış, reyting, galibiyet, kartsız)."
+            : kind === "teams"
+              ? "Puan: maç başına 10, galibiyet başına 5 + biten takım görevleri. Daha çok maç, daha çok puan."
+              : "Elit Seviye XP'si: maçlar, görevler, rozetler, tahminler ve oyunlar. Kariyerim'i açtıkça XP'n güncellenir."}
+        </Text>
       </View>
-      <Text style={styles.rule} {...textScale.long}>
-        {kind === "players"
-          ? "Puan: dönemde oynadığın maçların saha XP'si (maç, gol, asist, kurtarış, reyting, galibiyet, kartsız)."
-          : kind === "teams"
-            ? "Puan: maç başına 10, galibiyet başına 5 + biten takım görevleri. Daha çok maç, daha çok puan."
-            : "Elit Seviye XP'si: maçlar, görevler, rozetler, tahminler ve oyunlar. Kariyerim'i açtıkça XP'n güncellenir."}
-      </Text>
-      {meOutside ? <Row row={meOutside} kind={kind} mine onPress={() => open(meOutside)} pinned /> : null}
-      {data && data.rows.length >= 3 ? <Podium rows={data.rows.slice(0, 3)} kind={kind} onPress={open} isMine={isMine} /> : null}
+      {meOutside ? (
+        <View style={styles.pinnedWrap}>
+          <Text style={styles.pinnedLabel} {...textScale.badge}>
+            {upperTR("Senin sıran")}
+          </Text>
+          <Row row={meOutside} kind={kind} mine onPress={() => open(meOutside)} pinned />
+        </View>
+      ) : null}
+      {data && data.rows.length > 3 ? (
+        <Text style={styles.listLabel} {...textScale.badge}>
+          {upperTR("Sıralama")}
+        </Text>
+      ) : null}
     </View>
   );
 
+  const listRows = data ? (data.rows.length >= 3 ? data.rows.slice(3) : data.rows) : [];
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader title="Saha Sıralaması" back />
+      <ScreenHeader title="Saha Sıralaması" subtitle="Sahadaki emeğin haftalık tablosu" back />
       {query.isLoading ? (
         <View style={styles.pad}>
-          <SkeletonCard lines={3} />
-          <SkeletonCard lines={8} />
+          <SkeletonHero />
+          <SkeletonListRow count={6} />
         </View>
       ) : query.isError || !data ? (
         <ErrorState error={query.error} onRetry={query.refetch} />
       ) : (
         <FlatList
-          data={data.rows.length >= 3 ? data.rows.slice(3) : data.rows}
+          data={listRows}
           keyExtractor={(row) => `${kind}-${row.user_id ?? row.player_id ?? row.id}`}
           ListHeaderComponent={header}
           contentContainerStyle={styles.content}
           refreshControl={refresh.control}
-          renderItem={({ item, index }) => <Row row={item} kind={kind} mine={isMine(item)} first={index === 0} onPress={() => open(item)} />}
+          renderItem={({ item, index }) => (
+            <Reveal index={index} limit={8}>
+              <Row
+                row={item}
+                kind={kind}
+                mine={isMine(item)}
+                first={index === 0}
+                last={index === listRows.length - 1}
+                onPress={() => open(item)}
+              />
+            </Reveal>
+          )}
           ListEmptyComponent={
             data.rows.length ? null : (
               <EmptyState
@@ -247,61 +305,96 @@ function Leading({ row, kind, size }: { row: SahaLeaderRow; kind: Kind; size: nu
   return kind !== "teams" ? <Avatar name={row.name} image={row.image ?? null} size={size} /> : <TeamLogo name={row.name} logo={row.logo ?? null} size={size} />;
 }
 
-function Row({ row, kind, mine, first, pinned, onPress }: { row: SahaLeaderRow; kind: Kind; mine?: boolean; first?: boolean; pinned?: boolean; onPress: () => void }) {
+/**
+ * Sıralama satırı. Satırlar tek bir grup kartının dilimleridir (ilk satır
+ * üst, son satır alt köşeleri yuvarlar). Sıra solda tabular rakam; puan
+ * sağda değer hapı. Kendi satırın `brandDim` zemin + imza şeridi taşır;
+ * listenin dışındaysan üstte ayrı, çerçeveli bir kart olarak sabitlenir.
+ */
+function Row({ row, kind, mine, first, last, pinned, onPress }: { row: SahaLeaderRow; kind: Kind; mine?: boolean; first?: boolean; last?: boolean; pinned?: boolean; onPress: () => void }) {
   return (
-    <Touchable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${row.rank}. ${row.name}, ${row.score} puan`}>
-      <View style={[styles.row, !first && !pinned && styles.rowBorder, mine && styles.rowMine, pinned && styles.rowPinned]}>
+    <Touchable
+      feedback="row"
+      haptic="selection"
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${row.rank}. ${row.name}, ${row.score} puan`}
+      style={[
+        styles.row,
+        pinned ? styles.rowPinned : [first ? styles.rowFirst : styles.rowBorder, last ? styles.rowLast : null],
+        mine ? styles.rowMine : null,
+      ]}
+    >
+      {mine ? <SignatureStripe /> : null}
+      {row.rank <= 3 ? (
+        <RankBadge rank={row.rank} size={26} style={styles.rankBadge} />
+      ) : (
         <Text style={[styles.rank, mine && styles.rankMine]} {...textScale.dense}>
           {row.rank}
         </Text>
-        <Leading row={row} kind={kind} size={36} />
-        <View style={styles.flex}>
-          <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
-            {pinned ? `${row.name} · sen` : row.name}
-          </Text>
-          <Text style={styles.caption} numberOfLines={1} {...textScale.dense}>
-            {subtitleOf(row, kind)}
-          </Text>
-        </View>
-        <View style={styles.scoreBox}>
-          <Text style={styles.score} {...textScale.dense}>
-            {row.score.toLocaleString("tr-TR")}
-          </Text>
-          <Text style={styles.scoreUnit} {...textScale.badge}>
-            {kind === "teams" ? upperTR("puan") : "XP"}
-          </Text>
-        </View>
+      )}
+      <Leading row={row} kind={kind} size={38} />
+      <View style={styles.flex}>
+        <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
+          {row.name}
+          {mine ? <Text style={styles.youTag}>{"  · sen"}</Text> : null}
+        </Text>
+        <Text style={styles.caption} numberOfLines={1} {...textScale.dense}>
+          {subtitleOf(row, kind)}
+        </Text>
       </View>
+      <StatPill value={row.score.toLocaleString("tr-TR")} unit={kind === "teams" ? "PUAN" : "XP"} tone={mine ? "brand" : "neutral"} minWidth={56} />
     </Touchable>
   );
 }
 
+/** Podyum basamak yükseklikleri (dizin = sıra − 1). */
+const STEP_HEIGHT = [58, 42, 30] as const;
+const MEDAL_GRADIENT = [colors.medalGold, colors.medalSilver, colors.medalBronze] as const;
+
+/**
+ * Sahnenin içindeki podyum: 2 · 1 · 3 düzeni, madalya degradeli halka +
+ * `RankBadge`, basamak üstünde puan. Birinci büyük ve ışık halkalı.
+ */
 function Podium({ rows, kind, onPress, isMine }: { rows: SahaLeaderRow[]; kind: Kind; onPress: (row: SahaLeaderRow) => void; isMine: (row: SahaLeaderRow) => boolean }) {
-  // ikinci · birinci · üçüncü
-  const order = [rows[1], rows[0], rows[2]];
+  const order = [1, 0, 2];
   return (
     <View style={styles.podium}>
-      {order.map((row, i) => {
-        const place = i === 1 ? 0 : i === 0 ? 1 : 2;
-        const medal = MEDALS[place];
+      {order.map((place, column) => {
+        const row = rows[place];
+        if (!row) return <View key={`empty-${place}`} style={styles.podiumCol} />;
+        const first = place === 0;
+        const medal = MEDAL_GRADIENT[place];
         return (
-          <Touchable key={`${row.user_id ?? row.player_id ?? row.id}`} onPress={() => onPress(row)} style={styles.podiumCol} accessibilityRole="button" accessibilityLabel={`${row.rank}. ${row.name}`}>
-            <View style={[styles.podiumRing, { borderColor: medal }, isMine(row) && styles.podiumMine]}>
-              <Leading row={row} kind={kind} size={place === 0 ? 60 : 48} />
-            </View>
-            <View style={[styles.medal, { borderColor: medal }]}>
-              <Text style={styles.medalText} {...textScale.badge}>
-                {row.rank}
+          <Reveal key={`${row.user_id ?? row.player_id ?? row.id}`} index={column + 1} distance={14} style={styles.podiumCol}>
+            <Touchable
+              feedback="card"
+              haptic="selection"
+              onPress={() => onPress(row)}
+              style={styles.podiumInner}
+              accessibilityRole="button"
+              accessibilityLabel={`${row.rank}. ${row.name}, ${row.score} ${kind === "teams" ? "puan" : "XP"}`}
+            >
+              <View style={styles.podiumAvatar}>
+                <View style={[styles.podiumRing, { borderColor: medal[0] }, first ? glowStyle(medal[1], 2) : null, isMine(row) ? styles.podiumMine : null]}>
+                  <Leading row={row} kind={kind} size={first ? 58 : 44} />
+                </View>
+                <RankBadge rank={row.rank} size={first ? 24 : 20} style={styles.podiumMedal} />
+              </View>
+              <Text style={first ? styles.podiumNameFirst : styles.podiumName} numberOfLines={first ? 2 : 1} {...textScale.dense}>
+                {row.name}
               </Text>
-            </View>
-            <Text style={styles.podiumName} numberOfLines={2} {...textScale.dense}>
-              {row.name}
-            </Text>
-            <Text style={styles.podiumScore} {...textScale.dense}>
-              {`${row.score.toLocaleString("tr-TR")} ${kind === "teams" ? "puan" : "XP"}`}
-            </Text>
-            <View style={[styles.podiumBase, { height: place === 0 ? 34 : place === 1 ? 24 : 16, backgroundColor: withAlpha(medal, 0.3) }]} />
-          </Touchable>
+              <View style={[styles.step, { height: STEP_HEIGHT[place] }]}>
+                <LinearGradient colors={medal} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.stepTop} />
+                <Text style={first ? styles.stepValueFirst : styles.stepValue} numberOfLines={1} {...textScale.dense}>
+                  {row.score.toLocaleString("tr-TR")}
+                </Text>
+                <Text style={styles.stepUnit} {...textScale.badge}>
+                  {kind === "teams" ? "PUAN" : "XP"}
+                </Text>
+              </View>
+            </Touchable>
+          </Reveal>
         );
       })}
     </View>
@@ -310,32 +403,87 @@ function Podium({ rows, kind, onPress, isMine }: { rows: SahaLeaderRow[]; kind: 
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  flex: { flex: 1 },
+  flex: { flex: 1, minWidth: 0 },
   pad: { padding: layout.screenPadding, gap: space.md },
   content: { paddingHorizontal: layout.screenPadding, paddingBottom: space.giant },
-  head: { gap: space.md, paddingTop: space.md, paddingBottom: space.md },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: space.s },
-  metaTitle: { ...type.h3, color: colors.textPrimary },
-  caption: { ...type.caption, color: colors.textSecondary },
-  rule: { ...type.caption, color: colors.textTertiary },
-  footer: { ...type.caption, color: colors.textTertiary, textAlign: "center", marginTop: space.md },
-  row: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, paddingVertical: space.sm, backgroundColor: colors.surface1 },
-  rowBorder: { borderTopWidth: hairline, borderTopColor: colors.separator },
-  rowMine: { backgroundColor: withAlpha(colors.accent, 0.12) },
-  rowPinned: { borderRadius: radius.lg, borderWidth: hairline, borderColor: colors.accent },
-  rank: { ...type.label, color: colors.textTertiary, width: 28, textAlign: "center" },
-  rankMine: { color: colors.accentText },
-  name: { ...type.label, color: colors.textPrimary },
-  scoreBox: { alignItems: "flex-end" },
-  score: { ...type.h3, color: colors.textPrimary },
-  scoreUnit: { ...type.overline, color: colors.textTertiary },
-  podium: { flexDirection: "row", alignItems: "flex-end", gap: space.s, paddingTop: space.s },
-  podiumCol: { flex: 1, alignItems: "center", gap: space.xxs },
+  head: { gap: space.md, paddingTop: space.md, paddingBottom: space.sm },
+  bleed: { marginHorizontal: -layout.screenPadding },
+  controlRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
+
+  /* Sahne */
+  stage: { paddingTop: space.md, paddingBottom: 0 },
+  stageTop: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg },
+  stageOver: { ...type.overline, color: colors.brandOnDark },
+  stageRange: { ...type.h4, color: colors.onDark, marginTop: space.xxs },
+  stageCount: {
+    alignItems: "center",
+    paddingHorizontal: space.m,
+    paddingVertical: space.xs,
+    borderRadius: radius.md,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
+  },
+  stageCountValue: { ...type.scoreSm, color: colors.onDark },
+  stageCountUnit: { ...type.micro, color: colors.onDarkMuted },
+
+  podium: { flexDirection: "row", alignItems: "flex-end", gap: space.sm, paddingHorizontal: space.md, paddingTop: space.md },
+  podiumCol: { flex: 1, minWidth: 0 },
+  podiumInner: { alignItems: "center", gap: space.px },
+  podiumAvatar: { alignItems: "center", marginBottom: space.m },
   podiumRing: { borderWidth: 2, borderRadius: radius.pill, padding: 2 },
-  podiumMine: { shadowColor: colors.accent, shadowOpacity: 0.6, shadowRadius: 8 },
-  medal: { marginTop: -12, minWidth: 24, height: 24, borderRadius: radius.pill, borderWidth: 2, backgroundColor: colors.surface1, alignItems: "center", justifyContent: "center", paddingHorizontal: space.xs },
-  medalText: { ...type.overline, color: colors.textPrimary },
-  podiumName: { ...type.label, color: colors.textPrimary, textAlign: "center" },
-  podiumScore: { ...type.caption, color: colors.textSecondary },
-  podiumBase: { alignSelf: "stretch", borderTopLeftRadius: radius.md, borderTopRightRadius: radius.md, marginTop: space.xs },
+  podiumMine: { borderStyle: "dashed" },
+  podiumMedal: { position: "absolute", bottom: -9, alignSelf: "center" },
+  podiumName: { ...type.labelSm, color: colors.onDark, textAlign: "center", alignSelf: "stretch" },
+  podiumNameFirst: { ...type.h4, color: colors.onDark, textAlign: "center", alignSelf: "stretch" },
+  step: {
+    alignSelf: "stretch",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: space.s,
+    borderTopLeftRadius: radius.md,
+    borderTopRightRadius: radius.md,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderBottomWidth: 0,
+    borderColor: colors.inkTileBorder,
+    overflow: "hidden",
+  },
+  stepTop: { position: "absolute", top: 0, left: 0, right: 0, height: 3 },
+  stepValue: { ...type.scoreXs, color: colors.onDark },
+  stepValueFirst: { ...type.scoreMd, color: colors.onDark },
+  stepUnit: { ...type.micro, color: colors.onDarkMuted },
+
+  ruleRow: { flexDirection: "row", alignItems: "flex-start", gap: space.s, paddingHorizontal: space.xxs },
+  rule: { ...type.caption, color: colors.textTertiary, flex: 1 },
+  pinnedWrap: { gap: space.s },
+  pinnedLabel: { ...type.overline, color: colors.brandAccent, paddingHorizontal: space.xxs },
+  listLabel: { ...type.overline, color: colors.textTertiary, paddingHorizontal: space.xxs, marginTop: space.xs },
+  footer: { ...type.caption, color: colors.textTertiary, textAlign: "center", marginTop: space.md },
+
+  /* Satır */
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.m,
+    minHeight: 60,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    backgroundColor: colors.surface1,
+    borderLeftWidth: hairline,
+    borderRightWidth: hairline,
+    borderColor: colors.border,
+    overflow: "hidden",
+  },
+  rowFirst: { borderTopWidth: hairline, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl },
+  rowBorder: { borderTopWidth: hairline, borderTopColor: colors.separator },
+  rowLast: { borderBottomWidth: hairline, borderBottomLeftRadius: radius.xl, borderBottomRightRadius: radius.xl },
+  rowMine: { backgroundColor: colors.brandDim },
+  rowPinned: { borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.brandBorder, ...elevate(1) },
+  rank: { ...type.tableNumStrong, color: colors.textTertiary, width: 26, textAlign: "center" },
+  rankBadge: { marginHorizontal: 0 },
+  rankMine: { color: colors.brandAccent },
+  name: { ...type.h4, color: colors.textPrimary },
+  youTag: { color: colors.brandAccent },
+  caption: { ...type.caption, color: colors.textTertiary, marginTop: space.xxs },
 });

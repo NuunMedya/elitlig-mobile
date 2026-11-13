@@ -53,11 +53,15 @@ import {
   InboxSection,
   InboxSkeleton,
   PersonRow,
+  QUICK_RAIL_HEIGHT,
+  QuickRail,
+  type RowPosition,
+  type SwipeAction,
 } from "@/components/chat/InboxRow";
 import { ActionMenu, type MessageMenuItem } from "@/components/chat/MessageSheets";
 import { useConversationActions } from "@/components/chat/useConversationActions";
 import { ChatStatusBar, EmptyState, ErrorState, errorMessage, useRefresh } from "@/components/chat/kit";
-import { useFabAutoHide, useReduceMotion, useToast } from "@/components/ui";
+import { Reveal, useFabAutoHide, useReduceMotion, useToast } from "@/components/ui";
 import { useAdminConversations, useConversations } from "@/hooks/useChat";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { adminChat, getDirectory, openConversation, searchMessages, type ChatConversation, type ChatSearchHit, type ChatUser } from "@/lib/api/chat";
@@ -78,11 +82,29 @@ const normalize = (value: string) => value.toLocaleLowerCase("tr-TR");
 
 type Row =
   | { type: "archive"; key: string; count: number; unread: number }
-  | { type: "chat"; key: string; conversation: ChatConversation; inbox: boolean }
+  | { type: "chat"; key: string; conversation: ChatConversation; inbox: boolean; position?: RowPosition }
   | { type: "section"; key: string; title: string; count?: number }
-  | { type: "hit"; key: string; hit: ChatSearchHit }
-  | { type: "person"; key: string; user: ChatUser }
+  | { type: "hit"; key: string; hit: ChatSearchHit; position?: RowPosition }
+  | { type: "person"; key: string; user: ChatUser; position?: RowPosition }
   | { type: "note"; key: string; text: string };
+
+/** Hızlı erişim şeridindeki en çok sohbet. */
+const MAX_RAIL = 10;
+
+/**
+ * Ardışık sohbet / sonuç / kişi satırları tek kart olur: ilk satır üst, son
+ * satır alt köşeleri yuvarlar. Bölüm başlığı, not ve arşiv satırı kartı böler.
+ */
+function withPositions(rows: Row[]): Row[] {
+  const carded = (row: Row | undefined) => row?.type === "chat" || row?.type === "hit" || row?.type === "person";
+  return rows.map((row, index) => {
+    if (!carded(row)) return row;
+    const prev = carded(rows[index - 1]);
+    const next = carded(rows[index + 1]);
+    const position: RowPosition = prev ? (next ? "middle" : "last") : next ? "first" : "single";
+    return { ...row, position } as Row;
+  });
+}
 
 const rowHeight = (row: Row): number =>
   row.type === "archive" ? INBOX_ARCHIVE_HEIGHT : row.type === "section" ? INBOX_SECTION_HEIGHT : row.type === "note" ? INBOX_NOTE_HEIGHT : INBOX_ROW_HEIGHT;
@@ -203,7 +225,9 @@ export function ChatInbox({ admin = false, embedded = false, headerActions, onSc
     return out.slice(0, MAX_PEOPLE);
   }, [deepSearch, directory.data, meId, presenceIds]);
 
-  const rows = useMemo<Row[]>(() => {
+  const rows = useMemo<Row[]>(() => withPositions(buildRows()), // eslint-disable-next-line react-hooks/exhaustive-deps
+  [conversations, counts.archive, counts.archiveUnread, filter, hits.data, hits.isFetching, inboxKind, inboxList, people, query, searching]);
+  function buildRows(): Row[] {
     const out: Row[] = [];
     const needle = normalize(query);
     const inboxRows = () =>
@@ -246,10 +270,24 @@ export function ChatInbox({ admin = false, embedded = false, headerActions, onSc
     if (filter === "all" && counts.archive > 0) out.push({ type: "archive", key: "archive", count: counts.archive, unread: counts.archiveUnread });
     filterChats(conversations, filter, "").forEach((conversation) => out.push({ type: "chat", key: `p${conversation.id}`, conversation, inbox: false }));
     return out;
-  }, [conversations, counts.archive, counts.archiveUnread, filter, hits.data, hits.isFetching, inboxKind, inboxList, people, query, searching]);
+  }
+
+  /* Hızlı erişim: sabitlenenler önce, sonra okunmamışlar ve en yeniler. */
+  const showRail = !searching && filter === "all" && conversations.filter((item) => !item.archived).length >= 3;
+  const railItems = useMemo(
+    () =>
+      showRail
+        ? sortChats(conversations.filter((item) => !item.archived))
+            .slice()
+            .sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || Number(isUnread(b)) - Number(isUnread(a)))
+            .slice(0, MAX_RAIL)
+        : [],
+    [conversations, showRail],
+  );
+  const unreadMessages = useMemo(() => conversations.filter((item) => !item.archived && !item.muted).reduce((sum, item) => sum + (item.unread || 0), 0), [conversations]);
 
   /* Sabit yükseklikler: satırın konumu ölçmeden bilinir. */
-  const headerHeight = searching ? 0 : FILTER_BAR_HEIGHT + (filter === "inbox" ? INBOX_SUB_HEIGHT : 0);
+  const headerHeight = searching ? 0 : (showRail ? QUICK_RAIL_HEIGHT : 0) + FILTER_BAR_HEIGHT + (filter === "inbox" ? INBOX_SUB_HEIGHT : 0) + LIST_GAP;
   const offsets = useMemo(() => {
     const out = new Array<number>(rows.length);
     let y = 0;
@@ -302,6 +340,16 @@ export function ChatInbox({ admin = false, embedded = false, headerActions, onSc
     [queryClient, router, toast],
   );
 
+  /* Kaydırma eylemleri: uzun basma menüsündeki aynı eylemler. */
+  const onSwipe = useCallback(
+    (conversation: ChatConversation, action: SwipeAction) => {
+      if (action === "archive") actions.archive(conversation);
+      else if (action === "read") actions.markRead(conversation);
+      else actions.markUnread(conversation);
+    },
+    [actions],
+  );
+
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       onScroll?.(event);
@@ -310,8 +358,8 @@ export function ChatInbox({ admin = false, embedded = false, headerActions, onSc
     [fab, onScroll],
   );
 
-  const renderItem = useCallback(
-    ({ item }: { item: Row }) => {
+  const renderRow = useCallback(
+    (item: Row) => {
       switch (item.type) {
         case "archive":
           return <ArchiveRow count={item.count} unread={item.unread} onPress={showArchive} />;
@@ -320,14 +368,23 @@ export function ChatInbox({ admin = false, embedded = false, headerActions, onSc
         case "note":
           return <InboxNote text={item.text} />;
         case "hit":
-          return <HitRow hit={item.hit} conversation={byId.get(item.hit.conversation_id)} query={query} onPress={openHit} />;
+          return <HitRow hit={item.hit} conversation={byId.get(item.hit.conversation_id)} query={query} onPress={openHit} position={item.position} />;
         case "person":
-          return <PersonRow user={item.user} query={query} onPress={openPerson} />;
+          return <PersonRow user={item.user} query={query} onPress={openPerson} position={item.position} />;
         default:
-          return <ConversationRow conversation={item.conversation} inbox={item.inbox} meId={meId} onPress={open} onLongPress={onLongPress} />;
+          return <ConversationRow conversation={item.conversation} inbox={item.inbox} meId={meId} onPress={open} onLongPress={onLongPress} position={item.position} onSwipe={item.inbox ? undefined : onSwipe} />;
       }
     },
-    [byId, meId, onLongPress, open, openHit, openPerson, query, showArchive],
+    [byId, meId, onLongPress, onSwipe, open, openHit, openPerson, query, showArchive],
+  );
+  /* İlk 8 satır sırayla aşağıdan belirir; süzgeç değişince yeniden oynar. */
+  const renderItem = useCallback(
+    ({ item, index }: { item: Row; index: number }) => (
+      <Reveal index={index} limit={8} distance={14} replayKey={searching ? "ara" : filter}>
+        {renderRow(item)}
+      </Reveal>
+    ),
+    [filter, renderRow, searching],
   );
 
   /* ---------- menüler ---------- */
@@ -419,12 +476,13 @@ export function ChatInbox({ admin = false, embedded = false, headerActions, onSc
   const chips = useMemo(
     () =>
       searching ? null : (
-        <View>
+        <View style={styles.listHead}>
+          {showRail ? <QuickRail items={railItems} unread={unreadMessages} onPress={open} /> : null}
           <FilterPills items={filterItems} value={filter} onChange={pickFilter} accessibilityLabel="Sohbet süzgeçleri" />
           {filter === "inbox" ? <FilterPills items={kindItems} value={inboxKind} onChange={setInboxKind} secondary accessibilityLabel="Üye mesajı türü" /> : null}
         </View>
       ),
-    [filter, filterItems, inboxKind, kindItems, pickFilter, searching],
+    [filter, filterItems, inboxKind, kindItems, open, pickFilter, railItems, searching, showRail, unreadMessages],
   );
 
   /* ---------- ilk çizim: liste bir kez belirir ---------- */
@@ -553,10 +611,13 @@ export function ChatInbox({ admin = false, embedded = false, headerActions, onSc
 }
 
 const keyOf = (item: Row) => item.key;
+/** Süzgeç şeridi ile ilk kart arasındaki boşluk. */
+const LIST_GAP = space.xs;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   pane: { flex: 1 },
   /* Alt boşluk: son satır yüzen düğmenin altında kalmasın. */
   list: { paddingBottom: space.giant * 2, flexGrow: 1 },
+  listHead: { paddingBottom: LIST_GAP },
 });

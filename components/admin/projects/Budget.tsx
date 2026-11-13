@@ -11,8 +11,9 @@ import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { ActionSheet, FormSheet, Panel, RecordCard, confirmAction, type FieldDef, type FormValues } from "@/components/admin";
-import { Button, ErrorState, MetricGrid, MetricTile, SegmentedControl, SkeletonListRow } from "@/components/ui";
+import { ActionSheet, FormSheet, confirmAction, type FieldDef, type FormValues } from "@/components/admin";
+import { LineRow, Lines, StageChip, ToolStage, categoryVisual } from "@/components/admin/tools/ToolKit";
+import { Button, ErrorState, GradientBar, SectionHeader, SegmentedControl, SkeletonListRow } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { formatDate, formatMoney } from "@/lib/admin/format";
 import { ENTRY_STATUS_META, entryStatusLabel, entryTotals, isoDate, moneyText, paidVerb, parseAmount } from "@/lib/admin/projectUtils";
@@ -27,7 +28,7 @@ import {
   type EntryType,
   type FinanceEntry,
 } from "@/lib/api/admin/projects";
-import { colors, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 import { useProject } from "./ProjectContext";
 import { Pill } from "./ui";
@@ -38,6 +39,29 @@ const STATUS_FILTERS: { key: "" | EntryStatus; label: string }[] = [
   { key: "pending", label: "Bekliyor" },
   { key: "paid", label: "Gerçekleşen" },
 ];
+
+/** Plan ↔ gerçekleşen çubuğu: tahmini tutarın ne kadarı hesaplara işlendi. */
+function FlowBar({ label, planned, done, tone, doneLabel }: { label: string; planned: number; done: number; tone: "win" | "danger"; doneLabel: string }) {
+  const ratio = planned > 0 ? Math.min(1, done / planned) : 0;
+  const fg = tone === "win" ? colors.win : colors.danger;
+  return (
+    <View style={styles.flowRow} accessible accessibilityLabel={`${label}: tahmini ${formatMoney(planned, true)}, ${doneLabel} ${formatMoney(done, true)}`}>
+      <View style={styles.flowHead}>
+        <Text style={styles.flowLabel} {...textScale.dense}>
+          {label}
+        </Text>
+        <Text style={[styles.flowValue, { color: fg }]} {...textScale.badge}>
+          {formatMoney(done, true)}
+          <Text style={styles.flowOf}> / {formatMoney(planned, true)}</Text>
+        </Text>
+      </View>
+      <GradientBar value={ratio} height={6} gradient={tone === "win" ? [colors.win, colors.win] : [colors.danger, colors.danger]} />
+      <Text style={styles.flowSub} {...textScale.dense}>
+        %{Math.round(ratio * 100)} {doneLabel}
+      </Text>
+    </View>
+  );
+}
 
 export function Budget({ stepId = null }: { stepId?: number | null }) {
   const router = useRouter();
@@ -99,52 +123,82 @@ export function Budget({ stepId = null }: { stepId?: number | null }) {
         {status ? "Bu durumda kalem yok." : kind === "income" ? "Henüz gelir kalemi yok (sponsorluk, katılım ücreti, bilet…)." : "Henüz gider kalemi yok (tesis, ödül, ekipman…). Tedarik görüşmesi tamamlanınca buraya yazılır."}
       </Text>
     ) : (
-      items.map((e) => {
-        const st = ENTRY_STATUS_META[e.status] || ENTRY_STATUS_META.pending;
-        const open = e.status === "planned" || e.status === "pending";
-        const sub = [e.lead_name, e.step_title && `Adım: ${e.step_title}`, e.category, e.party, e.account_name || (e.account_id ? `Hesap #${e.account_id}` : "Hesap seçilmedi"), e.due_date && open ? `Vade ${formatDate(e.due_date, false)}` : null, e.document_no]
-          .filter(Boolean)
-          .join(" · ");
-        const can = editable && e.can_edit !== false;
-        return (
-          <RecordCard
-            key={e.id}
-            icon={e.type === "income" ? "trending-up" : "trending-down"}
-            iconTone={e.type === "income" ? "win" : "danger"}
-            title={e.description || e.category || (e.type === "income" ? "Gelir" : "Gider")}
-            subtitle={sub || null}
-            meta={formatDate(e.status === "paid" ? e.paid_date || e.entry_date : e.entry_date)}
-            value={`${e.type === "income" ? "+" : "−"}${formatMoney(e.effective)}${e.amount == null && e.estimate != null ? " (tahmini)" : ""}`}
-            valueTone={e.status === "cancelled" ? "neutral" : e.type === "income" ? "win" : "danger"}
-            muted={e.status === "cancelled"}
-            onPress={can ? () => setMenuFor(e) : undefined}
-          >
-            <View style={styles.cardFoot}>
-              <Pill label={entryStatusLabel(e.status, e.type)} color={st.color} icon={st.icon} />
-              {open && can ? <Button label={paidVerb(e.type)} icon="checkmark" variant="ghost" size="sm" onPress={() => void markPaid(e)} /> : null}
-            </View>
-          </RecordCard>
-        );
-      })
+      <Lines>
+        {items.map((e) => {
+          const st = ENTRY_STATUS_META[e.status] || ENTRY_STATUS_META.pending;
+          const open = e.status === "planned" || e.status === "pending";
+          const sub = [e.lead_name, e.step_title && `Adım: ${e.step_title}`, e.category, e.party].filter(Boolean).join(" · ");
+          const meta = [
+            formatDate(e.status === "paid" ? e.paid_date || e.entry_date : e.entry_date),
+            e.account_name || (e.account_id ? `Hesap #${e.account_id}` : "Hesap seçilmedi"),
+            e.due_date && open ? `Vade ${formatDate(e.due_date, false)}` : null,
+            e.document_no,
+          ]
+            .filter(Boolean)
+            .join(" · ");
+          const can = editable && e.can_edit !== false;
+          const visual = categoryVisual(e.category, e.type === "income" ? "income" : "expense");
+          return (
+            <LineRow
+              key={e.id}
+              icon={visual.icon}
+              tone={visual.tone}
+              title={e.description || e.category || (e.type === "income" ? "Gelir" : "Gider")}
+              sub={sub || null}
+              meta={meta}
+              metaIcon="calendar-outline"
+              value={`${e.type === "income" ? "+" : "−"}${formatMoney(e.effective)}`}
+              valueSub={e.amount == null && e.estimate != null ? "tahmini" : null}
+              valueTone={e.status === "cancelled" ? "neutral" : e.type === "income" ? "win" : "danger"}
+              stripe={e.status === "pending" ? colors.warn : null}
+              muted={e.status === "cancelled"}
+              onPress={can ? () => setMenuFor(e) : undefined}
+            >
+              <View style={styles.cardFoot}>
+                <Pill label={entryStatusLabel(e.status, e.type)} color={st.color} icon={st.icon} />
+                {open && can ? <Button label={paidVerb(e.type)} icon="checkmark" variant="ghost" size="sm" onPress={() => void markPaid(e)} /> : null}
+              </View>
+            </LineRow>
+          );
+        })}
+      </Lines>
     );
 
   return (
     <View style={styles.wrap}>
-      <MetricGrid columns={2}>
-        <MetricTile label="Tahmini net" value={formatMoney(totals.estimate_net, true)} hint={`Gelir ${formatMoney(totals.estimate_income, true)} − gider ${formatMoney(totals.estimate_expense, true)}`} tone="brand" />
-        <MetricTile label="Gerçekleşen net" value={formatMoney(totals.paid_net, true)} hint="hesaplara işlenen" tone={totals.paid_net < 0 ? "danger" : "win"} />
-        <MetricTile label="Tahmini gelir" value={formatMoney(totals.estimate_income, true)} hint={`${formatMoney(totals.paid_income, true)} tahsil edildi`} />
-        <MetricTile label="Tahmini gider" value={formatMoney(totals.estimate_expense, true)} hint={`${formatMoney(totals.paid_expense, true)} ödendi`} />
-        <MetricTile label="Tahsil edilecek" value={formatMoney(totals.open_income, true)} hint={`bekleyen ${formatMoney(totals.pending_income, true)} · tahmin ${formatMoney(totals.planned_income, true)}`} />
-        <MetricTile label="Ödenecek" value={formatMoney(totals.open_expense, true)} hint={`bekleyen ${formatMoney(totals.pending_expense, true)} · tahmin ${formatMoney(totals.planned_expense, true)}`} tone={totals.pending_expense > 0 ? "warn" : "neutral"} />
-      </MetricGrid>
+      <ToolStage
+        icon="wallet"
+        tone="mint"
+        overline="Tahmini net"
+        value={formatMoney(totals.estimate_net, true)}
+        valueTone={totals.estimate_net < 0 ? "danger" : "win"}
+        caption={`Gelir ${formatMoney(totals.estimate_income, true)} − gider ${formatMoney(totals.estimate_expense, true)}`}
+        chips={
+          <>
+            <StageChip label={`Gerçekleşen ${formatMoney(totals.paid_net, true)}`} icon="checkmark-circle" tone={totals.paid_net < 0 ? "danger" : "win"} />
+            {defaultAccount ? <StageChip label={defaultAccount.name} icon="card-outline" /> : null}
+          </>
+        }
+        stats={[
+          { label: "Tahsil edilecek", value: formatMoney(totals.open_income, true), tone: "win" },
+          { label: "Ödenecek", value: formatMoney(totals.open_expense, true), tone: totals.pending_expense > 0 ? "warn" : undefined },
+        ]}
+      />
+      <View style={styles.flow}>
+        <FlowBar label="Gelir" planned={totals.estimate_income} done={totals.paid_income} tone="win" doneLabel="tahsil" />
+        <FlowBar label="Gider" planned={totals.estimate_expense} done={totals.paid_expense} tone="danger" doneLabel="ödendi" />
+      </View>
       <SegmentedControl items={STATUS_FILTERS} value={status} onChange={setStatus} size="sm" />
       {step ? <Pill label={`Adım: ${step.title}`} color={project.item.color} icon="git-branch-outline" /> : null}
-      <Text style={styles.muted} {...textScale.dense}>{defaultAccount ? `Varsayılan hesap: ${defaultAccount.name}` : "Varsayılan hesap seçilmedi"}</Text>
+      {!defaultAccount ? (
+        <Text style={styles.muted} {...textScale.dense}>
+          Varsayılan hesap seçilmedi
+        </Text>
+      ) : null}
       {editable ? (
         <View style={styles.actions}>
-          <Button label="Gelir ekle" icon="add" variant="secondary" size="sm" onPress={() => setEditing({ type: "income" })} />
-          <Button label="Gider ekle" icon="remove" size="sm" onPress={() => setEditing({ type: "expense" })} />
+          <Button label="Gelir ekle" icon="add" variant="secondary" onPress={() => setEditing({ type: "income" })} style={styles.flex} />
+          <Button label="Gider ekle" icon="remove" onPress={() => setEditing({ type: "expense" })} style={styles.flex} />
         </View>
       ) : null}
       {!data.accounts?.length && editable ? (
@@ -156,12 +210,14 @@ export function Budget({ stepId = null }: { stepId?: number | null }) {
         </View>
       ) : null}
 
-      <Panel title={`Gelirler · ${income.length} · ${formatMoney(sum(income), true)}`}>
-        <View style={styles.list}>{list(income, "income")}</View>
-      </Panel>
-      <Panel title={`Giderler · ${expense.length} · ${formatMoney(sum(expense), true)}`}>
-        <View style={styles.list}>{list(expense, "expense")}</View>
-      </Panel>
+      <View style={styles.list}>
+        <SectionHeader title="Gelirler" meta={`${income.length} · ${formatMoney(sum(income), true)}`} inset="flush" icon="trending-up" iconTone="mint" />
+        {list(income, "income")}
+      </View>
+      <View style={styles.list}>
+        <SectionHeader title="Giderler" meta={`${expense.length} · ${formatMoney(sum(expense), true)}`} inset="flush" icon="trending-down" iconTone="red" />
+        {list(expense, "expense")}
+      </View>
       <Text style={styles.muted} {...textScale.long}>
         Tahmin: bütçe öngörüsü · Bekliyor: kesinleşti, ödeme bekleniyor · Ödendi / tahsil edildi: hesabın bakiyesine işlendi.
       </Text>
@@ -301,9 +357,24 @@ function EntrySheet({
 
 const styles = StyleSheet.create({
   wrap: { gap: space.md },
+  flex: { flex: 1 },
   list: { gap: space.sm },
+  flow: {
+    gap: space.md,
+    padding: space.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  flowRow: { gap: space.xs },
+  flowHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space.sm },
+  flowLabel: { ...type.h4, color: colors.textPrimary },
+  flowValue: { ...type.tableNumStrong },
+  flowOf: { ...type.numSm, color: colors.textTertiary },
+  flowSub: { ...type.caption, color: colors.textTertiary },
   muted: { ...type.bodySm, color: colors.textTertiary },
-  actions: { flexDirection: "row", gap: space.sm, justifyContent: "flex-end" },
+  actions: { flexDirection: "row", gap: space.sm },
   cardFoot: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.s },
   notice: { gap: space.sm, padding: space.md, backgroundColor: colors.infoDim, borderRadius: radius.md },
   noticeText: { ...type.bodySm, color: colors.textPrimary },

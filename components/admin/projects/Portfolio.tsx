@@ -10,7 +10,8 @@ import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { FormSheet, RecordCard, confirmAction, type FieldDef, type FormValues } from "@/components/admin";
-import { Button, Chip, ChipGroup, EmptyState, ErrorState, Input, MetricGrid, MetricTile, SkeletonListRow, useToast } from "@/components/ui";
+import { Button, Chip, ChipGroup, EmptyState, ErrorState, Input, SkeletonListRow, useToast } from "@/components/ui";
+import { ToolStage } from "@/components/admin/tools/ToolKit";
 import { errorText } from "@/lib/admin/errors";
 import { formatDate, formatMoney } from "@/lib/admin/format";
 import {
@@ -136,11 +137,18 @@ export function PortfolioList({
 
   return (
     <View style={styles.wrap}>
-      <MetricGrid columns={3}>
-        <MetricTile label="Portföy" value={String(shown.length)} hint={filtered ? "kayıt (süzülmüş)" : "kayıt"} tone="brand" />
-        <MetricTile label="Toplam değer" value={formatMoney(total, true)} hint="kayıtlı tutarlar" />
-        <MetricTile label="Aktif" value={String(shown.filter((i) => i.status === "active").length)} hint={`${shown.filter((i) => i.status === "renewal").length} yenilenecek`} tone="win" />
-      </MetricGrid>
+      <ToolStage
+        icon="briefcase"
+        tone="cyan"
+        overline={filtered ? "Portföy değeri · süzülmüş" : "Portföy değeri"}
+        value={formatMoney(total, true)}
+        caption="Satışı kapanan kişiler ve kayıtlı sözleşme tutarları."
+        stats={[
+          { label: "Kayıt", value: shown.length },
+          { label: "Aktif", value: shown.filter((i) => i.status === "active").length, tone: "win" },
+          { label: "Yenilenecek", value: shown.filter((i) => i.status === "renewal").length, tone: shown.some((i) => i.status === "renewal") ? "warn" : undefined },
+        ]}
+      />
       <Input variant="search" value={q} onChangeText={setQ} placeholder="Portföyde ara…" />
       <ChipGroup contentPadding={0}>
         <Chip label="Tüm durumlar" size="sm" selected={!status} onPress={() => setStatus("")} />
@@ -157,15 +165,14 @@ export function PortfolioList({
         </ChipGroup>
       ) : null}
       <View style={styles.actions}>
+        {canAdd ? <Button label="Portföye ekle" icon="add" onPress={() => setEditing("new")} style={styles.flex} /> : null}
         <Button
-          label="CSV paylaş"
+          label="CSV"
           icon="share-outline"
           variant="secondary"
-          size="sm"
           disabled={!shown.length}
           onPress={() => void shareCsv(title, toCsv(PORTFOLIO_EXPORT, shown))}
         />
-        {canAdd ? <Button label="Portföye ekle" icon="add" size="sm" onPress={() => setEditing("new")} /> : null}
       </View>
 
       {!shown.length ? (
@@ -183,6 +190,7 @@ export function PortfolioList({
             <RecordCard
               key={item.id}
               avatar={{ name: item.name }}
+              accentColor={st.color}
               title={item.name}
               subtitle={[item.company, item.title].filter(Boolean).join(" · ") || item.city || prettyPhone(item.phone) || null}
               meta={[item.category, item.start_date ? formatDate(item.start_date) : null, showProject && item.project_name ? `Proje: ${item.project_name}` : null].filter(Boolean).join(" · ") || null}
@@ -279,7 +287,7 @@ export function GlobalPortfolio({ projects, onOpenProject }: { projects: Project
 const styles = StyleSheet.create({
   wrap: { gap: space.md },
   flex: { flex: 1 },
-  actions: { flexDirection: "row", gap: space.sm, justifyContent: "flex-end" },
+  actions: { flexDirection: "row", gap: space.sm },
   cardFoot: { flexDirection: "row", alignItems: "center", marginTop: space.s, gap: space.sm },
   note: { ...type.bodySm, color: colors.textSecondary, marginTop: space.xs },
   hint: { ...type.caption, color: colors.textTertiary, textAlign: "center" },

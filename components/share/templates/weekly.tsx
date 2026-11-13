@@ -99,7 +99,7 @@ function WeeklyStar({ f, d }: { f: ShareFrame; d: WeeklyShareData }) {
       <View style={{ flexDirection: "row", gap: u(8), marginTop: u(story ? 22 : 12) }}>
         <StatTile f={f} value={p.goals} label="Gol" scale={story ? 1 : 0.78} />
         <StatTile f={f} value={p.assists} label="Asist" scale={story ? 1 : 0.78} />
-        <StatTile f={f} value={p.rating ? p.rating.toFixed(1) : "–"} label="Reyting" accent={t.gold[0]} scale={story ? 1 : 0.78} />
+        <StatTile f={f} value={p.rating ? p.rating.toFixed(1) : "–"} label="Reyting" accent={t.goldText} scale={story ? 1 : 0.78} />
       </View>
       <Spacer f={f} />
     </Poster>

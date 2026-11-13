@@ -19,7 +19,7 @@ export function staffFields({
   editing: boolean;
 }): FieldDef[] {
   const fields: FieldDef[] = [
-    { key: "fullName", label: "Ad soyad", kind: "text", required: true, placeholder: "Örn. Berke Yazıcı" },
+    { key: "fullName", label: "Ad soyad", kind: "text", required: true, placeholder: "Örn. Berke Yazıcı", group: "Kimlik ve görev" },
     {
       key: "duties",
       label: "Görevler",
@@ -27,7 +27,7 @@ export function staffFields({
       hint: "Bir kişi birden fazla görev yapabilir: hem spiker hem reji gibi.",
       options: duties.map((d) => ({ value: d.key, label: d.label })),
     },
-    { key: "phone", label: "Telefon", kind: "phone", placeholder: "05xx xxx xx xx" },
+    { key: "phone", label: "Telefon", kind: "phone", placeholder: "05xx xxx xx xx", group: "İletişim" },
     { key: "email", label: "E-posta", kind: "email" },
     { key: "notes", label: "Not", kind: "multiline", placeholder: "Ör. hafta içi akşamları müsait" },
   ];
@@ -36,6 +36,7 @@ export function staffFields({
       key: "cityId",
       label: "İl",
       kind: "select",
+      group: "Kapsam ve hesap",
       clearable: true,
       placeholder: "İl seçilmedi",
       hint: "Görevlendirme ekranlarında kişi yalnız kendi ilinin maçlarında listelenir.",
@@ -46,13 +47,14 @@ export function staffFields({
     key: "userId",
     label: "Yönetim hesabı",
     kind: "select",
+    ...(cities ? {} : { group: "Kapsam ve hesap" }),
     clearable: true,
     placeholder: "Otomatik (ad soyad eşleşmesi)",
     hint: "Kişinin zaten bir panel hesabı varsa buradan bağla.",
     options: linkable.map((u) => ({ value: u.id, label: u.name, hint: u.city })),
   });
   if (editing) {
-    fields.push({ key: "passive", label: "Pasif", kind: "toggle", hint: "Pasif personel görevlendirme listelerinde görünmez." });
+    fields.push({ key: "passive", label: "Pasif", kind: "toggle", hint: "Pasif personel görevlendirme listelerinde görünmez.", group: "Durum" });
   }
   return fields;
 }

@@ -14,7 +14,7 @@ import { Touchable as AppTouchable } from "@/components/ui";
 import { formatDurationMs, type ChatAction, type ChatMessage } from "@/lib/api/chat";
 import type { AttendancePlayer } from "@/lib/api/team";
 import { chatPalette, colors } from "@/lib/chatPalette";
-import { colors as app, radius, space, textScale, type } from "@/theme";
+import { colors as app, glowStyle, hairline, radius, space, textScale, type } from "@/theme";
 
 export function clockLabel(iso: string): string {
   const date = new Date(iso);
@@ -344,9 +344,10 @@ const styles = StyleSheet.create({
 
   /* Kartlar balon renklerinde durur: giden açık yeşil (koyuda koyu yeşil), gelen
      beyaz (koyuda gri); metin her ikisinde balon metni rengidir. */
-  bubble: { maxWidth: "86%", borderRadius: radius.sm, padding: space.md, gap: space.xs, borderBottomWidth: 1, borderBottomColor: chatPalette.bubbleShade },
-  bubbleMine: { alignSelf: "flex-end", backgroundColor: chatPalette.bubbleMine },
-  bubbleTheirs: { alignSelf: "flex-start", backgroundColor: chatPalette.bubbleTheirs },
+  /* Gece dili: 20 px köşe; giden kart mor + hafif parıltı, gelen kart yüzey + ışıklı kenar. */
+  bubble: { maxWidth: "86%", borderRadius: radius.xl, padding: space.md, gap: space.s },
+  bubbleMine: { alignSelf: "flex-end", backgroundColor: chatPalette.bubbleMine, ...glowStyle(colors.glow, 1), shadowOpacity: 0.18 },
+  bubbleTheirs: { alignSelf: "flex-start", backgroundColor: chatPalette.bubbleTheirs, borderWidth: hairline, borderColor: chatPalette.bubbleLine },
   stamp: { ...type.meta, color: chatPalette.bubbleMeta, alignSelf: "flex-end", marginTop: space.xxs },
   stampMine: { color: chatPalette.bubbleMeta },
   textMine: { color: chatPalette.bubbleText },
@@ -361,12 +362,12 @@ const styles = StyleSheet.create({
 
   card: { maxWidth: "92%", borderLeftWidth: 3, gap: space.sm },
   cardHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  cardIcon: { width: 30, height: 30, borderRadius: radius.pill, backgroundColor: colors.brandDim, alignItems: "center", justifyContent: "center" },
+  cardIcon: { width: 30, height: 30, borderRadius: radius.sm, backgroundColor: colors.brandDim, alignItems: "center", justifyContent: "center" },
   cardTitle: { ...type.h4, color: chatPalette.bubbleText, flex: 1 },
   bodyText: { ...type.body, color: chatPalette.bubbleText },
   statusPill: { paddingHorizontal: space.sm, paddingVertical: space.xxs, borderRadius: radius.pill },
   statusText: { ...type.micro },
-  teams: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.sm, paddingVertical: space.sm, paddingHorizontal: space.md, borderRadius: radius.sm },
+  teams: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.sm, paddingVertical: space.md, paddingHorizontal: space.md, borderRadius: radius.lg, borderWidth: hairline, borderColor: chatPalette.bubbleLine },
   teamName: { ...type.h4, color: chatPalette.bubbleText, flexShrink: 1 },
   vs: { ...type.micro, color: chatPalette.bubbleMeta },
   fact: { flexDirection: "row", alignItems: "flex-start", gap: space.xs },
@@ -376,8 +377,8 @@ const styles = StyleSheet.create({
   resolvedText: { ...type.label, color: colors.win },
 
   /* Sistem / arama satırı: ortalanmış WhatsApp hapı (gün hapıyla aynı yüzey). */
-  chipRow: { alignItems: "center", paddingVertical: space.xs },
-  chip: { maxWidth: "88%", paddingHorizontal: space.md, paddingVertical: space.s, borderRadius: radius.sm, backgroundColor: chatPalette.systemPill, gap: space.xs, borderBottomWidth: 1, borderBottomColor: chatPalette.bubbleShade },
+  chipRow: { alignItems: "center", paddingVertical: space.s },
+  chip: { maxWidth: "88%", paddingHorizontal: space.md, paddingVertical: space.s, borderRadius: radius.lg, backgroundColor: chatPalette.systemPill, gap: space.xs, borderWidth: hairline, borderColor: colors.glassLine },
   chipWide: { minWidth: 260 },
   chipLine: { flexDirection: "row", alignItems: "center", gap: space.s },
   chipText: { ...type.caption, color: chatPalette.dayText, flexShrink: 1 },

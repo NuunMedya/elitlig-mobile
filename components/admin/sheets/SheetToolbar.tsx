@@ -97,17 +97,19 @@ export function ColorSheet({
 }
 
 const styles = StyleSheet.create({
-  wrap: { backgroundColor: colors.surface1, borderBottomWidth: hairline, borderBottomColor: colors.border },
+  wrap: { backgroundColor: colors.surface1, borderBottomWidth: hairline, borderBottomColor: colors.glassLine },
   row: { alignItems: "center", gap: space.xxs, paddingHorizontal: space.sm, paddingVertical: space.xs },
   tool: {
     minWidth: 38,
     height: 36,
     paddingHorizontal: space.s,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: hairline,
+    borderColor: "transparent",
   },
-  toolOn: { backgroundColor: colors.brandDim },
+  toolOn: { backgroundColor: colors.brandDim, borderColor: colors.brandBorder },
   disabled: { opacity: 0.35 },
   toolText: { ...type.labelSm, color: colors.textSecondary },
   toolTextOn: { color: colors.brandAccent },
@@ -116,5 +118,5 @@ const styles = StyleSheet.create({
   palette: { flexDirection: "row", flexWrap: "wrap", gap: space.md, paddingBottom: space.lg, justifyContent: "center" },
   color: { width: 44, height: 44, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: hairline, borderColor: colors.border },
   none: { backgroundColor: colors.surface3 },
-  colorOn: { borderWidth: 3, borderColor: colors.brand },
+  colorOn: { borderWidth: 3, borderColor: colors.brandAccent, transform: [{ scale: 1.08 }] },
 });

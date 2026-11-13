@@ -13,7 +13,8 @@ import { SelectField, ToggleField, confirmAction } from "@/components/admin";
 import { Button, Chip, ChipGroup, EmptyState, Input, Touchable, withAlpha } from "@/components/ui";
 import { ACTIVITY_META, CONTACT_TYPES, kindOf, outcomeOf, relativeDayLabel, timeAgo, whenLabel } from "@/lib/admin/projectUtils";
 import type { Activity as ActivityRow, ActivityType } from "@/lib/api/admin/projects";
-import { colors, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
+import { MiniStat } from "@/components/admin/matches/opsKit";
 
 import { useProject } from "./ProjectContext";
 import { useChunk } from "./ui";
@@ -61,7 +62,7 @@ export function Timeline({ items, empty = "Kayıt yok.", showLead = true, showSt
   };
   return (
     <View>
-      {chunk.shown.map((a) => {
+      {chunk.shown.map((a, index) => {
         const m = ACTIVITY_META[a.type] || ACTIVITY_META.note;
         const outcome = a.outcome ? outcomeOf(settings, a.outcome, kindOf(data.leads.find((x) => x.id === a.lead_id))) : null;
         const lead = showLead && a.lead_id ? data.leads.find((l) => l.id === a.lead_id) : null;
@@ -71,12 +72,24 @@ export function Timeline({ items, empty = "Kayıt yok.", showLead = true, showSt
         lastDay = dayKey;
         const system = a.type === "status" || a.type === "system";
         const canRemove = canEdit && (isOwner || (!system && a.created_by === me));
+        const next = chunk.shown[index + 1];
+        const lastOfDay = !next || String(next.occurred_at || "").slice(0, 10) !== dayKey;
         return (
           <React.Fragment key={a.id}>
-            {header ? <Text style={styles.day} {...textScale.dense}>{header}</Text> : null}
+            {header ? (
+              <View style={styles.dayRow}>
+                <Text style={styles.day} {...textScale.dense}>
+                  {header.toLocaleUpperCase("tr-TR")}
+                </Text>
+                <View style={styles.dayLine} />
+              </View>
+            ) : null}
             <View style={[styles.row, system ? styles.system : null]}>
-              <View style={[styles.icon, { backgroundColor: withAlpha(m.color, 0.14) }]}>
-                <Ionicons name={m.icon} size={14} color={m.color} />
+              <View style={styles.rail}>
+                <View style={[styles.icon, { backgroundColor: withAlpha(m.color, 0.16), borderColor: withAlpha(m.color, 0.4) }]}>
+                  <Ionicons name={m.icon} size={14} color={m.color} />
+                </View>
+                {!lastOfDay ? <View style={styles.railLine} /> : null}
               </View>
               <View style={styles.flex}>
                 <View style={styles.headRow}>
@@ -131,6 +144,11 @@ export function Activity({ stepId = null }: { stepId?: number | null }) {
 
   return (
     <View style={styles.wrap}>
+      <View style={styles.stats}>
+        <MiniStat label="Kayıt" value={data.activities.length} />
+        <MiniStat label="Arama" value={calls} tone="info" />
+        <MiniStat label="Temas" value={data.activities.filter((a) => CONTACT_TYPES.includes(a.type) && a.type !== "note").length} tone="brand" />
+      </View>
       <ChipGroup contentPadding={0}>
         <Chip label="Tümü" size="sm" selected={!kind} onPress={() => setKind("")} />
         <Chip label="Yalnız temaslar" size="sm" selected={kind === "contact"} onPress={() => setKind(kind === "contact" ? "" : "contact")} />
@@ -148,7 +166,7 @@ export function Activity({ stepId = null }: { stepId?: number | null }) {
           </View>
         ) : null}
       </View>
-      <ToggleField label="Sistem kayıtlarını gizle" value={hideSystem} onChange={setHideSystem} hint={`${data.activities.length} kayıt · ${calls} arama`} />
+      <ToggleField label="Sistem kayıtlarını gizle" value={hideSystem} onChange={setHideSystem} hint="Durum değişiklikleri ve otomatik kayıtlar" />
       {canEdit ? (
         <View style={styles.card}>
           <NoteForm defaults={{ ...(scopeStep ? { step_id: scopeStep } : {}), ...(lead ? { lead_id: lead } : {}) }} />
@@ -169,17 +187,22 @@ const styles = StyleSheet.create({
   wrap: { gap: space.md },
   flex: { flex: 1 },
   row2: { flexDirection: "row", gap: space.sm },
-  card: { padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1 },
+  card: { padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.glassLine },
+  stats: { flexDirection: "row", gap: space.sm },
   form: { gap: space.sm },
   formBar: { flexDirection: "row", justifyContent: "flex-end" },
   muted: { ...type.bodySm, color: colors.textTertiary },
-  day: { ...type.overline, color: colors.textTertiary, marginTop: space.md, marginBottom: space.xs },
-  row: { flexDirection: "row", gap: space.sm, paddingVertical: space.s },
+  dayRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.sm, marginBottom: space.xs },
+  day: { ...type.overline, color: colors.brandAccent },
+  dayLine: { flex: 1, height: hairline, backgroundColor: colors.separator },
+  row: { flexDirection: "row", gap: space.m },
+  rail: { alignItems: "center", width: 30 },
+  railLine: { flex: 1, width: 2, borderRadius: 1, backgroundColor: colors.separator, marginVertical: space.xxs },
   system: { opacity: 0.75 },
-  icon: { width: 28, height: 28, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  icon: { width: 30, height: 30, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: 1 },
   headRow: { flexDirection: "row", alignItems: "center", gap: space.s },
   title: { ...type.label, color: colors.textPrimary },
   outcome: { ...type.labelSm, color: colors.brandAccent, flexShrink: 1 },
-  note: { ...type.bodySm, color: colors.textPrimary, marginTop: space.xxs },
-  tiny: { ...type.meta, color: colors.textTertiary, marginTop: space.xxs },
+  note: { ...type.bodySm, color: colors.textPrimary, marginTop: space.xs, padding: space.sm, borderRadius: radius.md, backgroundColor: colors.surface2 },
+  tiny: { ...type.meta, color: colors.textTertiary, marginTop: space.xxs, marginBottom: space.sm },
 });

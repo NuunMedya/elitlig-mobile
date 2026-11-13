@@ -21,9 +21,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { OptionSheet, Panel, SelectField, ToggleField, confirmAction, useAdminMutation } from "@/components/admin";
-import { Badge, Button, Chip, ChipGroup, GradientBar, Input, Reveal, SegmentedControl, Stepper, TeamLogo, Touchable, useReduceMotion, useToast } from "@/components/ui";
-import { OpsStage, StepRail } from "@/components/admin/matches/opsKit";
+import { OptionSheet, SelectField, ToggleField, confirmAction, useAdminMutation } from "@/components/admin";
+import { Badge, Button, GradientBar, Input, Reveal, SegmentedControl, Stepper, TeamLogo, Touchable, useReduceMotion, useToast } from "@/components/ui";
+import { BumpButtons, OpsGroup, OpsStage, StepRail } from "@/components/admin/matches/opsKit";
 import { mediaUrl } from "@/lib/format";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { WEB_BASE_URL } from "@/lib/config";
@@ -323,28 +323,48 @@ export function DrawEditor({ initial, onClose }: { initial: Draw | null; onClose
 
       {step === "setup" ? (
         <View style={styles.wrap}>
-          <Input label="Kura adı *" value={setup.name} onChangeText={(t) => setSetup((s) => ({ ...s, name: t }))} placeholder="Örn. 2026 Bahar Kupası" editable={editable} />
-          <SegmentedControl<DrawFormat>
-            items={DRAW_FORMATS.map((f) => ({ key: f.value, label: f.label }))}
-            value={setup.format}
-            onChange={(f) => setSetup((s) => ({ ...s, format: f }))}
-            stretch
-            size="sm"
-          />
-          <Text style={styles.hint} {...textScale.long}>
-            {DRAW_FORMATS.find((f) => f.value === setup.format)?.description}
-          </Text>
-          <Stepper label="Takım sayısı" value={setup.teamCount} min={2} max={128} onChange={(v) => setSetup((s) => ({ ...s, teamCount: v }))} disabled={!editable} />
-          <Stepper label="Torba sayısı" value={setup.potCount} min={1} max={Math.max(1, setup.teamCount)} onChange={(v) => setSetup((s) => ({ ...s, potCount: v }))} disabled={!editable} />
-          <Text style={styles.hint} {...textScale.long}>
-            Torba başına yaklaşık {balancedSizes(setup.teamCount, Math.max(1, setup.potCount)).join(" / ")} takım.
-          </Text>
-          {isGroup ? (
-            <>
-              <Stepper label="Grup sayısı" value={setup.groupCount} min={1} max={Math.max(1, setup.teamCount)} onChange={(v) => setSetup((s) => ({ ...s, groupCount: v }))} disabled={!editable} />
+          <OpsGroup title="Kura" icon="shuffle" tone="signature">
+            <Input label="Kura adı *" floating value={setup.name} onChangeText={(t) => setSetup((s) => ({ ...s, name: t }))} placeholder="Örn. 2026 Bahar Kupası" editable={editable} />
+            <SegmentedControl<DrawFormat>
+              items={DRAW_FORMATS.map((f) => ({ key: f.value, label: f.label }))}
+              value={setup.format}
+              onChange={(f) => setSetup((s) => ({ ...s, format: f }))}
+              stretch
+              size="sm"
+            />
+            <Text style={styles.hint} {...textScale.long}>
+              {DRAW_FORMATS.find((f) => f.value === setup.format)?.description}
+            </Text>
+          </OpsGroup>
+          <OpsGroup title="Boyut" icon="grid-outline" tone="cyan">
+            <View style={styles.cells}>
+              <SizeCell label="Takım" value={setup.teamCount} min={2} max={128} disabled={!editable} onChange={(v) => setSetup((s) => ({ ...s, teamCount: v }))} />
+              <SizeCell label="Torba" value={setup.potCount} min={1} max={Math.max(1, setup.teamCount)} disabled={!editable} onChange={(v) => setSetup((s) => ({ ...s, potCount: v }))} />
+              {isGroup ? (
+                <SizeCell label="Grup" value={setup.groupCount} min={1} max={Math.max(1, setup.teamCount)} disabled={!editable} onChange={(v) => setSetup((s) => ({ ...s, groupCount: v }))} />
+              ) : null}
+            </View>
+            <View style={styles.previewLine}>
+              <Ionicons name="albums-outline" size={14} color={colors.brandAccent} />
               <Text style={styles.hint} {...textScale.long}>
-                Grup başına yaklaşık {balancedSizes(setup.teamCount, Math.max(1, setup.groupCount)).join(" / ")} takım.
+                Torba başına {balancedSizes(setup.teamCount, Math.max(1, setup.potCount)).join(" / ")} takım
+                {isGroup ? ` · grup başına ${balancedSizes(setup.teamCount, Math.max(1, setup.groupCount)).join(" / ")}` : ""}
               </Text>
+            </View>
+            {!isGroup ? (
+              <View style={styles.previewLine}>
+                <Ionicons name="git-network-outline" size={14} color={colors.brandAccent} />
+                <Text style={styles.hint} {...textScale.long}>
+                  {(() => {
+                    const b = bracketPreview(setup.teamCount);
+                    return b.byes ? `${b.size}'lık ağaç kurulur; ${b.byes} takım ilk turu BAY geçer.` : `${b.size}'lık ağaç; BAY yok.`;
+                  })()}
+                </Text>
+              </View>
+            ) : null}
+          </OpsGroup>
+          {isGroup ? (
+            <OpsGroup title="Gruplar" icon="layers-outline" tone="violet">
               <View style={styles.groupNames}>
                 {groupNames.map((n, i) => (
                   <Input
@@ -366,15 +386,9 @@ export function DrawEditor({ initial, onClose }: { initial: Draw | null; onClose
                 ))}
               </View>
               <ToggleField label="Çift devre (rövanşlı fikstür)" value={setup.doubleRound} onChange={(v) => setSetup((s) => ({ ...s, doubleRound: v }))} disabled={!editable} />
-            </>
-          ) : (
-            <Text style={styles.hint} {...textScale.long}>
-              {(() => {
-                const b = bracketPreview(setup.teamCount);
-                return b.byes ? `${b.size}'lık ağaç kurulur; ${b.byes} takım ilk turu BAY geçer.` : `${b.size}'lık ağaç; BAY yok.`;
-              })()}
-            </Text>
-          )}
+            </OpsGroup>
+          ) : null}
+          <OpsGroup title="Bağlantı" icon="link-outline" tone="gold">
           <SelectField<number>
             label="Lig (isteğe bağlı)"
             value={setup.leagueId}
@@ -393,6 +407,7 @@ export function DrawEditor({ initial, onClose }: { initial: Draw | null; onClose
             disabled={!editable}
           />
           <Input label="Not" value={setup.notes} onChangeText={(t) => setSetup((s) => ({ ...s, notes: t }))} multiline editable={editable} />
+          </OpsGroup>
           {setupProblem ? (
             <Text style={styles.problem} {...textScale.long}>
               {setupProblem}
@@ -404,41 +419,92 @@ export function DrawEditor({ initial, onClose }: { initial: Draw | null; onClose
             </Text>
           ) : null}
           {editable ? (
-            <Button label={current ? "Kurulumu kaydet" : "Kurulumu kaydet ve devam et"} onPress={() => saveSetup.mutate(undefined)} loading={saveSetup.isPending} disabled={Boolean(setupProblem)} />
+            <Button label={current ? "Kurulumu kaydet" : "Kurulumu kaydet ve devam et"} size="lg" icon="save-outline" fullWidth onPress={() => saveSetup.mutate(undefined)} loading={saveSetup.isPending} disabled={Boolean(setupProblem)} />
           ) : null}
         </View>
       ) : null}
 
       {step === "pots" && current ? (
         <View style={styles.wrap}>
-          <Text style={styles.hint} {...textScale.long}>
-            {takenIds.size}/{setup.teamCount} takım seçildi · kapasite toplamı {capacityTotal}
-          </Text>
-          <View style={styles.row}>
-            <Button label="Kapasiteleri dengele" icon="git-compare-outline" size="sm" variant="secondary" onPress={distribute} disabled={!canUpdate} />
+          <View style={styles.potSummary}>
+            <View style={styles.potSummaryHead}>
+              <Text style={styles.potSummaryValue} {...textScale.badge}>
+                {takenIds.size}
+                <Text style={styles.potSummaryOf}>/{setup.teamCount}</Text>
+              </Text>
+              <View style={styles.flex}>
+                <Text style={styles.potSummaryTitle} {...textScale.dense}>
+                  takım torbalarda
+                </Text>
+                <Text style={styles.hint} {...textScale.dense}>
+                  Kapasite toplamı {capacityTotal}
+                </Text>
+              </View>
+              <Button label="Dengele" icon="git-compare-outline" size="sm" variant="secondary" onPress={distribute} disabled={!canUpdate} />
+            </View>
+            <GradientBar value={setup.teamCount ? takenIds.size / setup.teamCount : 0} height={6} />
           </View>
           {current.seasonId ? (
             <ToggleField label="Yalnız sezona kayıtlı takımlar" hint="Kapalıyken il genelindeki tüm takımlar listelenir." value={seasonOnly} onChange={setSeasonOnly} />
           ) : null}
-          {pots.map((pot) => (
-            <Panel key={pot.potNumber} title={`${pot.potNumber}. torba · ${pot.teams.length}/${pot.capacity}`}>
-              <Stepper label="Kapasite" value={pot.capacity} min={0} max={setup.teamCount} onChange={(v) => setCapacity(pot.potNumber, v)} disabled={!canUpdate} size="sm" />
-              <ChipGroup>
-                {pot.teams.map((t) => (
-                  <Chip key={t.teamId} size="sm" label={t.teamName} onDismiss={canUpdate ? () => removeTeam(pot.potNumber, t) : undefined} />
-                ))}
-              </ChipGroup>
-              {canUpdate && pot.teams.length < pot.capacity ? (
-                <Button label="Takım ekle" icon="add" size="sm" variant="secondary" onPress={() => setPicking(pot.potNumber)} />
-              ) : null}
-            </Panel>
-          ))}
+          {pots.map((pot) => {
+            const full = pot.capacity > 0 && pot.teams.length >= pot.capacity;
+            return (
+              <View key={pot.potNumber} style={styles.pot}>
+                <View style={styles.potHead}>
+                  <View style={[styles.potBall, full ? styles.potBallFull : null]}>
+                    <Text style={styles.potNo} {...textScale.badge}>
+                      {pot.potNumber}
+                    </Text>
+                  </View>
+                  <View style={styles.flex}>
+                    <Text style={styles.potTitle} {...textScale.dense}>
+                      {pot.potNumber}. torba
+                    </Text>
+                    <Text style={[styles.hint, full ? { color: colors.win } : null]} {...textScale.dense}>
+                      {pot.teams.length}/{pot.capacity} dolu
+                    </Text>
+                  </View>
+                  <Text style={styles.capLabel} {...textScale.badge}>
+                    KAPASİTE
+                  </Text>
+                  <Stepper value={pot.capacity} min={0} max={setup.teamCount} onChange={(v) => setCapacity(pot.potNumber, v)} disabled={!canUpdate} size="sm" accessibilityLabel={`${pot.potNumber}. torba kapasitesi`} />
+                </View>
+                <GradientBar value={pot.capacity ? pot.teams.length / pot.capacity : 0} height={3} gradient={full ? [colors.win, colors.win] : undefined} />
+                {pot.teams.length ? (
+                  <View style={styles.potTeams}>
+                    {pot.teams.map((t) => (
+                      <View key={t.teamId} style={styles.potTeam}>
+                        <TeamLogo name={t.teamName} size={22} />
+                        <Text style={styles.potTeamName} numberOfLines={1} {...textScale.dense}>
+                          {t.teamName}
+                        </Text>
+                        {canUpdate ? (
+                          <Touchable feedback="icon" onPress={() => removeTeam(pot.potNumber, t)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`${t.teamName} takımını torbadan çıkar`}>
+                            <Ionicons name="close-circle" size={16} color={colors.textTertiary} />
+                          </Touchable>
+                        ) : null}
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+                {canUpdate && pot.teams.length < pot.capacity ? (
+                  <Touchable onPress={() => setPicking(pot.potNumber)} feedback="row" style={styles.potAdd} accessibilityRole="button" accessibilityLabel={`${pot.potNumber}. torbaya takım ekle`}>
+                    <Ionicons name="add" size={16} color={colors.brandAccent} />
+                    <Text style={styles.potAddText} {...textScale.dense}>
+                      Takım ekle · {pot.capacity - pot.teams.length} boş yer
+                    </Text>
+                  </Touchable>
+                ) : null}
+              </View>
+            );
+          })}
           {potsProblem ? (
             <Text style={styles.problem} {...textScale.long}>
               {potsProblem}
             </Text>
           ) : null}
-          {canUpdate ? <Button label="Torbaları kaydet" onPress={() => roster.mutate(undefined)} loading={roster.isPending} disabled={Boolean(potsProblem)} /> : null}
+          {canUpdate ? <Button label="Torbaları kaydet" size="lg" icon="save-outline" fullWidth onPress={() => roster.mutate(undefined)} loading={roster.isPending} disabled={Boolean(potsProblem)} /> : null}
           {rosterComplete ? <Button label="Çekiliş adımına geç" variant="secondary" icon="arrow-forward" iconPosition="right" onPress={() => setStep("draw")} /> : null}
         </View>
       ) : null}
@@ -446,7 +512,7 @@ export function DrawEditor({ initial, onClose }: { initial: Draw | null; onClose
       {step === "draw" && current ? (
         <View style={styles.wrap}>
           {!current.result ? (
-            <Panel title="Çekiliş">
+            <OpsGroup title="Çekiliş" icon="shuffle" tone="signature">
               <Text style={styles.hint} {...textScale.long}>
                 {rosterComplete
                   ? "Torbalar dolu. Kurayı başlat: takımlar torba prensibine göre dağılır ve tohumla kaydedilir."
@@ -465,7 +531,7 @@ export function DrawEditor({ initial, onClose }: { initial: Draw | null; onClose
                   }}
                 />
               ) : null}
-            </Panel>
+            </OpsGroup>
           ) : (
             <>
               {/* ÇEKİLİŞ SAHNESİ — son çekilen takım topun içinde yaylanarak belirir; altında ilerleme. */}
@@ -509,12 +575,12 @@ export function DrawEditor({ initial, onClose }: { initial: Draw | null; onClose
               </OpsStage>
               <DrawResultView result={current.result} revealedIds={isRevealing ? revealedIds : null} lastTeamId={isRevealing ? lastTeamId : null} />
               {!isRevealing && current.fixture ? (
-                <Panel title="Fikstür">
+                <OpsGroup title="Fikstür" icon="calendar-outline" tone="cyan">
                   {current.format === "GROUP" && canUpdate ? (
                     <ToggleField label="Çift devre (rövanşlı)" value={current.doubleRound} onChange={(v) => doubleRound.mutate(v)} disabled={doubleRound.isPending} />
                   ) : null}
                   <DrawFixtureView fixture={current.fixture} />
-                </Panel>
+                </OpsGroup>
               ) : null}
               {canRun && !isRevealing ? (
                 <Button
@@ -531,7 +597,7 @@ export function DrawEditor({ initial, onClose }: { initial: Draw | null; onClose
           )}
 
           {canRun ? (
-            <Panel title="Yayın ekranı">
+            <OpsGroup title="Yayın ekranı" icon="videocam-outline" tone="red">
               <Text style={styles.hint} {...textScale.long}>
                 OBS'e tarayıcı kaynağı olarak bu adresi ekle. Çekiliş töreni kendiliğinden başlamaz: önce sahneye geç, sunuşun bitince “Kura çekimine başla”.
               </Text>
@@ -576,7 +642,7 @@ export function DrawEditor({ initial, onClose }: { initial: Draw | null; onClose
                   </Touchable>
                 );
               })}
-            </Panel>
+            </OpsGroup>
           ) : null}
         </View>
       ) : null}
@@ -601,7 +667,96 @@ export function DrawEditor({ initial, onClose }: { initial: Draw | null; onClose
   );
 }
 
+/** Kurulum sayacı: versal etiket + büyük rakam + ± düğmeleri. */
+function SizeCell({ label, value, min, max, disabled, onChange }: { label: string; value: number; min: number; max: number; disabled?: boolean; onChange: (v: number) => void }) {
+  return (
+    <View style={styles.cell}>
+      <Text style={styles.cellLabel} {...textScale.badge}>
+        {label.toLocaleUpperCase("tr-TR")}
+      </Text>
+      <Text style={styles.cellValue} {...textScale.badge}>
+        {value}
+      </Text>
+      {disabled ? null : <BumpButtons value={value} min={min} max={max} onChange={onChange} label={label} />}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  cells: { flexDirection: "row", gap: space.sm },
+  cell: {
+    flex: 1,
+    alignItems: "center",
+    gap: space.xxs,
+    paddingVertical: space.m,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  cellLabel: { ...type.overline, color: colors.textTertiary },
+  cellValue: { ...type.scoreLg, color: colors.textPrimary, marginBottom: space.xs },
+  previewLine: { flexDirection: "row", alignItems: "flex-start", gap: space.s },
+  potSummary: {
+    gap: space.m,
+    padding: space.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+  },
+  potSummaryHead: { flexDirection: "row", alignItems: "center", gap: space.md },
+  potSummaryValue: { ...type.scoreLg, color: colors.textPrimary },
+  potSummaryOf: { ...type.scoreXs, color: colors.textTertiary },
+  potSummaryTitle: { ...type.h4, color: colors.textPrimary },
+  pot: {
+    gap: space.m,
+    padding: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  potHead: { flexDirection: "row", alignItems: "center", gap: space.m },
+  potBall: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brandAccent,
+  },
+  potBallFull: { backgroundColor: colors.win },
+  potNo: { ...type.scoreXs, color: colors.onDark },
+  potTitle: { ...type.h3, color: colors.textPrimary },
+  capLabel: { ...type.nano, color: colors.textTertiary },
+  potTeams: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
+  potTeam: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    maxWidth: "100%",
+    paddingLeft: space.xs,
+    paddingRight: space.sm,
+    paddingVertical: space.xs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  potTeamName: { ...type.labelSm, color: colors.textPrimary, flexShrink: 1 },
+  potAdd: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.xs,
+    minHeight: 40,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: colors.brandBorder,
+  },
+  potAddText: { ...type.labelSm, color: colors.brandAccent },
   wrap: { gap: space.md },
   flex: { flex: 1 },
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm, flexWrap: "wrap" },

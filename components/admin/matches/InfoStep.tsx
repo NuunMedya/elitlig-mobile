@@ -14,15 +14,16 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
+import Ionicons from "@expo/vector-icons/Ionicons";
+
 import {
   DateField,
-  Panel,
   SelectField,
   confirmAction,
   useAdminMutation,
   type Option,
 } from "@/components/admin";
-import { Button, Input, Skeleton } from "@/components/ui";
+import { Badge, Input, Skeleton } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import {
   FALLBACK_DUTIES,
@@ -36,15 +37,17 @@ import {
   getTeamsForCity,
   normalizeMatchStatus,
   saveMatchAssignments,
+  statusLabelOf,
   updateMatch,
   type AdminMatch,
 } from "@/lib/api/admin/matches";
 import { getLeagues, getSeasons } from "@/lib/api/meta";
 import { useAuth } from "@/providers/AuthProvider";
-import { space } from "@/theme";
+import { colors, hairline, space } from "@/theme";
 
-import { dayOf, hhmm, stepAvailability, type StepKey } from "./model";
-import { Note, StepSaveBar, TimeField } from "./parts";
+import { STEPS, dayOf, hhmm, stepAvailability, type StepKey } from "./model";
+import { CheckGrid, FieldPair, NextStepCard, OpsGroup, OpsRow, VersusDivider, type CheckItem } from "./opsKit";
+import { Note, StepSaveBar, TimeField, statusTone } from "./parts";
 import { ResultSheet } from "./ResultSheet";
 
 interface InfoForm {
@@ -308,36 +311,56 @@ export function InfoStep({
 
   const next = NEXT_STEP[original.mac_durumu];
   const nextReady = next?.step ? stepAvailability(next.step, match.mac_durumu).ready : false;
+  const nextMeta = next?.step ? STEPS.find((s) => s.key === next.step) : null;
+
+  /* Hazırlık denetimi: kaydedilmiş + düzenlenen değerlere göre canlı hesaplanır. */
+  const assignedCount = duties.filter((d) => Boolean(assignments[d.key])).length;
+  const checks: CheckItem[] = [
+    { label: "Eşleşme", ok: Boolean(form.home_team_id && form.away_team_id && !sameTeams), hint: sameTeams ? "Aynı takım" : "Takım seç" },
+    { label: "Lig ve sezon", ok: Boolean(form.league_id && form.season_id), hint: "Sezon seç" },
+    { label: "Tarih ve saat", ok: Boolean(form.date && form.time), hint: form.date ? "Saat yok" : "Tarih yok" },
+    { label: "Saha", ok: Boolean(form.match_field), hint: "Saha seç" },
+    { label: "Yayın linki", ok: Boolean(form.match_video.trim()), optional: true },
+    ...(canSeeStaff ? [{ label: "Görevliler", ok: assignedCount > 0, optional: true, hint: `${assignedCount}/${duties.length} atandı` }] : []),
+  ];
 
   return (
     <View style={styles.stack}>
       {next ? (
-        <Note text={next.text} />
-      ) : null}
-      {next?.step && nextReady ? (
-        <Button label={next.label ?? "Devam"} icon="arrow-forward" iconPosition="right" variant="secondary" onPress={() => onGoStep(next.step!)} />
+        <NextStepCard
+          icon={nextMeta?.icon ?? "information-circle-outline"}
+          overline={next.step && nextReady ? "Sıradaki adım" : "Durum"}
+          title={next.step && nextReady ? next.label ?? "Devam" : statusLabelOf(original.mac_durumu)}
+          text={next.text}
+          onPress={next.step && nextReady ? () => onGoStep(next.step!) : undefined}
+          actionLabel={next.label}
+        />
       ) : null}
 
-      <Panel title="EŞLEŞME">
+      <CheckGrid title="Maç hazırlığı" items={checks} />
+
+      <OpsGroup title="Eşleşme" icon="git-compare-outline" tone="violet" hint="Takımlar ve maçın bağlı olduğu lig, sezon, grup.">
         <SelectField<number>
           label="Ev sahibi"
           value={form.home_team_id}
           options={teamOptions}
           valueLabel={form.first_team_name || null}
-          icon="shield-outline"
+          icon="home-outline"
           disabled={!canEdit}
           onChange={(v, o) => setForm((f) => ({ ...f, home_team_id: v, first_team_name: o?.label ?? f.first_team_name }))}
         />
+        <VersusDivider />
         <SelectField<number>
           label="Deplasman"
           value={form.away_team_id}
           options={teamOptions}
           valueLabel={form.second_team_name || null}
-          icon="shield-outline"
+          icon="airplane-outline"
           disabled={!canEdit}
           error={sameTeams ? "Bir takım kendisiyle eşleşemez." : undefined}
           onChange={(v, o) => setForm((f) => ({ ...f, away_team_id: v, second_team_name: o?.label ?? f.second_team_name }))}
         />
+        <View style={styles.sep} />
         <SelectField<number>
           label="Lig"
           value={form.league_id}
@@ -376,11 +399,13 @@ export function InfoStep({
             onChange={(v) => setForm((f) => ({ ...f, group_id: v }))}
           />
         ) : null}
-      </Panel>
+      </OpsGroup>
 
-      <Panel title="ZAMAN VE SAHA">
-        <DateField label="Tarih" value={form.date || null} onChange={(v) => setForm((f) => ({ ...f, date: v ?? "" }))} />
-        <TimeField label="Saat" value={form.time} onChange={(v) => setForm((f) => ({ ...f, time: v ?? "" }))} />
+      <OpsGroup title="Zaman ve saha" icon="time-outline" tone="cyan">
+        <FieldPair>
+          <DateField label="Tarih" value={form.date || null} onChange={(v) => setForm((f) => ({ ...f, date: v ?? "" }))} />
+          <TimeField label="Saat" value={form.time} onChange={(v) => setForm((f) => ({ ...f, time: v ?? "" }))} />
+        </FieldPair>
         <SelectField<string>
           label="Saha"
           value={form.match_field || null}
@@ -390,9 +415,14 @@ export function InfoStep({
           disabled={!canEdit}
           onChange={(v) => setForm((f) => ({ ...f, match_field: v ?? "" }))}
         />
-      </Panel>
+      </OpsGroup>
 
-      <Panel title="DURUM VE YAYIN">
+      <OpsGroup
+        title="Durum ve yayın"
+        icon="radio-outline"
+        tone="pink"
+        right={<Badge label={statusLabelOf(form.mac_durumu)} tone={statusTone(form.mac_durumu)} size="xs" dot />}
+      >
         <SelectField<string>
           label="Durum"
           value={form.mac_durumu}
@@ -404,6 +434,7 @@ export function InfoStep({
         />
         <Input
           label="Canlı yayın linki"
+          floating
           value={form.match_video}
           onChangeText={(t) => setForm((f) => ({ ...f, match_video: t }))}
           placeholder="https://youtube.com/live/…"
@@ -412,12 +443,25 @@ export function InfoStep({
           leadingIcon="videocam-outline"
           editable={canEdit}
         />
-      </Panel>
+      </OpsGroup>
 
       {canSeeStaff ? (
-        <Panel title="GÖREVLENDİRME">
+        <OpsGroup
+          title="Görevlendirme"
+          icon="people-outline"
+          tone="gold"
+          hint="Boş bırakılan görev kaydedince kaldırılır."
+          right={
+            staffQuery.isSuccess ? (
+              <Badge label={`${assignedCount}/${duties.length}`} tone={assignedCount === duties.length ? "win" : assignedCount ? "info" : "neutral"} size="xs" />
+            ) : null
+          }
+        >
           {staffQuery.isLoading || assignQuery.isLoading ? (
-            <Skeleton height={44} />
+            <View style={styles.skeletons}>
+              <Skeleton height={58} radius="md" />
+              <Skeleton height={58} radius="md" />
+            </View>
           ) : staffQuery.isError ? (
             <Note tone="warn" text="Personel listesi okunamadı. Görevlendirme için Personel yetkisi gerekir." />
           ) : !staffQuery.data?.items?.length && !Object.values(assignments).some(Boolean) ? (
@@ -430,7 +474,7 @@ export function InfoStep({
                 value={assignments[duty.key] || null}
                 valueLabel={assignQuery.data?.assignments?.[duty.key]?.name ?? null}
                 options={staffOptionsFor(duty.key)}
-                icon="person-outline"
+                icon={DUTY_ICON[duty.key] ?? "person-outline"}
                 placeholder="Görevli seç"
                 clearable
                 disabled={!canAssign}
@@ -438,7 +482,7 @@ export function InfoStep({
               />
             ))
           )}
-        </Panel>
+        </OpsGroup>
       ) : null}
 
       <StepSaveBar
@@ -449,15 +493,28 @@ export function InfoStep({
         disabled={!dirty || sameTeams}
       />
 
-      {canResult ? (
-        <Panel title="SONUÇ TESCİLİ">
-          <Note text="Canlı olay girmeden skoru elle ya da hükmen tescil edebilirsin; puan durumu yeniden hesaplanır." />
-          <Button label="Sonucu tescil et" icon="ribbon-outline" variant="secondary" onPress={() => setResultOpen(true)} fullWidth />
-        </Panel>
-      ) : null}
-
-      {canDelete ? (
-        <Button label="Maçı sil" icon="trash-outline" variant="danger" onPress={askDelete} loading={remove.isPending} fullWidth />
+      {canResult || canDelete ? (
+        <OpsGroup title="Sonuç ve kayıt" flush>
+          {canResult ? (
+            <OpsRow
+              icon="ribbon-outline"
+              tone="gold"
+              title="Sonucu tescil et"
+              meta="Canlı olay girmeden elle ya da hükmen; puan durumu yeniden hesaplanır"
+              onPress={() => setResultOpen(true)}
+            />
+          ) : null}
+          {canDelete ? (
+            <OpsRow
+              icon="trash-outline"
+              tone="red"
+              title={remove.isPending ? "Siliniyor…" : "Maçı sil"}
+              meta="Kadro ve istatistiklerle birlikte çöp kutusuna taşınır"
+              divider={canResult}
+              onPress={remove.isPending ? undefined : () => void askDelete()}
+            />
+          ) : null}
+        </OpsGroup>
       ) : null}
 
       <ResultSheet visible={resultOpen} onClose={() => setResultOpen(false)} match={match} onSaved={invalidate} />
@@ -465,6 +522,17 @@ export function InfoStep({
   );
 }
 
+/** Görev anahtarı → ikon (bilinmeyen görev kişi ikonuyla). */
+const DUTY_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
+  spiker: "mic-outline",
+  reji: "videocam-outline",
+  hakem: "flag-outline",
+  fotografci: "camera-outline",
+  saglikci: "medkit-outline",
+};
+
 const styles = StyleSheet.create({
   stack: { gap: space.md },
+  sep: { height: hairline, backgroundColor: colors.separator, marginVertical: space.xxs },
+  skeletons: { gap: space.m },
 });

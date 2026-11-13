@@ -188,7 +188,7 @@ export function StageStat({ label, value, tone, icon }: StageStatItem) {
     <View style={styles.stageStat} accessible accessibilityLabel={`${label}: ${value}`}>
       <View style={styles.stageStatHead}>
         {icon ? <Ionicons name={icon} size={11} color={tone ? stageTone(tone) : colors.onDarkMuted} /> : <View style={[styles.dot, { backgroundColor: tone ? stageTone(tone) : colors.onDarkMuted }]} />}
-        <Text style={styles.stageStatLabel} numberOfLines={1} {...textScale.badge}>
+        <Text style={styles.stageStatLabel} numberOfLines={2} {...textScale.badge}>
           {upperTR(label)}
         </Text>
       </View>

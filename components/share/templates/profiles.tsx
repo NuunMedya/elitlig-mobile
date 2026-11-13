@@ -247,7 +247,7 @@ function PlayerCard({ f, d }: { f: ShareFrame; d: PlayerShareData }) {
 function CardStat({ f, value, label, accent, gold }: { f: ShareFrame; value: string | number; label: string; accent?: boolean; gold?: boolean }) {
   return (
     <View style={{ alignItems: "center" }}>
-      <CText f={f} k="score" scale={f.story ? 0.46 : 0.36} color={gold ? f.t.gold[0] : accent ? f.t.accent : f.t.ink}>{value}</CText>
+      <CText f={f} k="score" scale={f.story ? 0.46 : 0.36} color={gold ? f.t.goldText : accent ? f.t.accent : f.t.ink}>{value}</CText>
       <Overline f={f} color={f.t.inkMuted} scale={0.9}>{label}</Overline>
     </View>
   );

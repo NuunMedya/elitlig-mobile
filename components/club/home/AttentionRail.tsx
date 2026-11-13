@@ -1,21 +1,27 @@
 /**
- * ŞİMDİ İLGİLEN — yatay kaydırılan renkli eylem kartları.
+ * YAPILACAKLAR — başkanın bekleyen işleri, öncelik sırasıyla.
  *
- * Her kart tek bir işi söyler: ne (başlık), neden (alt satır), kaç tane
- * (iri rakam) ve rengiyle ne kadar acil olduğunu (danger > warn > brand >
- * info > neutral). Kart dokunulunca `onAttention` çağrılır; ana ekran ya
- * rotayı açar ya da kendi alt sayfasını (onay bekleyen değişiklikler).
+ * İKİ KAT:
+ *   1. ÖNCELİKLİ KART — en ağır iş (süre baskısı > karar > bilgi) tek başına,
+ *      büyük: tonlu degrade ikon kutusu, başlık, neden, iri sayı ve "Şimdi
+ *      ilgilen" eylemi. Başkan sayfayı açınca ilk göreceği iş budur.
+ *   2. SIRADAKİLER — kalanlar tek kartta satır satır: IconTile + başlık/neden
+ *      + sayı rozeti + chevron. Acil tonlu (danger/warn) satırların solunda
+ *      3 px şerit.
+ * Eski yatay raf, işlerin yarısını ekran dışında bırakıyordu; "kaç iş var,
+ * hangisi önce?" ancak kaydırınca anlaşılıyordu.
  *
- * İş yoksa raf yerine tek satırlık "her şey yolunda" kartı çizilir; boş
- * bir başlık bırakmak "bir şey yüklenmedi mi?" sorusunu doğuruyordu.
+ * İş yoksa "her şey yolunda" satırı çizilir; boş bir başlık bırakmak "bir şey
+ * yüklenmedi mi?" sorusunu doğuruyordu.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
+import { ListCard, TILE_TONE, ToneRow } from "@/components/team/ClubKit";
 import type { AttentionItem } from "@/components/club/useClubSignals";
-import { Touchable, toneColors } from "@/components/ui";
+import { Badge, IconTile, Reveal, Touchable, toneColors, withAlpha } from "@/components/ui";
 import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 export const AttentionRail = React.memo(function AttentionRail({
@@ -27,99 +33,105 @@ export const AttentionRail = React.memo(function AttentionRail({
 }) {
   if (!items.length) {
     return (
-      <View style={styles.calm}>
-        <View style={[styles.calmIcon, { backgroundColor: toneColors("win").dim }]}>
-          <Ionicons name="checkmark-done" size={18} color={colors.win} />
-        </View>
-        <View style={styles.calmTexts}>
-          <Text style={styles.calmTitle} {...textScale.dense}>
-            Bekleyen iş yok
-          </Text>
-          <Text style={styles.calmHint} {...textScale.dense}>
-            Teklif, başvuru, yoklama ve disiplin tarafında her şey güncel.
-          </Text>
-        </View>
+      <View style={styles.pad}>
+        <ListCard>
+          <ToneRow icon="checkmark-done" tone="mint" title="Bekleyen iş yok" meta="Teklif, başvuru, yoklama ve disiplin tarafında her şey güncel." last />
+        </ListCard>
       </View>
     );
   }
 
+  const [lead, ...rest] = items;
+  const tc = toneColors(lead.tone);
+
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail} decelerationRate="fast" snapToInterval={CARD + space.sm}>
-      {items.map((item) => {
-        const tc = toneColors(item.tone);
-        return (
-          <Touchable
-            key={item.key}
-            onPress={() => onPress(item)}
-            feedback="card"
-            accessibilityRole="button"
-            accessibilityLabel={`${item.title}, ${item.count}, ${item.subtitle}`}
-            style={[styles.card, { borderColor: tc.dim }]}
-          >
-            <View style={[styles.stripe, { backgroundColor: tc.solidBg }]} />
-            <View style={styles.head}>
-              <View style={[styles.icon, { backgroundColor: tc.dim }]}>
-                <Ionicons name={item.icon} size={16} color={tc.fg} />
-              </View>
-              <Text style={[styles.count, { color: tc.fg }]} {...textScale.badge}>
-                {item.count > 99 ? "99+" : item.count}
-              </Text>
-            </View>
-            <Text style={styles.title} numberOfLines={2} {...textScale.dense}>
-              {item.title}
+    <View style={[styles.pad, styles.stack]}>
+      <Touchable
+        onPress={() => onPress(lead)}
+        feedback="card"
+        accessibilityRole="button"
+        accessibilityLabel={`Öncelikli iş: ${lead.title}, ${lead.count}, ${lead.subtitle}`}
+        style={[styles.lead, { borderColor: withAlpha(tc.fg, 0.35), backgroundColor: tc.dim }]}
+      >
+        <View style={[styles.leadStripe, { backgroundColor: tc.fg }]} />
+        <View style={styles.leadTop}>
+          <IconTile icon={lead.icon} tone={TILE_TONE[lead.tone]} size={44} />
+          <View style={styles.leadTexts}>
+            <Text style={[styles.leadOverline, { color: tc.fg }]} {...textScale.badge}>
+              ÖNCELİKLİ
             </Text>
-            <Text style={styles.subtitle} numberOfLines={2} {...textScale.dense}>
-              {item.subtitle}
+            <Text style={styles.leadTitle} numberOfLines={2} {...textScale.dense}>
+              {lead.title}
             </Text>
-            <View style={styles.footer}>
-              <Text style={[styles.go, { color: tc.fg }]} {...textScale.badge}>
-                İlgilen
-              </Text>
-              <Ionicons name="arrow-forward" size={12} color={tc.fg} />
-            </View>
-          </Touchable>
-        );
-      })}
-    </ScrollView>
+          </View>
+          <Text style={[styles.leadCount, { color: tc.fg }]} {...textScale.badge}>
+            {lead.count > 99 ? "99+" : lead.count}
+          </Text>
+        </View>
+        <Text style={styles.leadSubtitle} numberOfLines={2} {...textScale.dense}>
+          {lead.subtitle}
+        </Text>
+        <View style={[styles.leadCta, { backgroundColor: tc.fg }]}>
+          <Text style={[styles.leadCtaText, { color: tc.solidFg }]} {...textScale.badge}>
+            Şimdi ilgilen
+          </Text>
+          <Ionicons name="arrow-forward" size={14} color={tc.solidFg} />
+        </View>
+      </Touchable>
+
+      {rest.length ? (
+        <ListCard>
+          {rest.map((item, index) => {
+            const urgent = item.tone === "danger" || item.tone === "warn";
+            return (
+              <Reveal key={item.key} index={index} limit={8} distance={6}>
+                <ToneRow
+                  icon={item.icon}
+                  tone={TILE_TONE[item.tone]}
+                  title={item.title}
+                  meta={item.subtitle}
+                  stripe={urgent ? toneColors(item.tone).fg : undefined}
+                  trailing={<Badge label={item.count > 99 ? "99+" : item.count} tone={item.tone} variant={urgent ? "solid" : "soft"} size="sm" />}
+                  onPress={() => onPress(item)}
+                  last={index === rest.length - 1}
+                  accessibilityLabel={`${item.title}, ${item.count}, ${item.subtitle}`}
+                />
+              </Reveal>
+            );
+          })}
+        </ListCard>
+      ) : null}
+    </View>
   );
 });
 
-const CARD = 168;
-
 const styles = StyleSheet.create({
-  rail: { paddingHorizontal: layout.screenPadding, gap: space.sm },
-  card: {
-    width: CARD,
-    minHeight: 150,
-    padding: space.md,
-    paddingTop: space.md + space.xxs,
-    gap: space.xs,
+  pad: { paddingHorizontal: layout.screenPadding },
+  stack: { gap: space.sm },
+  lead: {
+    padding: space.lg,
+    paddingLeft: space.lg + space.xxs,
+    gap: space.sm,
     borderRadius: radius.xl,
-    backgroundColor: colors.surface1,
     borderWidth: hairline,
     overflow: "hidden",
   },
-  stripe: { position: "absolute", top: 0, left: 0, right: 0, height: 3 },
-  head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  icon: { width: 30, height: 30, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
-  count: { ...type.metric },
-  title: { ...type.h4, color: colors.textPrimary },
-  subtitle: { ...type.caption, color: colors.textTertiary, flex: 1 },
-  footer: { flexDirection: "row", alignItems: "center", gap: space.xxs },
-  go: { ...type.labelXs },
-  calm: {
-    marginHorizontal: layout.screenPadding,
+  leadStripe: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3 },
+  leadTop: { flexDirection: "row", alignItems: "center", gap: space.md },
+  leadTexts: { flex: 1, minWidth: 0, gap: space.xxs },
+  leadOverline: { ...type.overline },
+  leadTitle: { ...type.h2, color: colors.textPrimary },
+  leadCount: { ...type.scoreLg },
+  leadSubtitle: { ...type.bodySm, color: colors.textSecondary },
+  leadCta: {
+    alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
-    gap: space.md,
-    padding: space.md,
-    borderRadius: radius.xl,
-    backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
+    gap: space.xs,
+    paddingHorizontal: space.md,
+    paddingVertical: space.s,
+    borderRadius: radius.pill,
+    marginTop: space.xxs,
   },
-  calmIcon: { width: 34, height: 34, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
-  calmTexts: { flex: 1, gap: space.xxs },
-  calmTitle: { ...type.h4, color: colors.textPrimary },
-  calmHint: { ...type.caption, color: colors.textTertiary },
+  leadCtaText: { ...type.labelSm },
 });

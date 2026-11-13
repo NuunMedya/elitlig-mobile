@@ -129,7 +129,8 @@ export function ShareStudio({
       const outcome = await captureAndShare(shotRef, fmt, shareFileName(...fileParts, active.key, fmt));
       if (outcome === "downloaded") setNote({ tone: "ok", text: "PNG indirildi." });
       else if (outcome === "unavailable") setNote({ tone: "err", text: "Bu cihazda paylaşım menüsü açılamadı." });
-    } catch {
+    } catch (error) {
+      if (__DEV__) console.warn("Paylaşım görseli oluşturulamadı", error);
       setNote({ tone: "err", text: "Görsel oluşturulamadı. Görseller yüklendikten sonra yeniden dene." });
     } finally {
       setBusy(false);

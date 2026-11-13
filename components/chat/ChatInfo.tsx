@@ -11,6 +11,11 @@
  *   Belgeler    gönderilen dosyalar
  *   Bağlantılar mesajlardaki adresler
  *
+ * GECE DİLİ (ikinci tur): kimlik bir SAHNE kartıdır — gece mürekkebi degrade
+ * + aurora üstünde imza halkalı büyük avatar, beyaz ad ve durum, cam hızlı
+ * eylem karoları ve altta üç sayı (üye / medya / belge). Üyeler tek kartta
+ * girintili ayraçla; kendin ve yöneticiler mor şeritle ayrılır.
+ *
  * Takım grupları (type "team") sunucuda grup yönetimi uçlarına kapalıdır
  * (üyelik takım kadrosundan eşitlenir); üyeler salt okunur listelenir.
  */
@@ -27,7 +32,8 @@ import { ActionMenu, ChatAvatar, type MessageMenuItem } from "@/components/chat/
 import { ReportSheet, type ReportTarget } from "@/components/chat/ReportSheet";
 import { useConversationActions } from "@/components/chat/useConversationActions";
 import { Avatar, BottomSheet, Button, EmptyState, ErrorState, Input, ListRow, SegmentedControl, SkeletonListRow, Touchable, WaHeader, errorMessage } from "@/components/chat/kit";
-import { useToast } from "@/components/ui";
+import { Aurora, Reveal, useToast } from "@/components/ui";
+import { LinearGradient } from "expo-linear-gradient";
 import { patchConversationCache, useConversations, usePresence } from "@/hooks/useChat";
 import {
   addGroupMembers,
@@ -51,7 +57,11 @@ import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCall } from "@/providers/CallProvider";
 import { colors } from "@/lib/chatPalette";
-import { hairline, layout, radius, space, textScale, type } from "@/theme";
+import { glowStyle, hairline, layout, palette, radius, space, textScale, type } from "@/theme";
+
+/** Sahne degradesi: yatay, sağdan sola. */
+const G_START = { x: 1, y: 0.5 } as const;
+const G_END = { x: 0, y: 0.5 } as const;
 
 type Section = "genel" | "medya" | "belgeler" | "baglantilar";
 const SECTIONS: { key: Section; label: string }[] = [
@@ -227,24 +237,45 @@ export function ChatInfo({ conversationId, initialSection }: ChatInfoProps) {
     <SafeAreaView style={styles.screen} edges={["top"]}>
       {header}
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.identity}>
-          <Touchable feedback="none" haptic="light" onPress={canEditGroup ? changePhoto : undefined} disabled={!canEditGroup} accessibilityRole={canEditGroup ? "button" : "image"} accessibilityLabel={canEditGroup ? "Grup fotoğrafını değiştir" : conversation.title}>
-            <ChatAvatar conversation={conversation} size={96} online={Boolean(otherPresence?.online)} />
-            {canEditGroup ? (
-              <View style={styles.photoBadge}><Ionicons name="camera" size={14} color={colors.textOnBrand} /></View>
-            ) : null}
-          </Touchable>
-          <Text style={styles.name} {...textScale.dense}>{conversation.title}</Text>
-          <Text style={styles.status} {...textScale.dense}>{statusLine}</Text>
-          {other?.team_name && other.team_name !== conversation.title ? <Text style={styles.status} {...textScale.dense}>{other.team_name}</Text> : null}
-          {description ? <Text style={styles.description} {...textScale.long}>{description}</Text> : null}
-          <View style={styles.quick}>
-            <QuickAction icon="chatbubble" label="Mesaj" onPress={() => router.back()} />
-            {conversation.can_call ? <QuickAction icon="call" label="Ara" onPress={() => void call.startCall(conversation)} /> : null}
-            <QuickAction icon={conversation.muted ? "notifications" : "notifications-off"} label={conversation.muted ? "Sesi aç" : "Sessize al"} onPress={() => actions.mute(conversation)} />
-            {canEditGroup ? <QuickAction icon="create" label="Düzenle" onPress={() => setEditOpen(true)} /> : null}
+        <Reveal distance={12} style={styles.stage}>
+          <LinearGradient colors={colors.gradientInk} start={G_START} end={G_END} style={StyleSheet.absoluteFill} />
+          <Aurora variant="stage" />
+          <View style={styles.identity}>
+            <Touchable feedback="none" haptic="light" onPress={canEditGroup ? changePhoto : undefined} disabled={!canEditGroup} accessibilityRole={canEditGroup ? "button" : "image"} accessibilityLabel={canEditGroup ? "Grup fotoğrafını değiştir" : conversation.title}>
+              <View style={[styles.avatarGlow, glowStyle(colors.glow, 3)]}>
+                <ChatAvatar conversation={conversation} size={96} online={Boolean(otherPresence?.online)} ring dotRing={colors.gradientInk[0]} />
+              </View>
+              {canEditGroup ? (
+                <View style={styles.photoBadge}><Ionicons name="camera" size={14} color={palette.textOnBrand} /></View>
+              ) : null}
+            </Touchable>
+            <Text style={styles.kicker} {...textScale.badge}>{grouped ? (conversation.type === "team" ? "TAKIM GRUBU" : "GRUP") : conversation.is_management ? "RESMÎ SOHBET" : "KİŞİ"}</Text>
+            <Text style={styles.name} numberOfLines={2} {...textScale.dense}>{conversation.title}</Text>
+            <View style={styles.statusRow}>
+              {!grouped && otherPresence?.online ? <View style={styles.liveDot} /> : null}
+              <Text style={styles.status} numberOfLines={1} {...textScale.dense}>{statusLine}</Text>
+            </View>
+            {other?.team_name && other.team_name !== conversation.title ? <Text style={styles.status} {...textScale.dense}>{other.team_name}</Text> : null}
+            {description ? <Text style={styles.description} {...textScale.long}>{description}</Text> : null}
+            <View style={styles.quick}>
+              <QuickAction icon="chatbubble-ellipses" label="Mesaj" onPress={() => router.back()} />
+              {conversation.can_call ? <QuickAction icon="call" label="Ara" onPress={() => void call.startCall(conversation)} /> : null}
+              <QuickAction icon={conversation.muted ? "notifications" : "notifications-off"} label={conversation.muted ? "Sesi aç" : "Sessize al"} onPress={() => actions.mute(conversation)} />
+              {canEditGroup ? <QuickAction icon="create" label="Düzenle" onPress={() => setEditOpen(true)} /> : null}
+            </View>
           </View>
-        </View>
+          <View style={styles.stats}>
+            <StageStat value={grouped ? members.length : commonGroups.length} label={grouped ? "ÜYE" : "ORTAK GRUP"} />
+            <View style={styles.statRule} />
+            {grouped ? (
+              <StageStat value={members.filter((member) => member.role === "admin").length} label="YÖNETİCİ" />
+            ) : (
+              <StageStat value={conversation.muted ? "Sessiz" : "Açık"} label="BİLDİRİM" />
+            )}
+            <View style={styles.statRule} />
+            <StageStat value={sinceLabel(conversation.created_at)} label={grouped ? "KURULUŞ" : "İLK MESAJ"} />
+          </View>
+        </Reveal>
 
         <View style={styles.pad}>
           <SegmentedControl items={SECTIONS} value={section} onChange={setSection} stretch size="sm" />
@@ -274,12 +305,18 @@ export function ChatInfo({ conversationId, initialSection }: ChatInfoProps) {
                 <Text style={styles.sectionTitle} {...textScale.badge}>{members.length} ÜYE</Text>
                 {group.isError ? <View style={styles.pad}><ErrorState error={group.error} onRetry={() => void group.refetch()} variant="banner" /></View> : null}
                 {canEditGroup ? (
-                  <Touchable feedback="row" haptic="selection" onPress={() => setAddOpen(true)} accessibilityRole="button" accessibilityLabel="Üye ekle" style={styles.member}>
-                    <View style={styles.addIcon}><Ionicons name="person-add" size={18} color={colors.textOnBrand} /></View>
+                  <Touchable feedback="row" haptic="selection" onPress={() => setAddOpen(true)} accessibilityRole="button" accessibilityLabel="Üye ekle" style={[styles.member, styles.addRow]}>
+                    <View style={[styles.addIcon, glowStyle(colors.glow, 1)]}>
+                      <LinearGradient colors={colors.gradientBrand} start={G_START} end={G_END} style={[StyleSheet.absoluteFill, styles.addIconFill]} />
+                      <Ionicons name="person-add" size={17} color={palette.textOnBrand} />
+                    </View>
                     <Text style={styles.addLabel} {...textScale.dense}>Üye ekle</Text>
+                    <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
                   </Touchable>
                 ) : null}
-                {members.map((member) => <MemberRow key={member.user_id} member={member} onPress={setMemberMenu} />)}
+                <View style={styles.memberCard}>
+                  {members.map((member, index) => <MemberRow key={member.user_id} member={member} onPress={setMemberMenu} divided={index > 0 || canEditGroup} />)}
+                </View>
               </>
             ) : null}
 
@@ -375,18 +412,37 @@ export function ChatInfo({ conversationId, initialSection }: ChatInfoProps) {
 
 /* ---------- parçalar ---------- */
 
+/** "Kas 2026" biçiminde kısa tarih. */
+function sinceLabel(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("tr-TR", { month: "short", year: "numeric" });
+}
+
+/** Sahnedeki sayı / kısa değer: yoksa "—". */
+function StageStat({ value, label }: { value: number | string | null; label: string }) {
+  return (
+    <View style={styles.stat}>
+      <Text style={styles.statValue} {...textScale.badge}>{value == null ? "—" : value}</Text>
+      <Text style={styles.statLabel} {...textScale.badge}>{label}</Text>
+    </View>
+  );
+}
+
 function QuickAction({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }) {
   return (
     <Touchable feedback="chip" haptic="selection" onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={styles.quickItem}>
-      <Ionicons name={icon} size={20} color={colors.brandAccent} />
+      <Ionicons name={icon} size={19} color={colors.onDark} />
       <Text style={styles.quickLabel} numberOfLines={1} {...textScale.dense}>{label}</Text>
     </Touchable>
   );
 }
 
-const MemberRow = memo(function MemberRow({ member, onPress }: { member: GroupMember; onPress: (member: GroupMember) => void }) {
+const MemberRow = memo(function MemberRow({ member, onPress, divided = false }: { member: GroupMember; onPress: (member: GroupMember) => void; divided?: boolean }) {
   return (
-    <Touchable feedback="row" haptic="selection" onPress={() => onPress(member)} disabled={member.is_me} accessibilityRole="button" accessibilityLabel={`${member.is_me ? "Sen" : member.name}${member.role === "admin" ? ", grup yöneticisi" : ""}`} style={styles.member}>
+    <Touchable feedback="row" haptic="selection" onPress={() => onPress(member)} disabled={member.is_me} accessibilityRole="button" accessibilityLabel={`${member.is_me ? "Sen" : member.name}${member.role === "admin" ? ", grup yöneticisi" : ""}`} style={[styles.member, member.is_me ? styles.memberMe : null]}>
+      {member.is_me ? <View style={styles.meStrip} /> : null}
+      {divided ? <View style={styles.memberDivider} /> : null}
       <Avatar name={member.name} image={member.avatar} size={40} />
       <View style={styles.memberBody}>
         <Text style={styles.memberName} numberOfLines={1} {...textScale.dense}>{member.is_me ? "Sen" : member.name}</Text>
@@ -502,30 +558,47 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { paddingBottom: space.giant },
   pad: { paddingHorizontal: layout.screenPadding, paddingVertical: space.sm },
-  identity: { alignItems: "center", gap: space.xs, paddingHorizontal: layout.screenPadding, paddingTop: space.lg, paddingBottom: space.md },
-  photoBadge: { position: "absolute", right: 0, bottom: 0, width: 28, height: 28, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brand, borderWidth: 2, borderColor: colors.bg },
-  name: { ...type.display, color: colors.textPrimary, textAlign: "center", marginTop: space.sm },
-  status: { ...type.body, color: colors.textSecondary, textAlign: "center" },
-  description: { ...type.body, color: colors.textPrimary, textAlign: "center", marginTop: space.xs },
+  /* Kimlik sahnesi: gece mürekkebi + aurora, beyaz metin. */
+  avatarGlow: { borderRadius: radius.pill },
+  stage: { marginHorizontal: layout.screenPadding, marginTop: space.sm, borderRadius: radius.xxl, overflow: "hidden", borderWidth: hairline, borderColor: colors.glassBorder },
+  identity: { alignItems: "center", gap: space.xs, paddingHorizontal: layout.screenPadding, paddingTop: space.xl, paddingBottom: space.md },
+  photoBadge: { position: "absolute", right: 2, bottom: 2, width: 28, height: 28, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brand, borderWidth: 2, borderColor: colors.gradientInk[0] },
+  kicker: { ...type.overline, color: colors.onDarkMuted, marginTop: space.md },
+  name: { ...type.display, color: colors.onDark, textAlign: "center" },
+  statusRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  liveDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: palette.win },
+  status: { ...type.body, color: colors.onDarkMuted, textAlign: "center" },
+  description: { ...type.body, color: colors.onDark, textAlign: "center", marginTop: space.xs },
   quick: { flexDirection: "row", gap: space.sm, marginTop: space.md },
-  quickItem: { minWidth: 76, alignItems: "center", gap: space.xs, paddingVertical: space.m, paddingHorizontal: space.md, borderRadius: radius.md, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
-  quickLabel: { ...type.labelXs, color: colors.textSecondary },
+  quickItem: { minWidth: 72, alignItems: "center", gap: space.xs, paddingVertical: space.m, paddingHorizontal: space.md, borderRadius: radius.lg, backgroundColor: colors.inkPill, borderWidth: hairline, borderColor: colors.inkPillBorder },
+  quickLabel: { ...type.labelXs, color: colors.onDark },
+  stats: { flexDirection: "row", alignItems: "center", paddingVertical: space.md, borderTopWidth: hairline, borderTopColor: colors.inkPillBorder },
+  stat: { flex: 1, alignItems: "center", gap: space.xxs },
+  statValue: { ...type.metricSm, color: colors.onDark },
+  statLabel: { ...type.overline, color: colors.onDarkMuted },
+  statRule: { width: hairline, height: 28, backgroundColor: colors.inkPillBorder },
 
   group: { paddingHorizontal: layout.screenPadding, paddingTop: space.sm },
   dangerGroup: { paddingTop: space.xl },
-  sectionTitle: { ...type.overline, color: colors.textTertiary, paddingHorizontal: layout.screenPadding, paddingTop: space.xl, paddingBottom: space.xs },
+  sectionTitle: { ...type.overline, color: colors.textSecondary, paddingHorizontal: layout.screenPadding, paddingTop: space.xl, paddingBottom: space.sm },
 
-  member: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 56, paddingHorizontal: layout.screenPadding, paddingVertical: space.s },
+  member: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 60, paddingHorizontal: layout.screenPadding, paddingVertical: space.s },
+  memberCard: { marginHorizontal: layout.screenPadding, borderRadius: radius.xl, overflow: "hidden", backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
+  memberMe: { backgroundColor: colors.brandDim },
+  meStrip: { position: "absolute", left: 0, top: space.sm, bottom: space.sm, width: 3, borderTopRightRadius: radius.xs, borderBottomRightRadius: radius.xs, backgroundColor: colors.brand },
+  memberDivider: { position: "absolute", top: 0, right: 0, left: layout.screenPadding + 40 + space.md, height: hairline, backgroundColor: colors.border },
+  addRow: { marginHorizontal: layout.screenPadding, marginBottom: space.sm, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border, paddingHorizontal: space.md },
   memberBody: { flex: 1, minWidth: 0 },
   memberName: { ...type.h3, color: colors.textPrimary },
   memberSub: { ...type.caption, color: colors.textSecondary },
   role: { paddingHorizontal: space.sm, paddingVertical: space.xxs, borderRadius: radius.xs, backgroundColor: colors.brandDim },
   roleText: { ...type.labelXs, color: colors.brandAccent },
-  addIcon: { width: 40, height: 40, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brand },
-  addLabel: { ...type.h3, color: colors.brandAccent },
+  addIcon: { width: 40, height: 40, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  addIconFill: { borderRadius: radius.pill },
+  addLabel: { ...type.h3, color: colors.brandAccent, flex: 1 },
 
   grid: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, paddingHorizontal: layout.screenPadding, paddingTop: space.sm },
-  gridImage: { borderRadius: radius.xs, backgroundColor: colors.surface3 },
+  gridImage: { borderRadius: radius.md, backgroundColor: colors.surface3 },
   fileIcon: { width: 40, height: 40, borderRadius: radius.sm, alignItems: "center", justifyContent: "center", backgroundColor: colors.brand },
   linkIcon: { backgroundColor: colors.surface3 },
   linkText: { ...type.h3, color: colors.brandAccent },

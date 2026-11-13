@@ -85,6 +85,14 @@ export function EventSheet({
 
   const ready = Boolean(draft.code) && Boolean(draft.playerId) && (!sub || Boolean(draft.inPlayerId && draft.inPlayerId !== draft.playerId));
 
+  const codeLabel = EVENT_GROUPS.flatMap((g) => g.items).find((i) => i.code === draft.code)?.label ?? null;
+  const playerName = (id: string | null) => {
+    if (!id) return null;
+    const p = squad.find((x) => x.id === id);
+    return p ? `${p.number ? `#${p.number} ` : ""}${p.name}` : null;
+  };
+  const receipt = [`${draft.minute}. dakika`, codeLabel, playerName(draft.playerId)].filter(Boolean).join(", ");
+
   const submit = async () => {
     if (!ready) return;
     setBusy(true);
@@ -107,76 +115,134 @@ export function EventSheet({
       footer={<Button label={editing ? "Olayı güncelle" : "Olayı kaydet"} icon="checkmark" onPress={submit} loading={busy} disabled={!ready} fullWidth haptic="success" />}
     >
       <View style={styles.stack}>
-        <SidePicker
-          value={draft.side}
-          onChange={(side) => setDraft((d) => ({ ...d, side, playerId: null, inPlayerId: null }))}
-          homeName={homeName}
-          awayName={awayName}
-        />
-
-        {EVENT_GROUPS.map((group) => (
-          <View key={group.key} style={styles.group}>
-            <Text style={styles.groupTitle} {...textScale.dense}>
-              {group.title}
+        {/* Canlı makbuz: kaydedilecek olayın tek satırlık özeti. */}
+        <View style={styles.receipt} accessible accessibilityLabel={`Özet: ${receipt}`}>
+          <View style={styles.receiptMinute}>
+            <Text style={styles.receiptMinuteText} {...textScale.badge}>
+              {draft.minute}'
             </Text>
-            <ChipGroup scrollable={false} contentPadding={0}>
-              {group.items.map((item) => (
-                <Chip
-                  key={item.code}
-                  label={item.label}
-                  size="sm"
-                  tone={group.key === "goals" ? "win" : group.key === "discipline" ? "warn" : "info"}
-                  selected={draft.code === item.code}
-                  onPress={() => setDraft((d) => ({ ...d, code: item.code, inPlayerId: item.code === "SUBSTITUTION" ? d.inPlayerId : null }))}
-                />
-              ))}
-            </ChipGroup>
+            <Text style={styles.receiptPeriod} {...textScale.badge}>
+              {draft.period === 1 ? "1Y" : draft.period === 2 ? "2Y" : "UZ"}
+            </Text>
           </View>
-        ))}
-
-        {squad.length === 0 ? (
-          <Text style={styles.warn} {...textScale.long}>
-            Bu takımın maç kadrosu boş. Olay girmek için önce Kadro adımında oyuncuları seç.
-          </Text>
-        ) : null}
-
-        <PlayerGrid
-          label={sub ? "Oyundan çıkan" : "Oyuncu"}
-          players={playerList}
-          value={draft.playerId}
-          pitch={onPitch[draft.side]}
-          onChange={(v) => setDraft((d) => ({ ...d, playerId: v, inPlayerId: d.inPlayerId === v ? null : d.inPlayerId }))}
-        />
-        {sub ? (
-          <PlayerGrid
-            label="Oyuna giren"
-            players={inList}
-            value={draft.inPlayerId}
-            pitch={onPitch[draft.side]}
-            emptyText="Oyuna girebilecek yedek kalmadı."
-            onChange={(v) => setDraft((d) => ({ ...d, inPlayerId: v }))}
-          />
-        ) : null}
-
-        <View style={styles.inline}>
-          <Text style={styles.label} {...textScale.dense}>
-            Dakika
-          </Text>
-          <Stepper value={draft.minute} onChange={(minute) => setDraft((d) => ({ ...d, minute }))} min={0} max={130} repeatOnHold accessibilityLabel="Dakika" />
+          <View style={styles.flex}>
+            <Text style={styles.receiptTitle} numberOfLines={1} {...textScale.dense}>
+              {codeLabel ?? "Olay seç"}
+            </Text>
+            <Text style={styles.receiptMeta} numberOfLines={1} {...textScale.dense}>
+              {[draft.side === "home" ? homeName : awayName, playerName(draft.playerId), sub && draft.inPlayerId ? `↑ ${playerName(draft.inPlayerId)}` : null]
+                .filter(Boolean)
+                .join(" · ")}
+            </Text>
+          </View>
+          <Ionicons name={ready ? "checkmark-circle" : "ellipse-outline"} size={22} color={ready ? colors.win : colors.textTertiary} />
         </View>
-        <SegmentField<string>
-          label="Devre"
-          value={String(draft.period)}
-          onChange={(v) => setDraft((d) => ({ ...d, period: Number(v) }))}
-          options={[
-            { key: "1", label: "1. yarı" },
-            { key: "2", label: "2. yarı" },
-            { key: "3", label: "Uzatma" },
-          ]}
-        />
-        <Input label="Not (isteğe bağlı)" value={draft.note} onChangeText={(note) => setDraft((d) => ({ ...d, note }))} maxLength={255} placeholder="Kısa açıklama" />
+
+        <Section index={1} title="Taraf" done>
+          <SidePicker
+            value={draft.side}
+            onChange={(side) => setDraft((d) => ({ ...d, side, playerId: null, inPlayerId: null }))}
+            homeName={homeName}
+            awayName={awayName}
+          />
+        </Section>
+
+        <Section index={2} title="Olay" done={Boolean(draft.code)}>
+          {EVENT_GROUPS.map((group) => (
+            <View key={group.key} style={styles.group}>
+              <Text style={styles.groupTitle} {...textScale.dense}>
+                {group.title.toLocaleUpperCase("tr-TR")}
+              </Text>
+              <ChipGroup scrollable={false} contentPadding={0}>
+                {group.items.map((item) => (
+                  <Chip
+                    key={item.code}
+                    label={item.label}
+                    size="sm"
+                    tone={group.key === "goals" ? "win" : group.key === "discipline" ? "warn" : "info"}
+                    selected={draft.code === item.code}
+                    onPress={() => setDraft((d) => ({ ...d, code: item.code, inPlayerId: item.code === "SUBSTITUTION" ? d.inPlayerId : null }))}
+                  />
+                ))}
+              </ChipGroup>
+            </View>
+          ))}
+        </Section>
+
+        <Section index={3} title={sub ? "Oyuncular" : "Oyuncu"} done={Boolean(draft.playerId) && (!sub || Boolean(draft.inPlayerId))}>
+          {squad.length === 0 ? (
+            <Text style={styles.warn} {...textScale.long}>
+              Bu takımın maç kadrosu boş. Olay girmek için önce Kadro adımında oyuncuları seç.
+            </Text>
+          ) : null}
+          <PlayerGrid
+            label={sub ? "Oyundan çıkan" : "Oyuncu"}
+            players={playerList}
+            value={draft.playerId}
+            pitch={onPitch[draft.side]}
+            onChange={(v) => setDraft((d) => ({ ...d, playerId: v, inPlayerId: d.inPlayerId === v ? null : d.inPlayerId }))}
+          />
+          {sub ? (
+            <PlayerGrid
+              label="Oyuna giren"
+              players={inList}
+              value={draft.inPlayerId}
+              pitch={onPitch[draft.side]}
+              emptyText="Oyuna girebilecek yedek kalmadı."
+              onChange={(v) => setDraft((d) => ({ ...d, inPlayerId: v }))}
+            />
+          ) : null}
+        </Section>
+
+        <Section index={4} title="Zaman ve not" done>
+          <View style={styles.inline}>
+            <View>
+              <Text style={styles.label} {...textScale.dense}>
+                Dakika
+              </Text>
+              <Text style={styles.minuteBig} {...textScale.badge}>
+                {draft.minute}'
+              </Text>
+            </View>
+            <Stepper value={draft.minute} onChange={(minute) => setDraft((d) => ({ ...d, minute }))} min={0} max={130} repeatOnHold accessibilityLabel="Dakika" />
+          </View>
+          <SegmentField<string>
+            label="Devre"
+            value={String(draft.period)}
+            onChange={(v) => setDraft((d) => ({ ...d, period: Number(v) }))}
+            options={[
+              { key: "1", label: "1. yarı" },
+              { key: "2", label: "2. yarı" },
+              { key: "3", label: "Uzatma" },
+            ]}
+          />
+          <Input label="Not (isteğe bağlı)" floating value={draft.note} onChangeText={(note) => setDraft((d) => ({ ...d, note }))} maxLength={255} placeholder="Kısa açıklama" />
+        </Section>
       </View>
     </BottomSheet>
+  );
+}
+
+/** Numaralı form bölümü: sıra pulu (tamamsa yeşil onay) + versal başlık. */
+function Section({ index, title, done, children }: { index: number; title: string; done?: boolean; children: React.ReactNode }) {
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHead}>
+        <View style={[styles.stepDot, done ? styles.stepDotDone : null]}>
+          {done ? (
+            <Ionicons name="checkmark" size={12} color={colors.textOnStatus} />
+          ) : (
+            <Text style={styles.stepNo} {...textScale.badge}>
+              {index}
+            </Text>
+          )}
+        </View>
+        <Text style={styles.sectionTitle} accessibilityRole="header" {...textScale.dense}>
+          {title.toLocaleUpperCase("tr-TR")}
+        </Text>
+      </View>
+      {children}
+    </View>
   );
 }
 
@@ -221,9 +287,12 @@ function PlayerGrid({
                 accessibilityState={{ selected: on }}
                 accessibilityLabel={`${p.number ? `${p.number} numara ` : ""}${p.name}${pitch.has(p.id) ? ", sahada" : ""}`}
               >
-                <Text style={[styles.playerNo, on ? styles.playerTextOn : null]} {...textScale.badge}>
-                  {p.number || "–"}
-                </Text>
+                <View style={[styles.playerShirt, on ? styles.playerShirtOn : null]}>
+                  <Text style={[styles.playerNo, on ? styles.playerNoOn : null]} {...textScale.badge}>
+                    {p.number || "–"}
+                  </Text>
+                  {pitch.has(p.id) ? <View style={styles.pitchDot} /> : null}
+                </View>
                 <View style={styles.playerTexts}>
                   <Text style={[styles.playerName, on ? styles.playerTextOn : null]} numberOfLines={1} {...textScale.dense}>
                     {p.name}
@@ -261,28 +330,95 @@ export function draftToBody(draft: EventDraft, teamId: number | null, userId?: n
 
 const styles = StyleSheet.create({
   stack: { gap: space.md },
+  flex: { flex: 1, minWidth: 0 },
+  receipt: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+  },
+  receiptMinute: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.lg,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface1,
+  },
+  receiptMinuteText: { ...type.scoreSm, color: colors.textPrimary },
+  receiptPeriod: { ...type.nano, color: colors.brandAccent },
+  receiptTitle: { ...type.h3, color: colors.textPrimary },
+  receiptMeta: { ...type.caption, color: colors.textSecondary, marginTop: space.xxs },
+  section: {
+    gap: space.md,
+    padding: space.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  sectionHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  sectionTitle: { ...type.overline, color: colors.textSecondary },
+  stepDot: {
+    width: 22,
+    height: 22,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface3,
+  },
+  stepDotDone: { backgroundColor: colors.win },
+  stepNo: { ...type.numSmStrong, color: colors.textSecondary },
   group: { gap: space.xs },
   groupTitle: { ...type.overline, color: colors.textTertiary },
   inline: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  label: { ...type.label, color: colors.textSecondary },
+  label: { ...type.caption, color: colors.textTertiary },
+  minuteBig: { ...type.scoreLg, color: colors.textPrimary },
   warn: { ...type.bodySm, color: colors.warn },
   playerGrid: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   player: {
     flexGrow: 1,
     flexBasis: "46%",
-    minHeight: 52,
+    minHeight: 54,
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
-    paddingHorizontal: space.md,
+    paddingHorizontal: space.sm,
     paddingVertical: space.sm,
     borderRadius: radius.md,
     borderWidth: hairline,
-    borderColor: colors.border,
+    borderColor: colors.glassLine,
     backgroundColor: colors.surface2,
   },
   playerOn: { backgroundColor: colors.brandDim, borderColor: colors.brandBorder },
-  playerNo: { ...type.tableNumStrong, color: colors.textPrimary, minWidth: 24, textAlign: "center" },
+  playerShirt: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  playerShirtOn: { backgroundColor: colors.brandAccent, borderColor: colors.brandAccent },
+  playerNo: { ...type.numSmStrong, color: colors.textPrimary },
+  playerNoOn: { color: colors.onDark },
+  pitchDot: {
+    position: "absolute",
+    right: -1,
+    top: -1,
+    width: 9,
+    height: 9,
+    borderRadius: radius.pill,
+    backgroundColor: colors.win,
+    borderWidth: 1.5,
+    borderColor: colors.surface2,
+  },
   playerTexts: { flex: 1 },
   playerName: { ...type.label, color: colors.textPrimary },
   playerMeta: { ...type.caption, color: colors.textTertiary },

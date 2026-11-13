@@ -19,7 +19,8 @@ import { useQuery } from "@tanstack/react-query";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { MultiSelectField, Panel, SegmentField, SelectField, ToggleField } from "@/components/admin";
+import { MultiSelectField, SegmentField, SelectField, ToggleField } from "@/components/admin";
+import { SysGroup } from "@/components/admin/system/SysKit";
 import { ImageUploadField } from "@/components/admin/broadcast/ImageUploadField";
 import { Button, Chip, ChipGroup, Input, Tabs, Touchable } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
@@ -233,7 +234,7 @@ export function PortalEditor({
             ]}
             onChange={(v) => setPalette(v as "light" | "dark")}
           />
-          <Panel title={palette === "light" ? "Açık görünüm renkleri" : "Koyu görünüm renkleri"}>
+          <SysGroup icon="color-palette" tone="pink" title={palette === "light" ? "Açık görünüm renkleri" : "Koyu görünüm renkleri"}>
             {colorKeys.map((k) => (
               <ColorRow
                 key={k}
@@ -243,8 +244,8 @@ export function PortalEditor({
                 onChange={(v) => set({ theme: { ...f.theme, [palette]: { ...(f.theme[palette] ?? {}), [k]: v } } })}
               />
             ))}
-          </Panel>
-          <Panel title="Üst menü renkleri">
+          </SysGroup>
+          <SysGroup icon="menu" tone="violet" title="Üst menü renkleri">
             {menuKeys.map((k) => (
               <ColorRow
                 key={k}
@@ -254,7 +255,7 @@ export function PortalEditor({
                 onChange={(v) => set({ theme: { ...f.theme, menu: { ...(f.theme.menu ?? {}), [k]: v } } })}
               />
             ))}
-          </Panel>
+          </SysGroup>
           {catalog ? (
             <Button
               label="Varsayılan renklere dön"
@@ -278,7 +279,7 @@ export function PortalEditor({
           />
           <ToggleField label="Menü sabit kalsın" value={f.layout.header?.sticky ?? true} onChange={(v) => setLayout({ header: { ...f.layout.header, sticky: v } })} />
           <ToggleField label="Giriş / Kayıt düğmeleri" value={f.layout.header?.showLogin ?? true} onChange={(v) => setLayout({ header: { ...f.layout.header, showLogin: v } })} />
-          <Panel title="Menü öğeleri">
+          <SysGroup icon="list" tone="cyan" title="Menü öğeleri">
             {items.map((it, i) => (
               <OrderRow
                 key={it.key}
@@ -296,8 +297,8 @@ export function PortalEditor({
                 />
               </OrderRow>
             ))}
-          </Panel>
-          <Panel title={`Özel bağlantılar (${links.length}/${catalog?.maxCustomLinks ?? 6})`}>
+          </SysGroup>
+          <SysGroup icon="link" tone="gold" title={`Özel bağlantılar (${links.length}/${catalog?.maxCustomLinks ?? 6})`}>
             {links.map((l, i) => (
               // eslint-disable-next-line react/no-array-index-key
               <View key={i} style={styles.linkRow}>
@@ -319,13 +320,13 @@ export function PortalEditor({
             {links.length < (catalog?.maxCustomLinks ?? 6) ? (
               <Button label="Bağlantı ekle" icon="add" size="sm" variant="secondary" onPress={() => setLayout({ header: { ...f.layout.header, links: [...links, { label: "", url: "" }] } })} />
             ) : null}
-          </Panel>
+          </SysGroup>
         </View>
       ) : null}
 
       {tab === "home" ? (
         <View style={styles.wrap}>
-          <Panel title="Manşet">
+          <SysGroup icon="image" tone="red" title="Manşet">
             <ToggleField label="Manşet gösterilsin" value={f.layout.hero?.enabled ?? true} onChange={(v) => setLayout({ hero: { ...f.layout.hero, enabled: v } })} />
             <Input label="Başlık" value={f.layout.hero?.title ?? ""} onChangeText={(t) => setLayout({ hero: { ...f.layout.hero, title: t } })} />
             <Input label="Alt başlık" value={f.layout.hero?.subtitle ?? ""} multiline onChangeText={(t) => setLayout({ hero: { ...f.layout.hero, subtitle: t } })} />
@@ -339,8 +340,8 @@ export function PortalEditor({
               ]}
               onChange={(v) => setLayout({ hero: { ...f.layout.hero, align: v as "left" | "center" } })}
             />
-          </Panel>
-          <Panel title="Bölümler">
+          </SysGroup>
+          <SysGroup icon="grid" tone="mint" title="Bölümler">
             {home.map((h, i) => (
               <OrderRow
                 key={h.key}
@@ -353,7 +354,7 @@ export function PortalEditor({
                 <Input size="sm" value={h.title} placeholder={sectionLabel(h.key)} onChangeText={(t) => setLayout({ home: home.map((x, idx) => (idx === i ? { ...x, title: t } : x)) })} />
               </OrderRow>
             ))}
-          </Panel>
+          </SysGroup>
         </View>
       ) : null}
 

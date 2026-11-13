@@ -39,7 +39,7 @@ import { ChatHeader, SelectionHeader, type HeaderAction } from "@/components/cha
 import { Composer } from "@/components/chat/Composer";
 import { AwardSheet, MatchesSheet, SignupSheet } from "@/components/chat/ContentSheets";
 import { ImageViewer, type ViewerImage } from "@/components/chat/ImageViewer";
-import { DayDivider, MessageBubble, ReactionChips, RowShell, UnreadDivider, type BubbleActions } from "@/components/chat/MessageBubble";
+import { DayDivider, MessageBubble, ReactionChips, RowShell, UnreadDivider, beginRiseSession, type BubbleActions } from "@/components/chat/MessageBubble";
 import { ActionMenu, ForwardSheet, MessageInfoSheet, MessageMenu, ReactionsSheet, VotersSheet, type MessageMenuItem } from "@/components/chat/MessageSheets";
 import { ReportSheet, type ReportTarget } from "@/components/chat/ReportSheet";
 import { AwardPollCard, MatchesCard, PollBubble, SignupCard } from "@/components/chat/RichBubbles";
@@ -114,7 +114,9 @@ import { ApiError } from "@/lib/http";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCall } from "@/providers/CallProvider";
-import { hairline, layout, radius, space, textScale, type } from "@/theme";
+import { LinearGradient } from "expo-linear-gradient";
+import { Aurora } from "@/components/ui";
+import { glowStyle, hairline, layout, palette, radius, space, textScale, type } from "@/theme";
 
 const EMPTY_MESSAGES: ChatMessage[] = [];
 const EMPTY_PARTICIPANTS: ChatParticipant[] = [];
@@ -202,6 +204,8 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
 
   useEffect(() => {
     setActiveChatConversation(conversationId);
+    // Bubble Rise: açılıştaki mesajlar yükselmez, bundan sonra gelenler yükselir.
+    beginRiseSession();
     return () => setActiveChatConversation(null);
   }, [conversationId]);
 
@@ -729,6 +733,7 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
     longPress: (_message: ChatMessage) => {},
     press: (_message: ChatMessage) => {},
     openImage: (_message: ChatMessage) => {},
+    reply: (_message: ChatMessage) => {},
   });
   handlers.current.longPress = (message) => {
     if (selecting) {
@@ -743,6 +748,12 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
     const reportable = !admin && !message.sender.is_me && !message.sender.is_management && Boolean(message.sender.user_id);
     if (!canInteract(message) && !(message.kind === "call" && reportable)) return;
     setMenu(albums.get(message.id) ?? [message]);
+  };
+  // Kaydırarak yanıtla: menüdeki "Yanıtla" ile aynı koşullar.
+  handlers.current.reply = (message) => {
+    if (selecting || !canWrite || !canInteract(message)) return;
+    setEdit(null);
+    setReply(message);
   };
   handlers.current.press = (message) => {
     if (selecting && message.id > 0) toggleSelect(message);
@@ -761,6 +772,7 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
       onReactions: (message) => setReactionsOf(message.id),
       onRetry: retry,
       onOpenError: openError,
+      onReply: (message) => handlers.current.reply(message),
     }),
     [jumpToMessage, openError, retry],
   );
@@ -1062,7 +1074,7 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
         );
       }
       const shell = (children: React.ReactNode, center = false) => (
-        <RowShell mine={message.sender.is_me} selecting={selecting && canInteract(message)} selected={isSelected} highlighted={isHighlighted} last={item.last} center={center} onPress={() => actions.onPress(message)} onLongPress={() => actions.onLongPress(message)}>
+        <RowShell mine={message.sender.is_me} selecting={selecting && canInteract(message)} selected={isSelected} highlighted={isHighlighted} last={item.last} center={center} message={message} onSwipeReply={center ? undefined : () => actions.onReply?.(message)} onPress={() => actions.onPress(message)} onLongPress={() => actions.onLongPress(message)}>
           {children}
           {center ? null : <ReactionChips message={message} onPress={actions.onReactions} />}
         </RowShell>
@@ -1238,7 +1250,9 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
 
         {searchOpen ? (
           <View style={styles.searchBar}>
-            <Ionicons name="search" size={18} color={colors.textTertiary} />
+            <View style={styles.searchIcon}>
+              <Ionicons name="search" size={15} color={colors.brandAccent} />
+            </View>
             <TextInput
               value={searchText}
               onChangeText={setSearchText}
@@ -1268,8 +1282,11 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
         ) : null}
 
         {pinnedId && !selecting ? (
-          <Touchable feedback="row" haptic="selection" onPress={() => void jumpToMessage(pinnedId)} accessibilityRole="button" accessibilityLabel={`Sabitlenmiş mesaj: ${pinnedSummary?.text ?? "görmek için dokun"}`} style={styles.pinBar}>
-            <Ionicons name="pin" size={16} color={colors.brandAccent} />
+          <Touchable feedback="card" haptic="selection" onPress={() => void jumpToMessage(pinnedId)} accessibilityRole="button" accessibilityLabel={`Sabitlenmiş mesaj: ${pinnedSummary?.text ?? "görmek için dokun"}`} style={styles.pinBar}>
+            <LinearGradient colors={colors.gradientSignature} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={styles.pinStrip} />
+            <View style={styles.pinIcon}>
+              <Ionicons name="pin" size={14} color={colors.brandAccent} />
+            </View>
             <View style={styles.pinBody}>
               <Text style={styles.pinTitle} {...textScale.badge}>Sabitlenmiş mesaj</Text>
               <Text style={styles.pinText} numberOfLines={1} {...textScale.dense}>
@@ -1328,9 +1345,10 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
           )}
           {!atBottom && rows.length ? (
             <Touchable feedback="fab" haptic="light" onPress={() => scrollToBottom(true)} accessibilityRole="button" accessibilityLabel={newBelow ? `${newBelow} yeni mesaj. En alta git` : "En alta git"} style={[elevate(3), styles.down]}>
-              <Ionicons name="chevron-down" size={24} color={colors.textSecondary} />
+              <Ionicons name="chevron-down" size={22} color={colors.textPrimary} />
               {newBelow ? (
-                <View style={styles.downBadge}>
+                <View style={[styles.downBadge, glowStyle(colors.glow, 1)]}>
+                  <LinearGradient colors={colors.gradientBrand} start={{ x: 1, y: 0.5 }} end={{ x: 0, y: 0.5 }} style={[StyleSheet.absoluteFill, styles.downBadgeFill]} />
                   <Text style={styles.downBadgeText} {...textScale.badge}>{newBelow > 99 ? "99+" : newBelow}</Text>
                 </View>
               ) : null}
@@ -1340,13 +1358,17 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
 
         {selecting ? null : conversation.blocked_by_me ? (
           <View style={styles.notice}>
-            <Ionicons name="ban" size={18} color={colors.textSecondary} />
+            <View style={styles.noticeIcon}>
+              <Ionicons name="ban" size={16} color={colors.danger} />
+            </View>
             <Text style={styles.noticeText} {...textScale.long}>Bu üyeyi engelledin. Mesaj yazamaz ve arayamazsın.</Text>
             <Button label="Engeli kaldır" variant="secondary" size="sm" onPress={() => conversationActions.block(conversation)} />
           </View>
         ) : disabledReason ? (
           <View style={styles.notice}>
-            <Ionicons name="lock-closed" size={18} color={colors.textSecondary} />
+            <View style={styles.noticeIcon}>
+              <Ionicons name="lock-closed" size={16} color={colors.brandAccent} />
+            </View>
             <Text style={styles.noticeText} {...textScale.long}>{disabledReason}</Text>
           </View>
         ) : (
@@ -1442,17 +1464,30 @@ function mergeMessagesKeepLocal(list: ChatMessage[], message: ChatMessage): Chat
 
 /* ---------- duvar kâğıdı ---------- */
 
-const DOODLES: (keyof typeof Ionicons.glyphMap)[] = ["football-outline", "trophy-outline", "chatbubble-outline", "shirt-outline", "star-outline", "flag-outline", "stopwatch-outline", "people-outline", "medal-outline", "megaphone-outline", "heart-outline", "happy-outline"];
+const DOODLES: (keyof typeof Ionicons.glyphMap)[] = ["football-outline", "trophy-outline", "chatbubble-outline", "shirt-outline", "star-outline", "flag-outline", "stopwatch-outline", "medal-outline"];
 
-/** WhatsApp duvarındaki soluk desen: sabit, dokunulmaz, bir kez çizilir. */
+/**
+ * GECE DUVARI: üstte yavaş kayan aurora ışığı, altında "takımyıldız" nokta
+ * ızgarası ve seyrek, soluk futbol çizimleri. Sabit, dokunulmaz, bir kez çizilir.
+ */
 const Wallpaper = memo(function Wallpaper() {
   return (
     <View style={styles.wallpaper} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      {Array.from({ length: 48 }, (_unused, index) => (
-        <View key={index} style={[styles.doodle, index % 2 ? styles.doodleShift : null]}>
-          <Ionicons name={DOODLES[(index * 5 + Math.floor(index / 4)) % DOODLES.length]} size={26} color={chatPalette.wallPattern} />
-        </View>
-      ))}
+      <Aurora height={260} fadeTo={chatPalette.wall} />
+      <View style={styles.dotGrid}>
+        {Array.from({ length: 96 }, (_unused, index) => (
+          <View key={index} style={styles.dotCell}>
+            <View style={[styles.dot, index % 7 === 3 ? styles.dotBright : null]} />
+          </View>
+        ))}
+      </View>
+      <View style={styles.doodles}>
+        {Array.from({ length: 12 }, (_unused, index) => (
+          <View key={index} style={[styles.doodle, index % 2 ? styles.doodleShift : null]}>
+            <Ionicons name={DOODLES[(index * 3) % DOODLES.length]} size={22} color={chatPalette.wallPattern} />
+          </View>
+        ))}
+      </View>
     </View>
   );
 });
@@ -1460,25 +1495,33 @@ const Wallpaper = memo(function Wallpaper() {
 const styles = StyleSheet.create({
   /* Zemin yazma çubuğunun rengidir (alt güvenli alan onunla dolar); üst güvenli
      alanı `topInset` başlık rengine boyar. */
-  screen: { flex: 1, backgroundColor: wa.composerBar },
+  screen: { flex: 1, backgroundColor: colors.surface1 },
   screenPlain: { flex: 1, backgroundColor: colors.surface1 },
   topInset: { position: "absolute", top: 0, left: 0, right: 0, backgroundColor: colors.surface1 },
   flex: { flex: 1 },
   skeleton: { paddingHorizontal: layout.screenPadding, paddingTop: space.sm },
   banner: { marginHorizontal: layout.screenPadding, marginVertical: space.xs },
   wall: { flex: 1, backgroundColor: chatPalette.wall },
-  wallpaper: { ...StyleSheet.absoluteFillObject, flexDirection: "row", flexWrap: "wrap", overflow: "hidden" },
-  doodle: { width: "25%", height: 92, alignItems: "center", justifyContent: "center" },
-  doodleShift: { transform: [{ translateY: 22 }, { rotate: "-14deg" }] },
+  wallpaper: { ...StyleSheet.absoluteFillObject, overflow: "hidden" },
+  dotGrid: { ...StyleSheet.absoluteFillObject, flexDirection: "row", flexWrap: "wrap" },
+  dotCell: { width: "12.5%", height: 64, alignItems: "center", justifyContent: "center" },
+  dot: { width: 2, height: 2, borderRadius: radius.pill, backgroundColor: chatPalette.wallPattern },
+  dotBright: { width: 3, height: 3, backgroundColor: colors.brandBorder },
+  doodles: { ...StyleSheet.absoluteFillObject, flexDirection: "row", flexWrap: "wrap", paddingTop: space.giant },
+  doodle: { width: "33.3%", height: 150, alignItems: "center", justifyContent: "center" },
+  doodleShift: { transform: [{ translateY: 48 }, { rotate: "-14deg" }] },
   thread: { paddingVertical: space.sm },
   empty: { flex: 1, justifyContent: "flex-end", paddingHorizontal: layout.screenPadding, paddingBottom: space.lg },
 
-  searchBar: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingLeft: space.md, paddingRight: space.xs, minHeight: 48, backgroundColor: colors.surface1, borderBottomWidth: hairline, borderBottomColor: colors.separator },
+  searchBar: { flexDirection: "row", alignItems: "center", gap: space.xs, marginHorizontal: space.md, marginTop: space.xs, paddingLeft: space.xs, paddingRight: space.xxs, minHeight: 46, borderRadius: radius.pill, backgroundColor: colors.glass, borderWidth: hairline, borderColor: colors.brandBorder },
+  searchIcon: { width: 32, height: 32, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandDim },
   searchInput: { ...type.body, flex: 1, color: colors.textPrimary, paddingVertical: space.sm, ...({ outlineStyle: "none" } as object) },
   searchCount: { ...type.numSm, color: colors.textTertiary },
   searchButton: { width: 38, height: 44, alignItems: "center", justifyContent: "center" },
 
-  pinBar: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingLeft: space.md, minHeight: 48, backgroundColor: colors.surface1, borderBottomWidth: hairline, borderBottomColor: colors.separator },
+  pinBar: { flexDirection: "row", alignItems: "center", gap: space.sm, marginHorizontal: space.md, marginTop: space.xs, paddingLeft: space.md, minHeight: 50, borderRadius: radius.lg, overflow: "hidden", backgroundColor: colors.glass, borderWidth: hairline, borderColor: colors.glassLine, ...elevate(2) },
+  pinStrip: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3 },
+  pinIcon: { width: 28, height: 28, borderRadius: radius.sm, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandDim },
   pinBody: { flex: 1, minWidth: 0 },
   pinTitle: { ...type.labelXs, color: colors.brandAccent },
   pinText: { ...type.bodySm, color: colors.textSecondary },
@@ -1487,11 +1530,13 @@ const styles = StyleSheet.create({
   connecting: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: space.md, paddingVertical: space.xs, backgroundColor: colors.surface1, borderBottomWidth: hairline, borderBottomColor: colors.separator },
   connectingText: { ...type.caption, color: colors.textSecondary, flex: 1 },
 
-  down: { position: "absolute", right: space.md, bottom: space.md, width: 42, height: 42, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: chatPalette.bubbleTheirs, borderWidth: 0 },
-  downBadge: { position: "absolute", top: -space.s, right: -space.xs, minWidth: 20, height: 20, paddingHorizontal: space.xs, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: wa.badge },
-  downBadgeText: { ...type.nano, color: wa.onBadge },
+  down: { position: "absolute", right: space.md, bottom: space.md, width: 42, height: 42, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.glass, borderWidth: hairline, borderColor: colors.glassLine },
+  downBadge: { position: "absolute", top: -space.s, right: -space.xs, minWidth: 20, height: 20, paddingHorizontal: space.xs, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  downBadgeFill: { borderRadius: radius.pill },
+  downBadgeText: { ...type.nano, color: palette.textOnBrand },
 
-  notice: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: layout.screenPadding, paddingVertical: space.md, backgroundColor: wa.composerBar },
+  notice: { flexDirection: "row", alignItems: "center", gap: space.sm, marginHorizontal: space.md, marginVertical: space.sm, paddingHorizontal: space.md, paddingVertical: space.md, borderRadius: radius.xl, backgroundColor: colors.glass, borderWidth: hairline, borderColor: colors.glassLine },
+  noticeIcon: { width: 32, height: 32, borderRadius: radius.sm, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface3 },
   noticeText: { ...type.caption, color: colors.textSecondary, flex: 1 },
 
   attendanceHint: { ...type.bodySm, color: colors.textSecondary, paddingVertical: space.xs },
