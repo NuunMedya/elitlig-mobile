@@ -480,10 +480,10 @@ export default function ContactScreen() {
               inset="flush"
               style={styles.sectionHeader}
             />
-            <View style={styles.socialGrid}>
+            <View style={styles.socialCard}>
               {social.map((channel, index) => (
-                <Reveal key={channel.key} index={index} limit={6} style={styles.socialCell}>
-                  <SocialTile channel={channel} />
+                <Reveal key={channel.key} index={index} limit={6}>
+                  <SocialTile channel={channel} divided={index > 0} />
                 </Reveal>
               ))}
             </View>
@@ -612,8 +612,8 @@ const QuickTile = React.memo(function QuickTile({ channel }: { channel: Channel 
   );
 });
 
-/** Sosyal hesap karosu: basınca ilgili uygulamayı/tarayıcıyı açar. */
-const SocialTile = React.memo(function SocialTile({ channel }: { channel: Channel }) {
+/** Sosyal hesap satırı: basınca ilgili uygulamayı/tarayıcıyı açar. */
+const SocialTile = React.memo(function SocialTile({ channel, divided }: { channel: Channel; divided: boolean }) {
   const handlePress = useCallback(() => {
     void openLink(channel.url);
   }, [channel.url]);
@@ -625,9 +625,9 @@ const SocialTile = React.memo(function SocialTile({ channel }: { channel: Channe
       onPress={handlePress}
       accessibilityRole="link"
       accessibilityLabel={`${channel.label}: ${channel.value}`}
-      style={styles.social}
+      style={[styles.social, divided ? styles.socialDivided : null]}
     >
-      <IconTile icon={channel.leading.icon} tone={channel.tile} size={34} glow={false} />
+      <IconTile icon={channel.leading.icon} tone={channel.tile} size={36} glow={false} />
       <View style={styles.socialText}>
         <Text style={styles.socialValue} numberOfLines={1} {...textScale.dense}>
           {channel.value}
@@ -986,31 +986,31 @@ const styles = StyleSheet.create({
   },
 
   /* — Sosyal ızgara — */
-  socialGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: space.sm,
-  },
-  socialCell: {
-    width: "48.5%",
-    flexGrow: 1,
+  socialCard: {
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    overflow: "hidden",
+    ...elevate(1),
   },
   social: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
-    padding: space.m,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
+    gap: space.md,
+    minHeight: 60,
+    paddingHorizontal: space.md,
+  },
+  socialDivided: {
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
   },
   socialText: {
     flex: 1,
     minWidth: 0,
   },
   socialValue: {
-    ...type.h4,
+    ...type.h3,
     color: colors.textPrimary,
   },
   socialLabel: {

@@ -37,15 +37,22 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { FollowEventEditor } from "@/components/FollowEventEditor";
 import {
+  Badge,
   EmptyState,
   ErrorState,
-  ListRow,
+  GradientBar,
+  IconTile,
+  Odometer,
+  Reveal,
   ScreenHeader,
   SectionHeader,
+  Skeleton,
   SkeletonListRow,
   TeamLogo,
+  Toggle,
   Touchable,
   refreshControlProps,
+  type IconTileTone,
   useHeaderScroll,
   useRefresh,
   useToast,
@@ -63,15 +70,16 @@ import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, elevate, hairline, layout, radius, space, textScale, touchSlop, type } from "@/theme";
+import { SignatureStripe, StageCard } from "@/components/league/kit";
+import { colors, elevate, hairline, layout, radius, space, textScale, touchSlop, type, upperTR } from "@/theme";
 
 /** Bölüm sırası ve başlıkları. */
-const SECTIONS: { type: FollowType; title: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { type: "team", title: "Takımlar", icon: "shield-outline" },
-  { type: "league", title: "Ligler", icon: "trophy-outline" },
-  { type: "season", title: "Sezonlar", icon: "calendar-outline" },
-  { type: "city", title: "İller", icon: "location-outline" },
-  { type: "match", title: "Maçlar", icon: "football-outline" },
+const SECTIONS: { type: FollowType; title: string; icon: keyof typeof Ionicons.glyphMap; tone: IconTileTone }[] = [
+  { type: "team", title: "Takımlar", icon: "shield", tone: "violet" },
+  { type: "league", title: "Ligler", icon: "trophy", tone: "gold" },
+  { type: "season", title: "Sezonlar", icon: "calendar", tone: "cyan" },
+  { type: "city", title: "İller", icon: "location", tone: "mint" },
+  { type: "match", title: "Maçlar", icon: "football", tone: "pink" },
 ];
 
 
@@ -170,6 +178,8 @@ export default function FollowNotificationsScreen() {
   const data = query.data;
   const enabled = data?.enabled !== false;
   const followCount = data?.follows.length ?? 0;
+  const activeCount = data?.follows.filter((item) => !item.muted).length ?? 0;
+  const ratio = followCount ? activeCount / followCount : 0;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -180,28 +190,76 @@ export default function FollowNotificationsScreen() {
         contentContainerStyle={styles.list}
         refreshControl={<RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />}
       >
-        <View style={styles.intro}>
-          {query.error && data ? <ErrorState error={query.error} onRetry={query.refetch} variant="banner" /> : null}
+        {query.error && data ? <ErrorState error={query.error} onRetry={query.refetch} variant="banner" /> : null}
 
-          <ListRow
-            leading={{ icon: enabled ? "notifications" : "notifications-off", tone: enabled ? "brand" : "neutral" }}
-            title="Takip bildirimleri"
-            subtitle={
-              enabled
-                ? "Açık · aşağıdaki ayarlara göre gelir"
-                : "Kapalı · hiçbir takipten bildirim gelmez"
-            }
-            position="single"
-            toggle={{ value: enabled, onValueChange: (value) => master.mutate(value), disabled: !data }}
-            testID="follow-master"
-          />
-          <Text style={styles.hint} {...textScale.long}>
-            Zile dokun: o takibi sessize al. Karta dokun: hangi anlarda bildirim geleceğini seç.
-          </Text>
+        {/* 1) ÖZET SAHNESİ — kaç takip ses veriyor + ana anahtar. */}
+        <Reveal>
+          <StageCard style={styles.hero}>
+            <Text style={styles.heroOver} {...textScale.badge}>
+              {upperTR("Takip ettiklerinden")}
+            </Text>
+            <View style={styles.heroCount}>
+              {query.isLoading ? (
+                <Skeleton width={96} height={34} radius="sm" />
+              ) : (
+                <>
+                  <Odometer value={activeCount} style={styles.heroValue} />
+                  <Text style={styles.heroTotal} {...textScale.badge}>
+                    /{followCount}
+                  </Text>
+                  <Text style={styles.heroUnit} {...textScale.dense}>
+                    takip bildirim gönderiyor
+                  </Text>
+                </>
+              )}
+            </View>
+            <GradientBar value={enabled ? ratio : 0} height={6} track={colors.inkTile} />
+
+            <View style={styles.master}>
+              <IconTile
+                icon={enabled ? "notifications" : "notifications-off"}
+                tone={enabled ? "signature" : "neutral"}
+                size={36}
+                glow={enabled}
+              />
+              <View style={styles.masterText}>
+                <Text style={styles.masterTitle} {...textScale.dense}>
+                  {enabled ? "Bildirimler açık" : "Bildirimler kapalı"}
+                </Text>
+                <Text style={styles.masterSub} numberOfLines={2} {...textScale.dense}>
+                  {enabled ? "Aşağıdaki ayarlara göre gelir" : "Hiçbir takipten bildirim gelmez"}
+                </Text>
+              </View>
+              <Toggle
+                value={enabled}
+                onValueChange={(value) => master.mutate(value)}
+                disabled={!data}
+                accessibilityLabel="Takip bildirimleri"
+                testID="follow-master"
+              />
+            </View>
+          </StageCard>
+        </Reveal>
+
+        <View style={styles.legend}>
+          <View style={styles.legendItem}>
+            <Ionicons name="notifications" size={12} color={colors.brandAccent} />
+            <Text style={styles.hint} {...textScale.dense}>
+              Zil: sessize al
+            </Text>
+          </View>
+          <View style={styles.legendItem}>
+            <Ionicons name="options-outline" size={12} color={colors.textTertiary} />
+            <Text style={styles.hint} {...textScale.dense}>
+              Satır: hangi anlarda
+            </Text>
+          </View>
         </View>
 
         {query.isLoading ? (
-          <SkeletonListRow count={6} avatar />
+          <View style={styles.groupCard}>
+            <SkeletonListRow count={5} avatar />
+          </View>
         ) : query.error && !data ? (
           <ErrorState error={query.error} onRetry={query.refetch} />
         ) : followCount === 0 ? (
@@ -213,18 +271,28 @@ export default function FollowNotificationsScreen() {
             action={{ label: "Takım bul", onPress: () => router.push("/(tabs)/takip") }}
           />
         ) : (
-          SECTIONS.map((section) => {
+          SECTIONS.map((section, sectionIndex) => {
             const items = grouped.get(section.type);
             if (!items?.length) return null;
+            const live = items.filter((item) => !item.muted).length;
             return (
-              <View key={section.type} style={[styles.section, !enabled && styles.dimmed]}>
-                <SectionHeader title={section.title} meta={String(items.length)} style={styles.sectionHeader} />
-                <View style={styles.cards}>
-                  {items.map((item) => (
+              <Reveal key={section.type} index={sectionIndex + 1} style={!enabled ? styles.dimmed : undefined}>
+                <SectionHeader
+                  title={section.title}
+                  meta={`${live}/${items.length} açık`}
+                  icon={section.icon}
+                  iconTone={section.tone}
+                  inset="flush"
+                  style={styles.sectionHeader}
+                />
+                <View style={styles.groupCard}>
+                  {items.map((item, index) => (
                     <FollowCard
                       key={followKey(item)}
                       item={item}
                       icon={section.icon}
+                      tone={section.tone}
+                      last={index === items.length - 1}
                       expanded={expanded === followKey(item)}
                       onToggleExpand={() =>
                         setExpanded((current) => (current === followKey(item) ? null : followKey(item)))
@@ -234,52 +302,59 @@ export default function FollowNotificationsScreen() {
                     />
                   ))}
                 </View>
-              </View>
+              </Reveal>
             );
           })
         )}
 
         {/* ───────────── İl takibi ───────────── */}
-        <View style={styles.section}>
+        <View>
           <SectionHeader
             title="İl takip et"
             meta={cities.length ? `${cities.length} il` : undefined}
+            icon="location"
+            iconTone="cyan"
             collapsible
             collapsed={!showCities}
             onToggle={() => setShowCities((value) => !value)}
+            inset="flush"
             style={styles.sectionHeader}
           />
           {showCities ? (
             cities.length ? (
-              <View>
-                {cities.map((city, index) => (
-                  <ListRow
-                    key={city.id}
-                    title={city.label}
-                    subtitle={city.is_archived ? "Arşivlenmiş lig verisi" : undefined}
-                    position={
-                      cities.length === 1
-                        ? "single"
-                        : index === 0
-                          ? "first"
-                          : index === cities.length - 1
-                            ? "last"
-                            : "middle"
-                    }
-                    toggle={{
-                      value: isFavoriteCity(city.id),
-                      onValueChange: () => void toggleCity(city.id, city.label),
-                      disabled: pendingCity === city.id,
-                    }}
-                    testID={`follow-city-${city.id}`}
-                  />
-                ))}
+              <View style={styles.cityGrid}>
+                {cities.map((city) => {
+                  const on = isFavoriteCity(city.id);
+                  return (
+                    <Touchable
+                      key={city.id}
+                      feedback="chip"
+                      haptic="selection"
+                      disabled={pendingCity === city.id}
+                      onPress={() => void toggleCity(city.id, city.label)}
+                      accessibilityRole="switch"
+                      accessibilityState={{ checked: on, disabled: pendingCity === city.id }}
+                      accessibilityLabel={city.label}
+                      style={[styles.cityChip, on ? styles.cityChipOn : null]}
+                      testID={`follow-city-${city.id}`}
+                    >
+                      <Ionicons
+                        name={on ? "checkmark-circle" : "add-circle-outline"}
+                        size={16}
+                        color={on ? colors.brandAccent : colors.textTertiary}
+                      />
+                      <Text style={[styles.cityLabel, on ? styles.cityLabelOn : null]} numberOfLines={1} {...textScale.dense}>
+                        {city.label}
+                      </Text>
+                    </Touchable>
+                  );
+                })}
               </View>
             ) : (
               <SkeletonListRow count={4} avatar={false} />
             )
           ) : (
-            <Text style={styles.hint} {...textScale.long}>
+            <Text style={styles.cityHint} {...textScale.long}>
               Bir ili takip edersen o ildeki maç sonuçlarını ve haberleri alırsın; gol, kart gibi
               ayrıntıları ilin ayarından açabilirsin.
             </Text>
@@ -290,11 +365,19 @@ export default function FollowNotificationsScreen() {
   );
 }
 
-/* ═══════════════════════════ TAKİP KARTI ═══════════════════════════ */
+/* ═══════════════════════════ TAKİP SATIRI ═══════════════════════════ */
 
+/**
+ * Takip satırı — grup kartının içinde. Sol: arma ya da türün ikon kutusu;
+ * orta: ad + alt satırda olay noktaları (açık olay dolu, kapalı boş) ve
+ * özet; sağ: zil. Açılınca satırın altında olay karoları belirir ve satır
+ * imza şeridiyle işaretlenir.
+ */
 const FollowCard = memo(function FollowCard({
   item,
   icon,
+  tone,
+  last,
   expanded,
   onToggleExpand,
   eventInfo,
@@ -302,17 +385,21 @@ const FollowCard = memo(function FollowCard({
 }: {
   item: FollowItem;
   icon: keyof typeof Ionicons.glyphMap;
+  tone: IconTileTone;
+  last: boolean;
   expanded: boolean;
   onToggleExpand: () => void;
   eventInfo: Map<string, FollowEventInfo>;
   onChange: (item: FollowItem, patch: FollowSettingsPatch) => void;
 }) {
   const toggleMute = useCallback(() => onChange(item, { muted: !item.muted }), [item, onChange]);
+  const onCount = item.events.filter((event) => item.prefs[event]).length;
 
   return (
-    <View style={[styles.card, expanded ? styles.cardOpen : null]}>
+    <View style={[styles.row, !last ? styles.rowDivider : null, expanded ? styles.rowOpen : null]}>
+      {expanded ? <SignatureStripe /> : null}
       <View style={styles.cardHead}>
-        {/* Karta dokunmak olayları açar; zil ayrı bir hedeftir (iç içe
+        {/* Satıra dokunmak olayları açar; zil ayrı bir hedeftir (iç içe
             düğme yok — ekran okuyucu iki ayrı eylem duyar). */}
         <Touchable
           feedback="row"
@@ -325,19 +412,30 @@ const FollowCard = memo(function FollowCard({
           testID={`follow-${item.type}-${item.id}`}
         >
           {item.type === "team" ? (
-            <TeamLogo name={item.name} logo={item.logo} size={36} dimmed={item.muted} />
+            <TeamLogo name={item.name} logo={item.logo} size={38} dimmed={item.muted} />
           ) : (
-            <View style={styles.typeIcon}>
-              <Ionicons name={icon} size={18} color={item.muted ? colors.textTertiary : colors.brandAccent} />
-            </View>
+            <IconTile icon={icon} tone={item.muted ? "neutral" : tone} size={38} glow={false} />
           )}
           <View style={styles.cardText}>
             <Text style={[styles.cardTitle, item.muted ? styles.mutedText : null]} numberOfLines={1} {...textScale.dense}>
               {item.name}
             </Text>
-            <Text style={styles.cardSub} numberOfLines={1} {...textScale.dense}>
-              {[item.subtitle, summaryOf(item)].filter(Boolean).join(" · ")}
-            </Text>
+            <View style={styles.dotsRow}>
+              {item.muted ? (
+                <Badge label="Sessizde" tone="neutral" size="xs" icon="notifications-off" />
+              ) : (
+                <>
+                  <View style={styles.dots}>
+                    {item.events.map((event) => (
+                      <View key={event} style={[styles.dot, item.prefs[event] ? styles.dotOn : null]} />
+                    ))}
+                  </View>
+                  <Text style={styles.cardSub} numberOfLines={1} {...textScale.dense}>
+                    {[item.subtitle, `${onCount}/${item.events.length} tür`].filter(Boolean).join(" · ")}
+                  </Text>
+                </>
+              )}
+            </View>
           </View>
           <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={16} color={colors.textTertiary} />
         </Touchable>
@@ -375,27 +473,53 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   list: {
     paddingHorizontal: layout.screenPadding,
+    paddingTop: space.sm,
     paddingBottom: space.giant,
+    gap: space.sm,
     flexGrow: 1,
   },
-  intro: { paddingTop: space.md, gap: space.sm },
-  section: { paddingTop: space.sm },
-  sectionHeader: { paddingTop: space.lg, paddingHorizontal: 0 },
-  dimmed: { opacity: 0.55 },
-  cards: { gap: space.sm },
 
-  /* Takip kartı */
-  card: {
+  /* Sahne */
+  hero: { padding: space.lg, gap: space.sm },
+  heroOver: { ...type.overline, color: colors.brandOnDark },
+  heroCount: { flexDirection: "row", alignItems: "flex-end", gap: space.xs, minHeight: 34 },
+  heroValue: { ...type.scoreLg, color: colors.onDark },
+  heroTotal: { ...type.scoreSm, color: colors.onDarkMuted, marginBottom: 3 },
+  heroUnit: { ...type.bodySm, color: colors.onDarkMuted, marginBottom: 5, marginLeft: space.xs, flexShrink: 1 },
+  master: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    marginTop: space.sm,
+    padding: space.m,
     borderRadius: radius.lg,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
+  },
+  masterText: { flex: 1, minWidth: 0, gap: space.px },
+  masterTitle: { ...type.h4, color: colors.onDark },
+  masterSub: { ...type.caption, color: colors.onDarkMuted },
+
+  legend: { flexDirection: "row", gap: space.lg, paddingHorizontal: space.xxs },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  hint: { ...type.caption, color: colors.textTertiary },
+
+  sectionHeader: { marginTop: space.lg, marginBottom: space.sm },
+  dimmed: { opacity: 0.55 },
+
+  /* Grup kartı ve satır */
+  groupCard: {
+    borderRadius: radius.xl,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
     borderColor: colors.border,
     overflow: "hidden",
-  },
-  cardOpen: {
-    borderColor: colors.borderStrong,
     ...elevate(1),
   },
+  row: { overflow: "hidden" },
+  rowDivider: { borderBottomWidth: hairline, borderBottomColor: colors.separator },
+  rowOpen: { backgroundColor: colors.brandDim },
   cardHead: {
     flexDirection: "row",
     alignItems: "center",
@@ -406,23 +530,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
-    paddingVertical: space.md,
+    paddingVertical: space.m,
     paddingLeft: space.md,
     paddingRight: space.sm,
-    minHeight: layout.listRowHeightTwoLine,
+    minHeight: 64,
   },
-  typeIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.sm,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.brandDim,
-  },
-  cardText: { flex: 1, gap: 2 },
+  cardText: { flex: 1, minWidth: 0, gap: space.xs },
   cardTitle: { ...type.h3, color: colors.textPrimary },
   mutedText: { color: colors.textTertiary },
-  cardSub: { ...type.bodySm, color: colors.textSecondary },
+  dotsRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  dots: { flexDirection: "row", gap: 3 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.surface3 },
+  dotOn: { backgroundColor: colors.accent },
+  cardSub: { ...type.caption, color: colors.textTertiary, flexShrink: 1 },
   bell: {
     width: 36,
     height: 36,
@@ -430,17 +550,34 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
   },
   bellMuted: {
     backgroundColor: colors.surface2,
+    borderColor: colors.border,
   },
   cardBody: {
-    gap: space.md,
     paddingHorizontal: space.md,
-    paddingTop: space.md,
     paddingBottom: space.md,
-    borderTopWidth: hairline,
-    borderTopColor: colors.separator,
+    paddingTop: space.xs,
   },
-  hint: { ...type.caption, color: colors.textTertiary, lineHeight: 16, paddingHorizontal: space.xxs },
+
+  /* İller */
+  cityGrid: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  cityChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    paddingHorizontal: space.m,
+    minHeight: 36,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  cityChipOn: { backgroundColor: colors.brandDim, borderColor: colors.brandBorder },
+  cityLabel: { ...type.labelSm, color: colors.textSecondary },
+  cityLabelOn: { color: colors.brandAccent },
+  cityHint: { ...type.bodySm, color: colors.textTertiary, paddingHorizontal: space.xxs },
 });

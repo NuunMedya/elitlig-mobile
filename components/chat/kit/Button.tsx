@@ -46,9 +46,14 @@ import {
   type TextStyle,
   type ViewStyle,
 } from "react-native";
-import { hairline, radius, space, textScale, touchSlop, type } from "@/theme";
+import { LinearGradient } from "expo-linear-gradient";
+import { glowStyle, hairline, palette, radius, space, textScale, touchSlop, type } from "@/theme";
 import { colors } from "@/lib/chatPalette";
 import { Touchable, type HapticKind } from "./Pressable";
+
+/** Degrade yönü: sağdan sola (açık uç sağda). */
+const G_START = { x: 1, y: 0.5 } as const;
+const G_END = { x: 0, y: 0.5 } as const;
 
 export interface ButtonProps {
   label: string;
@@ -99,7 +104,7 @@ export const Button = React.memo(function Button({
 
   const boxStyle: ViewStyle =
     variant === "primary"
-      ? { backgroundColor: colors.brand }
+      ? { overflow: "hidden", ...glowStyle(colors.glow, 1) }
       : variant === "secondary"
         ? onDark
           ? { backgroundColor: colors.inkPill, borderWidth: hairline, borderColor: colors.inkPillBorder }
@@ -112,14 +117,14 @@ export const Button = React.memo(function Button({
      (Touchable "button") bunun üstüne biner. */
   const pressedBox: ViewStyle | undefined =
     variant === "primary"
-      ? { backgroundColor: colors.brandStrong }
+      ? undefined
       : variant === "secondary" && !onDark
         ? { backgroundColor: colors.pressed }
         : undefined;
 
   const fg =
     variant === "primary"
-      ? colors.textOnBrand
+      ? palette.textOnBrand
       : variant === "danger"
         ? colors.danger
         : onDark
@@ -170,6 +175,8 @@ export const Button = React.memo(function Button({
         style,
       ]}
     >
+      {/* Gece teması: birincil düğme mor degrade dolgudur (metin beyaz). */}
+      {variant === "primary" ? <LinearGradient colors={colors.gradientBrand} start={G_START} end={G_END} style={StyleSheet.absoluteFill} /> : null}
       {iconPosition === "left" ? iconNode : null}
       <Text style={labelStyle} numberOfLines={1} {...textScale.dense}>
         {label}

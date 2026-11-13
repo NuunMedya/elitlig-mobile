@@ -18,7 +18,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { ChipsField, confirmAction, useAdminMutation } from "@/components/admin";
-import { BottomSheet, Button, EmptyState, Input, SkeletonListRow, Stepper, Touchable } from "@/components/ui";
+import { Badge, BottomSheet, Button, EmptyState, GradientBar, IconTile, Input, SkeletonListRow, Stepper, Touchable, type IconTileTone } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import {
   createPlayerStat,
@@ -33,6 +33,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 import { POSITIONS, type Side, type SquadPlayer } from "./model";
+import { OpsGroup } from "./opsKit";
 import { Note, SidePicker } from "./parts";
 
 interface Draft {
@@ -80,51 +81,69 @@ export function StatsEditor({ match, squads }: { match: AdminMatch; squads: Reco
   const opponentId = side === "home" ? awayTeamId : homeTeamId;
   const entered = players.filter((p) => byPlayer.has(p.id)).length;
 
+  const ratio = players.length ? entered / players.length : 0;
+
   return (
     <View style={styles.stack}>
-      <Note text="Kadrodaki oyuncular için maç istatistiğini gir. Gol ve kart canlı akışta girildiyse burada yalnız eksikleri tamamla." />
       <SidePicker value={side} onChange={setSide} homeName={match.first_team_name || "Ev sahibi"} awayName={match.second_team_name || "Deplasman"} />
-      <Text style={styles.summary} {...textScale.dense}>
-        {entered} / {players.length} oyuncunun istatistiği girildi
-      </Text>
       {statsQuery.isLoading ? (
         <SkeletonListRow count={5} />
       ) : players.length === 0 ? (
         <EmptyState icon="people-outline" title="Kadro boş" body="İstatistik girmek için önce Kadro adımında oyuncuları seç." variant="inline" />
       ) : (
-        players.map((p) => {
-          const row = byPlayer.get(p.id) ?? null;
-          return (
-            <Touchable
-              key={p.id}
-              onPress={canEdit ? () => setEditing({ player: p, row }) : undefined}
-              style={[styles.row, row ? styles.rowOn : null]}
-              accessibilityRole="button"
-              accessibilityLabel={`${p.name} istatistiği`}
-            >
-              <View style={styles.rowText}>
-                <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
-                  {p.number ? `#${p.number} ` : ""}
-                  {p.name}
-                </Text>
-                <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
-                  {row
-                    ? [
-                        `${row.number_of_goals} gol`,
-                        row.yellow_card ? "sarı kart" : null,
-                        row.red_card ? "kırmızı kart" : null,
-                        row.goal_to_himself ? `${row.goal_to_himself} kendi kalesine` : null,
-                        `${row.points} puan`,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")
-                    : "Girilmedi"}
-                </Text>
-              </View>
-              <Ionicons name={row ? "checkmark-circle" : "add-circle-outline"} size={20} color={row ? colors.win : colors.textTertiary} />
-            </Touchable>
-          );
-        })
+        <OpsGroup
+          title="Oyuncu istatistikleri"
+          hint="Gol ve kart canlı akışta girildiyse burada yalnız eksikleri tamamla."
+          right={
+            <Text style={[styles.count, entered === players.length ? { color: colors.win } : null]} {...textScale.badge}>
+              {entered}
+              <Text style={styles.countOf}>/{players.length}</Text>
+            </Text>
+          }
+          flush
+        >
+          <View style={styles.progress}>
+            <GradientBar value={ratio} height={4} />
+          </View>
+          {players.map((p, index) => {
+            const row = byPlayer.get(p.id) ?? null;
+            return (
+              <Touchable
+                key={p.id}
+                onPress={canEdit ? () => setEditing({ player: p, row }) : undefined}
+                feedback="row"
+                style={[styles.row, index > 0 ? styles.rowDivider : null]}
+                accessibilityRole="button"
+                accessibilityLabel={`${p.name} istatistiği, ${row ? "girildi" : "girilmedi"}`}
+              >
+                <View style={[styles.shirt, row ? styles.shirtOn : null]}>
+                  <Text style={[styles.shirtNo, row ? styles.shirtNoOn : null]} {...textScale.badge}>
+                    {p.number || "–"}
+                  </Text>
+                </View>
+                <View style={styles.rowText}>
+                  <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
+                    {p.name}
+                  </Text>
+                  {row ? (
+                    <View style={styles.facts}>
+                      {Number(row.number_of_goals) > 0 ? <Fact icon="football" text={String(row.number_of_goals)} /> : null}
+                      {Number(row.yellow_card) > 0 ? <Fact card={colors.warn} text={String(row.yellow_card)} /> : null}
+                      {Number(row.red_card) > 0 ? <Fact card={colors.danger} text={String(row.red_card)} /> : null}
+                      {Number(row.goal_to_himself) > 0 ? <Fact icon="football" tint={colors.danger} text={`${row.goal_to_himself} k.k.`} /> : null}
+                      <Fact icon="star" tint={colors.brandAccent} text={`${row.points} puan`} />
+                    </View>
+                  ) : (
+                    <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+                      {[p.role === "starter" ? "İlk 11" : "Yedek", p.position].filter(Boolean).join(" · ")} · girilmedi
+                    </Text>
+                  )}
+                </View>
+                {row ? <Badge label="Girildi" tone="win" size="xs" /> : <Ionicons name="add-circle-outline" size={22} color={colors.brandAccent} />}
+              </Touchable>
+            );
+          })}
+        </OpsGroup>
       )}
 
       <StatSheet
@@ -133,6 +152,18 @@ export function StatsEditor({ match, squads }: { match: AdminMatch; squads: Reco
         base={{ match_id: matchId, team_id: teamId, opponent_team_id: opponentId }}
         statsKey={statsKey}
       />
+    </View>
+  );
+}
+
+/** Satır içi küçük istatistik: ikon (ya da kart dikdörtgeni) + değer. */
+function Fact({ icon, card, tint, text }: { icon?: keyof typeof Ionicons.glyphMap; card?: string; tint?: string; text: string }) {
+  return (
+    <View style={styles.fact}>
+      {card ? <View style={[styles.factCard, { backgroundColor: card }]} /> : icon ? <Ionicons name={icon} size={11} color={tint ?? colors.textSecondary} /> : null}
+      <Text style={styles.factText} {...textScale.badge}>
+        {text}
+      </Text>
     </View>
   );
 }
@@ -212,39 +243,72 @@ function StatSheet({
       }
     >
       <View style={styles.stack}>
-        <Counter label="Gol" value={draft.number_of_goals} onChange={(v) => set("number_of_goals", v)} max={20} />
-        {draft.number_of_goals > 0 ? (
-          <Input label="Gol dakikaları" value={draft.goals_minutes} onChangeText={(t) => set("goals_minutes", t)} placeholder="Ör. 12, 40" keyboardType="numbers-and-punctuation" />
-        ) : null}
-        <Counter label="Sarı kart" value={draft.yellow_card} onChange={(v) => set("yellow_card", v)} max={2} />
-        <Counter label="Kırmızı kart" value={draft.red_card} onChange={(v) => set("red_card", v)} max={1} />
-        <Counter label="Kendi kalesine gol" value={draft.goal_to_himself} onChange={(v) => set("goal_to_himself", v)} max={10} />
-        {draft.goal_to_himself > 0 ? (
-          <Input
-            label="Kendi kalesine gol dakikaları"
-            value={draft.goal_to_himself_minutes}
-            onChangeText={(t) => set("goal_to_himself_minutes", t)}
-            placeholder="Ör. 33"
-            keyboardType="numbers-and-punctuation"
+        <View style={styles.sheetSection}>
+          <Text style={styles.sectionTitle} {...textScale.dense}>
+            GOLLER
+          </Text>
+          <Counter icon="football-outline" tone="mint" label="Gol" value={draft.number_of_goals} onChange={(v) => set("number_of_goals", v)} max={20} />
+          {draft.number_of_goals > 0 ? (
+            <Input label="Gol dakikaları" floating value={draft.goals_minutes} onChangeText={(t) => set("goals_minutes", t)} placeholder="Ör. 12, 40" keyboardType="numbers-and-punctuation" />
+          ) : null}
+          <Counter icon="return-down-back-outline" tone="red" label="Kendi kalesine gol" value={draft.goal_to_himself} onChange={(v) => set("goal_to_himself", v)} max={10} divider />
+          {draft.goal_to_himself > 0 ? (
+            <Input
+              label="Kendi kalesine gol dakikaları"
+              floating
+              value={draft.goal_to_himself_minutes}
+              onChangeText={(t) => set("goal_to_himself_minutes", t)}
+              placeholder="Ör. 33"
+              keyboardType="numbers-and-punctuation"
+            />
+          ) : null}
+        </View>
+        <View style={styles.sheetSection}>
+          <Text style={styles.sectionTitle} {...textScale.dense}>
+            DİSİPLİN
+          </Text>
+          <Counter icon="square" tone="gold" label="Sarı kart" value={draft.yellow_card} onChange={(v) => set("yellow_card", v)} max={2} />
+          <Counter icon="square" tone="red" label="Kırmızı kart" value={draft.red_card} onChange={(v) => set("red_card", v)} max={1} divider />
+        </View>
+        <View style={styles.sheetSection}>
+          <Text style={styles.sectionTitle} {...textScale.dense}>
+            DEĞERLENDİRME
+          </Text>
+          <Counter icon="star-outline" tone="violet" label="Puan" value={draft.points} onChange={(v) => set("points", v)} max={10} />
+          <ChipsField<string>
+            label="Mevki"
+            value={draft.player_position || null}
+            options={POSITIONS}
+            onChange={(v) => set("player_position", typeof v === "string" ? v : "")}
           />
-        ) : null}
-        <Counter label="Puan" value={draft.points} onChange={(v) => set("points", v)} max={10} />
-        <ChipsField<string>
-          label="Mevki"
-          value={draft.player_position || null}
-          options={POSITIONS}
-          onChange={(v) => set("player_position", typeof v === "string" ? v : "")}
-        />
+        </View>
         {!base.team_id ? <Note tone="warn" text="Maçın takım kimliği eksik; istatistik kaydedilemez." /> : null}
       </View>
     </BottomSheet>
   );
 }
 
-function Counter({ label, value, onChange, max }: { label: string; value: number; onChange: (v: number) => void; max: number }) {
+function Counter({
+  label,
+  value,
+  onChange,
+  max,
+  icon,
+  tone = "violet",
+  divider,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  max: number;
+  icon?: keyof typeof Ionicons.glyphMap;
+  tone?: IconTileTone;
+  divider?: boolean;
+}) {
   return (
-    <View style={styles.counter}>
-      <Text style={styles.counterLabel} {...textScale.dense}>
+    <View style={[styles.counter, divider ? styles.counterDivider : null]}>
+      {icon ? <IconTile icon={icon} tone={tone} size={32} glow={false} /> : null}
+      <Text style={styles.counterLabel} numberOfLines={1} {...textScale.dense}>
         {label}
       </Text>
       <Stepper value={value} onChange={onChange} min={0} max={max} size="sm" accessibilityLabel={label} />
@@ -256,21 +320,56 @@ const styles = StyleSheet.create({
   stack: { gap: space.md },
   flex: { flex: 1 },
   footer: { flexDirection: "row", gap: space.sm },
-  summary: { ...type.caption, color: colors.textTertiary },
+  count: { ...type.scoreSm, color: colors.textPrimary },
+  countOf: { ...type.numSm, color: colors.textTertiary },
+  progress: { paddingHorizontal: space.lg, paddingBottom: space.s },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
-    padding: space.md,
-    borderRadius: radius.lg,
+    gap: space.m,
+    minHeight: 60,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.s,
+  },
+  rowDivider: { borderTopWidth: hairline, borderTopColor: colors.separator },
+  rowText: { flex: 1, gap: space.xxs, minWidth: 0 },
+  shirt: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  shirtOn: { backgroundColor: colors.winDim, borderColor: colors.win },
+  shirtNo: { ...type.numSmStrong, color: colors.textSecondary },
+  shirtNoOn: { color: colors.win },
+  name: { ...type.h4, color: colors.textPrimary },
+  meta: { ...type.caption, color: colors.textTertiary },
+  facts: { flexDirection: "row", flexWrap: "wrap", gap: space.s },
+  fact: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xxs,
+    paddingHorizontal: space.s,
+    paddingVertical: 1,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface2,
+  },
+  factCard: { width: 7, height: 10, borderRadius: 1.5 },
+  factText: { ...type.numSm, color: colors.textSecondary },
+  sheetSection: {
+    gap: space.m,
+    padding: space.lg,
+    borderRadius: radius.xl,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
-    borderColor: colors.border,
+    borderColor: colors.glassLine,
   },
-  rowOn: { borderColor: colors.winDim },
-  rowText: { flex: 1, gap: 2 },
-  name: { ...type.label, color: colors.textPrimary },
-  meta: { ...type.caption, color: colors.textTertiary },
-  counter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  counterLabel: { ...type.label, color: colors.textSecondary },
+  sectionTitle: { ...type.overline, color: colors.textTertiary },
+  counter: { flexDirection: "row", alignItems: "center", gap: space.m, minHeight: 44 },
+  counterDivider: { borderTopWidth: hairline, borderTopColor: colors.separator, paddingTop: space.m },
+  counterLabel: { ...type.h4, color: colors.textPrimary, flex: 1 },
 });

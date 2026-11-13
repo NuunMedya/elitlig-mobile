@@ -19,12 +19,14 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text } from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { StyleSheet, Text, View } from "react-native";
 
-import { AdminScreen, InfoLine, Panel, RecordCard, SegmentField, confirmAction } from "@/components/admin";
+import { AdminScreen, SegmentField, confirmAction } from "@/components/admin";
 import { RosterRulesEditor } from "@/components/admin/league/RosterRulesEditor";
 import { ScoringEditor } from "@/components/admin/league/ScoringEditor";
-import { Button, ErrorState, Input, SkeletonCard, useToast } from "@/components/ui";
+import { OpsGroup, OpsRow, OpsStage, StageTile, upperTR } from "@/components/admin/matches/opsKit";
+import { Badge, Button, ErrorState, IconTile, Input, Skeleton, SkeletonCard, useToast } from "@/components/ui";
 import { hasPermission } from "@/lib/admin/access";
 import { errorText } from "@/lib/admin/errors";
 import {
@@ -46,7 +48,7 @@ import {
   type RuleBookBody,
 } from "@/lib/api/admin/leagues";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, textScale, type } from "@/theme";
+import { colors, radius, space, textScale, type } from "@/theme";
 
 const PERMS = ["rule_books.create", "rule_books.update"];
 
@@ -109,6 +111,8 @@ export default function RuleBookEditorScreen() {
     setter(v);
   };
 
+  const paragraphs = content.split(/\n\s*\n/).filter((p) => p.trim()).length;
+
   const save = async () => {
     if (!title.trim()) return toast.show({ message: "Kitapçık başlığı zorunludur.", tone: "danger" });
     if (!structured && !content.trim()) return toast.show({ message: "Kural içeriği boş olamaz.", tone: "danger" });
@@ -170,11 +174,35 @@ export default function RuleBookEditorScreen() {
       {book.error ? (
         <ErrorState error={book.error} onRetry={book.refetch} variant="inline" />
       ) : loading ? (
-        <SkeletonCard />
+        <View style={styles.stack}>
+          <Skeleton height={168} radius="xl" />
+          <SkeletonCard />
+        </View>
       ) : (
         <>
-          <Panel title="GENEL">
-            <Input label="Başlık *" value={title} onChangeText={edit(setTitle)} placeholder="ör. 2026 Güz Ligi Kuralları" />
+          {/* Kimlik sahnesi: kitapçığın adı, biçimi, durumu ve özet sayaçları. */}
+          <OpsStage height={190}>
+            <View style={styles.stageTop}>
+              <IconTile icon="book" tone="gold" size={48} />
+              <View style={styles.flex}>
+                <Text style={styles.stageOver} numberOfLines={1} {...textScale.badge}>
+                  {upperTR(RULE_BOOK_KIND_LABELS[kind] ?? kind)}
+                </Text>
+                <Text style={styles.stageTitle} numberOfLines={2} {...textScale.dense}>
+                  {title.trim() || (isNew ? "Yeni kural kitapçığı" : "Adsız kitapçık")}
+                </Text>
+              </View>
+              <Badge label={status === "published" ? "Yayında" : "Taslak"} tone={status === "published" ? "win" : "neutral"} size="xs" dot={status === "published"} />
+            </View>
+            <View style={styles.stageTiles}>
+              <StageTile icon="list-outline" label="Paragraf" value={structured ? "Şablon" : paragraphs} />
+              <StageTile icon="calendar-outline" label="Sezon" value={editId ? activeSeasons.length : "—"} />
+              <StageTile icon="podium-outline" label="Puan" value={scoringShort(rules.scoring)} />
+            </View>
+          </OpsStage>
+
+          <OpsGroup title="Genel" icon="document-text-outline" tone="violet">
+            <Input label="Başlık *" floating value={title} onChangeText={edit(setTitle)} placeholder="ör. 2026 Güz Ligi Kuralları" />
             <SegmentField
               label="Durum"
               value={status}
@@ -185,14 +213,21 @@ export default function RuleBookEditorScreen() {
               ]}
             />
             {status === "published" && !canPublish ? (
-              <Text style={styles.warn} {...textScale.long}>
-                Yayına alma yetkin yok; kayıt sunucu tarafından reddedilir. Taslak olarak kaydet.
-              </Text>
+              <View style={styles.warnBox}>
+                <Ionicons name="lock-closed-outline" size={15} color={colors.warn} />
+                <Text style={styles.warn} {...textScale.long}>
+                  Yayına alma yetkin yok; kayıt sunucu tarafından reddedilir. Taslak olarak kaydet.
+                </Text>
+              </View>
             ) : null}
-            <InfoLine label="Biçim" value={RULE_BOOK_KIND_LABELS[kind] ?? kind} />
-          </Panel>
+          </OpsGroup>
 
-          <Panel title="İÇERİK">
+          <OpsGroup
+            title="İçerik"
+            icon="reader-outline"
+            tone="cyan"
+            right={!structured ? <Text style={styles.counter} {...textScale.badge}>{paragraphs} paragraf</Text> : undefined}
+          >
             {structured ? (
               <Text style={styles.note} {...textScale.long}>
                 Seçenekli kitapçığın maddeleri ayarlardan üretilir ve madde sihirbazı bu ekranda açılmaz; maddeler ve metin olduğu gibi korunur.
@@ -209,32 +244,41 @@ export default function RuleBookEditorScreen() {
                 hint="Paragrafları boş satırla ayır."
               />
             )}
-          </Panel>
+          </OpsGroup>
 
           {canManage ? (
             <>
-              <Panel title="PUANLAMA SİSTEMİ">
-                <Text style={styles.note} {...textScale.dense}>
-                  Şu an: {scoringSummary(rules.scoring)}
-                </Text>
+              <OpsGroup
+                title="Puanlama sistemi"
+                icon="podium-outline"
+                tone="gold"
+                hint={`Şu an: ${scoringSummary(rules.scoring)}`}
+              >
                 <ScoringEditor value={rules.scoring} onChange={edit((s: ManageState["scoring"]) => setRules((r) => ({ ...r, scoring: s })))} />
-              </Panel>
-              <Panel title="KADRO KURALLARI">
+              </OpsGroup>
+              <OpsGroup title="Kadro kuralları" icon="people-outline" tone="mint" hint="Kadro sınırı, transfer hakkı ve lisans dönemleri.">
                 <RosterRulesEditor value={rules.roster} onChange={edit((roster: ManageState["roster"]) => setRules((r) => ({ ...r, roster })))} />
-              </Panel>
+              </OpsGroup>
             </>
           ) : null}
 
           {editId ? (
-            <Panel title="KULLANAN SEZONLAR">
+            <OpsGroup
+              title="Kullanan sezonlar"
+              icon="calendar-outline"
+              tone="pink"
+              right={<Badge label={String(activeSeasons.length)} tone={activeSeasons.length ? "brand" : "neutral"} size="xs" />}
+              flush={activeSeasons.length > 0}
+            >
               {activeSeasons.length ? (
-                activeSeasons.map((s) => (
-                  <RecordCard
+                activeSeasons.map((s, i) => (
+                  <OpsRow
                     key={s.id}
+                    icon="trophy-outline"
+                    tone="violet"
                     title={s.name}
-                    subtitle={s.league_name}
-                    meta={[s.scoring ? scoringSummary(s.scoring) : null, s.roster ? s.roster.name || "Kadro kuralları" : null].filter(Boolean).join(" · ")}
-                    icon="calendar-outline"
+                    meta={[s.league_name, s.scoring ? scoringSummary(s.scoring) : null, s.roster ? s.roster.name || "Kadro kuralları" : null].filter(Boolean).join(" · ")}
+                    divider={i > 0}
                   />
                 ))
               ) : (
@@ -242,17 +286,40 @@ export default function RuleBookEditorScreen() {
                   Henüz bir sezonda kullanılmıyor. Sezonlar ekranından seçebilirsin.
                 </Text>
               )}
-            </Panel>
+            </OpsGroup>
           ) : null}
 
-          <Button label={isNew ? "Kitapçığı kaydet" : "Değişiklikleri kaydet"} icon="save-outline" onPress={() => void save()} loading={busy} fullWidth haptic="success" />
+          <Button
+            label={isNew ? "Kitapçığı kaydet" : dirty ? "Değişiklikleri kaydet" : "Kaydedildi"}
+            icon="save-outline"
+            size="lg"
+            onPress={() => void save()}
+            loading={busy}
+            fullWidth
+            haptic="success"
+          />
         </>
       )}
     </AdminScreen>
   );
 }
 
+/** Sahnede kısa puanlama: "3-1-0" ya da "Güç d.". */
+function scoringShort(scoring: ManageState["scoring"]): string {
+  if (scoring.type === "ozel") return `${scoring.win}-${scoring.draw}-${scoring.loss}`;
+  if (scoring.type === "gucdengesi") return "Güç d.";
+  return "3-1-0";
+}
+
 const styles = StyleSheet.create({
+  stack: { gap: space.md },
+  flex: { flex: 1, minWidth: 0 },
+  stageTop: { flexDirection: "row", alignItems: "center", gap: space.md },
+  stageOver: { ...type.overline, color: colors.onDarkMuted },
+  stageTitle: { ...type.h1, color: colors.onDark, marginTop: space.xxs },
+  stageTiles: { flexDirection: "row", gap: space.sm },
   note: { ...type.bodySm, color: colors.textSecondary },
-  warn: { ...type.bodySm, color: colors.warn },
+  counter: { ...type.numSm, color: colors.textTertiary },
+  warnBox: { flexDirection: "row", gap: space.sm, padding: space.m, borderRadius: radius.md, backgroundColor: colors.warnDim },
+  warn: { ...type.bodySm, color: colors.warn, flex: 1 },
 });

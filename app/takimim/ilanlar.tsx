@@ -13,6 +13,13 @@
  * Yeni davet ve transfer teklifi oyuncu aramasından (OfferCta) gönderilir.
  *
  * Önbellek anahtarları Kulübüm sayaçlarıyla ortaktır (["takim","join-requests"]).
+ *
+ * TASARIM (gece teması): üstte üç sayı (bekleyen başvuru · açık davet ·
+ * ilan durumu); İLAN KARTI megafon ikonu, "Yayında" hapı, aranan mevkiler
+ * büyük haplar hâlinde, not alıntı çizgisiyle; altta açılış zamanı ve kapat.
+ * Başvuru/davet KARTLARI: avatar + ad + mevki, durum hapı (bekliyor = warn,
+ * kabul = win, ret = danger, geri çekildi = neutral), mesaj alıntısı ve
+ * bekleyenlerde tam genişlik eylemler. Bekleyenler listenin başına gelir.
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -21,7 +28,6 @@ import React, { useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { PanelCard, PanelEmpty, PanelRow, PanelSection } from "@/components/club/Panel";
 import { useTeamAccess } from "@/components/club/team/useTeamAccess";
 import {
   Avatar,
@@ -31,10 +37,16 @@ import {
   Chip,
   EmptyState,
   ErrorState,
+  IconTile,
   Input,
+  MetricGrid,
+  MetricTile,
+  Reveal,
   ScreenHeader,
+  SectionHeader,
   SegmentedControl,
-  SkeletonCard,
+  Skeleton,
+  Touchable,
   useHeaderScroll,
   useRefresh,
   useToast,
@@ -55,7 +67,7 @@ import {
 import { formatDateShort, mediaUrl } from "@/lib/format";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, space, textScale, type } from "@/theme";
+import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 type Section = "basvuru" | "davet";
 const SECTIONS: SegmentedItem<Section>[] = [
@@ -63,11 +75,22 @@ const SECTIONS: SegmentedItem<Section>[] = [
   { key: "davet", label: "Davetlerim" },
 ];
 const STATUS = {
-  pending: { label: "Bekliyor", tone: "warn" },
-  accepted: { label: "Kabul", tone: "win" },
-  rejected: { label: "Ret", tone: "danger" },
-  cancelled: { label: "Geri çekildi", tone: "neutral" },
+  pending: { label: "Bekliyor", tone: "warn", icon: "hourglass-outline" },
+  accepted: { label: "Kabul edildi", tone: "win", icon: "checkmark-circle" },
+  rejected: { label: "Reddedildi", tone: "danger", icon: "close-circle" },
+  cancelled: { label: "Geri çekildi", tone: "neutral", icon: "arrow-undo" },
 } as const;
+
+function ago(value?: string | null): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const days = Math.floor((Date.now() - date.getTime()) / 86_400_000);
+  if (days <= 0) return "Bugün";
+  if (days === 1) return "Dün";
+  if (days < 30) return `${days} gün önce`;
+  return formatDateShort(value);
+}
 
 const errorText = (error: unknown, fallback: string) => (error instanceof ApiError ? error.userMessage : fallback);
 
@@ -131,6 +154,10 @@ export default function RecruitmentScreen() {
   const list = section === "basvuru" ? applications : invites;
   const pendingApplications = applications.filter((item) => item.status === "pending").length;
 
+  const pendingInvites = invites.filter((item) => item.status === "pending").length;
+  /* Bekleyenler başa; kendi içinde sunucunun sırası korunur. */
+  const sorted = [...list].sort((a, b) => Number(b.status === "pending") - Number(a.status === "pending"));
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
@@ -141,48 +168,107 @@ export default function RecruitmentScreen() {
         actions={[{ icon: "person-add-outline", onPress: () => router.push("/takimim/oyuncu-ara?serbest=1" as Href), accessibilityLabel: "Serbest oyuncu ara ve davet et" }]}
       />
       <ScrollView {...scrollProps} contentContainerStyle={styles.content} refreshControl={refresh.control}>
-        <PanelSection title="Oyuncu arıyoruz ilanı" meta={openRecruitment ? "yayında" : undefined}>
-          {recruitments.isLoading ? (
-            <SkeletonCard lines={2} />
-          ) : openRecruitment ? (
-            <PanelCard style={styles.recruit}>
-              <View style={styles.positions}>
-                {openRecruitment.positions.map((code) => (
-                  <Badge key={code} label={positionLabel(code)} tone="brand" size="sm" />
-                ))}
-              </View>
-              {openRecruitment.note ? (
-                <Text style={styles.note} {...textScale.long}>
-                  {openRecruitment.note}
-                </Text>
-              ) : null}
-              <Text style={styles.meta} {...textScale.dense}>
-                {`${formatDateShort(openRecruitment.created_at)} tarihinde açıldı`}
-              </Text>
-              <Button
-                label="İlanı kapat"
-                variant="secondary"
-                size="sm"
-                icon="close-circle-outline"
-                loading={close.isPending}
-                onPress={() =>
-                  Alert.alert("İlanı kapat", "İlan vitrinden kalkar; gelmiş başvurular kalır.", [
-                    { text: "Vazgeç", style: "cancel" },
-                    { text: "Kapat", style: "destructive", onPress: () => close.mutate(openRecruitment.id) },
-                  ])
-                }
-              />
-            </PanelCard>
-          ) : (
-            <PanelEmpty
-              icon="megaphone-outline"
-              text="Açık ilanın yok. Aradığın mevkileri seç; serbest oyuncular takımını ilan vitrininde görüp başvursun."
-              action={{ label: "İlan aç", onPress: () => setSheetOpen(true) }}
+        <Reveal index={0}>
+          <MetricGrid columns={3}>
+            <MetricTile
+              label="Başvuru"
+              value={joins.isLoading ? "…" : String(pendingApplications)}
+              hint="bekliyor"
+              icon="mail-unread"
+              tone={pendingApplications ? "warn" : "neutral"}
             />
-          )}
-        </PanelSection>
+            <MetricTile
+              label="Davet"
+              value={joins.isLoading ? "…" : String(pendingInvites)}
+              hint="yanıt bekliyor"
+              icon="paper-plane"
+              tone="accent"
+            />
+            <MetricTile
+              label="İlan"
+              value={recruitments.isLoading ? "…" : openRecruitment ? "Açık" : "Yok"}
+              hint={openRecruitment ? `${openRecruitment.positions.length} mevki` : "vitrinde değil"}
+              icon="megaphone"
+              tone={openRecruitment ? "win" : "neutral"}
+            />
+          </MetricGrid>
+        </Reveal>
 
-        <View style={styles.segment}>
+        <View style={styles.block}>
+          <SectionHeader title="Oyuncu arıyoruz ilanı" inset="flush" />
+          {recruitments.isLoading ? (
+            <Skeleton height={176} radius="xl" />
+          ) : openRecruitment ? (
+            <Reveal index={1}>
+              <View style={styles.adCard}>
+                <View style={styles.adHead}>
+                  <IconTile icon="megaphone" tone="gold" size={42} />
+                  <View style={styles.flex}>
+                    <Text style={styles.adTitle} {...textScale.dense}>
+                      Kadroya oyuncu arıyoruz
+                    </Text>
+                    <Text style={styles.meta} {...textScale.dense}>
+                      {`${ago(openRecruitment.created_at)} açıldı · ${applications.length} başvuru`}
+                    </Text>
+                  </View>
+                  <Badge label="Yayında" tone="win" icon="radio" size="sm" />
+                </View>
+                <View style={styles.positions}>
+                  {openRecruitment.positions.map((code) => (
+                    <View key={code} style={styles.posChip}>
+                      <Text style={styles.posCode} {...textScale.badge}>
+                        {code}
+                      </Text>
+                      <Text style={styles.posLabel} {...textScale.dense}>
+                        {positionLabel(code)}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+                {openRecruitment.note ? (
+                  <View style={styles.quote}>
+                    <Text style={styles.note} {...textScale.long}>
+                      {openRecruitment.note}
+                    </Text>
+                  </View>
+                ) : null}
+                <View style={styles.adFooter}>
+                  <Text style={styles.meta} {...textScale.dense}>
+                    {`${formatDateShort(openRecruitment.created_at)} tarihinde açıldı`}
+                  </Text>
+                  <Button
+                    label="İlanı kapat"
+                    variant="ghost"
+                    size="sm"
+                    icon="close-circle-outline"
+                    loading={close.isPending}
+                    onPress={() =>
+                      Alert.alert("İlanı kapat", "İlan vitrinden kalkar; gelmiş başvurular kalır.", [
+                        { text: "Vazgeç", style: "cancel" },
+                        { text: "Kapat", style: "destructive", onPress: () => close.mutate(openRecruitment.id) },
+                      ])
+                    }
+                  />
+                </View>
+              </View>
+            </Reveal>
+          ) : (
+            <Touchable onPress={() => setSheetOpen(true)} feedback="card" accessibilityRole="button" accessibilityLabel="İlan aç" style={styles.adEmpty}>
+              <IconTile icon="megaphone-outline" tone="neutral" size={42} glow={false} />
+              <View style={styles.flex}>
+                <Text style={styles.adTitle} {...textScale.dense}>
+                  Açık ilanın yok
+                </Text>
+                <Text style={styles.meta} {...textScale.long}>
+                  Aradığın mevkileri seç; serbest oyuncular takımını ilan vitrininde görüp başvursun.
+                </Text>
+              </View>
+              <Badge label="İlan aç" tone="brand" variant="solid" icon="add" size="sm" />
+            </Touchable>
+          )}
+        </View>
+
+        <View style={styles.block}>
           <SegmentedControl
             items={SECTIONS.map((item) =>
               item.key === "basvuru" && pendingApplications ? { ...item, label: `Başvurular (${pendingApplications})` } : item,
@@ -192,42 +278,55 @@ export default function RecruitmentScreen() {
           />
         </View>
 
-        {joins.isLoading ? (
-          <View style={styles.pad}>
-            <SkeletonCard lines={3} />
-          </View>
-        ) : joins.isError ? (
-          <ErrorState variant="inline" error={joins.error} onRetry={joins.refetch} />
-        ) : list.length === 0 ? (
-          <PanelSection title={section === "basvuru" ? "Gelen başvurular" : "Gönderilen davetler"}>
-            <PanelEmpty
+        <View style={styles.block}>
+          <SectionHeader
+            title={section === "basvuru" ? "Gelen başvurular" : "Gönderilen davetler"}
+            meta={list.length ? `${list.length}` : undefined}
+            inset="flush"
+            action={section === "davet" ? { label: "Davet et", onPress: () => router.push("/takimim/oyuncu-ara?serbest=1" as Href) } : undefined}
+          />
+          {joins.isLoading ? (
+            <View style={styles.stack}>
+              <Skeleton height={132} radius="xl" />
+              <Skeleton height={132} radius="xl" />
+            </View>
+          ) : joins.isError ? (
+            <ErrorState variant="inline" error={joins.error} onRetry={joins.refetch} />
+          ) : list.length === 0 ? (
+            <EmptyState
+              variant="inline"
               icon={section === "basvuru" ? "mail-open-outline" : "paper-plane-outline"}
-              text={
+              title={section === "basvuru" ? "Henüz başvuru yok" : "Gönderilmiş davet yok"}
+              body={
                 section === "basvuru"
-                  ? "Henüz başvuru yok. İlan açarsan serbest oyuncular takımına başvurabilir."
-                  : "Gönderilmiş davet yok. Serbest oyuncuyu arayıp tek dokunuşla davet et."
+                  ? "İlan açarsan serbest oyuncular takımına başvurabilir."
+                  : "Serbest oyuncuyu arayıp tek dokunuşla davet et."
               }
-              action={section === "davet" ? { label: "Serbest oyuncu ara", onPress: () => router.push("/takimim/oyuncu-ara?serbest=1" as Href) } : undefined}
+              action={
+                section === "davet"
+                  ? { label: "Serbest oyuncu ara", onPress: () => router.push("/takimim/oyuncu-ara?serbest=1" as Href) }
+                  : !openRecruitment
+                    ? { label: "İlan aç", onPress: () => setSheetOpen(true) }
+                    : undefined
+              }
             />
-          </PanelSection>
-        ) : (
-          <PanelSection title={section === "basvuru" ? "Gelen başvurular" : "Gönderilen davetler"} meta={`${list.length}`}>
-            <PanelCard padded={false}>
-              {list.map((item, index) => (
-                <RequestRow
-                  key={item.id}
-                  request={item}
-                  last={index === list.length - 1}
-                  busy={decide.isPending && decide.variables?.request.id === item.id}
-                  onOpen={() => router.push(`/oyuncu/${item.player.id}`)}
-                  onAccept={section === "basvuru" ? () => decide.mutate({ request: item, action: "accept" }) : undefined}
-                  onReject={section === "basvuru" ? () => decide.mutate({ request: item, action: "reject" }) : undefined}
-                  onCancel={section === "davet" ? () => decide.mutate({ request: item, action: "cancel" }) : undefined}
-                />
+          ) : (
+            <View style={styles.stack}>
+              {sorted.map((item, index) => (
+                <Reveal key={item.id} index={index} limit={8} distance={8}>
+                  <RequestCard
+                    request={item}
+                    busy={decide.isPending && decide.variables?.request.id === item.id}
+                    onOpen={() => router.push(`/oyuncu/${item.player.id}`)}
+                    onAccept={section === "basvuru" ? () => decide.mutate({ request: item, action: "accept" }) : undefined}
+                    onReject={section === "basvuru" ? () => decide.mutate({ request: item, action: "reject" }) : undefined}
+                    onCancel={section === "davet" ? () => decide.mutate({ request: item, action: "cancel" }) : undefined}
+                  />
+                </Reveal>
               ))}
-            </PanelCard>
-          </PanelSection>
-        )}
+            </View>
+          )}
+        </View>
       </ScrollView>
 
       <RecruitmentSheet visible={sheetOpen} onClose={() => setSheetOpen(false)} onCreated={invalidate} />
@@ -235,9 +334,8 @@ export default function RecruitmentScreen() {
   );
 }
 
-function RequestRow({
+function RequestCard({
   request,
-  last,
   busy,
   onOpen,
   onAccept,
@@ -245,7 +343,6 @@ function RequestRow({
   onCancel,
 }: {
   request: JoinRequest;
-  last: boolean;
   busy: boolean;
   onOpen: () => void;
   onAccept?: () => void;
@@ -255,20 +352,38 @@ function RequestRow({
   const status = STATUS[request.status] ?? STATUS.pending;
   const pending = request.status === "pending";
   return (
-    <View style={[styles.request, !last && styles.requestDivider]}>
-      <PanelRow
-        leading={<Avatar name={request.player.name ?? "?"} image={mediaUrl(request.player.image ?? null)} size={layout.crestLg} />}
-        title={request.player.name ?? "Oyuncu"}
-        hint={[positionLabel(request.player.position), formatDateShort(request.created_at), request.message].filter(Boolean).join(" · ")}
-        value={pending ? undefined : status.label}
+    <View style={[styles.reqCard, pending && styles.reqPending]}>
+      {pending ? <View style={styles.reqStripe} /> : null}
+      <Touchable
         onPress={onOpen}
-        last
-      />
+        feedback="row"
+        accessibilityRole="button"
+        accessibilityLabel={[request.player.name, positionLabel(request.player.position), status.label].filter(Boolean).join(", ")}
+        style={styles.reqTop}
+      >
+        <Avatar name={request.player.name ?? "?"} image={mediaUrl(request.player.image ?? null)} size={44} />
+        <View style={styles.flex}>
+          <Text style={styles.reqName} numberOfLines={1} {...textScale.dense}>
+            {request.player.name ?? "Oyuncu"}
+          </Text>
+          <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+            {[positionLabel(request.player.position), ago(request.created_at)].filter(Boolean).join(" · ")}
+          </Text>
+        </View>
+        <Badge label={status.label} tone={status.tone} icon={status.icon} size="sm" />
+      </Touchable>
+      {request.message ? (
+        <View style={[styles.quote, styles.reqQuote]}>
+          <Text style={styles.note} numberOfLines={3} {...textScale.long}>
+            {request.message}
+          </Text>
+        </View>
+      ) : null}
       {pending && (onAccept || onCancel) ? (
         <View style={styles.requestActions}>
           {onAccept ? <Button label="Kadroya al" icon="checkmark" size="sm" onPress={onAccept} loading={busy} style={styles.flex} /> : null}
           {onReject ? <Button label="Reddet" variant="secondary" size="sm" onPress={onReject} disabled={busy} style={styles.flex} /> : null}
-          {onCancel ? <Button label="Daveti geri çek" variant="secondary" size="sm" onPress={onCancel} loading={busy} style={styles.flex} /> : null}
+          {onCancel ? <Button label="Daveti geri çek" variant="secondary" size="sm" icon="arrow-undo" onPress={onCancel} loading={busy} style={styles.flex} /> : null}
         </View>
       ) : null}
     </View>
@@ -318,17 +433,83 @@ function RecruitmentSheet({ visible, onClose, onCreated }: { visible: boolean; o
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingBottom: space.giant, paddingTop: space.xs },
-  pad: { paddingHorizontal: layout.screenPadding },
-  recruit: { gap: space.sm },
-  positions: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
-  note: { ...type.bodySm, color: colors.textSecondary },
+  content: { paddingHorizontal: layout.screenPadding, paddingBottom: space.giant, paddingTop: space.md },
+  block: { marginTop: space.xl },
+  stack: { gap: space.sm },
+  flex: { flex: 1, minWidth: 0 },
   meta: { ...type.caption, color: colors.textTertiary },
-  segment: { paddingHorizontal: layout.screenPadding, marginTop: space.xl },
-  request: {},
-  requestDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.separator },
+  note: { ...type.bodySm, color: colors.textSecondary },
+  quote: { borderLeftWidth: 2, borderLeftColor: colors.brandBorder, paddingLeft: space.sm },
+
+  /* İlan kartı */
+  adCard: {
+    gap: space.md,
+    padding: space.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  adHead: { flexDirection: "row", alignItems: "center", gap: space.md },
+  adTitle: { ...type.h3, color: colors.textPrimary },
+  positions: { flexDirection: "row", flexWrap: "wrap", gap: space.s },
+  posChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+    paddingLeft: space.xs,
+    paddingRight: space.md,
+    paddingVertical: space.xs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+  },
+  posCode: {
+    ...type.micro,
+    color: colors.textOnBrand,
+    backgroundColor: colors.brand,
+    paddingHorizontal: space.s,
+    paddingVertical: space.xxs,
+    borderRadius: radius.pill,
+    overflow: "hidden",
+  },
+  posLabel: { ...type.labelSm, color: colors.brandAccent },
+  adFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: space.sm,
+    paddingTop: space.sm,
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+  },
+  adEmpty: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    padding: space.lg,
+    borderRadius: radius.xl,
+    borderWidth: hairline,
+    borderStyle: "dashed",
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface1,
+  },
+
+  /* Başvuru / davet kartı */
+  reqCard: {
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    overflow: "hidden",
+  },
+  reqPending: { borderColor: colors.glassLine },
+  reqStripe: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3, backgroundColor: colors.warn },
+  reqTop: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md },
+  reqName: { ...type.h4, color: colors.textPrimary },
+  reqQuote: { marginHorizontal: space.md, marginBottom: space.md, marginTop: -space.xs },
   requestActions: { flexDirection: "row", gap: space.sm, paddingHorizontal: space.md, paddingBottom: space.md },
-  flex: { flex: 1 },
   sheet: { gap: space.md, paddingBottom: space.md },
   label: { ...type.label, color: colors.textSecondary },
   chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: space.s },

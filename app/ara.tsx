@@ -31,29 +31,34 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Avatar,
+  Badge,
+  Chip,
   EmptyState,
   ErrorState,
+  IconTile,
   Input,
   ScreenHeader,
+  SectionHeader,
   SegmentedControl,
   SkeletonListRow,
   TeamLogo,
   Touchable,
   useToast,
 } from "@/components/ui";
-import { GroupSeparator, PaneLabel, groupRowStyle } from "@/components/league/shared";
+import { GroupSeparator, groupRowStyle } from "@/components/league/shared";
 import { getPlayerRankings } from "@/lib/api/players";
 import { getTeams } from "@/lib/api/teams";
 import { queryKeys } from "@/lib/queryKeys";
 import type { ApiTeam, PlayerRankRow } from "@/lib/types";
 import { useFavorite, type FavoriteTeam } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, fonts, hairline, layout, radius, space, textScale, touchSlop, type } from "@/theme";
+import { colors, elevate, fonts, hairline, layout, radius, space, textScale, touchSlop, type, upperTR } from "@/theme";
 
 type SearchKind = "takim" | "oyuncu";
 
@@ -65,6 +70,9 @@ const SEGMENTS = [
 /** En az bu kadar harf yazılmadan liste açılmaz (tam liste ezber gibi görünür). */
 const MIN_QUERY = 2;
 const ROW_HEIGHT = 64;
+/** Son aramalar — cihazda tutulur, en fazla sekiz. */
+const RECENT_KEY = "elitlig.ara.recent.v1";
+const RECENT_MAX = 8;
 
 /**
  * Türkçe arama katlaması. `toLocaleLowerCase("tr-TR")` tek başına yetmez:
@@ -153,7 +161,7 @@ const TeamResult = React.memo(function TeamResult({
       accessibilityRole="button"
       accessibilityLabel={`${name}${meta ? `, ${meta}` : ""}`}
     >
-      <TeamLogo name={name} logo={logo} size={layout.crestLg} />
+      <TeamLogo name={name} logo={logo} size={40} />
       <View style={styles.rowBody}>
         <MatchName name={name} needle={needle} />
         {meta ? (
@@ -169,11 +177,12 @@ const TeamResult = React.memo(function TeamResult({
         hitSlop={touchSlop(20)}
         accessibilityRole="button"
         accessibilityLabel={favorite ? `${name} takibini bırak` : `${name} takımını takip et`}
+        style={[styles.starButton, favorite ? styles.starButtonOn : null]}
       >
         <Ionicons
           name={favorite ? "star" : "star-outline"}
-          size={20}
-          color={favorite ? colors.star : colors.starEmpty}
+          size={18}
+          color={favorite ? colors.star : colors.textTertiary}
         />
       </Touchable>
     </Touchable>
@@ -207,7 +216,7 @@ const PlayerResult = React.memo(function PlayerResult({
       accessibilityRole="button"
       accessibilityLabel={`${name}${meta ? `, ${meta}` : ""}`}
     >
-      <Avatar name={name} image={image} size={layout.crestLg + 4} />
+      <Avatar name={name} image={image} size={40} />
       <View style={styles.rowBody}>
         <MatchName name={name} needle={needle} />
         {meta ? (
@@ -288,8 +297,22 @@ export default function SearchScreen() {
       .slice(0, 50);
   }, [enough, needle, playersQuery.data]);
 
-  const openTeam = useCallback((teamId: number) => router.push(`/takim/${teamId}`), [router]);
-  const openPlayer = useCallback((playerId: number) => router.push(`/oyuncu/${playerId}`), [router]);
+  const openTeam = useCallback(
+    (teamId: number) => {
+      rememberRef.current(term);
+      router.push(`/takim/${teamId}`);
+    },
+    [router, term],
+  );
+  const openPlayer = useCallback(
+    (playerId: number) => {
+      rememberRef.current(term);
+      router.push(`/oyuncu/${playerId}`);
+    },
+    [router, term],
+  );
+  /* `remember` aşağıda tanımlanır; açıcılar ona ref üstünden ulaşır. */
+  const rememberRef = useRef<(value: string) => void>(() => undefined);
 
   const starTeam = useCallback(
     (teamId: number, name: string, logo: string | null) => {
@@ -301,6 +324,45 @@ export default function SearchScreen() {
       });
     },
     [isFavorite, toast, toggleFavorite],
+  );
+
+  /* ── Son aramalar: cihazda tutulan kısa geçmiş (sonuç açılınca kaydedilir). ── */
+  const [recent, setRecent] = useState<string[]>([]);
+  useEffect(() => {
+    AsyncStorage.getItem(RECENT_KEY)
+      .then((raw) => {
+        const list = raw ? (JSON.parse(raw) as unknown) : [];
+        if (Array.isArray(list)) setRecent(list.filter((item): item is string => typeof item === "string").slice(0, RECENT_MAX));
+      })
+      .catch(() => undefined);
+  }, []);
+  const remember = useCallback((value: string) => {
+    const clean = value.trim();
+    if (clean.length < MIN_QUERY) return;
+    setRecent((current) => {
+      const next = [clean, ...current.filter((item) => fold(item) !== fold(clean))].slice(0, RECENT_MAX);
+      void AsyncStorage.setItem(RECENT_KEY, JSON.stringify(next)).catch(() => undefined);
+      return next;
+    });
+  }, []);
+  rememberRef.current = remember;
+  const clearRecent = useCallback(() => {
+    setRecent([]);
+    void AsyncStorage.removeItem(RECENT_KEY).catch(() => undefined);
+  }, []);
+
+  /* ── Ligler: kapsamın zaten yüklü lig listesinden süzülür (yeni istek yok). ── */
+  const leagues = useMemo(
+    () => (enough && kind === "takim" ? scope.leagues.filter((league) => fold(league.label ?? "").includes(needle)).slice(0, 4) : []),
+    [enough, kind, needle, scope.leagues],
+  );
+  const openLeague = useCallback(
+    (leagueId: number) => {
+      remember(query);
+      scope.selectLeague(leagueId);
+      router.push("/(tabs)/ligler");
+    },
+    [query, remember, router, scope],
   );
 
   /* Boş arama: takip edilen takımlar (yalnız Takımlar segmentinde). */
@@ -380,6 +442,71 @@ export default function SearchScreen() {
     />
   );
 
+  /* Takım sonuçlarının üstü: lig eşleşmeleri + takım grubu başlığı. */
+  const teamHeader =
+    !loading && !failed && (teams.length > 0 || leagues.length > 0) ? (
+      <View style={styles.groups}>
+        {leagues.length > 0 ? (
+          <View>
+            <SectionHeader title="Ligler" meta={String(leagues.length)} icon="trophy" iconTone="gold" inset="flush" style={styles.groupHead} />
+            <View style={styles.groupCard}>
+              {leagues.map((league, index) => (
+                <Touchable
+                  key={league.id}
+                  feedback="row"
+                  haptic="selection"
+                  onPress={() => openLeague(league.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${league.label} ligi, ${scope.cityLabel}`}
+                  style={[styles.row, index > 0 ? styles.rowDivider : null]}
+                >
+                  <IconTile icon="trophy" tone="gold" size={40} glow={false} />
+                  <View style={styles.rowBody}>
+                    <MatchName name={league.label} needle={needle} />
+                    <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+                      {scope.cityLabel} · lig sayfasını aç
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.textDisabled} />
+                </Touchable>
+              ))}
+            </View>
+          </View>
+        ) : null}
+        {teams.length > 0 ? (
+          <SectionHeader
+            title="Takımlar"
+            meta={teams.length >= 50 ? "ilk 50" : String(teams.length)}
+            icon="shield"
+            iconTone="violet"
+            inset="flush"
+            style={styles.groupHead}
+          />
+        ) : null}
+      </View>
+    ) : null;
+
+  /* Boş ekranın başı: son aramalar çipleri. */
+  const recentBlock = recent.length ? (
+    <View style={styles.recent}>
+      <View style={styles.recentHead}>
+        <Text style={styles.recentTitle} {...textScale.badge}>
+          {upperTR("Son aramalar")}
+        </Text>
+        <Touchable feedback="chip" onPress={clearRecent} accessibilityRole="button" accessibilityLabel="Son aramaları temizle">
+          <Text style={styles.recentClear} {...textScale.dense}>
+            Temizle
+          </Text>
+        </Touchable>
+      </View>
+      <View style={styles.recentChips}>
+        {recent.map((item) => (
+          <Chip key={item} label={item} icon="time-outline" size="sm" onPress={() => setTerm(item)} />
+        ))}
+      </View>
+    </View>
+  ) : null;
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
@@ -391,10 +518,11 @@ export default function SearchScreen() {
               variant="search"
               value={term}
               onChangeText={setTerm}
-              placeholder={kind === "takim" ? "Takım adı yaz" : "Oyuncu ya da takım adı yaz"}
+              placeholder={kind === "takim" ? "Takım ya da lig adı yaz" : "Oyuncu ya da takım adı yaz"}
               autoFocus
               autoCorrect={false}
               returnKeyType="search"
+              onSubmitEditing={() => remember(term)}
             />
             <SegmentedControl<SearchKind> items={SEGMENTS} value={kind} onChange={setKind} />
           </View>
@@ -414,15 +542,8 @@ export default function SearchScreen() {
             contentContainerStyle={styles.list}
             initialNumToRender={12}
             windowSize={8}
-            ListHeaderComponent={
-              !loading && !failed && teams.length > 0 ? (
-                <PaneLabel
-                  title="Takımlar"
-                  meta={teams.length >= 50 ? "ilk 50 sonuç" : `${teams.length} sonuç`}
-                />
-              ) : null
-            }
-            ListEmptyComponent={placeholder}
+            ListHeaderComponent={teamHeader}
+            ListEmptyComponent={leagues.length ? null : placeholder}
           />
         ) : (
           <FlatList
@@ -435,18 +556,36 @@ export default function SearchScreen() {
             keyboardDismissMode="on-drag"
             contentContainerStyle={styles.list}
             ListHeaderComponent={
-              followed.length > 0 ? (
-                <PaneLabel title="Takip ettiğin takımlar" meta={`${followed.length} takım`} />
-              ) : null
+              <View>
+                {recentBlock}
+                {followed.length > 0 ? (
+                  <SectionHeader
+                    title="Takip ettiğin takımlar"
+                    meta={String(followed.length)}
+                    icon="star"
+                    iconTone="gold"
+                    inset="flush"
+                    style={styles.groupHead}
+                  />
+                ) : null}
+              </View>
             }
             ListFooterComponent={followed.length > 0 ? <SearchHint /> : null}
             ListEmptyComponent={
-              <EmptyState
-                icon="search-outline"
-                title="Takımını bul"
-                body={`Tüm şehirlerdeki takımlar arasında arar. En az ${MIN_QUERY} harf yaz, yıldızla takip et.`}
-                variant="inline"
-              />
+              <View style={styles.idle}>
+                <IconTile icon="search" tone="signature" size={56} />
+                <Text style={styles.idleTitle} {...textScale.dense}>
+                  Takımını bul
+                </Text>
+                <Text style={styles.idleBody} {...textScale.long}>
+                  Tüm şehirlerdeki takımlar ve bu ilin ligleri arasında arar. En az {MIN_QUERY} harf yaz, yıldızla takip et.
+                </Text>
+                <View style={styles.idleKinds}>
+                  <Badge label="Takımlar" tone="brand" icon="shield" />
+                  <Badge label="Ligler" tone="warn" icon="trophy" />
+                  <Badge label="Oyuncular" tone="accent" icon="person" />
+                </View>
+              </View>
             }
           />
         )
@@ -464,27 +603,40 @@ export default function SearchScreen() {
           windowSize={8}
           ListHeaderComponent={
             scope.ready ? (
-              <Touchable
-                feedback="row"
-                haptic="selection"
-                onPress={() => scope.openScopeSheet("league")}
-                style={styles.scopeCard}
-                accessibilityRole="button"
-                accessibilityLabel={`Arama kapsamı: ${scopeLine}. Değiştir`}
-              >
-                <Ionicons name="funnel-outline" size={16} color={colors.textTertiary} />
-                <View style={styles.rowBody}>
-                  <Text style={styles.scopeLabel} {...textScale.badge}>
-                    KADROLARDA ARANIYOR
+              <View>
+                {enough ? null : recentBlock}
+                <Touchable
+                  feedback="card"
+                  haptic="selection"
+                  onPress={() => scope.openScopeSheet("league")}
+                  style={styles.scopeCard}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Arama kapsamı: ${scopeLine}. Değiştir`}
+                >
+                  <IconTile icon="funnel" tone="cyan" size={36} glow={false} />
+                  <View style={styles.rowBody}>
+                    <Text style={styles.scopeLabel} {...textScale.badge}>
+                      KADROLARDA ARANIYOR
+                    </Text>
+                    <Text style={styles.scopeValue} numberOfLines={1} {...textScale.dense}>
+                      {scopeLine}
+                    </Text>
+                  </View>
+                  <Text style={styles.scopeAction} {...textScale.dense}>
+                    Değiştir
                   </Text>
-                  <Text style={styles.scopeValue} numberOfLines={1} {...textScale.dense}>
-                    {scopeLine}
-                  </Text>
-                </View>
-                <Text style={styles.scopeAction} {...textScale.dense}>
-                  Değiştir
-                </Text>
-              </Touchable>
+                </Touchable>
+                {enough && !loading && !failed && players.length > 0 ? (
+                  <SectionHeader
+                    title="Oyuncular"
+                    meta={players.length >= 50 ? "ilk 50" : String(players.length)}
+                    icon="person"
+                    iconTone="cyan"
+                    inset="flush"
+                    style={styles.groupHead}
+                  />
+                ) : null}
+              </View>
             ) : null
           }
           ListEmptyComponent={
@@ -593,6 +745,81 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     gap: space.xxs,
+  },
+  rowDivider: {
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+  },
+  starButton: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface2,
+  },
+  starButtonOn: {
+    backgroundColor: colors.warnDim,
+  },
+  groups: {
+    gap: space.xs,
+  },
+  groupHead: {
+    marginTop: space.sm,
+    marginBottom: space.sm,
+  },
+  groupCard: {
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    overflow: "hidden",
+    ...elevate(1),
+  },
+  recent: {
+    gap: space.sm,
+    marginBottom: space.md,
+  },
+  recentHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  recentTitle: {
+    ...type.overline,
+    color: colors.textTertiary,
+  },
+  recentClear: {
+    ...type.label,
+    color: colors.brandAccent,
+  },
+  recentChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.sm,
+  },
+  idle: {
+    alignItems: "center",
+    gap: space.sm,
+    paddingTop: space.huge,
+    paddingHorizontal: space.xl,
+  },
+  idleTitle: {
+    ...type.h2,
+    color: colors.textPrimary,
+    marginTop: space.sm,
+  },
+  idleBody: {
+    ...type.bodySm,
+    color: colors.textSecondary,
+    textAlign: "center",
+  },
+  idleKinds: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: space.sm,
+    marginTop: space.sm,
   },
   name: {
     ...type.h3,

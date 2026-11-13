@@ -22,23 +22,33 @@
  * baştan mount etmekten ucuzdur ve açılış anında görünür.
  */
 
-import { useMemo, useState } from "react";
-import { SectionList, StyleSheet, Text, View } from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import {
+  SectionList,
+  StyleSheet,
+  Text,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  Badge,
   Chip,
   EmptyState,
+  IconTile,
   Input,
   ListRow,
+  Reveal,
   ScreenHeader,
-  SectionHeader,
+  Touchable,
   useHeaderScroll,
 } from "@/components/ui";
+import { StageCard, StageStat } from "@/components/league/kit";
 import { RULES_SECTIONS, RULES_UPDATED_AT } from "@/constants/rulesContent";
 import { useRouter } from "expo-router";
 import { useScope } from "@/providers/ScopeProvider";
-import { animateNextLayout, colors, layout, radius, space, textScale, type } from "@/theme";
+import { animateNextLayout, colors, elevate, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 /* ============================ SABİTLER / TİPLER ============================ */
 
@@ -53,6 +63,9 @@ interface RuleEntry {
 
 interface RuleSectionData {
   title: string;
+  /** Başlığın numarası ("3") ve numarasız adı — bölüm rozeti ile başlık ayrı çizilir. */
+  number: string;
+  name: string;
   /** Bölümün RULES_SECTIONS içindeki sırası — akordeon anahtarı. */
   index: number;
   /** Bölümdeki toplam madde (arama süzse bile başlıkta gerçek sayı görünür). */
@@ -61,6 +74,12 @@ interface RuleSectionData {
 }
 
 /* ============================== SAF YARDIMCILAR =========================== */
+
+/** "3. Takım Kadroları…" → { number: "3", name: "Takım Kadroları…" }. */
+function splitTitle(title: string): { number: string; name: string } {
+  const match = title.match(/^(\d+)\.\s*(.*)$/);
+  return match ? { number: match[1], name: match[2] } : { number: "", name: title };
+}
 
 /**
  * Türkçe arama katlaması. `toLocaleLowerCase("tr-TR")` "I" harfini noktasız
@@ -115,6 +134,7 @@ export default function RulesScreen() {
     () =>
       RULES_SECTIONS.map((section, index) => ({
         title: section.title,
+        ...splitTitle(section.title),
         index,
         entries: section.items.map((item, itemIndex) => parseRule(item, index, itemIndex)),
       })),
@@ -131,6 +151,8 @@ export default function RulesScreen() {
         if (!searching) {
           return {
             title: section.title,
+            number: section.number,
+            name: section.name,
             index: section.index,
             total,
             // Kapalı bölüm hiç satır kurmaz.
@@ -144,7 +166,7 @@ export default function RulesScreen() {
           ? section.entries
           : section.entries.filter((entry) => fold(`${entry.number ?? ""} ${entry.text}`).includes(needle));
 
-        return { title: section.title, index: section.index, total, data: hits };
+        return { title: section.title, number: section.number, name: section.name, index: section.index, total, data: hits };
       })
       .filter((section) => !searching || section.data.length > 0);
   }, [open, parsed, search, searching]);
@@ -168,12 +190,90 @@ export default function RulesScreen() {
     setOpen(allOpen ? [] : RULES_SECTIONS.map((_, index) => index));
   };
 
+  const listRef = useRef<SectionList<RuleEntry, RuleSectionData>>(null);
+  const totalItems = useMemo(() => parsed.reduce((sum, section) => sum + section.entries.length, 0), [parsed]);
+
+  /**
+   * BÖLÜME KAYDIRMA: `scrollToLocation` web'de sessizce hiçbir şey yapmıyordu
+   * (ölçülmemiş hücre). Bunun yerine bölüm başlığının ekrandaki konumu
+   * (`measureInWindow`) listenin konumundan çıkarılır, o anki kaydırma
+   * payına eklenir ve liste oraya kaydırılır — iki platformda aynı yol.
+   */
+  const headerRefs = useRef(new Map<number, View>());
+  const listBoxRef = useRef<View>(null);
+  const scrollYRef = useRef(0);
+  const scrollToSection = useCallback((index: number) => {
+    const header = headerRefs.current.get(index);
+    const box = listBoxRef.current;
+    if (!header || !box) return;
+    box.measureInWindow((_bx, boxY) => {
+      header.measureInWindow((_hx, headerY) => {
+        const y = Math.max(0, scrollYRef.current + headerY - boxY);
+        listRef.current?.getScrollResponder()?.scrollTo({ y, animated: true });
+      });
+    });
+  }, []);
+  const { onScroll: headerOnScroll } = scrollProps;
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      scrollYRef.current = event.nativeEvent.contentOffset.y;
+      headerOnScroll(event);
+    },
+    [headerOnScroll],
+  );
+
+  /** İçindekiler: bölümü açar ve listede başına kaydırır. */
+  const jumpTo = useCallback(
+    (index: number) => {
+      animateNextLayout();
+      setSearch("");
+      setOpen((current) => (current.includes(index) ? current : [...current, index]));
+      // Açılan bölümün satırları bir sonraki karede kurulur; kaydırma ondan sonra.
+      setTimeout(() => scrollToSection(index), 160);
+    },
+    [scrollToSection],
+  );
+
   /**
    * Başlık bloğu ELEMENT olarak verilir (bileşen olarak DEĞİL): her tuş
    * vuruşunda yeni bir bileşen türü üretilseydi arama kutusu odağı kaybederdi.
    */
   const listHeader = (
     <View style={styles.headerBlock}>
+      {/* KİTAPÇIK KAPAĞI — resmî metnin kimliği ve hacmi. */}
+      <Reveal>
+        <StageCard style={styles.cover}>
+          <View style={styles.coverTop}>
+            <IconTile icon="book" tone="signature" size={40} />
+            <View style={styles.coverText}>
+              <Text style={styles.coverOver} {...textScale.badge}>
+                {upperTR("Resmî kural kitapçığı")}
+              </Text>
+              <Text style={styles.coverTitle} numberOfLines={1} {...textScale.dense}>
+                {scope.leagueLabel || "Elitlig"} kuralları
+              </Text>
+            </View>
+          </View>
+          <View style={styles.coverStats}>
+            <StageStat label="Bölüm" value={parsed.length} />
+            <View style={styles.coverDivider} />
+            <StageStat label="Madde" value={totalItems} accent />
+            <View style={styles.coverDivider} />
+            <View style={styles.coverDate}>
+              <View style={styles.coverDateRow}>
+                <Ionicons name="checkmark-circle" size={14} color={colors.win} />
+                <Text style={styles.coverDateValue} {...textScale.dense}>
+                  Güncel
+                </Text>
+              </View>
+              <Text style={styles.coverDateLabel} numberOfLines={1} {...textScale.badge}>
+                {RULES_UPDATED_AT}
+              </Text>
+            </View>
+          </View>
+        </StageCard>
+      </Reveal>
+
       <Input
         variant="search"
         value={search}
@@ -184,29 +284,55 @@ export default function RulesScreen() {
         accessibilityLabel="Kurallarda ara"
       />
 
-      <View style={styles.metaRow}>
-        <Badge label="Güncel" tone="win" icon="checkmark-circle" />
-        <Text style={styles.updated} {...textScale.dense}>
-          Son güncelleme: {RULES_UPDATED_AT}
-        </Text>
-        {searching ? null : (
-          <Chip
-            label={allOpen ? "Tümünü kapat" : "Tümünü aç"}
-            icon={allOpen ? "chevron-up" : "chevron-down"}
-            size="sm"
-            onPress={toggleAll}
-            style={styles.toggleAll}
-          />
-        )}
-      </View>
-
       {searching ? (
-        <Text style={styles.matchLine} {...textScale.dense}>
-          {matchCount > 0
-            ? `${matchCount} madde eşleşti — eşleşen bölümler açık gösteriliyor.`
-            : "Eşleşen madde yok."}
-        </Text>
-      ) : null}
+        <View style={styles.matchBar}>
+          <Ionicons name={matchCount > 0 ? "search" : "alert-circle-outline"} size={14} color={colors.brandAccent} />
+          <Text style={styles.matchLine} {...textScale.dense}>
+            {matchCount > 0
+              ? `${matchCount} madde eşleşti · eşleşen bölümler açık`
+              : "Eşleşen madde yok."}
+          </Text>
+        </View>
+      ) : (
+        <>
+          {/* İÇİNDEKİLER — numaralı satırlar; dokununca bölüm açılır ve kayar. */}
+          <View style={styles.tocHead}>
+            <Text style={styles.tocTitle} {...textScale.badge}>
+              {upperTR("İçindekiler")}
+            </Text>
+            <Chip
+              label={allOpen ? "Tümünü kapat" : "Tümünü aç"}
+              icon={allOpen ? "chevron-up" : "chevron-down"}
+              size="sm"
+              onPress={toggleAll}
+            />
+          </View>
+          <View style={styles.toc}>
+            {parsed.map((section, index) => (
+              <Touchable
+                key={section.index}
+                feedback="row"
+                haptic="selection"
+                onPress={() => jumpTo(section.index)}
+                accessibilityRole="button"
+                accessibilityLabel={`${section.title}, ${section.entries.length} madde`}
+                style={[styles.tocRow, index > 0 ? styles.tocDivider : null]}
+              >
+                <Text style={styles.tocNumber} {...textScale.dense}>
+                  {section.number.padStart(2, "0")}
+                </Text>
+                <Text style={styles.tocName} numberOfLines={1} {...textScale.dense}>
+                  {section.name}
+                </Text>
+                <Text style={styles.tocCount} {...textScale.dense}>
+                  {section.entries.length}
+                </Text>
+                <Ionicons name="chevron-forward" size={14} color={colors.textDisabled} />
+              </Touchable>
+            ))}
+          </View>
+        </>
+      )}
     </View>
   );
 
@@ -236,8 +362,11 @@ export default function RulesScreen() {
         scrollY={scrollY}
       />
 
+      <View ref={listBoxRef} style={styles.listBox} collapsable={false}>
       <SectionList
         {...scrollProps}
+        onScroll={handleScroll}
+        ref={listRef}
         sections={sections}
         keyExtractor={(item) => item.key}
         stickySectionHeadersEnabled
@@ -256,51 +385,108 @@ export default function RulesScreen() {
             variant="inline"
           />
         }
-        renderSectionHeader={({ section }) => (
-          /*
-           * `uppercase={false}`: bölüm başlığı burada bir ETİKET değil, resmî
-           * metnin kendi başlığıdır ("3. Takım Kadroları…"). Büyük harfe
-           * çevirmek hem numarayla birlikte bağırır hem de tek satıra sığmayı
-           * zorlaştırır. Arama açıkken başlıklar katlanmaz — süzülmüş sonucu
-           * kapatabilmek kafa karıştırırdı.
-           */
-          <SectionHeader
-            title={section.title}
-            meta={`${section.total} madde`}
-            sticky
-            uppercase={false}
-            collapsible={!searching}
-            collapsed={!searching && !open.includes(section.index)}
-            onToggle={searching ? undefined : () => toggleSection(section.index)}
-          />
+        renderSectionHeader={({ section }) => {
+          /* Bölüm başlığı yapışkan bir KART BAŞLIĞIDIR: degrade numara
+             pulu + resmî başlık + madde sayısı. Açık bölümde maddeler aynı
+             kartın gövdesi gibi altına bağlanır (üst köşeler burada, alt
+             köşeler son maddede yuvarlanır). Arama açıkken katlanmaz. */
+          const isOpen = searching || open.includes(section.index);
+          return (
+            <View
+              style={styles.sectionWrap}
+              collapsable={false}
+              ref={(node) => {
+                if (node) headerRefs.current.set(section.index, node);
+                else headerRefs.current.delete(section.index);
+              }}
+            >
+              <Touchable
+                feedback="row"
+                haptic="selection"
+                disabled={searching}
+                onPress={() => toggleSection(section.index)}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: isOpen }}
+                accessibilityLabel={`${section.title}, ${section.total} madde`}
+                style={[styles.sectionHead, isOpen && section.data.length ? styles.sectionHeadOpen : null]}
+              >
+                <View style={[styles.sectionNumber, isOpen ? styles.sectionNumberOn : null]}>
+                  <Text style={[styles.sectionNumberText, isOpen ? styles.sectionNumberTextOn : null]} {...textScale.dense}>
+                    {section.number || "•"}
+                  </Text>
+                </View>
+                <Text style={styles.sectionTitle} numberOfLines={2} {...textScale.dense}>
+                  {section.name}
+                </Text>
+                <Text style={styles.sectionCount} {...textScale.dense}>
+                  {searching ? `${section.data.length}/${section.total}` : section.total}
+                </Text>
+                {searching ? null : (
+                  <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={16} color={colors.textTertiary} />
+                )}
+              </Touchable>
+            </View>
+          );
+        }}
+        renderItem={({ item, index, section }) => (
+          <RuleRow entry={item} last={index === section.data.length - 1} needle={searching ? search.trim() : ""} />
         )}
-        renderItem={({ item }) => <RuleRow entry={item} />}
         SectionSeparatorComponent={null}
       />
+      </View>
     </SafeAreaView>
   );
 }
 
 /* ============================== ALT BİLEŞENLER ============================ */
 
-/** Tek madde: solda numara/işaret sütunu, sağda gövde metni. */
-function RuleRow({ entry }: { entry: RuleEntry }) {
+/**
+ * Tek madde: solda numara/işaret sütunu, sağda gövde metni. Maddeler bölüm
+ * kartının gövdesidir (aynı zemin, yan çerçeve); son madde kartı kapatır.
+ * Arama açıkken eşleşen parça marka renginde vurgulanır.
+ */
+function RuleRow({ entry, last, needle }: { entry: RuleEntry; last: boolean; needle: string }) {
   return (
-    <View style={styles.item}>
-      <View style={styles.numberColumn}>
-        {entry.bullet ? (
-          <View style={styles.bulletDot} />
-        ) : entry.number ? (
-          <Text style={styles.number} {...textScale.dense}>
-            {entry.number}
-          </Text>
-        ) : null}
+    <View style={styles.itemWrap}>
+      <View style={[styles.item, last ? styles.itemLast : null]}>
+        <View style={styles.numberColumn}>
+          {entry.bullet ? (
+            <View style={styles.bulletDot} />
+          ) : entry.number ? (
+            <Text style={styles.number} {...textScale.dense}>
+              {entry.number}
+            </Text>
+          ) : null}
+        </View>
+        <Text style={styles.itemText} {...textScale.long}>
+          {highlight(entry.text, needle)}
+        </Text>
       </View>
-      <Text style={styles.itemText} {...textScale.long}>
-        {entry.text}
-      </Text>
     </View>
   );
+}
+
+/** Metni aramaya göre parçalar; eşleşen parçalar vurgu `Text`'i olur. */
+function highlight(text: string, needle: string): React.ReactNode {
+  if (!needle) return text;
+  const folded = fold(text);
+  const target = fold(needle);
+  if (!target || folded.length !== text.length) return text;
+  const parts: React.ReactNode[] = [];
+  let from = 0;
+  let at = folded.indexOf(target, from);
+  while (at >= 0) {
+    if (at > from) parts.push(text.slice(from, at));
+    parts.push(
+      <Text key={at} style={styles.hit}>
+        {text.slice(at, at + target.length)}
+      </Text>,
+    );
+    from = at + target.length;
+    at = folded.indexOf(target, from);
+  }
+  if (from < text.length) parts.push(text.slice(from));
+  return parts;
 }
 
 /* ================================ STİLLER ================================= */
@@ -310,10 +496,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
   },
+  listBox: {
+    flex: 1,
+  },
   /**
-   * Yatay boşluk YOK: yapışkan başlık kendi `screenPadding`'ini taşır, madde
-   * satırları da kendi boşluğunu verir. Kapsayıcıya boşluk verilseydi başlık
-   * iki kat girintili çizilirdi.
+   * Yatay boşluk YOK: yapışkan başlık ve madde satırları kendi
+   * `screenPadding`'ini taşır (yapışkan başlığın zemini kenardan kenara).
    */
   content: {
     paddingBottom: space.giant,
@@ -323,48 +511,209 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.screenPadding,
     paddingTop: space.sm,
     paddingBottom: space.md,
-    gap: space.sm,
+    gap: space.md,
   },
-  metaRow: {
+
+  /* — Kapak — */
+  cover: {
+    padding: space.lg,
+    gap: space.md,
+  },
+  coverTop: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
+    gap: space.md,
   },
-  updated: {
-    ...type.caption,
-    color: colors.textTertiary,
-    flexShrink: 1,
+  coverText: {
+    flex: 1,
+    minWidth: 0,
+    gap: space.xxs,
   },
-  toggleAll: {
-    marginLeft: "auto",
+  coverOver: {
+    ...type.overline,
+    color: colors.brandOnDark,
+  },
+  coverTitle: {
+    ...type.h1,
+    color: colors.onDark,
+  },
+  coverStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: space.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
+  },
+  coverDivider: {
+    width: hairline,
+    alignSelf: "stretch",
+    backgroundColor: colors.borderOnDark,
+  },
+  coverDate: {
+    flex: 1,
+    alignItems: "center",
+    gap: space.xxs,
+  },
+  coverDateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+  },
+  coverDateValue: {
+    ...type.h4,
+    color: colors.onDark,
+  },
+  coverDateLabel: {
+    ...type.micro,
+    color: colors.onDarkMuted,
+  },
+
+  /* — Arama ve içindekiler — */
+  matchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.brandDim,
   },
   matchLine: {
-    ...type.bodySm,
+    ...type.labelSm,
+    color: colors.brandAccent,
+    flex: 1,
+  },
+  tocHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: space.xs,
+  },
+  tocTitle: {
+    ...type.overline,
+    color: colors.textTertiary,
+  },
+  toc: {
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    overflow: "hidden",
+    ...elevate(1),
+  },
+  tocRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    minHeight: 44,
+    paddingHorizontal: space.md,
+  },
+  tocDivider: {
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+  },
+  tocNumber: {
+    ...type.tableNumStrong,
+    color: colors.brandAccent,
+    width: 22,
+  },
+  tocName: {
+    ...type.label,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  tocCount: {
+    ...type.numSmStrong,
+    color: colors.textTertiary,
+  },
+
+  /* — Bölüm başlığı (yapışkan) — */
+  sectionWrap: {
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.sm,
+    backgroundColor: colors.bg,
+  },
+  sectionHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    minHeight: 56,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  sectionHeadOpen: {
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderBottomColor: colors.separator,
+  },
+  sectionNumber: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface3,
+  },
+  sectionNumberOn: {
+    backgroundColor: colors.brand,
+  },
+  sectionNumberText: {
+    ...type.tableNumStrong,
     color: colors.textSecondary,
+  },
+  sectionNumberTextOn: {
+    color: colors.textOnBrand,
+  },
+  sectionTitle: {
+    ...type.h3,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  sectionCount: {
+    ...type.numSmStrong,
+    color: colors.textTertiary,
   },
 
   /* — Madde — */
+  itemWrap: {
+    paddingHorizontal: layout.screenPadding,
+  },
   item: {
     flexDirection: "row",
     gap: space.m,
-    paddingHorizontal: layout.screenPadding,
+    paddingHorizontal: space.md,
     paddingVertical: space.sm,
+    backgroundColor: colors.surface1,
+    borderLeftWidth: hairline,
+    borderRightWidth: hairline,
+    borderColor: colors.border,
+  },
+  itemLast: {
+    paddingBottom: space.md,
+    borderBottomWidth: hairline,
+    borderBottomLeftRadius: radius.xl,
+    borderBottomRightRadius: radius.xl,
   },
   /** Sabit genişlik: "3.10." ile "3.1." aynı sol kenarda hizalanır. */
   numberColumn: {
     width: 38,
-    paddingTop: 2,
+    paddingTop: 3,
     alignItems: "flex-start",
   },
   number: {
     ...type.tableNumStrong,
-    // Madde numarası bir bağlantı değil, yapıdır: mor (aksiyon) yerine mürekkep.
-    color: colors.textTertiary,
+    color: colors.brandAccent,
   },
   bulletDot: {
     width: 5,
     height: 5,
-    marginTop: 7,
+    marginTop: 9,
     marginLeft: space.m,
     borderRadius: radius.pill,
     backgroundColor: colors.textTertiary,
@@ -372,19 +721,21 @@ const styles = StyleSheet.create({
   itemText: {
     ...type.bodyLg,
     color: colors.textPrimary,
-    lineHeight: 24,
     flex: 1,
+  },
+  hit: {
+    color: colors.brandAccent,
+    backgroundColor: colors.brandDim,
   },
 
   /* — Alt bilgi — */
   footer: {
     paddingHorizontal: layout.screenPadding,
-    paddingTop: space.lg,
+    paddingTop: space.xl,
     gap: space.md,
   },
   footerNote: {
     ...type.bodySm,
     color: colors.textTertiary,
-    lineHeight: 19,
   },
 });

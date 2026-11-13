@@ -14,7 +14,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import {
   ActionSheet,
@@ -30,9 +31,10 @@ import {
 } from "@/components/admin";
 import { GroupCard } from "@/components/admin/league/GroupCard";
 import { OpsGroup, StatusTiles } from "@/components/admin/matches/opsKit";
+import { TileButton } from "@/components/admin/tools/ToolKit";
 import { ScheduleSheet } from "@/components/admin/league/ScheduleSheet";
 import { StructureSheet } from "@/components/admin/league/StructureSheet";
-import { Button, EmptyState, ErrorState, SkeletonCard, useToast } from "@/components/ui";
+import { EmptyState, ErrorState, Reveal, SectionHeader, SkeletonCard, useToast } from "@/components/ui";
 import { hasPermission } from "@/lib/admin/access";
 import { errorText } from "@/lib/admin/errors";
 import { ApiError } from "@/lib/http";
@@ -57,7 +59,7 @@ import {
 } from "@/lib/api/admin/leagues";
 import { isArchived, seasonBelongsToLeague, teamOptionsLoader } from "@/lib/api/admin/lookups";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, space, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 const PERMS = ["groups.view", "groups.create", "groups.update", "groups.delete"];
 
@@ -345,37 +347,41 @@ export default function LeagueStructureScreen() {
       refreshing={overview.isRefetching}
     >
       <OpsGroup
-        title="Sezon seç"
+        title="Sezon"
         icon="git-network"
         tone="cyan"
-        hint="Grupları, eleme turlarını ve hangi takımın hangi etaba kalacağını kur. Kutuya dokun: kaynağını seç; basılı tut: taşı ya da boşalt."
+        hint={seasonId ? undefined : "Grupları, eleme turlarını ve hangi takımın hangi etaba kalacağını kur."}
       >
-      <SelectField<number>
-        label="Lig"
-        value={leagueId}
-        options={leagueOptions}
-        placeholder={leagues.isLoading ? "Yükleniyor…" : "Lig seç"}
-        onChange={(v) => {
-          setLeagueId(v);
-          setSeasonId(null);
-        }}
-        icon="trophy-outline"
-      />
-      <SelectField<number>
-        label="Sezon"
-        value={seasonId}
-        options={seasonOptions}
-        placeholder={leagueId ? "Sezon seç" : "Önce lig seç"}
-        onChange={(v) => setSeasonId(v)}
-        icon="calendar-outline"
-        disabled={!leagueId && !seasonId}
-      />
+        <>
+          <SelectField<number>
+            label="Lig"
+            value={leagueId}
+            options={leagueOptions}
+            placeholder={leagues.isLoading ? "Yükleniyor…" : "Lig seç"}
+            onChange={(v) => {
+              setLeagueId(v);
+              setSeasonId(null);
+            }}
+            icon="trophy-outline"
+          />
+          <SelectField<number>
+            label="Sezon"
+            value={seasonId}
+            options={seasonOptions}
+            placeholder={leagueId ? "Sezon seç" : "Önce lig"}
+            onChange={(v) => setSeasonId(v)}
+            icon="calendar-outline"
+            disabled={!leagueId && !seasonId}
+          />
+        </>
       </OpsGroup>
-
       {!seasonId ? (
         <EmptyState icon="git-network-outline" variant="inline" title="Lig ve sezon seç" body="Statüyü düzenlemek için önce lig ve sezon seç." />
       ) : overview.isLoading ? (
-        <SkeletonCard />
+        <View style={styles.loading}>
+          <SkeletonCard />
+          <SkeletonCard />
+        </View>
       ) : overview.error ? (
         <ErrorState error={overview.error} onRetry={overview.refetch} variant="inline" />
       ) : (
@@ -390,6 +396,32 @@ export default function LeagueStructureScreen() {
               ]}
             />
           ) : null}
+
+          {/* Turnuva akışı: gruplar → etaplar, her düğümde doluluk. */}
+          {groups.length ? <FlowStrip groups={groups} /> : null}
+
+          {can.create || can.update ? (
+            <View style={styles.tiles}>
+              {can.create ? (
+                <TileButton icon="construct-outline" tone="signature" title="Hazır statü" hint="Grup + eleme tek adımda" onPress={() => setBuilder(true)} style={styles.tile} />
+              ) : null}
+              {can.create ? <TileButton icon="add-circle-outline" tone="violet" title="Grup ekle" hint="Grup ya da etap" onPress={() => setGroupForm("new")} style={styles.tile} /> : null}
+              {can.create && groups.length ? (
+                <TileButton icon="copy-outline" tone="cyan" title="Kurguyu kopyala" hint="Başka sezona aktar" onPress={() => setCopying(true)} style={styles.tile} />
+              ) : null}
+              {can.update && groups.length ? (
+                <TileButton
+                  icon="refresh-outline"
+                  tone="mint"
+                  title={resolve.isPending ? "Çözülüyor…" : "Yeniden çöz"}
+                  hint="Kontenjanları sonuçlardan"
+                  onPress={() => !resolve.isPending && resolve.mutate(undefined)}
+                  style={styles.tile}
+                />
+              ) : null}
+            </View>
+          ) : null}
+
           <OpsGroup title="Görünüm" icon="eye-outline" tone="violet">
             <ToggleField
               label="Genel puan tablosu gösterilsin"
@@ -409,17 +441,6 @@ export default function LeagueStructureScreen() {
             />
           </OpsGroup>
 
-          <View style={styles.actions}>
-            {can.create ? <Button label="Hazır statü" icon="construct-outline" size="sm" onPress={() => setBuilder(true)} /> : null}
-            {can.create ? <Button label="Grup ekle" icon="add" size="sm" variant="secondary" onPress={() => setGroupForm("new")} /> : null}
-            {can.create && groups.length ? (
-              <Button label="Kurguyu kopyala" icon="copy-outline" size="sm" variant="secondary" onPress={() => setCopying(true)} />
-            ) : null}
-            {can.update && groups.length ? (
-              <Button label="Yeniden çöz" icon="refresh" size="sm" variant="ghost" loading={resolve.isPending} onPress={() => resolve.mutate(undefined)} />
-            ) : null}
-          </View>
-
           {!groups.length ? (
             <EmptyState
               icon="git-network-outline"
@@ -428,20 +449,23 @@ export default function LeagueStructureScreen() {
               body={can.create ? "Hazır statü ile tek adımda grup ve eleme turlarını kur ya da tek tek grup ekle." : "Bu sezon tek tablolu."}
             />
           ) : (
-            groups.map((g) => (
-              <GroupCard
-                key={g.id}
-                group={g}
-                canEdit={can.update}
-                onMenu={setGroupMenu}
-                onSlot={(group, slot) => setSlotEdit({ group, slot })}
-                onSlotMenu={(group, slot, index) => setSlotMenu({ group, slot, index })}
-              />
-            ))
+            <>
+              <SectionHeader title="Gruplar ve etaplar" meta={`${groups.length} bölüm`} inset="flush" subtitle="Kutuya dokun: kaynağını seç · basılı tut: taşı ya da boşalt" />
+              {groups.map((g, i) => (
+                <Reveal key={g.id} index={i}>
+                  <GroupCard
+                    group={g}
+                    canEdit={can.update}
+                    onMenu={setGroupMenu}
+                    onSlot={(group, slot) => setSlotEdit({ group, slot })}
+                    onSlotMenu={(group, slot, index) => setSlotMenu({ group, slot, index })}
+                  />
+                </Reveal>
+              ))}
+            </>
           )}
         </>
       )}
-
       <ActionSheet
         visible={groupMenu != null}
         onClose={() => setGroupMenu(null)}
@@ -602,7 +626,88 @@ export default function LeagueStructureScreen() {
   );
 }
 
+/**
+ * Turnuva akışı: grup aşaması tek sütunda, ardından her etap kendi sütununda;
+ * sütunlar arasında ok. Düğümde ad + doluluk (dolu/kutu) ve ince doluluk çizgisi.
+ */
+function FlowStrip({ groups }: { groups: SeasonGroup[] }) {
+  const pools = groups.filter((g) => g.group_kind !== "etap");
+  const stages = groups.filter((g) => g.group_kind === "etap");
+  const columns: { key: string; title: string; items: SeasonGroup[] }[] = [
+    ...(pools.length ? [{ key: "pool", title: "Grup aşaması", items: pools }] : []),
+    ...stages.map((g) => ({ key: String(g.id), title: g.group_name, items: [g] })),
+  ];
+  return (
+    <View style={styles.flow} accessible accessibilityLabel={`Turnuva akışı: ${columns.map((c) => c.title).join(", sonra ")}`}>
+      <Text style={styles.flowTitle} {...textScale.dense}>
+        TURNUVA AKIŞI
+      </Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.flowRow}>
+        {columns.map((col, ci) => (
+          <View key={col.key} style={styles.flowColWrap}>
+            {ci > 0 ? <Ionicons name="chevron-forward" size={16} color={colors.brandAccent} style={styles.flowArrow} /> : null}
+            <View style={styles.flowCol}>
+              {col.items.map((g) => {
+                const filled = g.team_count ?? 0;
+                const total = g.slot_count ?? 0;
+                const full = total > 0 && filled >= total;
+                return (
+                  <View key={g.id} style={[styles.flowNode, g.group_kind === "etap" ? styles.flowNodeStage : null]}>
+                    <View style={styles.flowNodeHead}>
+                      <Ionicons name={g.group_kind === "etap" ? "git-merge-outline" : "grid-outline"} size={12} color={g.group_kind === "etap" ? colors.accentText : colors.brandAccent} />
+                      <Text style={styles.flowNodeName} numberOfLines={1} {...textScale.dense}>
+                        {g.group_name}
+                      </Text>
+                    </View>
+                    <Text style={[styles.flowNodeCount, full ? { color: colors.win } : null]} {...textScale.badge}>
+                      {filled}/{total}
+                      <Text style={styles.flowNodeUnit}>{g.group_kind === "etap" ? ` · ${g.matchup_count} eşl.` : " takım"}</Text>
+                    </Text>
+                    <View style={styles.flowBar}>
+                      <View style={[styles.flowBarFill, { width: `${total ? Math.min(100, (filled / total) * 100) : 0}%`, backgroundColor: full ? colors.win : colors.brandAccent }]} />
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  intro: { ...type.bodySm, color: colors.textSecondary },
-  actions: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  loading: { gap: space.md },
+  tiles: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  tile: { flexBasis: "47%", flexGrow: 1 },
+  flow: {
+    gap: space.m,
+    paddingVertical: space.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  flowTitle: { ...type.overline, color: colors.textSecondary, paddingHorizontal: space.lg },
+  flowRow: { paddingHorizontal: space.lg, alignItems: "center" },
+  flowColWrap: { flexDirection: "row", alignItems: "center" },
+  flowArrow: { marginHorizontal: space.xs },
+  flowCol: { gap: space.sm },
+  flowNode: {
+    width: 116,
+    gap: space.xxs,
+    padding: space.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+  },
+  flowNodeStage: { backgroundColor: colors.surface2, borderColor: colors.glassLine },
+  flowNodeHead: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  flowNodeName: { ...type.labelXs, color: colors.textPrimary, flex: 1 },
+  flowNodeCount: { ...type.numSmStrong, color: colors.textPrimary },
+  flowNodeUnit: { ...type.meta, color: colors.textTertiary },
+  flowBar: { height: 3, borderRadius: 2, backgroundColor: colors.surface3, overflow: "hidden", marginTop: space.xxs },
+  flowBarFill: { height: 3, borderRadius: 2 },
 });

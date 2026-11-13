@@ -8,13 +8,14 @@
 
 import { useQuery } from "@tanstack/react-query";
 import React, { useEffect } from "react";
-import { StyleSheet, View } from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { StyleSheet, Text, View } from "react-native";
 
 import { SelectField } from "@/components/admin";
 import { getSeasonGroups } from "@/lib/api/admin/matches";
 import { getCities, getLeagues, getSeasons } from "@/lib/api/meta";
 import { useScope } from "@/providers/ScopeProvider";
-import { space } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 export interface AdminScope {
   cityId: number | null;
@@ -96,8 +97,31 @@ export function ScopeFields({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupList.length, withGroup]);
 
+  /* Seçim yolu: il › lig › sezon (› grup) — hangi kademenin eksik olduğu bir bakışta görünür. */
+  const trail = [
+    { key: "city", label: value.cityLabel || "İl", done: Boolean(value.cityId) },
+    { key: "league", label: value.leagueLabel || "Lig", done: Boolean(value.leagueId) },
+    { key: "season", label: value.seasonLabel || "Sezon", done: Boolean(value.seasonId) },
+    ...(withGroup && groupList.length ? [{ key: "group", label: value.groupLabel || (groupRequired ? "Grup" : "Tüm sezon"), done: Boolean(value.groupId) || !groupRequired }] : []),
+  ];
+
   return (
     <View style={[styles.stack, compact ? styles.compact : null]}>
+      {!compact ? (
+        <View style={styles.trail} accessible accessibilityLabel={`Kapsam: ${trail.map((t) => t.label).join(", ")}`}>
+          {trail.map((item, index) => (
+            <React.Fragment key={item.key}>
+              {index > 0 ? <Ionicons name="chevron-forward" size={11} color={colors.textTertiary} /> : null}
+              <View style={[styles.crumb, item.done ? styles.crumbOn : null]}>
+                <View style={[styles.crumbDot, { backgroundColor: item.done ? colors.win : colors.warn }]} />
+                <Text style={[styles.crumbText, item.done ? styles.crumbTextOn : null]} numberOfLines={1} {...textScale.dense}>
+                  {item.label}
+                </Text>
+              </View>
+            </React.Fragment>
+          ))}
+        </View>
+      ) : null}
       <SelectField<number>
         label="İl"
         value={value.cityId}
@@ -149,4 +173,21 @@ export function ScopeFields({
 const styles = StyleSheet.create({
   stack: { gap: space.md },
   compact: { gap: space.sm },
+  trail: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs },
+  crumb: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    maxWidth: 150,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xxs + 1,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  crumbOn: { backgroundColor: colors.brandDim, borderColor: colors.brandBorder },
+  crumbDot: { width: 6, height: 6, borderRadius: radius.pill },
+  crumbText: { ...type.caption, color: colors.textTertiary, flexShrink: 1 },
+  crumbTextOn: { color: colors.textPrimary },
 });

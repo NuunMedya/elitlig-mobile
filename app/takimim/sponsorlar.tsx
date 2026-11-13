@@ -10,6 +10,11 @@
  *
  * Görsel, galeriden seçilir ve doğrudan alanın görsel ucuna yüklenir
  * (multipart "image"); ad/konum/bağlantı ayrı PUT ile gider.
+ *
+ * TASARIM (gece teması): üstte üç sayı (yayında · pasif · boş alan) ve üyelik
+ * durumu satırı; alanlar iki sütunlu LOGO IZGARASI — her karo geniş bir logo
+ * vitrini (görsel yoksa alan numarası ve kurdele ikonu), altında ad, konum
+ * ve yayın hapı. Boş alan kesik çizgili "ekle" karosudur.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -20,17 +25,22 @@ import React, { useState } from "react";
 import { Alert, Image, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { PanelEmpty, PanelSection } from "@/components/club/Panel";
 import {
   Badge,
   BottomSheet,
   Button,
   Chip,
   ChipGroup,
+  EmptyState,
   ErrorState,
+  IconTile,
   Input,
+  MetricGrid,
+  MetricTile,
+  Reveal,
   ScreenHeader,
-  SkeletonCard,
+  SectionHeader,
+  Skeleton,
   Toggle,
   Touchable,
   useHeaderScroll,
@@ -48,7 +58,7 @@ import {
 import { mediaUrl } from "@/lib/format";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 const placementLabel = (key: string | null) => SPONSOR_PLACEMENTS.find((item) => item.key === key)?.label ?? null;
 const errorText = (error: unknown, fallback: string) =>
@@ -90,47 +100,78 @@ export default function TeamSponsorsScreen() {
   if (!auth.user) return <Redirect href="/giris" />;
 
   const premium = Boolean(query.data?.isPremium);
+  const slots = query.data?.sponsors ?? [];
+  const live = slots.filter((slot) => slot.active && (slot.sponsor_name || slot.image_url)).length;
+  const empty = slots.filter((slot) => !slot.sponsor_name && !slot.image_url).length;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader title="Sponsorlar" subtitle="Takım sayfasındaki sponsor alanları" back scrollY={scrollY} />
       <ScrollView {...scrollProps} contentContainerStyle={styles.content} refreshControl={refresh.control}>
         {query.isLoading ? (
-          <View style={styles.pad}>
-            <SkeletonCard lines={3} />
-            <SkeletonCard lines={3} />
+          <View style={styles.stack}>
+            <Skeleton height={76} radius="xl" />
+            <Skeleton height={64} radius="xl" />
+            <View style={styles.grid}>
+              {[0, 1, 2, 3].map((index) => (
+                <View key={index} style={styles.cell}>
+                  <Skeleton height={196} radius="xl" />
+                </View>
+              ))}
+            </View>
           </View>
         ) : query.isError ? (
           <ErrorState error={query.error} onRetry={query.refetch} />
         ) : (
           <>
-            <View style={[styles.pad, styles.notice]}>
-              <Ionicons name={premium ? "sparkles" : "lock-closed"} size={16} color={premium ? colors.brandAccent : colors.warn} />
-              <Text style={styles.noticeText} {...textScale.long}>
-                {premium
-                  ? "Değişiklikler yönetici onayından sonra takım sayfanda yayına alınır."
-                  : "Sponsor alanlarını düzenlemek premium üyelik ister. Mevcut alanları görebilirsin."}
-              </Text>
-            </View>
-            <PanelSection title="Alanlar" meta={`${query.data?.slotCount ?? 3} alan`}>
-              <View style={styles.slots}>
-                {(query.data?.sponsors ?? []).map((slot) => (
-                  <SlotCard
-                    key={slot.slot_index}
-                    slot={slot}
-                    editable={premium}
-                    onEdit={() => setEditing(slot)}
-                    onClear={() =>
-                      Alert.alert("Sponsoru kaldır", `${slot.sponsor_name ?? `${slot.slot_index}. alan`} kaldırılsın mı? İstek yönetici onayına gider.`, [
-                        { text: "Vazgeç", style: "cancel" },
-                        { text: "Kaldır", style: "destructive", onPress: () => clear.mutate(slot.slot_index) },
-                      ])
-                    }
-                  />
-                ))}
-                {!query.data?.sponsors?.length ? <PanelEmpty icon="megaphone-outline" text="Sponsor alanı bulunamadı." /> : null}
+            <Reveal index={0}>
+              <MetricGrid columns={3}>
+                <MetricTile label="Yayında" value={String(live)} icon="radio" tone="win" />
+                <MetricTile label="Pasif" value={String(slots.length - live - empty)} icon="pause-circle" />
+                <MetricTile label="Boş" value={String(empty)} icon="add-circle" tone={empty ? "brand" : "neutral"} />
+              </MetricGrid>
+            </Reveal>
+
+            <Reveal index={1}>
+              <View style={[styles.notice, premium ? styles.noticePremium : styles.noticeLocked]}>
+                <IconTile icon={premium ? "sparkles" : "lock-closed"} tone={premium ? "signature" : "gold"} size={36} glow={false} />
+                <View style={styles.flex}>
+                  <Text style={styles.noticeTitle} {...textScale.dense}>
+                    {premium ? "Premium üyelik açık" : "Düzenleme premium ister"}
+                  </Text>
+                  <Text style={styles.noticeText} {...textScale.long}>
+                    {premium
+                      ? "Değişiklikler yönetici onayından sonra takım sayfanda yayına alınır."
+                      : "Mevcut alanları görebilirsin; düzenlemek için takım üyeliğini yükselt."}
+                  </Text>
+                </View>
               </View>
-            </PanelSection>
+            </Reveal>
+
+            <SectionHeader title="Sponsor alanları" meta={`${query.data?.slotCount ?? 3} alan`} inset="flush" style={styles.section} />
+            {slots.length ? (
+              <View style={styles.grid}>
+                {slots.map((slot, index) => (
+                  <View key={slot.slot_index} style={styles.cell}>
+                    <Reveal index={index + 2} distance={8} scaleFrom={0.96}>
+                      <SlotTile
+                        slot={slot}
+                        editable={premium}
+                        onEdit={() => setEditing(slot)}
+                        onClear={() =>
+                          Alert.alert("Sponsoru kaldır", `${slot.sponsor_name ?? `${slot.slot_index}. alan`} kaldırılsın mı? İstek yönetici onayına gider.`, [
+                            { text: "Vazgeç", style: "cancel" },
+                            { text: "Kaldır", style: "destructive", onPress: () => clear.mutate(slot.slot_index) },
+                          ])
+                        }
+                      />
+                    </Reveal>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <EmptyState variant="inline" icon="ribbon-outline" title="Sponsor alanı yok" body="Takımın için tanımlı bir sponsor alanı bulunamadı." />
+            )}
           </>
         )}
       </ScrollView>
@@ -140,42 +181,68 @@ export default function TeamSponsorsScreen() {
   );
 }
 
-function SlotCard({ slot, editable, onEdit, onClear }: { slot: SponsorSlot; editable: boolean; onEdit: () => void; onClear: () => void }) {
+function SlotTile({ slot, editable, onEdit, onClear }: { slot: SponsorSlot; editable: boolean; onEdit: () => void; onClear: () => void }) {
   const filled = Boolean(slot.sponsor_name || slot.image_url);
   const image = mediaUrl(slot.image_url);
+  const placement = placementLabel(slot.placement);
   return (
-    <Touchable onPress={editable ? onEdit : undefined} disabled={!editable} feedback="card" style={styles.slot} accessibilityRole="button">
-      <View style={styles.slotImage}>
+    <Touchable
+      onPress={editable ? onEdit : undefined}
+      disabled={!editable}
+      feedback="card"
+      accessibilityRole="button"
+      accessibilityLabel={`${slot.slot_index}. alan, ${slot.sponsor_name ?? (filled ? "Adsız sponsor" : "boş")}${editable ? ", düzenle" : ""}`}
+      style={[styles.tile, !filled && styles.tileEmpty]}
+    >
+      <View style={[styles.logo, !filled && styles.logoEmpty]}>
         {image ? (
-          <Image source={{ uri: image }} style={styles.slotImg} resizeMode="contain" />
+          <Image source={{ uri: image }} style={styles.logoImg} resizeMode="contain" />
+        ) : filled ? (
+          <View style={styles.monogram}>
+            <Text style={styles.monogramText} numberOfLines={1} {...textScale.badge}>
+              {initials(slot.sponsor_name ?? "")}
+            </Text>
+          </View>
         ) : (
-          <Ionicons name="image-outline" size={22} color={colors.textTertiary} />
+          <Ionicons name={editable ? "add-circle-outline" : "ribbon-outline"} size={28} color={colors.textTertiary} />
+        )}
+        <View style={styles.slotNo}>
+          <Text style={styles.slotNoText} {...textScale.badge}>
+            {slot.slot_index}
+          </Text>
+        </View>
+        {editable && filled ? (
+          <Touchable onPress={onClear} hitSlop={10} accessibilityRole="button" accessibilityLabel="Sponsoru kaldır" style={styles.trash}>
+            <Ionicons name="trash-outline" size={14} color={colors.danger} />
+          </Touchable>
+        ) : null}
+      </View>
+      <View style={styles.tileBody}>
+        <Text style={styles.slotIndex} {...textScale.badge}>
+          {upperTR(placement ?? `${slot.slot_index}. alan`)}
+        </Text>
+        <Text style={[styles.slotName, !filled && styles.slotNameEmpty]} numberOfLines={1} {...textScale.dense}>
+          {slot.sponsor_name ?? (filled ? "Adsız sponsor" : editable ? "Sponsor ekle" : "Boş alan")}
+        </Text>
+        {filled ? (
+          <Badge label={slot.active ? "Yayında" : "Pasif"} tone={slot.active ? "win" : "neutral"} icon={slot.active ? "radio" : "pause"} size="xs" />
+        ) : (
+          <Text style={styles.slotHint} numberOfLines={1} {...textScale.dense}>
+            {editable ? "Görsel ve bağlantı ekle" : "Premium ile açılır"}
+          </Text>
         )}
       </View>
-      <View style={styles.slotBody}>
-        <Text style={styles.slotIndex} {...textScale.badge}>
-          {`${slot.slot_index}. ALAN`}
-        </Text>
-        <Text style={styles.slotName} numberOfLines={1} {...textScale.dense}>
-          {slot.sponsor_name ?? (filled ? "Adsız sponsor" : "Boş alan")}
-        </Text>
-        <View style={styles.slotMeta}>
-          {placementLabel(slot.placement) ? <Badge label={placementLabel(slot.placement)!} tone="info" size="xs" /> : null}
-          <Badge label={slot.active ? "Yayında" : "Pasif"} tone={slot.active ? "win" : "neutral"} size="xs" />
-        </View>
-      </View>
-      {editable ? (
-        <View style={styles.slotActions}>
-          <Ionicons name="create-outline" size={18} color={colors.brandAccent} />
-          {filled ? (
-            <Touchable onPress={onClear} hitSlop={10} accessibilityLabel="Sponsoru kaldır">
-              <Ionicons name="trash-outline" size={18} color={colors.danger} />
-            </Touchable>
-          ) : null}
-        </View>
-      ) : null}
     </Touchable>
   );
+}
+
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0]?.toLocaleUpperCase("tr-TR") ?? "")
+    .join("");
 }
 
 function SponsorSheet({ slot, onClose, onSaved }: { slot: SponsorSlot | null; onClose: () => void; onSaved: (message: string) => void }) {
@@ -295,36 +362,84 @@ function SponsorSheet({ slot, onClose, onSaved }: { slot: SponsorSlot | null; on
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingTop: space.md, paddingBottom: space.giant },
-  pad: { paddingHorizontal: layout.screenPadding, gap: space.md },
-  notice: { flexDirection: "row", alignItems: "flex-start" },
-  noticeText: { ...type.caption, color: colors.textSecondary, flex: 1 },
-  slots: { gap: space.sm },
-  slot: {
+  content: { paddingHorizontal: layout.screenPadding, paddingTop: space.md, paddingBottom: space.giant, gap: space.md },
+  stack: { gap: space.md },
+  flex: { flex: 1, minWidth: 0 },
+  section: { marginTop: space.md },
+  notice: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
     padding: space.md,
     borderRadius: radius.xl,
+    borderWidth: hairline,
+  },
+  noticePremium: { backgroundColor: colors.brandDim, borderColor: colors.brandBorder },
+  noticeLocked: { backgroundColor: colors.warnDim, borderColor: colors.border },
+  noticeTitle: { ...type.h4, color: colors.textPrimary },
+  noticeText: { ...type.caption, color: colors.textSecondary },
+
+  grid: { flexDirection: "row", flexWrap: "wrap", marginHorizontal: -space.xs },
+  cell: { width: "50%", padding: space.xs },
+  tile: {
+    borderRadius: radius.xl,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
-    borderColor: colors.border,
-  },
-  slotImage: {
-    width: 64,
-    height: 48,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface2,
-    alignItems: "center",
-    justifyContent: "center",
+    borderColor: colors.glassLine,
     overflow: "hidden",
   },
-  slotImg: { width: "100%", height: "100%" },
-  slotBody: { flex: 1, minWidth: 0, gap: space.xxs },
+  tileEmpty: { borderStyle: "dashed", borderColor: colors.borderStrong },
+  logo: {
+    height: 112,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface2,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.separator,
+  },
+  logoEmpty: { backgroundColor: colors.surface1 },
+  logoImg: { width: "80%", height: "80%" },
+  monogram: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.lg,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+  },
+  monogramText: { ...type.scoreMd, color: colors.brandAccent },
+  slotNo: {
+    position: "absolute",
+    top: space.sm,
+    left: space.sm,
+    minWidth: 22,
+    height: 22,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.glass,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  slotNoText: { ...type.numSmStrong, color: colors.textSecondary },
+  trash: {
+    position: "absolute",
+    top: space.sm,
+    right: space.sm,
+    width: 28,
+    height: 28,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.dangerDim,
+  },
+  tileBody: { padding: space.md, gap: space.xs, alignItems: "flex-start" },
   slotIndex: { ...type.overline, color: colors.textTertiary },
   slotName: { ...type.h4, color: colors.textPrimary },
-  slotMeta: { flexDirection: "row", gap: space.xs },
-  slotActions: { flexDirection: "row", gap: space.md, alignItems: "center" },
+  slotNameEmpty: { color: colors.brandAccent },
+  slotHint: { ...type.caption, color: colors.textTertiary },
   sheet: { gap: space.md, paddingBottom: space.md },
   label: { ...type.label, color: colors.textSecondary },
   toggleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },

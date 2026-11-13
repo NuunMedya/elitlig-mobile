@@ -1,8 +1,16 @@
 /**
- * YAZMA ALANI — WhatsApp düzeni: duvar kâğıdı renginde çubuk, içinde beyaz
- * (koyuda gri) yuvarlak metin hapı; hapın SAĞINDA ataş (ek) ve kamera, en
- * sağda ayrı yuvarlak yeşil düğme — metin yokken mikrofon (basılı tut: sesli
- * mesaj), metin varken gönder oku.
+ * YAZMA ALANI — WhatsApp işlevi, Gece dili (ikinci tur).
+ *
+ *   [ + ]  ( cam metin hapı ……………… 📷 )  ( degrade ➤ / 🎤 )
+ *
+ *   · Çubuk yarı saydam cam zemindir, üstünde ince ışık çizgisi. Solda cam
+ *     daire "+" (ek menüsü), ortada cam metin hapı (odakta mor kenar), hapın
+ *     içinde kamera; en sağda mor degrade, parıltılı yuvarlak düğme.
+ *   · MİKROFONA DÖNÜŞEN DÜĞME: metin yokken mikrofon (basılı tut: sesli mesaj),
+ *     metin yazılınca simge dönerek gönder okuna dönüşür (yaylı "pop").
+ *   · ARROW LAUNCH: gönderince ok sağ üste fırlayıp kaybolur, ardından düğme
+ *     mikrofona döner. Bunun için gönder düğmesi gönderimden sonra ~260 ms
+ *     daha bağlı kalır.
  *
  *   · Metin durumu BURADA yaşar: her tuş vuruşunda yalnız bu bileşen çizilir,
  *     mesaj listesi çizilmez.
@@ -14,18 +22,43 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PanResponder, StyleSheet, Text, TextInput, View, type NativeSyntheticEvent, type TextInputSelectionChangeEventData } from "react-native";
+import { Animated, PanResponder, StyleSheet, Text, TextInput, View, type NativeSyntheticEvent, type TextInputSelectionChangeEventData } from "react-native";
 
 import { Avatar, Touchable, errorMessage, fireHaptic } from "@/components/chat/kit";
-import { useToast } from "@/components/ui";
+import { useReduceMotion, useToast } from "@/components/ui";
 import { formatDurationMs, type ChatMessage, type ChatParticipant } from "@/lib/api/chat";
 import { getDraft, loadChatDrafts, setDraft } from "@/lib/chatDrafts";
 import { MAX_VOICE_MS, useVoiceRecorder, type VoiceRecording } from "@/lib/chatMedia";
 import { chatPalette, colors, senderColor, wa } from "@/lib/chatPalette";
 import { emitTyping } from "@/lib/chatSocket";
 import { extractMentions, insertMention, mentionQuery, messageSummary } from "@/lib/chatUtils";
-import { hairline, radius, space, textScale, type } from "@/theme";
+import { easing, glowStyle, hairline, palette, radius, space, spring, textScale, type } from "@/theme";
+
+/** Degrade yönü: sağdan sola (açık uç sağda). */
+const G_START = { x: 1, y: 0.5 } as const;
+const G_END = { x: 0, y: 0.5 } as const;
+const LAUNCH_MS = 260;
+
+/** Düğme simgesi takıldığında yaylanarak (dönerek) belirir: mikrofon ↔ ok dönüşümü. */
+function MorphIcon({ children, spin = -60 }: { children: React.ReactNode; spin?: number }) {
+  const reduceMotion = useReduceMotion();
+  const v = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
+  useEffect(() => {
+    if (!reduceMotion) Animated.spring(v, { toValue: 1, ...spring.pop }).start();
+  }, [reduceMotion, v]);
+  return (
+    <Animated.View
+      style={{
+        opacity: v.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 1, 1], extrapolate: "clamp" }),
+        transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) }, { rotate: v.interpolate({ inputRange: [0, 1], outputRange: [`${spin}deg`, "0deg"] }) }],
+      }}
+    >
+      {children}
+    </Animated.View>
+  );
+}
 
 const TYPING_EVERY_MS = 2_500;
 const TYPING_IDLE_MS = 4_000;
@@ -60,6 +93,9 @@ export const Composer = memo(function Composer({ conversationId, placeholder, pa
   const [focused, setFocused] = useState(false);
   const [recording, setRecording] = useState(false);
   const [willCancel, setWillCancel] = useState(false);
+  const [launching, setLaunching] = useState(false);
+  const launch = useRef(new Animated.Value(0)).current;
+  const reduceMotion = useReduceMotion();
   const typing = useRef<{ last: number; timer: ReturnType<typeof setTimeout> | null }>({ last: 0, timer: null });
   const hold = useRef({ active: false, startedAt: 0, cancel: false });
   const textRef = useRef(text);
@@ -152,7 +188,13 @@ export const Composer = memo(function Composer({ conversationId, placeholder, pa
     }
     setText("");
     stopTyping();
-  }, [conversationId, editing, onSaveEdit, onSendText, participants, stopTyping]);
+    // ARROW LAUNCH: ok sağ üste fırlar; düğme bu sürede bağlı kalır.
+    if (!editing && !reduceMotion) {
+      setLaunching(true);
+      launch.setValue(0);
+      Animated.timing(launch, { toValue: 1, duration: LAUNCH_MS, easing: easing.accelerate, useNativeDriver: true }).start(() => setLaunching(false));
+    }
+  }, [conversationId, editing, launch, onSaveEdit, onSendText, participants, reduceMotion, stopTyping]);
 
   /* ---------- sesli mesaj: basılı tut ---------- */
   const finishRecording = useCallback(
@@ -271,6 +313,11 @@ export const Composer = memo(function Composer({ conversationId, placeholder, pa
       ) : null}
 
       <View style={styles.bar}>
+        {editing || recording ? null : (
+          <Touchable feedback="icon" haptic="light" onPress={onAttach} hitSlop={4} accessibilityRole="button" accessibilityLabel="Ek gönder: fotoğraf, video, konum, anket" style={styles.plus}>
+            <Ionicons name="add" size={24} color={colors.textPrimary} />
+          </Touchable>
+        )}
         {recording ? (
           <View style={[styles.field, styles.recording]} accessibilityLiveRegion="polite">
             <View style={styles.recDot} />
@@ -283,7 +330,7 @@ export const Composer = memo(function Composer({ conversationId, placeholder, pa
             </View>
           </View>
         ) : (
-          <View style={styles.field}>
+          <View style={[styles.field, focused ? styles.fieldFocused : null]}>
             <TextInput
               ref={inputRef}
               value={text}
@@ -301,22 +348,31 @@ export const Composer = memo(function Composer({ conversationId, placeholder, pa
               style={styles.input}
               {...textScale.dense}
             />
-            {editing ? null : (
-              <Touchable feedback="icon" haptic="light" onPress={onAttach} hitSlop={4} accessibilityRole="button" accessibilityLabel="Ek gönder: fotoğraf, video, konum, anket" style={[styles.fieldButton, trimmed || !onCamera ? styles.fieldButtonLast : null]}>
-                <Ionicons name="attach" size={25} color={wa.composerIcon} style={styles.clip} />
-              </Touchable>
-            )}
             {editing || trimmed || !onCamera ? null : (
               <Touchable feedback="icon" haptic="light" onPress={onCamera} hitSlop={4} accessibilityRole="button" accessibilityLabel="Kamerayla fotoğraf çek" style={[styles.fieldButton, styles.fieldButtonLast]}>
-                <Ionicons name="camera-outline" size={23} color={wa.composerIcon} />
+                <Ionicons name="camera-outline" size={21} color={wa.composerIcon} />
               </Touchable>
             )}
           </View>
         )}
 
-        {trimmed || editing ? (
-          <Touchable feedback="button" haptic="medium" onPress={submit} disabled={!trimmed} accessibilityRole="button" accessibilityLabel={editing ? "Düzenlemeyi kaydet" : "Gönder"} style={[styles.send, !trimmed ? styles.sendOff : null]}>
-            <Ionicons name={editing ? "checkmark" : "send"} size={editing ? 24 : 20} color={wa.onSend} style={editing ? null : styles.sendGlyph} />
+        {trimmed || editing || launching ? (
+          <Touchable feedback="fab" haptic="medium" onPress={submit} disabled={!trimmed} accessibilityRole="button" accessibilityLabel={editing ? "Düzenlemeyi kaydet" : "Gönder"} style={[styles.send, glowStyle(colors.glow, 2), !trimmed && !launching ? styles.sendOff : null]}>
+            <LinearGradient colors={colors.gradientBrand} start={G_START} end={G_END} style={[StyleSheet.absoluteFill, styles.sendFill]} />
+            <MorphIcon spin={-90}>
+              <Animated.View
+                style={{
+                  opacity: launch.interpolate({ inputRange: [0, 0.7, 1], outputRange: [1, 1, 0] }),
+                  transform: [
+                    { translateX: launch.interpolate({ inputRange: [0, 1], outputRange: [0, 30] }) },
+                    { translateY: launch.interpolate({ inputRange: [0, 1], outputRange: [0, -30] }) },
+                    { rotate: launch.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "-20deg"] }) },
+                  ],
+                }}
+              >
+                <Ionicons name={editing ? "checkmark" : "send"} size={editing ? 24 : 19} color={palette.textOnBrand} style={editing ? null : styles.sendGlyph} />
+              </Animated.View>
+            </MorphIcon>
           </Touchable>
         ) : (
           <View
@@ -325,9 +381,12 @@ export const Composer = memo(function Composer({ conversationId, placeholder, pa
             accessibilityRole="button"
             accessibilityLabel="Sesli mesaj"
             accessibilityHint="Kaydetmek için basılı tut, göndermek için bırak, iptal için sola kaydır"
-            style={[styles.send, recording ? styles.sendRecording : null, willCancel ? styles.sendCancel : null]}
+            style={[styles.send, glowStyle(willCancel ? colors.danger : colors.glow, recording ? 3 : 1), recording ? styles.sendRecording : null]}
           >
-            <Ionicons name={recorder.busy ? "ellipsis-horizontal" : "mic"} size={recording ? 26 : 23} color={wa.onSend} />
+            {willCancel ? <View style={[StyleSheet.absoluteFill, styles.sendFill, styles.sendCancel]} /> : <LinearGradient colors={colors.gradientBrand} start={G_START} end={G_END} style={[StyleSheet.absoluteFill, styles.sendFill]} />}
+            <MorphIcon spin={60}>
+              <Ionicons name={recorder.busy ? "ellipsis-horizontal" : willCancel ? "trash" : "mic"} size={recording ? 24 : 22} color={palette.textOnBrand} />
+            </MorphIcon>
           </View>
         )}
       </View>
@@ -337,34 +396,38 @@ export const Composer = memo(function Composer({ conversationId, placeholder, pa
 
 const styles = StyleSheet.create({
   /* Çubuk duvar kâğıdı rengindedir (WhatsApp): üst çizgi yok, hap zeminden ayrışır. */
-  wrap: { backgroundColor: wa.composerBar },
-  bar: { flexDirection: "row", alignItems: "flex-end", gap: space.s, paddingHorizontal: space.s, paddingTop: space.xs, paddingBottom: space.s },
-  field: { flex: 1, minHeight: 48, flexDirection: "row", alignItems: "flex-end", borderRadius: radius.xxl + space.xs, backgroundColor: wa.composerField, borderBottomWidth: 1, borderBottomColor: chatPalette.bubbleShade },
-  fieldButton: { width: 40, height: 48, alignItems: "center", justifyContent: "center" },
+  /* Cam çubuk: yarı saydam zemin + üstte ince ışık çizgisi. */
+  wrap: { backgroundColor: colors.glass, borderTopWidth: hairline, borderTopColor: colors.glassLine },
+  bar: { flexDirection: "row", alignItems: "flex-end", gap: space.s, paddingHorizontal: space.sm, paddingTop: space.sm, paddingBottom: space.sm },
+  plus: { width: 44, height: 46, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface3, borderWidth: hairline, borderColor: colors.glassLine },
+  field: { flex: 1, minHeight: 46, flexDirection: "row", alignItems: "flex-end", borderRadius: radius.xxl, backgroundColor: wa.composerField, borderWidth: 1, borderColor: colors.glassLine },
+  fieldFocused: { borderColor: colors.brandBorder },
+  fieldButton: { width: 40, height: 46, alignItems: "center", justifyContent: "center" },
   fieldButtonLast: { marginRight: space.xs },
   clip: { transform: [{ rotate: "-45deg" }] },
   input: {
     ...type.body,
     fontSize: type.article.fontSize,
     flex: 1,
-    minHeight: 48,
+    minHeight: 46,
     maxHeight: 132,
     color: colors.textPrimary,
-    paddingTop: space.md + space.px,
-    paddingBottom: space.md + space.px,
+    paddingTop: space.md,
+    paddingBottom: space.md,
     paddingRight: space.xs,
-    paddingLeft: space.lg + space.xxs,
+    paddingLeft: space.lg,
     textAlignVertical: "center",
     ...({ outlineStyle: "none" } as object),
   },
-  send: { width: 48, height: 48, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: wa.send },
+  send: { width: 46, height: 46, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  sendFill: { borderRadius: radius.pill },
   /* Kâğıt uçak simgesinin görsel ağırlığı solda; 2 px sağa alınca daireye oturur. */
   sendGlyph: { marginLeft: space.xxs },
   sendOff: { opacity: 0.5 },
   sendRecording: { transform: [{ scale: 1.25 }] },
   sendCancel: { backgroundColor: colors.danger },
 
-  recording: { alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, minHeight: 48 },
+  recording: { alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, minHeight: 46, borderColor: colors.dangerDim },
   recDot: { width: 10, height: 10, borderRadius: radius.pill, backgroundColor: colors.danger },
   recTime: { ...type.tableNum, fontSize: type.bodyLg.fontSize, color: colors.textPrimary, minWidth: 44 },
   recHint: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: space.xs },
@@ -372,7 +435,7 @@ const styles = StyleSheet.create({
   recCancel: { color: colors.danger },
 
   /* Yanıt / düzenleme çubuğu: hap renginde kart, solda renkli çubuk (yanıtta gönderenin rengi, düzenlemede yeşil). */
-  banner: { flexDirection: "row", alignItems: "center", gap: space.sm, marginHorizontal: space.s, marginTop: space.s, borderRadius: radius.md, backgroundColor: wa.composerField, overflow: "hidden" },
+  banner: { flexDirection: "row", alignItems: "center", gap: space.sm, marginHorizontal: space.sm, marginTop: space.sm, borderRadius: radius.lg, backgroundColor: wa.composerField, borderWidth: hairline, borderColor: colors.glassLine, overflow: "hidden" },
   bannerBar: { width: 4, alignSelf: "stretch" },
   bannerBody: { flex: 1, minWidth: 0, paddingVertical: space.s, gap: space.px },
   bannerTitle: { ...type.labelSm },
@@ -380,7 +443,7 @@ const styles = StyleSheet.create({
   bannerText: { ...type.bodySm, color: colors.textSecondary, flexShrink: 1 },
   bannerClose: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
 
-  mentions: { marginHorizontal: space.s, marginTop: space.s, borderRadius: radius.md, backgroundColor: wa.composerField, borderWidth: hairline, borderColor: colors.border, overflow: "hidden" },
+  mentions: { marginHorizontal: space.sm, marginTop: space.sm, borderRadius: radius.lg, backgroundColor: wa.composerField, borderWidth: hairline, borderColor: colors.border, overflow: "hidden" },
   mentionRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, minHeight: 44 },
   mentionName: { ...type.label, color: colors.textPrimary, flexShrink: 1 },
   mentionSub: { ...type.caption, color: colors.textTertiary, flex: 1 },

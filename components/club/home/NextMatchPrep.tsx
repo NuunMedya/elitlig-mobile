@@ -1,12 +1,14 @@
 /**
  * SIRADAKİ MAÇ + HAZIRLIK — başkanın "maça hazır mıyız?" kartı.
  *
- * Üstte maç (ev/deplasman, rakip, gün-saat-saha, geri sayım), altında üç
- * adım gerçek veriden durum alır ve her biri maç ekranının ilgili sekmesini
- * açar (web "Gelecek Maçlar": kadro kur, yoklama yap, rakip analizi):
- *   1. Yoklama — sıradaki maçın yoklama dağılımı (geliyor ≥ ilk 8 → tamam)
- *   2. Maç kadrosu — kayıtlı maç planı (ilk 8 dolu → tamam, eksik → uyarı)
- *   3. Rakip analizi — kadro kayıtlıysa senaryo karşılaştırması
+ * İKİ KAT, TEK KART:
+ *   1. MAÇ ŞERİDİ — ev/deplasman ve geri sayım hapları; iki arma yan yana,
+ *      ortada başlama saati (Archivo, iri) ve gün; altında saha.
+ *   2. HAZIRLIK — imza degradeli ilerleme çubuğu (%), üç adım satırı:
+ *        Yoklama — sıradaki maçın yoklama dağılımı (geliyor ≥ ilk 8 → tamam)
+ *        Maç kadrosu — kayıtlı maç planı (ilk 8 dolu → tamam, eksik → uyarı)
+ *        Rakip analizi — kadro kayıtlıysa senaryo karşılaştırması
+ *      Her satır maç ekranının ilgili sekmesini açar. Altta iki eylem.
  * Plan sorgusunun anahtarı maç ekranıyla AYNIDIR (["takim","match-plan",id]):
  * kadro kaydedilince bu kart da kendiliğinden güncellenir.
  */
@@ -16,14 +18,21 @@ import { useQuery } from "@tanstack/react-query";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { daysUntil, matchWhen } from "@/components/club/NextMatchCard";
-import { PanelCard, PanelEmpty, PrepChecklist, ThinProgress, prepProgress, type PrepStep } from "@/components/club/Panel";
+import { daysUntil } from "@/components/club/NextMatchCard";
+import { PanelEmpty, prepProgress, type PrepStep } from "@/components/club/Panel";
 import type { ClubSignals } from "@/components/club/useClubSignals";
-import { Badge, Button, SkeletonCard, TeamLogo, toneColors } from "@/components/ui";
+import { ListCard, ToneRow } from "@/components/team/ClubKit";
+import { Badge, Button, GradientBar, Odometer, Skeleton, TeamLogo } from "@/components/ui";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { MAX_STARTERS, getTeamMatchPlan } from "@/lib/api/team";
-import { mediaUrl } from "@/lib/format";
-import { colors, radius, space, textScale, type, upperTR } from "@/theme";
+import { formatDateLong, formatTime, mediaUrl } from "@/lib/format";
+import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
+
+const STEP_LOOK = {
+  done: { icon: "checkmark-circle", tone: "mint", color: colors.win },
+  warn: { icon: "alert-circle", tone: "gold", color: colors.warn },
+  todo: { icon: "ellipse-outline", tone: "neutral", color: colors.textTertiary },
+} as const;
 
 export function NextMatchPrep({
   signals,
@@ -49,7 +58,14 @@ export function NextMatchPrep({
     retry: false,
   });
 
-  if (teamMatches.isLoading) return <SkeletonCard lines={3} />;
+  if (teamMatches.isLoading) {
+    return (
+      <View style={styles.skeleton}>
+        <Skeleton height={118} radius="xl" />
+        <Skeleton height={150} radius="xl" />
+      </View>
+    );
+  }
 
   if (!match) {
     return (
@@ -101,62 +117,96 @@ export function NextMatchPrep({
   });
 
   const countdown = daysUntil(match.date);
-  const progressTone = progress >= 100 ? "win" : progress >= 50 ? "brand" : "warn";
   const homeName = match.is_home ? teamName : (match.opponent_name ?? "Rakip");
   const awayName = match.is_home ? (match.opponent_name ?? "Rakip") : teamName;
   const opponentLogo = mediaUrl(logos.logoFor(match.opponent_team_id, match.opponent_name));
+  const clock = match.time ? formatTime(match.time) : null;
+  const ready = progress >= 100;
 
   return (
-    <PanelCard style={styles.card}>
-      <View style={styles.head}>
-        <Badge label={match.is_home ? "EV SAHİBİ" : "DEPLASMAN"} tone={match.is_home ? "brand" : "info"} size="xs" />
-        {countdown ? <Badge label={upperTR(countdown)} tone="live" size="xs" icon="time-outline" /> : null}
-      </View>
-
-      <View style={styles.versus}>
-        <Side name={homeName} logo={match.is_home ? teamLogo : opponentLogo} />
-        <Text style={styles.vs} {...textScale.badge}>
-          VS
-        </Text>
-        <Side name={awayName} logo={match.is_home ? opponentLogo : teamLogo} />
-      </View>
-      <View style={styles.when}>
-        <Ionicons name="calendar-outline" size={13} color={colors.textTertiary} />
-        <Text style={styles.whenText} numberOfLines={1} {...textScale.dense}>
-          {[matchWhen(match.date, match.time), match.match_field].filter(Boolean).join(" · ")}
-        </Text>
-      </View>
-
-      <View style={styles.progressRow}>
-        <View style={styles.flex}>
-          <ThinProgress value={progress} tone={progressTone} />
+    <View style={styles.stack}>
+      <ListCard style={styles.matchCard}>
+        <View style={styles.head}>
+          <Badge label={match.is_home ? "EV SAHİBİ" : "DEPLASMAN"} tone={match.is_home ? "brand" : "info"} size="xs" />
+          {countdown ? <Badge label={upperTR(countdown)} tone="live" variant="solid" size="xs" icon="time-outline" /> : null}
         </View>
-        <Text style={[styles.progressText, { color: toneColors(progressTone).fg }]} {...textScale.dense}>
-          %{progress} hazır
-        </Text>
-      </View>
 
-      <PrepChecklist steps={steps} />
+        <View style={styles.versus}>
+          <Side name={homeName} logo={match.is_home ? teamLogo : opponentLogo} own={match.is_home} />
+          <View style={styles.center}>
+            {clock ? (
+              <Odometer value={clock} style={styles.clock} />
+            ) : (
+              <Text style={styles.vs} {...textScale.badge}>
+                VS
+              </Text>
+            )}
+            <Text style={styles.date} numberOfLines={2} {...textScale.dense}>
+              {formatDateLong(match.date)}
+            </Text>
+          </View>
+          <Side name={awayName} logo={match.is_home ? opponentLogo : teamLogo} own={!match.is_home} />
+        </View>
 
-      <View style={styles.actions}>
-        <Button
-          label={lineup.length ? "Kadroyu düzenle" : "Kadroyu kur"}
-          icon="people-outline"
-          size="sm"
-          onPress={() => go(`${base}?sekme=kadro`)}
-          style={styles.flex}
-        />
-        <Button label="Maç sayfası" size="sm" variant="secondary" onPress={() => go(`/mac/${match.id}`)} style={styles.flex} />
-      </View>
-    </PanelCard>
+        {match.match_field ? (
+          <View style={styles.venue}>
+            <Ionicons name="location-outline" size={13} color={colors.textTertiary} />
+            <Text style={styles.venueText} numberOfLines={1} {...textScale.dense}>
+              {match.match_field}
+            </Text>
+          </View>
+        ) : null}
+      </ListCard>
+
+      <ListCard>
+        <View style={styles.progress}>
+          <View style={styles.progressHead}>
+            <Text style={styles.progressLabel} {...textScale.badge}>
+              MAÇ HAZIRLIĞI
+            </Text>
+            <Text style={[styles.progressValue, { color: ready ? colors.win : colors.textPrimary }]} {...textScale.badge}>
+              {`%${progress}`}
+            </Text>
+          </View>
+          <GradientBar value={progress / 100} height={8} />
+        </View>
+        {steps.map((step, index) => {
+          const look = STEP_LOOK[step.state];
+          return (
+            <ToneRow
+              key={step.key}
+              icon={look.icon}
+              tone={look.tone}
+              title={step.label}
+              meta={step.detail}
+              stripe={step.state === "warn" ? colors.warn : undefined}
+              onPress={step.onPress}
+              last={index === steps.length - 1}
+            />
+          );
+        })}
+        <View style={styles.actions}>
+          <Button
+            label={lineup.length ? "Kadroyu düzenle" : "Kadroyu kur"}
+            icon="people-outline"
+            size="sm"
+            onPress={() => go(`${base}?sekme=kadro`)}
+            style={styles.flex}
+          />
+          <Button label="Maç sayfası" size="sm" variant="secondary" onPress={() => go(`/mac/${match.id}`)} style={styles.flex} />
+        </View>
+      </ListCard>
+    </View>
   );
 }
 
-function Side({ name, logo }: { name: string; logo: string | null }) {
+function Side({ name, logo, own }: { name: string; logo: string | null; own: boolean }) {
   return (
     <View style={styles.side}>
-      <TeamLogo name={name} logo={logo} size={40} />
-      <Text style={styles.sideName} numberOfLines={2} {...textScale.dense}>
+      <View style={[styles.crest, own && styles.crestOwn]}>
+        <TeamLogo name={name} logo={logo} size={44} />
+      </View>
+      <Text style={[styles.sideName, own && styles.sideOwn]} numberOfLines={2} {...textScale.dense}>
         {name}
       </Text>
     </View>
@@ -164,24 +214,43 @@ function Side({ name, logo }: { name: string; logo: string | null }) {
 }
 
 const styles = StyleSheet.create({
-  card: { gap: space.md },
+  stack: { gap: space.sm },
+  skeleton: { gap: space.sm },
+  matchCard: { padding: space.lg, gap: space.md },
   head: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   versus: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  side: { flex: 1, alignItems: "center", gap: space.xs },
-  sideName: { ...type.h4, color: colors.textPrimary, textAlign: "center" },
-  vs: {
-    ...type.labelXs,
-    color: colors.textTertiary,
-    paddingHorizontal: space.sm,
-    paddingVertical: space.xxs,
-    borderRadius: radius.pill,
+  side: { flex: 1, alignItems: "center", gap: space.s },
+  crest: {
+    width: 60,
+    height: 60,
+    borderRadius: radius.lg,
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: colors.surface2,
-    overflow: "hidden",
+    borderWidth: hairline,
+    borderColor: colors.border,
   },
-  when: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.xs },
-  whenText: { ...type.caption, color: colors.textTertiary },
-  progressRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  progressText: { ...type.labelXs },
-  actions: { flexDirection: "row", gap: space.sm },
+  crestOwn: { backgroundColor: colors.brandDim, borderColor: colors.brandBorder },
+  sideName: { ...type.h4, color: colors.textSecondary, textAlign: "center" },
+  sideOwn: { color: colors.textPrimary },
+  center: { alignItems: "center", gap: space.xxs, minWidth: 92 },
+  clock: { ...type.scoreLg, color: colors.textPrimary },
+  vs: { ...type.h2, color: colors.textTertiary },
+  date: { ...type.caption, color: colors.textTertiary, textAlign: "center" },
+  venue: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.xs,
+    paddingTop: space.sm,
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+  },
+  venueText: { ...type.caption, color: colors.textTertiary },
+  progress: { padding: space.md, paddingBottom: space.sm, gap: space.sm },
+  progressHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },
+  progressLabel: { ...type.overline, color: colors.textTertiary },
+  progressValue: { ...type.scoreSm },
+  actions: { flexDirection: "row", gap: space.sm, padding: space.md, borderTopWidth: hairline, borderTopColor: colors.separator },
   flex: { flex: 1 },
 });

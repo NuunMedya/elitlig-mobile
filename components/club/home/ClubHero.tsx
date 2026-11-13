@@ -67,7 +67,7 @@ export const ClubHero = React.memo(function ClubHero({
   onOpen,
   onEdit,
 }: ClubHeroProps) {
-  const formValue = (Array.isArray(form) ? form : (form ?? "").split("")).filter((item) => /^[WDL]$/.test(item)) as FormResult[];
+  const formValue = form && form.length ? (form as string | FormResult[]) : null;
   const stats: StageStat[] = facts.map((fact) => ({
     key: fact.label,
     label: fact.label,
@@ -121,7 +121,7 @@ export const ClubHero = React.memo(function ClubHero({
               <Text style={styles.recordLoss}>{`${record.losses}M`}</Text>
             </Text>
             <View style={styles.flex} />
-            {formValue.length ? <FormChips form={formValue} size="sm" /> : null}
+            {formValue ? <FormChips form={formValue} size="sm" /> : null}
           </View>
           <SplitBar
             height={6}
@@ -133,7 +133,7 @@ export const ClubHero = React.memo(function ClubHero({
             ]}
           />
         </View>
-      ) : formValue.length ? (
+      ) : formValue ? (
         <View style={styles.recordHead}>
           <Text style={styles.recordLabel} {...textScale.badge}>
             SON MAÇLAR

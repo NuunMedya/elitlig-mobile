@@ -4,21 +4,21 @@
  * `app/(tabs)/kulubum.tsx` bu bileşeni çizer:
  *   <ClubHome signals={signals} go={go} onAttention={openAttention} />
  *
- * DÜZEN — ÖNCE İŞ ("şimdi ne yapmalıyım?" → "nereye gideceğim?" → "durum ne?"):
- *   1. Kahraman kartı   arma, ad, lig/sezon, sıra · puan · averaj · kadro, form
- *   2. Şimdi ilgilen     yatay iş kartları (izin, revizyon, başvuru, yoklama,
- *                        sözleşmesiz, kadro taslağı, FFP, disiplin…)
- *   3. Sıradaki maç      rakip, geri sayım, hazırlık yüzdesi ve üç adım
- *   4. Kısayollar        haftalık döngünün altı işi, DURUM satırıyla:
- *                        Kadro · Maç kadrosu · Maç al · Teklifler · Kasa ·
- *                        Teklif ver — hepsi tek dokunuş
- *   5. Araçlar           kalan her şey dört grupta, açık ızgara (Maç ·
- *                        Kadro ve transfer · Kulüp · İletişim) — web panelinin
- *                        menüsünün tamamı, katlama yok
- *   6. Durum             gol katkısı · kadro dengesi · kasa
- *   7. Kulüp ayarları    yönetim yetkisi (devir/istifa), bildirim tercihleri,
- *                        profil modları, hesap — başkan modunun ayarları TEK
- *                        yerde, sayfanın sonunda
+ * DÜZEN — KONTROL PANELİ ("biz neredeyiz?" → "ne bekliyor?" → "nereye?" → "durum ne?"):
+ *   1. Kimlik sahnesi   koyu mor sahne: arma, ad, rol/lig hapları; SIRA ·
+ *                       PUAN · AVERAJ · KADRO dönen sayılarla; G/B/M oran
+ *                       çubuğu ve son beş maç formu
+ *   2. Yapılacaklar      en ağır iş büyük "öncelikli" kartta, kalanlar tek
+ *                       kartta satır satır (izin, revizyon, başvuru, yoklama,
+ *                       sözleşmesiz, kadro taslağı, FFP, disiplin…)
+ *   3. Kısayollar        haftalık döngünün altı işi, IconTile + DURUM satırı
+ *   4. Sıradaki maç      armalar + başlama saati, hazırlık yüzdesi, üç adım
+ *   5. Kadro özeti       oyuncu sayısı, sözleşme oranı, mevki dağılımı, gol
+ *                       katkısı ilk üçü
+ *   6. Kasa özeti        bakiye, gelir/gider oranı, FFP, kadro değeri
+ *   7. Tüm araçlar       kalan her şey dört grupta, açık ızgara
+ *   8. Kulüp ayarları    yönetim yetkisi, bildirim tercihleri, profil modları,
+ *                       hesap — sayfanın sonunda
  *
  * TAKIMSIZ BAŞKAN: mod açık ama takım bağlı değilse boş durum bekleyen
  * yönetim talebini (onay bekliyor / reddedildi + not) gösterir; yeniden
@@ -32,22 +32,26 @@
 
 import { useQuery } from "@tanstack/react-query";
 import React, { useEffect, useMemo, useRef } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
+import { MenuGroup, type MenuItemSpec } from "@/components/account/MenuBlocks";
 import { AttentionRail } from "@/components/club/home/AttentionRail";
 import { ClubHero, type HeroFact } from "@/components/club/home/ClubHero";
+import { FinanceSummary, SquadSummary } from "@/components/club/home/ClubSummaries";
+import { ControlGrid, ToolDeck } from "@/components/club/home/ControlGrid";
 import { HomeSkeleton } from "@/components/club/home/HomeSkeleton";
 import { NextMatchPrep } from "@/components/club/home/NextMatchPrep";
-import { ShortcutGrid, ToolBoard, type BoardSection, type Shortcut } from "@/components/club/home/ToolBoard";
+import type { BoardSection, Shortcut } from "@/components/club/home/ToolBoard";
 import { useClubExtras } from "@/components/club/home/useClubExtras";
-import { PanelCard, PanelEmpty, PanelRow, PanelSection, StatStrip, type StatItem } from "@/components/club/Panel";
+import { PanelCard, PanelEmpty, PanelRow, PanelSection } from "@/components/club/Panel";
 import { countLines } from "@/components/club/SquadSnapshot";
 import type { AttentionItem, ClubSignals } from "@/components/club/useClubSignals";
 import { matchWhen } from "@/components/club/NextMatchCard";
-import { Avatar, Reveal } from "@/components/ui";
+import { shortMoney } from "@/components/team/ClubKit";
+import { Reveal, SectionHeader } from "@/components/ui";
 import { ACCOUNT_REQUEST_LABELS, TEAM_REQUEST_TYPES, getAccountRequests } from "@/lib/api/club/account";
-import { formatDateShort, formatDecimal, mediaUrl } from "@/lib/format";
-import { colors, layout, space, textScale, type } from "@/theme";
+import { formatDateShort, mediaUrl } from "@/lib/format";
+import { layout, space } from "@/theme";
 
 export interface ClubHomeProps {
   signals: ClubSignals;
@@ -56,16 +60,6 @@ export interface ClubHomeProps {
 }
 
 const signed = (value: number) => (value > 0 ? `+${value}` : String(value));
-
-/** Bakiye eksiye düşebilir; kısa biçim: 12,4 B ₺ / 850 ₺. */
-function shortMoney(value: number): string {
-  if (!Number.isFinite(value)) return "—";
-  const abs = Math.abs(value);
-  const sign = value < 0 ? "−" : "";
-  if (abs >= 1_000_000) return `${sign}${formatDecimal(abs / 1_000_000, 1)} Mn ₺`;
-  if (abs >= 1_000) return `${sign}${formatDecimal(abs / 1_000, 1)} B ₺`;
-  return `${sign}${Math.round(abs)} ₺`;
-}
 
 /**
  * Ortak dikkat listesindeki bazı işler eski genel ekranlara gidiyordu
@@ -224,58 +218,46 @@ export function ClubHome({ signals, go, onAttention }: ClubHomeProps) {
     );
   }
 
-  /* ------------------------------ Kahraman ------------------------------ */
+  /* ------------------------------ Kimlik ------------------------------ */
 
   const facts: HeroFact[] = [];
-  const position = standing?.rank ?? overview?.standings?.position ?? null;
-  const teamCount = overview?.standings?.team_count ?? null;
-  if (position) facts.push({ label: "Sıra", value: teamCount ? `${position}/${teamCount}` : `${position}.` });
+  /* Sıra ve takım sayısı AYNI kaynaktan: kapsam puan durumu varsa onun
+     sırası (takım sayısı bilinmez), yoksa panel özetinin "3/14"ü. */
+  const rankFromScope = standing?.rank ?? null;
+  const position = rankFromScope ?? overview?.standings?.position ?? null;
+  const teamCount = rankFromScope ? null : (overview?.standings?.team_count ?? null);
+  if (position) facts.push({ label: "Sıra", value: `${position}.`, suffix: teamCount ? `/${teamCount}` : undefined });
   const points = standing ? Number(standing.row.display_points) : (overview?.standings?.points ?? team.team_points ?? null);
-  if (points != null) facts.push({ label: "Puan", value: String(points) });
+  if (points != null && Number.isFinite(points)) facts.push({ label: "Puan", value: String(points) });
   const diff = standing ? Number(standing.row.goal_diff) || 0 : (overview?.standings?.goal_diff ?? null);
   if (diff != null) facts.push({ label: "Averaj", value: signed(diff), tone: diff > 0 ? "win" : diff < 0 ? "danger" : "neutral" });
-  facts.push({ label: "Kadro", value: String(signals.squadSize) });
+  facts.push({ label: "Kadro", value: String(signals.squadSize), onPress: () => go("/takimim/kadro") });
 
   const form = standing?.row.last5 || overview?.standings?.last5 || overview?.form?.results || null;
   const wins = overview?.standings?.wins ?? team.team_wins;
-  const record = wins != null ? `${wins}G ${overview?.standings?.draws ?? team.team_draws ?? 0}B ${overview?.standings?.losses ?? team.team_losses ?? 0}M` : null;
-  const context = [team.current_league, overview?.season?.name ?? team.current_season].filter(Boolean).join(" · ") || team.city;
+  const record =
+    wins != null
+      ? { wins: Number(wins) || 0, draws: Number(overview?.standings?.draws ?? team.team_draws ?? 0) || 0, losses: Number(overview?.standings?.losses ?? team.team_losses ?? 0) || 0 }
+      : null;
+  const context = [overview?.season?.name ?? team.current_season, team.city].filter(Boolean).join(" · ") || null;
 
-  /* ------------------------------- Özet --------------------------------- */
-
-  const squadItems: StatItem[] = [
-    { label: "Kaleci", value: String(lines.GK), tone: lines.GK === 0 ? "danger" : "neutral" },
-    { label: "Defans", value: String(lines.DEF) },
-    { label: "Orta", value: String(lines.MID) },
-    { label: "Forvet", value: String(lines.FWD) },
-    {
-      label: "Sözleşme",
-      value: `${signals.contracted}/${signals.squadSize}`,
-      tone: signals.withoutContract > 0 ? "danger" : "win",
-      onPress: signals.withoutContract > 0 ? () => go("/takimim/kadro?filtre=sozlesmesiz") : undefined,
-    },
-  ];
-
-  const financeItems: StatItem[] = [];
-  if (finance?.totals && finance.ffp && balance != null) {
-    financeItems.push({ label: "Bakiye", value: shortMoney(balance), tone: balance < 0 ? "danger" : "neutral", onPress: () => go("/takimim/kasa") });
-    financeItems.push({ label: "Kadro değeri", value: shortMoney(finance.squadValue), tone: "brand", onPress: () => go("/takimim/kasa?tab=kadro") });
-    financeItems.push({
-      label: "FFP",
-      value: finance.ffp.status === "BREACH" ? "Aşıldı" : finance.ffp.status === "WARNING" ? "Uyarı" : finance.ffp.status === "DISABLED" ? "Kapalı" : "Uygun",
-      tone: finance.ffp.status === "BREACH" ? "danger" : finance.ffp.status === "COMPLIANT" ? "win" : "neutral",
-      onPress: () => go("/takimim/kasa"),
-    });
-  }
   const contributors = (overview?.top_contributors ?? []).slice(0, 3);
+
+  const settings: MenuItemSpec[] = [
+    { key: "yetki", icon: "key", tone: "cyan", title: "Yönetim yetkisi", subtitle: "Takımı devret ya da başkanlıktan istifa et", onPress: () => go("/takimim/bilgiler?bolum=kimlik") },
+    { key: "bildirim", icon: "notifications", tone: "violet", title: "Bildirim tercihleri", subtitle: "Maç, transfer, disiplin — hangisi telefonuna gelsin", onPress: () => go("/bildirim-tercihleri") },
+    { key: "modlar", icon: "toggle", tone: "neutral", title: "Profil modları", subtitle: "Takım başkanı / oyuncu alanını aç-kapat", onPress: () => go("/oyuncum/modlar") },
+    { key: "hesap", icon: "person-circle", tone: "neutral", title: "Hesabım", subtitle: "Üyelik bilgileri ve güvenlik", onPress: () => go("/hesabim") },
+  ];
 
   return (
     <View style={styles.root}>
-      <Reveal index={0} style={styles.pad}>
+      <Reveal index={0} scaleFrom={0.97} style={styles.pad}>
         <ClubHero
           name={team.team_name}
           logo={mediaUrl(team.logo)}
           role="Başkan"
+          league={overview?.team?.league ?? team.current_league}
           context={context}
           facts={facts}
           form={form}
@@ -285,93 +267,63 @@ export function ClubHome({ signals, go, onAttention }: ClubHomeProps) {
         />
       </Reveal>
 
-      <Reveal index={1} style={styles.block}>
-        <SectionTitle title="Şimdi ilgilen" meta={attention.length ? `${attention.length} iş` : undefined} />
+      <Reveal index={1} style={styles.section}>
+        <SectionHeader title="Yapılacaklar" meta={attention.length ? `${attention.length} iş` : undefined} />
         <AttentionRail items={attention} onPress={onAttention} />
       </Reveal>
 
-      <Reveal index={2}>
-        <PanelSection title="Sıradaki maç" action={{ label: "Fikstür", onPress: () => go("/takimim/mac-merkezi") }}>
-          <NextMatchPrep signals={signals} teamName={team.team_name} teamLogo={mediaUrl(team.logo)} go={go} />
-        </PanelSection>
+      <Reveal index={2} style={[styles.section, styles.pad]}>
+        <SectionHeader title="Kısayollar" inset="flush" />
+        <ControlGrid items={shortcuts} go={go} />
       </Reveal>
 
-      <Reveal index={3}>
-        <PanelSection title="Kısayollar">
-          <ShortcutGrid items={shortcuts} go={go} />
-        </PanelSection>
+      <Reveal index={3} style={[styles.section, styles.pad]}>
+        <SectionHeader title="Sıradaki maç" inset="flush" action={{ label: "Fikstür", onPress: () => go("/takimim/mac-merkezi") }} />
+        <NextMatchPrep signals={signals} teamName={team.team_name} teamLogo={mediaUrl(team.logo)} go={go} />
       </Reveal>
 
-      <Reveal index={4}>
-        <PanelSection title="Tüm araçlar">
-          <ToolBoard sections={sections} go={go} />
-        </PanelSection>
+      <Reveal index={4} style={[styles.section, styles.pad]}>
+        <SectionHeader title="Kadro özeti" inset="flush" action={{ label: "Yönet", onPress: () => go("/takimim/kadro") }} />
+        {signals.squadSize > 0 ? (
+          <SquadSummary
+            lines={lines}
+            total={signals.squadSize}
+            contracted={signals.contracted}
+            contributors={contributors}
+            onOpen={() => go("/takimim/kadro")}
+            onContracts={() => go(signals.withoutContract > 0 ? "/takimim/kadro?filtre=sozlesmesiz" : "/takimim/sozlesmeler")}
+            onPlayer={(id) => go(`/oyuncu/${id}`)}
+          />
+        ) : (
+          <PanelEmpty
+            icon="people-outline"
+            text="Kadron boş. Oyuncu ara; davet ya da transfer teklifi gönder."
+            action={{ label: "Oyuncu ara", onPress: () => go("/takimim/oyuncu-ara") }}
+          />
+        )}
       </Reveal>
 
-      <Reveal index={5}>
-        <PanelSection title="Kadro dengesi" meta={`${signals.squadSize} oyuncu`} action={{ label: "Yönet", onPress: () => go("/takimim/kadro") }}>
-          {signals.squadSize > 0 ? (
-            <StatStrip items={squadItems} />
-          ) : (
-            <PanelEmpty
-              icon="people-outline"
-              text="Kadron boş. Oyuncu ara; davet ya da transfer teklifi gönder."
-              action={{ label: "Oyuncu ara", onPress: () => go("/takimim/oyuncu-ara") }}
-            />
-          )}
-        </PanelSection>
+      {finance?.totals && finance.ffp ? (
+        <Reveal index={5} style={[styles.section, styles.pad]}>
+          <SectionHeader title="Kasa özeti" inset="flush" action={{ label: "Kasa", onPress: () => go("/takimim/kasa") }} />
+          <FinanceSummary
+            income={finance.totals.income}
+            expense={finance.totals.expense}
+            squadValue={finance.squadValue}
+            ffp={finance.ffp.status}
+            season={finance.team?.season ?? team.current_season}
+            onOpen={() => go("/takimim/kasa")}
+            onSquadValue={() => go("/takimim/kasa?tab=kadro")}
+          />
+        </Reveal>
+      ) : null}
 
-        {financeItems.length ? (
-          <PanelSection title="Kulüp bütçesi" meta={team.current_season ?? undefined} action={{ label: "Kasa", onPress: () => go("/takimim/kasa") }}>
-            <StatStrip items={financeItems} />
-          </PanelSection>
-        ) : null}
+      <View style={[styles.section, styles.pad]}>
+        <SectionHeader title="Tüm araçlar" inset="flush" />
+        <ToolDeck sections={sections} go={go} />
+      </View>
 
-        {contributors.length ? (
-          <PanelSection title="Gol katkısı" meta={overview?.season?.name ?? undefined} action={{ label: "İstatistik", onPress: () => go("/takimim/istatistik") }}>
-            <PanelCard padded={false}>
-              {contributors.map((player, index) => (
-                <PanelRow
-                  key={player.id}
-                  leading={<Avatar name={player.name} image={mediaUrl(player.image)} size={layout.crestMd} />}
-                  title={player.name}
-                  hint={[player.position, `${player.matches} maç`].filter(Boolean).join(" · ")}
-                  value={`${player.goals} G · ${player.assists} A`}
-                  onPress={() => go(`/oyuncu/${player.id}`)}
-                  last={index === contributors.length - 1}
-                />
-              ))}
-            </PanelCard>
-          </PanelSection>
-        ) : null}
-
-        <PanelSection title="Kulüp ayarları">
-          <PanelCard padded={false}>
-            <PanelRow
-              icon="key"
-              tone="info"
-              title="Yönetim yetkisi"
-              hint="Takımı devret ya da başkanlıktan istifa et"
-              onPress={() => go("/takimim/bilgiler?bolum=kimlik")}
-            />
-            <PanelRow
-              icon="notifications"
-              tone="brand"
-              title="Bildirim tercihleri"
-              hint="Maç, transfer, disiplin — hangisi telefonuna gelsin"
-              onPress={() => go("/bildirim-tercihleri")}
-            />
-            <PanelRow
-              icon="toggle"
-              tone="neutral"
-              title="Profil modları"
-              hint="Takım başkanı / oyuncu alanını aç-kapat"
-              onPress={() => go("/oyuncum/modlar")}
-            />
-            <PanelRow icon="person-circle" tone="neutral" title="Hesabım" hint="Üyelik bilgileri ve güvenlik" onPress={() => go("/hesabim")} last />
-          </PanelCard>
-        </PanelSection>
-      </Reveal>
+      <MenuGroup title="Kulüp ayarları" icon="settings" tone="neutral" items={settings} style={[styles.section, styles.pad]} />
     </View>
   );
 }
@@ -452,22 +404,8 @@ function NoTeam({
   );
 }
 
-function SectionTitle({ title, meta }: { title: string; meta?: string }) {
-  return (
-    <View style={styles.sectionHead}>
-      <Text style={styles.sectionTitle} numberOfLines={1} {...textScale.badge}>
-        {title.toLocaleUpperCase("tr-TR")}
-        {meta ? <Text style={styles.sectionMeta}>{`  ·  ${meta}`}</Text> : null}
-      </Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   root: { paddingTop: space.md },
   pad: { paddingHorizontal: layout.screenPadding },
-  block: { marginTop: space.xl, gap: space.sm },
-  sectionHead: { paddingHorizontal: layout.screenPadding },
-  sectionTitle: { ...type.overline, color: colors.textTertiary },
-  sectionMeta: { ...type.overline, color: colors.textTertiary, letterSpacing: 0.4 },
+  section: { marginTop: space.xl },
 });

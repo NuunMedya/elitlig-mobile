@@ -1184,3 +1184,50 @@ const kit = StyleSheet.create({
   miniValue: { ...type.scoreMd, color: colors.textPrimary },
   miniLabel: { ...type.overline, color: colors.textTertiary },
 });
+
+/**
+ * Numaralı form bölümü (sihirbaz sayfaları): sıra pulu (tamamsa yeşil onay) +
+ * versal başlık + isteğe bağlı sağ öğe; içerik cam kartta.
+ */
+export function NumberedSection({
+  index,
+  title,
+  done,
+  right,
+  children,
+  style,
+}: {
+  index: number;
+  title: string;
+  done?: boolean;
+  right?: React.ReactNode;
+  children?: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <View style={[styles.group, style]}>
+      <View style={styles.groupHead}>
+        <View style={[kit2.dot, done ? kit2.dotDone : null]}>
+          {done ? (
+            <Ionicons name="checkmark" size={12} color={colors.textOnStatus} />
+          ) : (
+            <Text style={kit2.no} {...textScale.badge}>
+              {index}
+            </Text>
+          )}
+        </View>
+        <Text style={[styles.groupTitle, styles.flex]} numberOfLines={1} accessibilityRole="header" {...textScale.dense}>
+          {upperTR(title)}
+        </Text>
+        {right}
+      </View>
+      {children}
+    </View>
+  );
+}
+
+const kit2 = StyleSheet.create({
+  dot: { width: 22, height: 22, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandAccent },
+  dotDone: { backgroundColor: colors.win },
+  no: { ...type.numSmStrong, color: colors.onDark },
+});

@@ -20,6 +20,13 @@
  * SÜZGEÇLER: arama (400 ms gecikmeli), sıralama çipleri, mevki çipleri
  * (sunucunun il özetindeki mevki sayımlarıyla), "Serbest" ve alt sayfada
  * gelişmiş aralıklar (yaş, en az maç, en az puan). Seçim URL'de taşınır.
+ *
+ * TASARIM (gece teması): üstte tek cam HAVUZ KARTI (kayıtlı · serbest ·
+ * takım dönen sayılarla, serbest oranı degrade çubukla); süzgeç şeritleri;
+ * OYUNCU KARTI: avatar (mevki renginde halka), ad + durum hapı, mevki · takım
+ * arması · yaş meta satırı, sağda puan hapı (RatingPill), altta dört hücreli
+ * sayı şeridi (maç · gol · asist · değer) ve rol kararlı eylem. Kendi
+ * oyuncun brandDim zemin + imza şeritle ayrılır.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -40,12 +47,15 @@ import {
   ChipGroup,
   EmptyState,
   ErrorState,
+  GradientBar,
   Input,
-  MetricGrid,
-  MetricTile,
+  Odometer,
+  RatingPill,
+  Reveal,
   ScreenHeader,
-  SkeletonListRow,
+  Skeleton,
   SkeletonListFooter,
+  TeamLogo,
   Touchable,
   useHeaderScroll,
   useRefresh,
@@ -65,7 +75,9 @@ import { formatEtlShort } from "@/lib/api/marketValue";
 import { formatDecimal, formatNumber, mediaUrl } from "@/lib/format";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { LinearGradient } from "expo-linear-gradient";
+import { colors, hairline, layout, positionColor, radius, space, textScale, type, upperTR } from "@/theme";
+import { positionLine } from "@/lib/api/team";
 
 const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value) ?? "";
 const num = (value: unknown) => {
@@ -205,17 +217,33 @@ export default function PlayerSearchScreen() {
   const header = (
     <View style={styles.header}>
       {firstPage?.summary ? (
-        <MetricGrid columns={3}>
-          <MetricTile label="Kayıtlı" value={formatNumber(firstPage.summary.totalPlayers)} icon="people" />
-          <MetricTile
-            label="Serbest"
-            value={formatNumber(firstPage.summary.freeAgents)}
-            icon="lock-open"
-            tone="win"
-            onPress={() => setFreeOnly((value) => !value)}
+        <View style={styles.pool}>
+          <View style={styles.poolHead}>
+            <Text style={styles.poolTitle} {...textScale.badge}>
+              {upperTR(cityName ? `${cityName} havuzu` : "Oyuncu havuzu")}
+            </Text>
+            <Touchable onPress={() => setFreeOnly((value) => !value)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Yalnız serbest oyuncular">
+              <Text style={styles.poolAction} {...textScale.badge}>
+                {freeOnly ? "Tümünü göster" : "Serbestleri göster"}
+              </Text>
+            </Touchable>
+          </View>
+          <View style={styles.poolStats}>
+            <PoolStat label="Kayıtlı" value={formatNumber(firstPage.summary.totalPlayers)} />
+            <View style={styles.poolDivider} />
+            <PoolStat label="Serbest" value={formatNumber(firstPage.summary.freeAgents)} color={colors.win} />
+            <View style={styles.poolDivider} />
+            <PoolStat label="Takım" value={formatNumber(firstPage.summary.teams)} />
+          </View>
+          <GradientBar
+            value={firstPage.summary.totalPlayers ? firstPage.summary.freeAgents / firstPage.summary.totalPlayers : 0}
+            height={6}
+            gradient={colors.tileTones.mint}
           />
-          <MetricTile label="Takım" value={formatNumber(firstPage.summary.teams)} icon="shield" />
-        </MetricGrid>
+          <Text style={styles.poolHint} {...textScale.dense}>
+            {`Havuzun %${firstPage.summary.totalPlayers ? Math.round((firstPage.summary.freeAgents / firstPage.summary.totalPlayers) * 100) : 0}'i serbest — kadroya doğrudan davet edilebilir.`}
+          </Text>
+        </View>
       ) : null}
 
       <Input
@@ -320,7 +348,11 @@ export default function PlayerSearchScreen() {
           }}
           ListEmptyComponent={
             query.isLoading ? (
-              <SkeletonListRow count={8} />
+              <View style={styles.skeleton}>
+                {[0, 1, 2, 3].map((index) => (
+                  <Skeleton key={index} height={156} radius="xl" />
+                ))}
+              </View>
             ) : query.isError ? (
               <ErrorState variant="inline" error={query.error} onRetry={query.refetch} />
             ) : (
@@ -335,7 +367,8 @@ export default function PlayerSearchScreen() {
           }
           ListFooterComponent={query.isFetchingNextPage ? <SkeletonListFooter /> : null}
           ItemSeparatorComponent={Separator}
-          renderItem={({ item }) => (
+          renderItem={({ item, index }) => (
+            <Reveal index={index} limit={6} distance={8}>
             <PlayerCard
               player={item}
               crossCity={Boolean(item.crossCity)}
@@ -346,6 +379,7 @@ export default function PlayerSearchScreen() {
               onClaim={() => claim.mutate(item)}
               onOpen={openPlayer}
             />
+            </Reveal>
           )}
         />
       )}
@@ -401,7 +435,18 @@ function Separator() {
   return <View style={styles.separator} />;
 }
 
-/** Bir oyuncu kartı: kimlik + dört sayı + rol kararlı eylem. */
+function PoolStat({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <View style={styles.poolStat} accessible accessibilityLabel={`${label} ${value}`}>
+      <Odometer value={value} style={[styles.poolValue, color ? { color } : null]} />
+      <Text style={styles.poolLabel} {...textScale.badge}>
+        {upperTR(label)}
+      </Text>
+    </View>
+  );
+}
+
+/** Bir oyuncu kartı: kimlik + puan hapı + dört hücreli sayı şeridi + rol kararlı eylem. */
 const PlayerCard = React.memo(function PlayerCard({
   player,
   crossCity,
@@ -421,13 +466,10 @@ const PlayerCard = React.memo(function PlayerCard({
   onClaim: () => void;
   onOpen: (id: number) => void;
 }) {
-  const facts = [
-    player.position,
-    player.teamName ?? "Serbest",
-    player.age != null ? `${player.age} yaş` : null,
-    crossCity ? player.city : null,
-  ].filter(Boolean);
+  const facts = [player.position, player.age != null ? `${player.age} yaş` : null, crossCity ? player.city : null].filter(Boolean);
   const value = player.marketValue != null && num(player.marketValue) > 0 ? formatEtlShort(num(player.marketValue)) : null;
+  const rating = num(player.averageRating) > 0 ? num(player.averageRating) : null;
+  const ring = positionColor(colors, player.position ? positionLine(player.position) : null);
 
   let action: React.ReactNode = null;
   if (canManage) {
@@ -450,49 +492,82 @@ const PlayerCard = React.memo(function PlayerCard({
   }
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, player.isOwnPlayer && styles.cardOwn]}>
+      {player.isOwnPlayer ? (
+        <LinearGradient colors={colors.gradientSignature} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={styles.ownStripe} />
+      ) : null}
       <Touchable
         onPress={() => onOpen(player.id)}
         feedback="card"
         accessibilityRole="button"
-        accessibilityLabel={`${player.displayName}, ${facts.join(", ")}`}
+        accessibilityLabel={`${player.displayName}, ${[...facts, player.teamName ?? "Serbest"].join(", ")}`}
         style={styles.cardTop}
       >
-        <Avatar name={player.displayName} image={mediaUrl(player.profileImage)} size={layout.crestXl} />
+        <View style={[styles.avatarRing, { borderColor: ring }]}>
+          <Avatar name={player.displayName} image={mediaUrl(player.profileImage)} size={46} />
+        </View>
         <View style={styles.cardBody}>
           <View style={styles.nameRow}>
             <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
               {player.displayName}
             </Text>
-            {player.isFreeAgent ? <Badge label="SERBEST" tone="win" size="xs" /> : null}
-            {player.isOwnPlayer ? <Badge label="KADRONDA" tone="brand" size="xs" /> : null}
+            {player.isFreeAgent ? <Badge label="Serbest" tone="win" size="xs" /> : null}
+            {player.isOwnPlayer ? <Badge label="Kadronda" tone="brand" size="xs" /> : null}
           </View>
-          <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
-            {facts.join(" · ")}
-          </Text>
-          <View style={styles.stats}>
-            <Stat label="Maç" value={formatNumber(num(player.matches))} />
-            <Stat label="Gol" value={formatNumber(num(player.goals))} />
-            <Stat label="Asist" value={formatNumber(num(player.assists))} />
-            <Stat label="Puan" value={num(player.averageRating) > 0 ? formatDecimal(num(player.averageRating), 1) : "—"} />
-            {value ? <Stat label="Değer" value={value} /> : null}
+          <View style={styles.metaRow}>
+            {player.position ? (
+              <Text style={[styles.pos, { color: ring }]} numberOfLines={1} {...textScale.badge}>
+                {player.position}
+              </Text>
+            ) : null}
+            {player.teamName ? (
+              <>
+                <TeamLogo name={player.teamName} logo={mediaUrl(player.teamLogo)} size={16} />
+                <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+                  {player.teamName}
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+                Takımı yok
+              </Text>
+            )}
+            {player.age != null ? (
+              <Text style={styles.metaAge} numberOfLines={1} {...textScale.dense}>
+                {`· ${player.age} yaş`}
+              </Text>
+            ) : null}
+            {crossCity && player.city ? (
+              <Text style={styles.metaAge} numberOfLines={1} {...textScale.dense}>
+                {`· ${player.city}`}
+              </Text>
+            ) : null}
           </View>
         </View>
-        <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+        {rating ? <RatingPill value={rating} size="md" /> : <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />}
       </Touchable>
+      <View style={styles.stats}>
+        <Stat label="Maç" value={formatNumber(num(player.matches))} />
+        <View style={styles.statDivider} />
+        <Stat label="Gol" value={formatNumber(num(player.goals))} />
+        <View style={styles.statDivider} />
+        <Stat label="Asist" value={formatNumber(num(player.assists))} />
+        <View style={styles.statDivider} />
+        <Stat label="Değer" value={value ?? "—"} accent={Boolean(value)} />
+      </View>
       {action ? <View style={styles.cardAction}>{action}</View> : null}
     </View>
   );
 });
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
     <View style={styles.stat}>
-      <Text style={styles.statValue} {...textScale.badge}>
+      <Text style={[styles.statValue, accent && styles.statAccent]} numberOfLines={1} {...textScale.badge}>
         {value}
       </Text>
       <Text style={styles.statLabel} {...textScale.badge}>
-        {label}
+        {upperTR(label)}
       </Text>
     </View>
   );
@@ -502,32 +577,71 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { paddingHorizontal: layout.screenPadding, paddingBottom: space.giant },
   header: { gap: space.md, paddingTop: space.md, paddingBottom: space.md },
+  skeleton: { gap: space.md },
   resultBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   resultText: { ...type.caption, color: colors.textTertiary },
   reset: { ...type.caption, color: colors.brandAccent },
   tip: { flexDirection: "row", gap: space.xs, alignItems: "flex-start" },
   tipText: { ...type.caption, color: colors.textTertiary, flex: 1 },
-  separator: { height: space.sm },
+  separator: { height: space.md },
+
+  /* Havuz kartı */
+  pool: {
+    gap: space.sm,
+    padding: space.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  poolHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm },
+  poolTitle: { ...type.overline, color: colors.textTertiary },
+  poolAction: { ...type.labelXs, color: colors.brandAccent },
+  poolStats: { flexDirection: "row", alignItems: "center" },
+  poolStat: { flex: 1, alignItems: "center", gap: space.xxs },
+  poolDivider: { width: hairline, alignSelf: "stretch", backgroundColor: colors.separator },
+  poolValue: { ...type.scoreMd, color: colors.textPrimary },
+  poolLabel: { ...type.nano, color: colors.textTertiary },
+  poolHint: { ...type.caption, color: colors.textTertiary },
+
+  /* Oyuncu kartı */
   card: {
     backgroundColor: colors.surface1,
     borderRadius: radius.xl,
     borderWidth: hairline,
-    borderColor: colors.border,
+    borderColor: colors.glassLine,
     overflow: "hidden",
   },
+  cardOwn: { backgroundColor: colors.brandDim, borderColor: colors.brandBorder },
+  ownStripe: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3 },
   cardTop: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md },
-  cardBody: { flex: 1, minWidth: 0, gap: space.xxs },
+  avatarRing: { padding: space.xxs, borderRadius: radius.pill, borderWidth: 2 },
+  cardBody: { flex: 1, minWidth: 0, gap: space.xs },
   nameRow: { flexDirection: "row", alignItems: "center", gap: space.s },
-  name: { ...type.h4, color: colors.textPrimary, flexShrink: 1 },
-  meta: { ...type.caption, color: colors.textTertiary },
-  stats: { flexDirection: "row", gap: space.lg, marginTop: space.xs },
-  stat: { alignItems: "flex-start" },
-  statValue: { ...type.numSmStrong, color: colors.textPrimary },
+  name: { ...type.h3, color: colors.textPrimary, flexShrink: 1 },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  pos: { ...type.labelXs, marginRight: space.xxs },
+  meta: { ...type.caption, color: colors.textSecondary, flexShrink: 1 },
+  metaAge: { ...type.caption, color: colors.textTertiary },
+  stats: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: space.md,
+    marginBottom: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface2,
+  },
+  statDivider: { width: hairline, alignSelf: "stretch", backgroundColor: colors.separator },
+  stat: { flex: 1, alignItems: "center", gap: space.xxs },
+  statValue: { ...type.scoreXs, color: colors.textPrimary },
+  statAccent: { color: colors.accentText },
   statLabel: { ...type.nano, color: colors.textTertiary },
   cardAction: {
     paddingHorizontal: space.md,
     paddingBottom: space.md,
   },
+
   sheetGrid: { flexDirection: "row", flexWrap: "wrap", gap: space.md, paddingBottom: space.md },
   sheetField: { width: "47%" },
   sheetFooter: { flexDirection: "row", gap: space.sm },
