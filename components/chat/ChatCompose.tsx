@@ -7,22 +7,32 @@
  * sohbeti birebir açılır ve sesli aranabilir.
  * Rehber sunucudan (GET /api/chat/directory?q=) gelir; seçim yapılınca
  * konuşma açılır (varsa mevcut olan döner) ve sohbet ekranına geçilir.
+ *
+ * GECE DİLİ (ikinci tur): "Tümü"nde üstte iki kısayol karosu (Yeni grup ·
+ * Yönetime yaz). Rehber bölümleri mor işaretli başlık + tek kart içinde
+ * girintili ayraçlı satırlardır; takım ve yönetim degrade karolu avatarla
+ * çizilir. Grup kurarken seçilenler üstte yatay "seçilenler" şeridinde
+ * avatar olarak birikir (dokununca çıkar); seçili satır mor zemin + şerit.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { FlatList, StyleSheet, Text, View } from "react-native";
+import { FlatList, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Avatar, Button, Chip, ChipGroup, EmptyState, ErrorState, Input, ListRow, SkeletonListRow, Touchable, WaHeader, errorMessage } from "@/components/chat/kit";
-import { useToast } from "@/components/ui";
+import { InboxAvatar } from "@/components/chat/AvatarArt";
+import { IconTile, Reveal, useToast, type IconTileTone } from "@/components/ui";
+import { LinearGradient } from "expo-linear-gradient";
 import { adminChat, getDirectory, openConversation, updateGroup, type ChatUser, type OpenConversationInput } from "@/lib/api/chat";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors } from "@/lib/chatPalette";
-import { hairline, layout, space, textScale, type } from "@/theme";
+import { glowStyle, hairline, layout, palette, radius, space, textScale, type } from "@/theme";
+
+type CardPosition = "single" | "first" | "middle" | "last";
 
 type Tab = "all" | "staff" | "management" | "team" | "managers" | "players" | "group";
 
@@ -161,13 +171,28 @@ export function ChatCompose({ admin = false, initialTab }: ChatComposeProps) {
   }, [open, selected, title]);
 
   const renderItem = useCallback(
-    ({ item }: { item: Row }) => {
-      if (item.kind === "section") return <Text style={styles.section} accessibilityRole="header" {...textScale.dense}>{item.title}</Text>;
+    ({ item, index }: { item: Row; index: number }) => {
+      if (item.kind === "section") {
+        return (
+          <View style={styles.sectionRow} accessibilityRole="header">
+            <View style={styles.sectionMark} />
+            <Text style={styles.section} {...textScale.dense}>{item.title.toLocaleUpperCase("tr-TR")}</Text>
+          </View>
+        );
+      }
+      // Ardışık satırlar tek kart: ilk / son satır köşeleri yuvarlar.
+      const prev = rows[index - 1];
+      const next = rows[index + 1];
+      const joinedPrev = Boolean(prev && prev.kind !== "section");
+      const joinedNext = Boolean(next && next.kind !== "section");
+      const position: CardPosition = joinedPrev ? (joinedNext ? "middle" : "last") : joinedNext ? "first" : "single";
       if (item.kind === "management") {
         return (
           <DirectoryRow
             name={item.name}
             subtitle={item.subtitle}
+            kind="management"
+            position={position}
             icon="shield-checkmark"
             onPress={() => open.mutate({ type: "management" })}
             disabled={open.isPending}
@@ -180,6 +205,8 @@ export function ChatCompose({ admin = false, initialTab }: ChatComposeProps) {
             name={item.name}
             subtitle={item.subtitle}
             avatar={item.avatar}
+            kind="team"
+            position={position}
             icon="people"
             onPress={() => open.mutate({ type: "team", team_id: item.teamId })}
             disabled={open.isPending}
@@ -192,6 +219,7 @@ export function ChatCompose({ admin = false, initialTab }: ChatComposeProps) {
           name={item.user.name}
           subtitle={item.user.subtitle}
           avatar={item.user.avatar}
+          position={position}
           selected={tab === "group" ? picked : undefined}
           onPress={() =>
             tab === "group"
@@ -202,7 +230,7 @@ export function ChatCompose({ admin = false, initialTab }: ChatComposeProps) {
         />
       );
     },
-    [admin, open, selected, tab, toggle],
+    [admin, open, rows, selected, tab, toggle],
   );
 
   if (!auth.user) return <Redirect href="/giris" />;
@@ -211,8 +239,35 @@ export function ChatCompose({ admin = false, initialTab }: ChatComposeProps) {
   const canCreate = groupMode && title.trim().length >= 2 && selected.length > 0 && !open.isPending;
 
   // Grup formu listenin başında kayar: üye listesine yer kalır, klavye açıkken de erişilir.
+  const pickedPeople = selected.map((id) => people.find((user) => user.user_id === id)).filter(Boolean) as ChatUser[];
   const groupForm = (
     <View style={styles.groupForm}>
+          {/* Seçilenler şeridi: dokununca kişi seçimden çıkar. */}
+          <View style={styles.pickedCard}>
+            <View style={styles.pickedHead}>
+              <Text style={styles.pickedTitle} {...textScale.badge}>SEÇİLENLER</Text>
+              <View style={styles.pickedCount}>
+                <Text style={styles.pickedCountText} {...textScale.badge}>{selected.length}</Text>
+              </View>
+            </View>
+            {pickedPeople.length ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pickedTrack}>
+                {pickedPeople.map((user) => (
+                  <Touchable key={user.user_id} feedback="chip" haptic="selection" onPress={() => toggle(user.user_id)} accessibilityRole="button" accessibilityLabel={`${user.name} seçimini kaldır`} style={styles.pickedItem}>
+                    <View>
+                      <InboxAvatar type="person" title={user.name} image={user.avatar} size={44} ring />
+                      <View style={styles.pickedRemove}>
+                        <Ionicons name="close" size={10} color={colors.textPrimary} />
+                      </View>
+                    </View>
+                    <Text style={styles.pickedName} numberOfLines={1} {...textScale.badge}>{user.name.split(" ")[0]}</Text>
+                  </Touchable>
+                ))}
+              </ScrollView>
+            ) : (
+              <Text style={styles.pickedEmpty} {...textScale.dense}>Aşağıdan en az bir kişi seç.</Text>
+            )}
+          </View>
           <Input
             label="Grup adı"
             value={title}
@@ -255,6 +310,17 @@ export function ChatCompose({ admin = false, initialTab }: ChatComposeProps) {
         }
       />
 
+      {!groupMode && tab === "all" && !debounced ? (
+        <Reveal distance={10} style={styles.shortcuts}>
+          <Shortcut icon="people-circle" tone="cyan" title="Yeni grup" body="Kişileri seç, adını ver" onPress={() => setTab("group")} />
+          {query.data?.management && !admin ? (
+            <Shortcut icon="shield-checkmark" tone="violet" title="Yönetime yaz" body="Resmî destek hattı" onPress={() => open.mutate({ type: "management" })} />
+          ) : (
+            <Shortcut icon="people" tone="mint" title={admin ? "Takım grupları" : "Takımım"} body="Takım grubunu aç" onPress={() => setTab("team")} />
+          )}
+        </Reveal>
+      ) : null}
+
       {query.isLoading ? (
         <View style={styles.skeleton}>
           <SkeletonListRow count={8} avatar />
@@ -295,11 +361,26 @@ export function ChatCompose({ admin = false, initialTab }: ChatComposeProps) {
   );
 }
 
+/** Kısayol karosu: degrade ikon + başlık + kısa açıklama. */
+function Shortcut({ icon, tone, title, body, onPress }: { icon: keyof typeof Ionicons.glyphMap; tone: IconTileTone; title: string; body: string; onPress: () => void }) {
+  return (
+    <Touchable feedback="card" haptic="selection" onPress={onPress} accessibilityRole="button" accessibilityLabel={`${title}. ${body}`} style={styles.shortcut}>
+      <IconTile icon={icon} tone={tone} size={36} />
+      <View style={styles.rowBody}>
+        <Text style={styles.rowTitle} numberOfLines={1} {...textScale.dense}>{title}</Text>
+        <Text style={styles.rowSubtitle} numberOfLines={1} {...textScale.dense}>{body}</Text>
+      </View>
+    </Touchable>
+  );
+}
+
 const DirectoryRow = memo(function DirectoryRow({
   name,
   subtitle,
   avatar,
   icon,
+  kind,
+  position = "single",
   selected,
   disabled,
   onPress,
@@ -308,10 +389,14 @@ const DirectoryRow = memo(function DirectoryRow({
   subtitle: string;
   avatar?: string | null;
   icon?: keyof typeof Ionicons.glyphMap;
+  /** Avatar türü: yönetim / takım degrade karolu çizilir. */
+  kind?: "management" | "team";
+  position?: CardPosition;
   selected?: boolean;
   disabled?: boolean;
   onPress: () => void;
 }) {
+  const corners = position === "single" ? styles.cardSingle : position === "first" ? styles.cardFirst : position === "last" ? styles.cardLast : null;
   return (
     <Touchable
       feedback="row"
@@ -321,14 +406,14 @@ const DirectoryRow = memo(function DirectoryRow({
       accessibilityRole="button"
       accessibilityLabel={name}
       accessibilityState={{ selected: Boolean(selected), disabled: Boolean(disabled) }}
-      style={[styles.row, selected ? styles.rowSelected : null]}
+      style={[styles.row, corners, selected ? styles.rowSelected : null]}
     >
+      {selected ? <View style={styles.selectedStrip} /> : null}
+      {position === "middle" || position === "last" ? <View style={styles.divider} /> : null}
       {icon && !avatar ? (
-        <View style={styles.iconBubble}>
-          <Ionicons name={icon} size={20} color={colors.textOnBrand} />
-        </View>
+        <InboxAvatar type={kind ?? "group"} title={name} size={40} />
       ) : (
-        <Avatar name={name} image={avatar ?? null} size={44} />
+        <InboxAvatar type={kind ?? "person"} title={name} image={avatar ?? null} size={40} />
       )}
       <View style={styles.rowBody}>
         <Text style={styles.rowTitle} numberOfLines={1} {...textScale.dense}>
@@ -338,21 +423,40 @@ const DirectoryRow = memo(function DirectoryRow({
           {subtitle}
         </Text>
       </View>
-      <Ionicons
-        name={selected === undefined ? "chevron-forward" : selected ? "checkmark-circle" : "ellipse-outline"}
-        size={selected === undefined ? 16 : 22}
-        color={selected ? colors.brand : colors.textTertiary}
-      />
+      {selected === undefined ? (
+        <View style={styles.go}>
+          <Ionicons name="chatbubble-outline" size={14} color={colors.brandAccent} />
+        </View>
+      ) : selected ? (
+        <View style={[styles.check, glowStyle(colors.glow, 1)]}>
+          <LinearGradient colors={colors.gradientBrand} start={{ x: 1, y: 0.5 }} end={{ x: 0, y: 0.5 }} style={[StyleSheet.absoluteFill, styles.checkFill]} />
+          <Ionicons name="checkmark" size={14} color={palette.textOnBrand} />
+        </View>
+      ) : (
+        <View style={[styles.check, styles.checkIdle]} />
+      )}
     </Touchable>
   );
 });
 
-const ICON_BUBBLE = 44;
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   headerBottom: { gap: space.sm, paddingBottom: space.sm },
-  section: { ...type.label, color: colors.textSecondary, paddingHorizontal: layout.screenPadding, paddingTop: space.lg, paddingBottom: space.s },
+  sectionRow: { flexDirection: "row", alignItems: "center", gap: space.s, paddingHorizontal: layout.screenPadding, paddingTop: space.xl, paddingBottom: space.sm },
+  sectionMark: { width: 3, height: 12, borderRadius: radius.pill, backgroundColor: colors.brand },
+  section: { ...type.overline, color: colors.textSecondary },
+  shortcuts: { flexDirection: "row", gap: space.sm, paddingHorizontal: layout.screenPadding, paddingTop: space.md },
+  shortcut: { flex: 1, flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
+  pickedCard: { padding: space.md, gap: space.sm, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border, marginBottom: space.sm },
+  pickedHead: { flexDirection: "row", alignItems: "center", gap: space.s },
+  pickedTitle: { ...type.overline, color: colors.textSecondary },
+  pickedCount: { minWidth: 20, height: 18, paddingHorizontal: space.xs, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandDim },
+  pickedCountText: { ...type.nano, color: colors.brandAccent },
+  pickedTrack: { gap: space.sm },
+  pickedItem: { width: 58, alignItems: "center", gap: space.xs },
+  pickedRemove: { position: "absolute", top: -2, right: -2, width: 18, height: 18, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface3, borderWidth: 2, borderColor: colors.surface1 },
+  pickedName: { ...type.caption, color: colors.textSecondary },
+  pickedEmpty: { ...type.bodySm, color: colors.textTertiary },
   searchWrap: { paddingHorizontal: layout.screenPadding },
   skeleton: { paddingHorizontal: layout.screenPadding, paddingTop: space.sm },
   list: { flexGrow: 1, paddingBottom: space.huge },
@@ -361,28 +465,32 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
-    paddingHorizontal: layout.screenPadding,
-    paddingVertical: space.m,
-    minHeight: layout.listRowHeightTwoLine,
+    marginHorizontal: layout.screenPadding,
+    paddingHorizontal: space.md,
+    paddingVertical: space.s,
+    minHeight: 62,
+    backgroundColor: colors.surface1,
+    overflow: "hidden",
   },
+  cardSingle: { borderRadius: radius.xl },
+  cardFirst: { borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl },
+  cardLast: { borderBottomLeftRadius: radius.xl, borderBottomRightRadius: radius.xl },
+  divider: { position: "absolute", top: 0, right: 0, left: space.md + 46 + space.md, height: hairline, backgroundColor: colors.border },
   rowSelected: { backgroundColor: colors.brandDim },
-  iconBubble: {
-    width: ICON_BUBBLE,
-    height: ICON_BUBBLE,
-    borderRadius: ICON_BUBBLE / 2,
-    backgroundColor: colors.brand,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  selectedStrip: { position: "absolute", left: 0, top: space.sm, bottom: space.sm, width: 3, borderTopRightRadius: radius.xs, borderBottomRightRadius: radius.xs, backgroundColor: colors.brand },
+  go: { width: 30, height: 30, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandDim },
+  check: { width: 24, height: 24, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  checkFill: { borderRadius: radius.pill },
+  checkIdle: { borderWidth: 1.5, borderColor: colors.borderStrong },
   rowBody: { flex: 1, minWidth: 0, gap: space.xxs },
-  rowTitle: { ...type.h4, color: colors.textPrimary },
+  rowTitle: { ...type.h3, color: colors.textPrimary },
   rowSubtitle: { ...type.caption, color: colors.textSecondary },
   footer: {
     paddingHorizontal: layout.screenPadding,
     paddingTop: space.sm,
     paddingBottom: space.sm,
     borderTopWidth: hairline,
-    borderTopColor: colors.separator,
-    backgroundColor: colors.surface1,
+    borderTopColor: colors.glassLine,
+    backgroundColor: colors.glass,
   },
 });

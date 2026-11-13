@@ -7,6 +7,11 @@
  * "Yönetime gönder". Gönderilen takvim yönetimin maç planlamasında kullanılır.
  *
  * GET / PUT /api/team-availability/mine
+ *
+ * TASARIM (gece teması): üstte durum kartı (gönderim durumu + toplam uygun /
+ * zorda saat, parçalı çubuk); her saha bir kart: IconTile + ad/konum, seçili
+ * tercih hapı, üç seçenekli SegmentedControl; oynanabilir sahada haftalık
+ * ızgara (gün başlıkları, saat sütunu, renk lejantı) ve saha özeti.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -16,13 +21,18 @@ import React, { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { LegendItem, SplitBar } from "@/components/team/ClubKit";
 import {
+  Badge,
   Button,
   Chip,
   EmptyState,
   ErrorState,
+  IconTile,
+  Reveal,
   ScreenHeader,
-  SkeletonCard,
+  SegmentedControl,
+  Skeleton,
   Touchable,
   useHeaderScroll,
   useRefresh,
@@ -50,6 +60,14 @@ const PREFERENCES: { key: Preference; label: string; tone: "win" | "warn" | "dan
   { key: "maybe", label: "Zorda kalırsak", tone: "warn" },
   { key: "no", label: "Uymaz", tone: "danger" },
 ];
+const PREF_TILE = { yes: "mint", maybe: "gold", no: "red" } as const;
+
+/** Taslaktaki uygun / zorda hücre sayısı (yalnız oynanabilir sahalar). */
+function tally(draft: Draft): { yes: number; maybe: number } {
+  if (draft.preference !== "yes" && draft.preference !== "maybe") return { yes: 0, maybe: 0 };
+  const values = Object.values(draft.slots);
+  return { yes: values.filter((v) => v === "yes").length, maybe: values.filter((v) => v === "maybe").length };
+}
 
 const NEXT: Record<string, SlotState | undefined> = { none: "yes", yes: "maybe", maybe: undefined };
 const DAY_SHORT: Record<number, string> = { 1: "Pzt", 2: "Sal", 3: "Çar", 4: "Per", 5: "Cum", 6: "Cmt", 7: "Paz" };
@@ -118,7 +136,9 @@ export default function AvailabilityScreen() {
       />
       {query.isLoading || (query.data && !drafts) ? (
         <View style={styles.pad}>
-          <SkeletonCard lines={6} />
+          <Skeleton height={104} radius="xl" />
+          <Skeleton height={260} radius="xl" />
+          <Skeleton height={120} radius="xl" />
         </View>
       ) : query.isError ? (
         <ErrorState error={query.error} onRetry={query.refetch} />
@@ -127,11 +147,27 @@ export default function AvailabilityScreen() {
       ) : (
         <>
           <ScrollView {...scrollProps} contentContainerStyle={styles.content} refreshControl={refresh.control}>
+            <Reveal index={0}>
+              <SummaryCard
+                submittedAt={submittedAt ?? null}
+                dirty={dirty}
+                venues={venues.length}
+                playable={Object.values(drafts ?? {}).filter((d) => d.preference === "yes" || d.preference === "maybe").length}
+                totals={Object.values(drafts ?? {}).reduce(
+                  (sum, d) => {
+                    const t = tally(d);
+                    return { yes: sum.yes + t.yes, maybe: sum.maybe + t.maybe };
+                  },
+                  { yes: 0, maybe: 0 },
+                )}
+              />
+            </Reveal>
             <Text style={styles.lede} {...textScale.long}>
               Her saha için tercihini seç. Oynayabileceğin sahalarda saat hücrelerine dokun: bir dokunuş uygun, iki dokunuş zorda kalırsak, üç
               dokunuş temizler.
             </Text>
-            {venues.map((venue) => (
+            {venues.map((venue, index) => (
+              <Reveal key={venue.id} index={index + 1} limit={6}>
               <VenueCard
                 key={venue.id}
                 venue={venue}
@@ -147,10 +183,11 @@ export default function AvailabilityScreen() {
                   })
                 }
               />
+              </Reveal>
             ))}
           </ScrollView>
           <View style={styles.bar}>
-            <Button label="Kaydet" variant="secondary" onPress={() => save.mutate(false)} loading={save.isPending && save.variables === false} disabled={save.isPending} style={styles.flex} />
+            <Button label="Kaydet" variant="secondary" onPress={() => save.mutate(false)} loading={save.isPending && save.variables === false} disabled={save.isPending} />
             <Button label="Yönetime gönder" icon="paper-plane-outline" onPress={() => save.mutate(true)} loading={save.isPending && save.variables === true} disabled={save.isPending} style={styles.flex} />
           </View>
         </>
@@ -172,79 +209,159 @@ const VenueCard = React.memo(function VenueCard({
 }) {
   const playable = draft.preference === "yes" || draft.preference === "maybe";
   const { days, times } = venue.weekly;
+  const pref = PREFERENCES.find((item) => item.key === draft.preference) ?? null;
+  const counts = tally(draft);
   return (
-    <View style={styles.card}>
-      <Text style={styles.venueName} {...textScale.dense}>
-        {venue.name}
-      </Text>
-      <Text style={styles.venueMeta} {...textScale.dense}>
-        {[venue.location, `${venue.open_label}–${venue.close_label}`].filter(Boolean).join(" · ")}
-      </Text>
-      <View style={styles.chips}>
-        {PREFERENCES.map((item) => (
-          <Chip key={item.key} size="sm" label={item.label} tone={item.tone} selected={draft.preference === item.key} onPress={() => onPreference(item.key)} />
-        ))}
+    <View style={[styles.card, draft.preference === "no" && styles.cardOff]}>
+      <View style={styles.venueHead}>
+        <IconTile icon="location" tone={pref ? PREF_TILE[pref.key] : "neutral"} size={40} glow={false} />
+        <View style={styles.flex}>
+          <Text style={styles.venueName} numberOfLines={1} {...textScale.dense}>
+            {venue.name}
+          </Text>
+          <Text style={styles.venueMeta} numberOfLines={1} {...textScale.dense}>
+            {[venue.location, `${venue.open_label}–${venue.close_label}`].filter(Boolean).join(" · ")}
+          </Text>
+        </View>
+        {pref ? <Badge label={pref.label} tone={pref.tone} size="xs" /> : <Badge label="Seçilmedi" tone="neutral" size="xs" />}
       </View>
+      {/* Seçim yokken kaydırmalı göstergenin ilk seçeneği "seçili" gibi
+          göstermemesi için tercih yapılana dek ayrı haplar çizilir. */}
+      {draft.preference ? (
+        <SegmentedControl
+          items={PREFERENCES.map((item) => ({ key: item.key, label: item.label }))}
+          value={draft.preference}
+          onChange={(key) => onPreference(key as Preference)}
+        />
+      ) : (
+        <View style={styles.chips}>
+          {PREFERENCES.map((item) => (
+            <Chip key={item.key} size="sm" label={item.label} tone={item.tone} selected={false} onPress={() => onPreference(item.key)} />
+          ))}
+        </View>
+      )}
       {playable && days.length && times.length ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View>
-            <View style={styles.gridRow}>
-              <View style={styles.timeCell} />
-              {days.map((day) => (
-                <Text key={day.weekday} style={styles.dayHead} {...textScale.badge}>
-                  {DAY_SHORT[day.weekday] ?? day.label}
-                </Text>
+        <>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View>
+              <View style={styles.gridRow}>
+                <View style={styles.timeCell} />
+                {days.map((day) => (
+                  <Text key={day.weekday} style={styles.dayHead} {...textScale.badge}>
+                    {DAY_SHORT[day.weekday] ?? day.label}
+                  </Text>
+                ))}
+              </View>
+              {times.map((time) => (
+                <View key={time.key} style={styles.gridRow}>
+                  <Text style={[styles.timeCell, styles.timeText]} {...textScale.badge}>
+                    {time.label}
+                  </Text>
+                  {days.map((day) => {
+                    const key = `${day.weekday}:${time.key}`;
+                    const state = draft.slots[key];
+                    return (
+                      <Touchable
+                        key={key}
+                        feedback="icon"
+                        haptic="selection"
+                        onPress={() => onCell(key)}
+                        style={[styles.cell, state === "yes" && styles.cellYes, state === "maybe" && styles.cellMaybe]}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${day.label} ${time.label}: ${state === "yes" ? "uygun" : state === "maybe" ? "zorda kalırsak" : "uygun değil"}`}
+                      >
+                        {state ? <Ionicons name={state === "yes" ? "checkmark" : "remove"} size={14} color={colors.onDark} /> : null}
+                      </Touchable>
+                    );
+                  })}
+                </View>
               ))}
             </View>
-            {times.map((time) => (
-              <View key={time.key} style={styles.gridRow}>
-                <Text style={[styles.timeCell, styles.timeText]} {...textScale.badge}>
-                  {time.label}
-                </Text>
-                {days.map((day) => {
-                  const key = `${day.weekday}:${time.key}`;
-                  const state = draft.slots[key];
-                  return (
-                    <Touchable
-                      key={key}
-                      feedback="icon"
-                      haptic="selection"
-                      onPress={() => onCell(key)}
-                      style={[styles.cell, state === "yes" && styles.cellYes, state === "maybe" && styles.cellMaybe]}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${day.label} ${time.label}: ${state === "yes" ? "uygun" : state === "maybe" ? "zorda kalırsak" : "uygun değil"}`}
-                    >
-                      {state ? <Ionicons name={state === "yes" ? "checkmark" : "remove"} size={14} color={colors.onDark} /> : null}
-                    </Touchable>
-                  );
-                })}
-              </View>
-            ))}
+          </ScrollView>
+          <View style={styles.legend}>
+            <LegendItem color={colors.win} label="Uygun" value={counts.yes} />
+            <LegendItem color={colors.warn} label="Zorda kalırsak" value={counts.maybe} />
           </View>
-        </ScrollView>
+        </>
+      ) : draft.preference === "no" ? (
+        <Text style={styles.venueMeta} {...textScale.dense}>
+          Bu sahada maç planlanmaz.
+        </Text>
       ) : null}
     </View>
   );
 });
+
+function SummaryCard({
+  submittedAt,
+  dirty,
+  venues,
+  playable,
+  totals,
+}: {
+  submittedAt: string | null;
+  dirty: boolean;
+  venues: number;
+  playable: number;
+  totals: { yes: number; maybe: number };
+}) {
+  return (
+    <View style={styles.summary}>
+      <View style={styles.venueHead}>
+        <IconTile icon={submittedAt && !dirty ? "checkmark-done" : "calendar"} tone={submittedAt && !dirty ? "mint" : "violet"} size={40} />
+        <View style={styles.flex}>
+          <Text style={styles.venueName} {...textScale.dense}>
+            {dirty ? "Kaydedilmemiş değişiklik var" : submittedAt ? "Yönetime gönderildi" : "Henüz gönderilmedi"}
+          </Text>
+          <Text style={styles.venueMeta} numberOfLines={1} {...textScale.dense}>
+            {`${playable}/${venues} sahada oynanabilir${submittedAt ? ` · son gönderim ${formatDateShort(submittedAt)}` : ""}`}
+          </Text>
+        </View>
+      </View>
+      <SplitBar
+        height={8}
+        parts={[
+          { key: "yes", value: totals.yes, color: colors.win },
+          { key: "maybe", value: totals.maybe, color: colors.warn },
+        ]}
+      />
+      <View style={styles.legend}>
+        <LegendItem color={colors.win} label="Uygun saat" value={totals.yes} />
+        <LegendItem color={colors.warn} label="Zorda kalırsak" value={totals.maybe} />
+      </View>
+    </View>
+  );
+}
 
 const CELL = 36;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
-  pad: { padding: layout.screenPadding },
+  pad: { padding: layout.screenPadding, gap: space.md },
   content: { paddingHorizontal: layout.screenPadding, paddingTop: space.md, paddingBottom: space.giant, gap: space.md },
   lede: { ...type.caption, color: colors.textSecondary },
   card: {
-    gap: space.s,
+    gap: space.md,
     padding: space.md,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     borderWidth: hairline,
-    borderColor: colors.border,
+    borderColor: colors.glassLine,
     backgroundColor: colors.surface1,
   },
-  venueName: { ...type.label, color: colors.textPrimary },
+  cardOff: { borderColor: colors.border },
+  summary: {
+    gap: space.sm,
+    padding: space.md,
+    borderRadius: radius.xl,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+    backgroundColor: colors.surface1,
+  },
+  venueHead: { flexDirection: "row", alignItems: "center", gap: space.md },
+  venueName: { ...type.h4, color: colors.textPrimary },
   venueMeta: { ...type.caption, color: colors.textTertiary },
+  legend: { flexDirection: "row", gap: space.lg },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: space.s },
   gridRow: { flexDirection: "row", alignItems: "center", gap: space.xxs, marginTop: space.xxs },
   timeCell: { width: 48 },
@@ -256,6 +373,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     borderWidth: hairline,
     borderColor: colors.border,
+    backgroundColor: colors.surface2,
     alignItems: "center",
     justifyContent: "center",
   },

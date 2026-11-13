@@ -17,8 +17,9 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { Panel, RecordCard, SelectField, StatRow, type FieldDef } from "@/components/admin";
-import { Touchable } from "@/components/ui";
+import { SelectField, type FieldDef } from "@/components/admin";
+import { LineRow, Lines, StageChip, ToolStage } from "@/components/admin/tools/ToolKit";
+import { GradientBar, SectionHeader, Touchable } from "@/components/ui";
 import { formatDate } from "@/lib/admin/format";
 import {
   RATE_SCOPES,
@@ -279,119 +280,165 @@ export function CityDetail({
 
   return (
     <View style={styles.gap}>
-      <StatRow
-        items={[
-          { label: "Devreden", value: money(city.opening), tone: balanceTone(city.opening) },
-          { label: `Maç · ${city.seasons.length} sezon`, value: city.matchCount },
+      <ToolStage
+        icon="map"
+        tone="cyan"
+        overline={city.balance < 0 ? `${city.name} · fazla ödeme` : `${city.name} · kalan borç`}
+        value={money(Math.abs(city.balance))}
+        valueTone={city.balance > 0 ? "danger" : city.balance < 0 ? "win" : undefined}
+        caption={
+          city.adjustment
+            ? `Hesaplanan ${money(city.calculated)} · düzeltme ${money(city.adjustment, { signed: true })}`
+            : "Tahakkuk = maç sayısı × maç başı ücret."
+        }
+        chips={city.lastPayment ? <StageChip label={`Son tahsilat ${formatDate(city.lastPayment.date)}`} icon="cash-outline" tone="win" /> : null}
+        stats={[
+          { label: "Devreden", value: money(city.opening), tone: city.opening > 0 ? "danger" : city.opening < 0 ? "win" : undefined },
           { label: "Tahakkuk", value: money(city.due) },
+          { label: "Tahsilat", value: money(city.paid), tone: "win" },
+          { label: "Maç", value: city.matchCount },
         ]}
       />
-      <StatRow
-        items={[
-          { label: city.lastPayment ? `Tahsilat · son ${formatDate(city.lastPayment.date)}` : "Tahsilat", value: money(city.paid), tone: "win" },
-          { label: city.balance < 0 ? "Fazla ödeme (alacaklı)" : "Kalan borç", value: money(city.balance), tone: balanceTone(city.balance) },
-        ]}
-      />
-      {city.adjustment ? <Muted>{`Hesaplanan ${money(city.calculated)} · düzeltme ${money(city.adjustment, { signed: true })}`}</Muted> : <Muted>Tahakkuk = maç sayısı × maç başı ücret.</Muted>}
 
-      <Panel title="Ay ay hesap">
-        <Muted>Ayı açınca sezon satırları, kalemler ve tahsilatlar görünür.</Muted>
-        {months.map((m) => {
-          const lines = city.lines.filter((l) => l.period === m.period);
-          const charges = city.charges.filter((e) => e.period === m.period);
-          const payments = city.payments.filter((e) => e.period === m.period);
-          const expandable = lines.length || charges.length || payments.length;
-          const isOpen = open.has(m.period);
-          return (
-            <View key={m.period} style={styles.month}>
-              <Touchable onPress={expandable ? () => toggle(m.period) : undefined} disabled={!expandable} style={styles.monthHead} accessibilityRole="button" accessibilityState={{ expanded: isOpen }}>
-                {expandable ? <Ionicons name={isOpen ? "chevron-down" : "chevron-forward"} size={16} color={colors.textTertiary} /> : <View style={styles.iconSpace} />}
-                <View style={styles.flex}>
-                  <Text style={styles.strong} {...textScale.dense}>
-                    {m.label}
+      <View style={styles.section}>
+        <SectionHeader title="Ay ay hesap" meta={`${months.length} ay`} subtitle="Ayı aç: sezon satırları, kalemler ve tahsilatlar" inset="flush" icon="calendar-outline" iconTone="violet" />
+        <View style={styles.monthCard}>
+          {months.map((m, mi) => {
+            const lines = city.lines.filter((l) => l.period === m.period);
+            const charges = city.charges.filter((e) => e.period === m.period);
+            const payments = city.payments.filter((e) => e.period === m.period);
+            const expandable = lines.length || charges.length || payments.length;
+            const isOpen = open.has(m.period);
+            const ratio = m.due > 0 ? Math.min(1, m.paid / m.due) : m.paid > 0 ? 1 : 0;
+            return (
+              <View key={m.period} style={[styles.month, mi === 0 ? styles.monthFirst : null]}>
+                <Touchable
+                  onPress={expandable ? () => toggle(m.period) : undefined}
+                  disabled={!expandable}
+                  feedback="row"
+                  style={[styles.monthHead, isOpen ? styles.monthHeadOpen : null]}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: isOpen }}
+                  accessibilityLabel={`${m.label}, ${m.matchCount} maç, bakiye ${money(m.balance)}`}
+                >
+                  <View style={[styles.monthStamp, isOpen ? styles.monthStampOpen : null]}>
+                    <Text style={[styles.monthStampNum, isOpen ? styles.monthStampNumOpen : null]} {...textScale.badge}>
+                      {m.matchCount}
+                    </Text>
+                    <Text style={styles.monthStampUnit} {...textScale.badge}>
+                      MAÇ
+                    </Text>
+                  </View>
+                  <View style={styles.flex}>
+                    <Text style={styles.strong} numberOfLines={1} {...textScale.dense}>
+                      {m.label}
+                    </Text>
+                    <Text style={styles.muted} numberOfLines={1} {...textScale.dense}>
+                      tahakkuk {money(m.due)}
+                      {m.paid ? ` · tahsilat ${money(m.paid)}` : ""}
+                      {m.adjustment ? ` · düzeltme ${money(m.adjustment, { signed: true })}` : ""}
+                    </Text>
+                    <View style={styles.monthBar}>
+                      <GradientBar value={ratio} height={3} />
+                    </View>
+                  </View>
+                  <Text style={[styles.num, { color: toneColor(m.balance) }]} {...textScale.badge}>
+                    {money(m.balance)}
                   </Text>
-                  <Text style={styles.muted} {...textScale.dense}>
-                    {m.matchCount} maç · hesaplanan {money(m.calculated)}
-                    {m.adjustment ? ` · düzeltme ${money(m.adjustment, { signed: true })}` : ""} · tahakkuk {money(m.due)}
-                    {m.paid ? ` · tahsilat ${money(m.paid)}` : ""}
-                  </Text>
-                </View>
-                <Text style={[styles.num, { color: toneColor(m.balance) }]} {...textScale.dense}>
-                  {money(m.balance)}
-                </Text>
-              </Touchable>
-              {isOpen ? (
-                <View style={styles.sub}>
-                  {lines.map((l) => (
-                    <RecordCard
-                      key={`${l.period}-${l.seasonId || 0}`}
-                      title={l.seasonName}
-                      subtitle={l.leagues.length > 1 ? l.leagues.map((x) => `${x.name} (${x.count})`).join(", ") : l.leagueName || null}
-                      meta={`${l.matchCount} maç · ${money(l.fee)} / maç · ${l.rate ? RATE_SCOPES[l.rate.scope] : "tarife yok"} · hesaplanan ${money(l.calculated)}${l.override ? ` · düzeltme ${money(l.amount - l.calculated, { signed: true })}` : ""}${l.override?.note ? ` · ${l.override.note}` : ""}`}
-                      icon="calendar-outline"
-                      value={money(l.amount)}
-                      onPress={canManage ? () => onOverride({ ...l, cityName: city.name }) : undefined}
-                      badges={[l.override ? { label: "Düzeltildi", tone: "warn" } : null, { label: rateText(l.rate), tone: "neutral" }]}
-                    />
-                  ))}
-                  {charges.map((e) => (
-                    <RecordCard
-                      key={`c${e.id}`}
-                      title={e.title || "Kalem"}
-                      subtitle={[e.seasonName, e.note].filter(Boolean).join(" · ") || null}
-                      icon="swap-vertical-outline"
-                      iconTone="warn"
-                      value={money(e.amount, { signed: true })}
-                      onPress={canManage ? () => onEditEntry(e) : undefined}
-                    />
-                  ))}
-                  {payments.map((e) => (
-                    <RecordCard
-                      key={`p${e.id}`}
-                      title={`Tahsilat · ${formatDate(e.date)}`}
-                      subtitle={[method(e.paymentMethod), e.title, e.note].filter(Boolean).join(" · ") || null}
-                      icon="cash-outline"
-                      iconTone="win"
-                      value={money(e.amount)}
-                      valueTone="win"
-                      onPress={canManage ? () => onEditEntry(e) : undefined}
-                    />
-                  ))}
-                  {canManage && lines.length ? <Muted>Sezon satırına dokunup tutarı düzeltebilirsiniz.</Muted> : null}
-                </View>
-              ) : null}
-            </View>
-          );
-        })}
-        <Text style={styles.muted} {...textScale.dense}>
-          Dönem toplamı: {city.matchCount} maç · hesaplanan {money(city.calculated)} · tahakkuk {money(city.due)} · tahsilat {money(city.paid)} · bakiye {money(city.balance)}
+                  {expandable ? <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={16} color={colors.textTertiary} /> : <View style={styles.iconSpace} />}
+                </Touchable>
+                {isOpen ? (
+                  <View style={styles.sub}>
+                    {lines.map((l) => (
+                      <LineRow
+                        key={`${l.period}-${l.seasonId || 0}`}
+                        icon="trophy-outline"
+                        tone="violet"
+                        title={l.seasonName}
+                        sub={`${l.matchCount} maç × ${money(l.fee)} · ${l.leagues.length > 1 ? l.leagues.map((x) => `${x.name} (${x.count})`).join(", ") : l.leagueName || rateText(l.rate)}`}
+                        meta={l.override ? `Hesaplanan ${money(l.calculated)} · düzeltme ${money(l.amount - l.calculated, { signed: true })}${l.override.note ? ` · ${l.override.note}` : ""}` : l.rate ? RATE_SCOPES[l.rate.scope] : "Tarife yok"}
+                        value={money(l.amount)}
+                        badge={l.override ? { label: "Düzeltildi", tone: "warn" } : null}
+                        onPress={canManage ? () => onOverride({ ...l, cityName: city.name }) : undefined}
+                      />
+                    ))}
+                    {charges.map((e) => (
+                      <LineRow
+                        key={`c${e.id}`}
+                        icon="swap-vertical-outline"
+                        tone="gold"
+                        title={e.title || "Kalem"}
+                        sub={[e.seasonName, e.note].filter(Boolean).join(" · ") || null}
+                        value={money(e.amount, { signed: true })}
+                        onPress={canManage ? () => onEditEntry(e) : undefined}
+                      />
+                    ))}
+                    {payments.map((e) => (
+                      <LineRow
+                        key={`p${e.id}`}
+                        icon="cash-outline"
+                        tone="mint"
+                        title={`Tahsilat · ${formatDate(e.date)}`}
+                        sub={[method(e.paymentMethod), e.title, e.note].filter(Boolean).join(" · ") || null}
+                        value={money(e.amount)}
+                        valueTone="win"
+                        onPress={canManage ? () => onEditEntry(e) : undefined}
+                      />
+                    ))}
+                    {canManage && lines.length ? <Muted>Sezon satırına dokunup tutarı düzeltebilirsin.</Muted> : null}
+                  </View>
+                ) : null}
+              </View>
+            );
+          })}
+        </View>
+        <Text style={styles.total} {...textScale.dense}>
+          Dönem toplamı · {city.matchCount} maç · hesaplanan {money(city.calculated)} · bakiye {money(city.balance)}
         </Text>
-      </Panel>
+      </View>
 
-      <Panel title="Sezon ve lig bazında">
+      <View style={styles.section}>
+        <SectionHeader title="Sezon ve lig bazında" meta={String(city.seasons.length)} inset="flush" icon="trophy-outline" iconTone="gold" />
         {city.seasons.length ? (
-          city.seasons.map((x) => <RecordCard key={x.seasonId || 0} title={x.seasonName} subtitle={x.leagueName || null} meta={`${x.matchCount} maç`} icon="trophy-outline" value={money(x.amount)} />)
+          <Lines>
+            {city.seasons.map((x) => (
+              <LineRow key={x.seasonId || 0} icon="trophy-outline" tone="gold" title={x.seasonName} sub={x.leagueName || null} value={money(x.amount)} valueSub={`${x.matchCount} maç`} />
+            ))}
+          </Lines>
         ) : (
           <Muted>Bu dönemde maç yok.</Muted>
         )}
-      </Panel>
+      </View>
 
-      <Panel title="Maç başı ücretler" action={canManage ? { label: "Ücret ekle", onPress: () => onAddRate({ cityId: city.cityId }) } : undefined}>
+      <View style={styles.section}>
+        <SectionHeader
+          title="Maç başı ücretler"
+          meta={String(city.rates.length)}
+          inset="flush"
+          icon="pricetag-outline"
+          iconTone="mint"
+          action={canManage ? { label: "Ücret ekle", onPress: () => onAddRate({ cityId: city.cityId }) } : undefined}
+        />
         {city.rates.length ? (
-          city.rates.map((r) => (
-            <RecordCard
-              key={r.id}
-              title={r.seasonName || "İlin tüm maçları"}
-              subtitle={[r.validFrom ? `${monthLabel(r.validFrom)}'dan itibaren` : "Baştan beri", r.note].filter(Boolean).join(" · ")}
-              icon="pricetag-outline"
-              value={money(r.fee)}
-              onPress={canManage ? () => onEditRate(r) : undefined}
-            />
-          ))
+          <Lines>
+            {city.rates.map((r) => (
+              <LineRow
+                key={r.id}
+                icon="pricetag-outline"
+                tone="mint"
+                title={r.seasonName || "İlin tüm maçları"}
+                sub={[r.validFrom ? `${monthLabel(r.validFrom)}'dan itibaren` : "Baştan beri", r.note].filter(Boolean).join(" · ")}
+                value={money(r.fee)}
+                valueSub="maç başı"
+                chevron={canManage}
+                onPress={canManage ? () => onEditRate(r) : undefined}
+              />
+            ))}
+          </Lines>
         ) : (
           <Muted>Bu il için ücret tanımlı değil; varsa genel ücret uygulanır.</Muted>
         )}
-      </Panel>
+      </View>
     </View>
   );
 }
@@ -427,9 +474,20 @@ const styles = StyleSheet.create({
   strong: { ...type.label, color: colors.textPrimary },
   muted: { ...type.caption, color: colors.textTertiary },
   num: { ...type.numSmStrong },
-  month: { borderBottomWidth: hairline, borderBottomColor: colors.separator },
-  monthHead: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.sm },
+  section: { gap: space.sm, marginTop: space.sm },
+  monthCard: { borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.glassLine, overflow: "hidden" },
+  month: { borderTopWidth: hairline, borderTopColor: colors.separator },
+  monthFirst: { borderTopWidth: 0 },
+  monthHead: { flexDirection: "row", alignItems: "center", gap: space.m, paddingVertical: space.m, paddingHorizontal: space.md, minHeight: 64 },
+  monthHeadOpen: { backgroundColor: colors.brandDim },
+  monthStamp: { width: 40, height: 42, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface2 },
+  monthStampOpen: { backgroundColor: colors.brandAccent },
+  monthStampNum: { ...type.scoreXs, color: colors.textPrimary },
+  monthStampNumOpen: { color: colors.onDark },
+  monthStampUnit: { ...type.nano, color: colors.textTertiary },
+  monthBar: { marginTop: space.xs },
   iconSpace: { width: 16 },
-  sub: { gap: space.xs, paddingBottom: space.sm },
+  sub: { gap: space.xs, paddingBottom: space.sm, backgroundColor: colors.surface1 },
+  total: { ...type.caption, color: colors.textTertiary, textAlign: "center" },
 });
 

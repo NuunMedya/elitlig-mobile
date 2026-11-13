@@ -86,6 +86,7 @@ export function SquadSummary({
           <LegendItem color={colors.posDefense} label="Defans" value={lines.DEF} />
           <LegendItem color={colors.posMidfield} label="Orta" value={lines.MID} />
           <LegendItem color={colors.posForward} label="Forvet" value={lines.FWD} />
+          {lines.unknown ? <LegendItem color={colors.posUnknown} label="Mevkisiz" value={lines.unknown} /> : null}
         </View>
         {lines.GK === 0 ? (
           <View style={styles.warn}>
@@ -248,7 +249,7 @@ const styles = StyleSheet.create({
     borderTopWidth: hairline,
     borderTopColor: colors.separator,
   },
-  legendRow: { flexDirection: "row", justifyContent: "space-between", gap: space.sm },
+  legendRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: space.xs, columnGap: space.sm },
   warn: { flexDirection: "row", alignItems: "center", gap: space.xs },
   warnText: { ...type.caption, color: colors.danger, flex: 1 },
   subHead: { paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: space.xxs, borderTopWidth: hairline, borderTopColor: colors.separator },

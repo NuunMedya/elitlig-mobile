@@ -16,7 +16,7 @@ import { ToggleField } from "@/components/admin";
 import { Avatar, BottomSheet, EmptyState, Input, SkeletonListRow, TeamLogo, Touchable } from "@/components/ui";
 import { formatEtl, POS_GROUPS, searchAwardPlayers, searchAwardTeams, type AwardPlayer, type AwardTeam, type PositionGroup } from "@/lib/api/admin/weeklyAwards";
 import { mediaUrl } from "@/lib/format";
-import { colors, hairline, space, textScale, type } from "@/theme";
+import { colors, hairline, positionBadge, positionColor, radius, space, textScale, type } from "@/theme";
 
 function useDebounced(value: string, ms = 300) {
   const [v, setV] = useState(value);
@@ -74,27 +74,53 @@ export function PlayerPickerSheet({
           keyExtractor={(p) => String(p.playerId)}
           keyboardShouldPersistTaps="handled"
           ListEmptyComponent={query.isLoading ? <SkeletonListRow count={6} /> : <EmptyState icon="person-outline" title="Oyuncu bulunamadı" variant="inline" compact />}
-          renderItem={({ item }) => (
-            <Touchable
-              style={styles.row}
-              onPress={() => {
-                onPick(item);
-                onClose();
-              }}
-              accessibilityRole="button"
-            >
-              <Avatar name={item.playerName} image={mediaUrl(item.playerImg)} size={40} />
-              <View style={styles.texts}>
-                <Text style={styles.name} {...textScale.dense}>
-                  {item.playerName}
-                </Text>
-                <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
-                  {[posLabel(item), item.teamName, item.marketValue != null ? formatEtl(item.marketValue) : null].filter(Boolean).join(" · ")}
-                </Text>
-              </View>
-              <Ionicons name="add-circle-outline" size={22} color={colors.brandAccent} />
-            </Touchable>
-          )}
+          ListHeaderComponent={
+            results.length ? (
+              <Text style={styles.count} {...textScale.dense}>
+                {results.length} OYUNCU
+              </Text>
+            ) : null
+          }
+          renderItem={({ item }) => {
+            const line = LINE_OF[item.positionGroup as PositionGroup] ?? null;
+            return (
+              <Touchable
+                style={styles.row}
+                feedback="row"
+                onPress={() => {
+                  onPick(item);
+                  onClose();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.playerName}, ${posLabel(item)}${item.teamName ? `, ${item.teamName}` : ""}. Seç`}
+              >
+                <View>
+                  <Avatar name={item.playerName} image={mediaUrl(item.playerImg)} size={40} />
+                  <View style={[styles.pos, { backgroundColor: positionColor(colors, line) }]}>
+                    <Text style={styles.posText} {...textScale.badge}>
+                      {positionBadge(line)}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.texts}>
+                  <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
+                    {item.playerName}
+                  </Text>
+                  <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+                    {[posLabel(item), item.teamName].filter(Boolean).join(" · ")}
+                  </Text>
+                </View>
+                {item.marketValue != null ? (
+                  <Text style={styles.value} numberOfLines={1} {...textScale.badge}>
+                    {formatEtl(item.marketValue)}
+                  </Text>
+                ) : null}
+                <View style={styles.add}>
+                  <Ionicons name="add" size={18} color={colors.brandAccent} />
+                </View>
+              </Touchable>
+            );
+          }}
         />
       </View>
     </BottomSheet>
@@ -135,17 +161,21 @@ export function TeamPickerSheet({
           renderItem={({ item }) => (
             <Touchable
               style={styles.row}
+              feedback="row"
               onPress={() => {
                 onPick(item);
                 onClose();
               }}
               accessibilityRole="button"
+              accessibilityLabel={`${item.teamName}. Seç`}
             >
-              <TeamLogo name={item.teamName} logo={mediaUrl(item.teamLogo)} size={36} />
-              <Text style={[styles.name, styles.texts]} {...textScale.dense}>
+              <TeamLogo name={item.teamName} logo={mediaUrl(item.teamLogo)} size={40} />
+              <Text style={[styles.name, styles.texts]} numberOfLines={1} {...textScale.dense}>
                 {item.teamName}
               </Text>
-              <Ionicons name="add-circle-outline" size={22} color={colors.brandAccent} />
+              <View style={styles.add}>
+                <Ionicons name="add" size={18} color={colors.brandAccent} />
+              </View>
             </Touchable>
           )}
         />
@@ -154,10 +184,48 @@ export function TeamPickerSheet({
   );
 }
 
+/** Ödül mevki grubu → hat (renk ve 3 harfli rozet). */
+const LINE_OF: Record<PositionGroup, "GK" | "DEF" | "MID" | "FWD"> = {
+  GOALKEEPER: "GK",
+  DEFENDER: "DEF",
+  MIDFIELDER: "MID",
+  FORWARD: "FWD",
+};
+
 const styles = StyleSheet.create({
   wrap: { flex: 1, gap: space.sm },
-  row: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.sm, borderBottomWidth: hairline, borderBottomColor: colors.separator },
-  texts: { flex: 1, gap: 2 },
-  name: { ...type.body, color: colors.textPrimary },
+  count: { ...type.overline, color: colors.textTertiary, paddingVertical: space.xs },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    minHeight: 60,
+    paddingVertical: space.sm,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.separator,
+  },
+  texts: { flex: 1, gap: space.xxs, minWidth: 0 },
+  name: { ...type.h4, color: colors.textPrimary },
   meta: { ...type.caption, color: colors.textTertiary },
+  value: { ...type.tableNumStrong, color: colors.textSecondary },
+  pos: {
+    position: "absolute",
+    bottom: -3,
+    left: 4,
+    right: 4,
+    alignItems: "center",
+    borderRadius: radius.pill,
+    paddingVertical: 1,
+    borderWidth: 1.5,
+    borderColor: colors.surface1,
+  },
+  posText: { ...type.nano, color: colors.onDark },
+  add: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brandDim,
+  },
 });

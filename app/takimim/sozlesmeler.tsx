@@ -6,12 +6,17 @@
  * `scope=team` şart: double rolünde kapsamsız istek oyuncunun kendi
  * sözleşmelerini de karıştırır (bkz. lib/api/club/contracts.ts). Satır
  * sözleşme belgesini açar (/sozlesme/[id]).
+ *
+ * TASARIM (gece teması): üstte üç sayı (aktif · aktivasyon bekleyen · biten
+ * ya da feshedilen), durum şeridi (yatay Chip). SÖZLEŞME KARTI: avatar + ad,
+ * durum hapı, başlangıç → bitiş zaman çizgisi (geçen süre degrade çubukla),
+ * kalan gün; bitişe 30 günden az kalan aktif sözleşme uyarı tonunda.
  */
 
 import { useQuery } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter, type Href } from "expo-router";
 import React, { useMemo, useState } from "react";
-import { FlatList, StyleSheet, View } from "react-native";
+import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -21,18 +26,22 @@ import {
   ChipGroup,
   EmptyState,
   ErrorState,
-  ListRow,
+  GradientBar,
+  MetricGrid,
+  MetricTile,
+  Reveal,
+  Skeleton,
   ScreenHeader,
-  SkeletonListRow,
+  Touchable,
   useHeaderScroll,
   useRefresh,
   type Tone,
 } from "@/components/ui";
-import { CONTRACT_STATUS_LABELS, getTeamContracts } from "@/lib/api/club/contracts";
+import { CONTRACT_STATUS_LABELS, getTeamContracts, type TeamContract } from "@/lib/api/club/contracts";
 import { formatMoney } from "@/lib/api/transfers";
 import { formatDateShort, mediaUrl } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, space } from "@/theme";
+import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 const TONE: Record<string, Tone> = {
   ACTIVE: "win",
@@ -42,8 +51,18 @@ const TONE: Record<string, Tone> = {
   CANCELLED: "neutral",
 };
 const STATUSES = Object.keys(CONTRACT_STATUS_LABELS);
-const positionOf = (index: number, length: number) =>
-  length === 1 ? "single" : index === 0 ? "first" : index === length - 1 ? "last" : "middle";
+const DAY = 86_400_000;
+
+/** Sözleşme süresinin geçen kısmı (0–1) ve kalan gün; süresizse null. */
+function timeline(contract: TeamContract): { ratio: number; daysLeft: number | null } {
+  const start = contract.contract_start_date ? new Date(contract.contract_start_date).getTime() : NaN;
+  const end = contract.contract_end_date ? new Date(contract.contract_end_date).getTime() : NaN;
+  const now = Date.now();
+  if (!Number.isFinite(end)) return { ratio: Number.isFinite(start) && start <= now ? 1 : 0, daysLeft: null };
+  const daysLeft = Math.ceil((end - now) / DAY);
+  if (!Number.isFinite(start) || end <= start) return { ratio: now >= end ? 1 : 0, daysLeft };
+  return { ratio: Math.max(0, Math.min(1, (now - start) / (end - start))), daysLeft };
+}
 
 export default function TeamContractsScreen() {
   const auth = useAuth();
@@ -61,6 +80,7 @@ export default function TeamContractsScreen() {
   });
   const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching });
   const items = useMemo(() => query.data?.items ?? [], [query.data]);
+  const count = (key: string) => items.filter((item) => item.status === key).length;
 
   if (!auth.user) return <Redirect href="/giris" />;
 
@@ -80,6 +100,13 @@ export default function TeamContractsScreen() {
         contentContainerStyle={styles.content}
         ListHeaderComponent={
           <View style={styles.header}>
+            {!status && items.length ? (
+              <MetricGrid columns={3}>
+                <MetricTile label="Aktif" value={String(count("ACTIVE"))} icon="document-text" tone="win" />
+                <MetricTile label="Sırada" value={String(count("PENDING_ACTIVATION"))} icon="hourglass" tone="warn" />
+                <MetricTile label="Biten" value={String(count("COMPLETED") + count("TERMINATED") + count("CANCELLED"))} icon="archive" />
+              </MetricGrid>
+            ) : null}
             <ChipGroup contentPadding={0}>
               <Chip size="sm" label="Tümü" selected={!status} onPress={() => setStatus(null)} />
               {STATUSES.map((key) => (
@@ -90,7 +117,11 @@ export default function TeamContractsScreen() {
         }
         ListEmptyComponent={
           query.isLoading ? (
-            <SkeletonListRow count={6} />
+            <View style={styles.skeleton}>
+              {[0, 1, 2].map((index) => (
+                <Skeleton key={index} height={120} radius="xl" />
+              ))}
+            </View>
           ) : query.isError ? (
             <ErrorState variant="inline" error={query.error} onRetry={query.refetch} />
           ) : (
@@ -103,28 +134,103 @@ export default function TeamContractsScreen() {
             />
           )
         }
+        ItemSeparatorComponent={Gap}
         renderItem={({ item, index }) => (
-          <ListRow
-            leading={<Avatar name={item.player?.player_name ?? "?"} image={mediaUrl(item.player?.player_img ?? null)} size={layout.crestLg} />}
-            title={item.player?.player_name ?? "Oyuncu"}
-            subtitle={[
-              `${formatDateShort(item.contract_start_date)} — ${item.contract_end_date ? formatDateShort(item.contract_end_date) : "süresiz"}`,
-              item.transfer_fee != null && Number(item.transfer_fee) > 0 ? formatMoney(item.transfer_fee, item.currency ?? "TRY") : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-            badge={<Badge label={CONTRACT_STATUS_LABELS[item.status] ?? item.status} tone={TONE[item.status] ?? "neutral"} size="xs" />}
-            position={positionOf(index, items.length)}
-            onPress={() => router.push(`/sozlesme/${item.public_id}` as Href)}
-          />
+          <Reveal index={index} limit={6} distance={8}>
+            <ContractCard contract={item} onPress={() => router.push(`/sozlesme/${item.public_id}` as Href)} />
+          </Reveal>
         )}
       />
     </SafeAreaView>
   );
 }
 
+function Gap() {
+  return <View style={styles.gap} />;
+}
+
+const ContractCard = React.memo(function ContractCard({ contract, onPress }: { contract: TeamContract; onPress: () => void }) {
+  const tone = TONE[contract.status] ?? "neutral";
+  const active = contract.status === "ACTIVE";
+  const { ratio, daysLeft } = timeline(contract);
+  const ending = active && daysLeft != null && daysLeft <= 30;
+  const fee = contract.transfer_fee != null && Number(contract.transfer_fee) > 0 ? formatMoney(contract.transfer_fee, contract.currency ?? "TRY") : null;
+  const left =
+    contract.status === "PENDING_ACTIVATION"
+      ? "Başlangıç bekleniyor"
+      : !active
+        ? null
+        : daysLeft == null
+          ? "Süresiz"
+          : daysLeft <= 0
+            ? "Bugün bitiyor"
+            : `${daysLeft} gün kaldı`;
+  return (
+    <Touchable
+      onPress={onPress}
+      feedback="card"
+      accessibilityRole="button"
+      accessibilityLabel={[contract.player?.player_name, CONTRACT_STATUS_LABELS[contract.status], left].filter(Boolean).join(", ")}
+      style={[styles.card, !active && contract.status !== "PENDING_ACTIVATION" && styles.cardDone]}
+    >
+      <View style={styles.top}>
+        <Avatar name={contract.player?.player_name ?? "?"} image={mediaUrl(contract.player?.player_img ?? null)} size={42} />
+        <View style={styles.texts}>
+          <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
+            {contract.player?.player_name ?? "Oyuncu"}
+          </Text>
+          <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+            {fee ? `Bonservis ${fee}` : "Bedelsiz"}
+          </Text>
+        </View>
+        <Badge label={CONTRACT_STATUS_LABELS[contract.status] ?? contract.status} tone={tone} size="sm" />
+      </View>
+      <View style={styles.timeline}>
+        <GradientBar
+          value={ratio}
+          height={6}
+          gradient={!active ? colors.tileTones.neutral : ending ? colors.tileTones.gold : undefined}
+        />
+        <View style={styles.dates}>
+          <Text style={styles.date} {...textScale.badge}>
+            {formatDateShort(contract.contract_start_date)}
+          </Text>
+          {left ? (
+            <Text style={[styles.left, ending && styles.leftWarn]} numberOfLines={1} {...textScale.badge}>
+              {left}
+            </Text>
+          ) : null}
+          <Text style={styles.date} {...textScale.badge}>
+            {contract.contract_end_date ? formatDateShort(contract.contract_end_date) : "Süresiz"}
+          </Text>
+        </View>
+      </View>
+    </Touchable>
+  );
+});
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { paddingHorizontal: layout.screenPadding, paddingBottom: space.giant },
-  header: { paddingVertical: space.md },
+  header: { paddingVertical: space.md, gap: space.md },
+  skeleton: { gap: space.md },
+  gap: { height: space.sm },
+  card: {
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  cardDone: { borderColor: colors.border, opacity: 0.8 },
+  top: { flexDirection: "row", alignItems: "center", gap: space.md },
+  texts: { flex: 1, minWidth: 0, gap: space.xxs },
+  name: { ...type.h4, color: colors.textPrimary },
+  meta: { ...type.caption, color: colors.textTertiary },
+  timeline: { gap: space.xs },
+  dates: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm },
+  date: { ...type.numSm, color: colors.textTertiary },
+  left: { ...type.labelXs, color: colors.textSecondary, flexShrink: 1, textAlign: "center" },
+  leftWarn: { color: colors.warn },
 });

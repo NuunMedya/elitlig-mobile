@@ -21,9 +21,9 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { LinearGradient } from "expo-linear-gradient";
 
-import { Panel, RecordCard, StatRow, ToggleField } from "@/components/admin";
+import { Panel, RecordCard, ToggleField } from "@/components/admin";
 import { Delta, LineRow, Lines, StageChip, StageStats, ToolStage, categoryVisual, type StageStat } from "@/components/admin/tools/ToolKit";
-import { Badge, Button, Chip, ChipGroup, EmptyState, GradientBar, IconTile, Input, SegmentedControl, Touchable } from "@/components/ui";
+import { Badge, Button, Chip, ChipGroup, EmptyState, GradientBar, IconTile, Input, SegmentedControl, TeamLogo, Touchable } from "@/components/ui";
 import { timeAgo } from "@/lib/admin/format";
 import {
   ageInDays,
@@ -753,6 +753,44 @@ export function ReportsView({ book, categories }: { book: AccBook; categories: A
 
 /* ---------------------------------- personel ---------------------------------- */
 
+/** Liste üstündeki arama + süzgeç + sıralama şeridi (personel / takımlar ortak). */
+function ListTools<K extends string>({
+  query,
+  onQuery,
+  placeholder,
+  toggleLabel,
+  toggle,
+  onToggle,
+  sorts,
+  sort,
+  onSort,
+  onExport,
+}: {
+  query: string;
+  onQuery: (v: string) => void;
+  placeholder: string;
+  toggleLabel: string;
+  toggle: boolean;
+  onToggle: (v: boolean) => void;
+  sorts: readonly (readonly [K, string])[];
+  sort: K;
+  onSort: (k: K) => void;
+  onExport: () => void;
+}) {
+  return (
+    <View style={styles.tools}>
+      <Input variant="search" leadingIcon="search" value={query} onChangeText={onQuery} placeholder={placeholder} autoCapitalize="none" />
+      <ChipGroup scrollable contentPadding={0}>
+        <Chip label={toggleLabel} icon={toggle ? "checkmark" : "funnel-outline"} size="sm" tone="danger" selected={toggle} onPress={() => onToggle(!toggle)} />
+        {sorts.map(([k, l]) => (
+          <Chip key={k} label={l} size="sm" selected={sort === k} onPress={() => onSort(k)} />
+        ))}
+        <Chip label="CSV" icon="share-outline" size="sm" onPress={onExport} />
+      </ChipGroup>
+    </View>
+  );
+}
+
 export function StaffView({ book, categories, canManage, onMarkPaid, onStatement, onExport }: { book: AccBook; categories: AccCategory[]; canManage: boolean; onMarkPaid: (ids: number[], message: string) => void; onStatement: (r: AccStaffRow) => void; onExport: () => void }) {
   const [query, setQuery] = useState("");
   const [onlyPending, setOnlyPending] = useState(false);
@@ -765,46 +803,68 @@ export function StaffView({ book, categories, canManage, onMarkPaid, onStatement
   const t = rows.reduce((acc, r) => ({ tasks: acc.tasks + r.tasks, earned: acc.earned + r.earned, paid: acc.paid + r.paid, pending: acc.pending + r.pending }), { tasks: 0, earned: 0, paid: 0, pending: 0 });
   return (
     <View style={styles.gap}>
-      <Muted>Görev sayısı maç görevlendirmelerinden, kazanç girilen ödemelerden gelir. Kutucukta personel seçilmemişse ödeme maçın görevlisine yazılır.</Muted>
-      <StatRow
-        items={[
-          { label: "Hak ediş", value: money(t.earned) },
+      <ToolStage
+        icon="people"
+        tone="violet"
+        overline="Personel hak edişi"
+        value={money(t.earned)}
+        caption="Görev sayısı maç görevlendirmelerinden, kazanç girilen ödemelerden gelir."
+        stats={[
           { label: "Ödenen", value: money(t.paid), tone: "win" },
           { label: "Bekleyen", value: money(t.pending), tone: t.pending ? "danger" : undefined },
           { label: "Görev", value: t.tasks },
         ]}
       />
-      <Input variant="search" leadingIcon="search" value={query} onChangeText={setQuery} placeholder="Personel ara" autoCapitalize="none" />
-      <ToggleField label="Yalnızca bekleyenler" value={onlyPending} onChange={setOnlyPending} />
-      <ChipGroup scrollable contentPadding={0}>
-        {([["earned", "Kazanç"], ["pending", "Bekleyen"], ["tasks", "Görev"], ["name", "Ad"]] as const).map(([k, l]) => (
-          <Chip key={k} label={l} size="sm" selected={sort === k} onPress={() => setSort(k)} />
-        ))}
-        <Chip label="CSV" icon="share-outline" size="sm" onPress={onExport} />
-      </ChipGroup>
-      {!rows.length ? <Muted>Bu dönemde görev alan personel yok.</Muted> : null}
-      {rows.map((r) => (
-        <RecordCard
-          key={r.staffId}
-          title={r.name}
-          subtitle={`${r.tasks} görev · ${r.matchCount} maç · görev başı ${money(r.average)}`}
-          meta={Object.entries(r.byCategory).map(([k, a]) => `${labels[k] || k}: ${money(a)}`).join(" · ") || null}
-          icon="person-outline"
-          value={money(r.earned)}
-          badges={[
-            { label: `Ödenen ${money(r.paid)}`, tone: "win" },
-            r.pending > 0 ? { label: `Bekleyen ${money(r.pending)}`, tone: "danger" } : null,
-            r.unpaidTasks > 0 ? { label: `${r.unpaidTasks} görev ücretsiz`, tone: "warn" } : null,
-          ]}
-          onPress={() => onStatement(r)}
-        >
-          {canManage && r.pendingEntryIds.length ? (
-            <View style={styles.inline}>
-              <Button label="Ödendi yap" icon="checkmark" size="sm" variant="secondary" onPress={() => onMarkPaid(r.pendingEntryIds, `${r.name} için ${money(r.pending)} ödendi olarak işaretlensin mi?`)} />
-            </View>
-          ) : null}
-        </RecordCard>
-      ))}
+      <ListTools
+        query={query}
+        onQuery={setQuery}
+        placeholder="Personel ara"
+        toggleLabel="Bekleyenler"
+        toggle={onlyPending}
+        onToggle={setOnlyPending}
+        sorts={[["earned", "Kazanç"], ["pending", "Bekleyen"], ["tasks", "Görev"], ["name", "Ad"]] as const}
+        sort={sort}
+        onSort={setSort}
+        onExport={onExport}
+      />
+      {!rows.length ? (
+        <EmptyState icon="people-outline" title="Personel yok" body="Bu dönemde görev alan personel yok." variant="inline" compact />
+      ) : (
+        <Lines>
+          {rows.map((r) => {
+            const ratio = r.earned ? r.paid / r.earned : 0;
+            return (
+              <LineRow
+                key={r.staffId}
+                avatar={{ name: r.name }}
+                title={r.name}
+                sub={`${r.tasks} görev · ${r.matchCount} maç · görev başı ${money(r.average)}`}
+                meta={Object.entries(r.byCategory).map(([k, a]) => `${labels[k] || k}: ${money(a)}`).join(" · ") || null}
+                value={money(r.earned)}
+                valueSub={r.pending > 0 ? `${money(r.pending)} bekliyor` : "Ödendi"}
+                stripe={r.pending > 0 ? colors.danger : null}
+                onPress={() => onStatement(r)}
+                accessibilityLabel={`${r.name}, hak ediş ${money(r.earned)}, bekleyen ${money(r.pending)}. Ekstre`}
+              >
+                <View style={styles.payLine}>
+                  <GradientBar value={ratio} height={4} style={styles.flex} />
+                  <Text style={styles.payPct} {...textScale.badge}>
+                    %{Math.round(ratio * 100)}
+                  </Text>
+                </View>
+                {r.unpaidTasks > 0 || (canManage && r.pendingEntryIds.length) ? (
+                  <View style={styles.rowActions}>
+                    {r.unpaidTasks > 0 ? <Badge label={`${r.unpaidTasks} görev ücretsiz`} tone="warn" size="xs" /> : null}
+                    {canManage && r.pendingEntryIds.length ? (
+                      <Button label="Ödendi yap" icon="checkmark" size="sm" variant="secondary" onPress={() => onMarkPaid(r.pendingEntryIds, `${r.name} için ${money(r.pending)} ödendi olarak işaretlensin mi?`)} />
+                    ) : null}
+                  </View>
+                ) : null}
+              </LineRow>
+            );
+          })}
+        </Lines>
+      )}
     </View>
   );
 }
@@ -823,49 +883,70 @@ export function TeamsView({ book, canManage, onMarkPaid, onStatement, onExport }
   const debtors = rows.filter((r) => r.outstanding > 0).length;
   return (
     <View style={styles.gap}>
-      <Muted>Takımlardan alınacak maç ücretleri: faturalanan, tahsil edilen ve kalan alacak. Takıma dokunup ekstresini açın, WhatsApp'a paylaşın.</Muted>
-      <StatRow
-        items={[
+      <ToolStage
+        icon="shield"
+        tone="cyan"
+        overline="Takımlardan kalan alacak"
+        value={money(t.outstanding)}
+        valueTone={t.outstanding ? "danger" : undefined}
+        caption={`${debtors} borçlu takım · takıma dokun, ekstresini aç ve paylaş.`}
+        stats={[
           { label: "Faturalanan", value: money(t.billed) },
-          { label: "Tahsil edilen", value: money(t.collected), tone: "win" },
-          { label: "Kalan alacak", value: money(t.outstanding), tone: t.outstanding ? "danger" : undefined },
-          { label: `Oran · ${debtors} borçlu`, value: t.billed ? `%${Math.round((t.collected / t.billed) * 100)}` : "—" },
+          { label: "Tahsil", value: money(t.collected), tone: "win" },
+          { label: "Oran", value: t.billed ? `%${Math.round((t.collected / t.billed) * 100)}` : "—", tone: "accent" },
         ]}
       />
-      <Input variant="search" leadingIcon="search" value={query} onChangeText={setQuery} placeholder="Takım ara" autoCapitalize="none" />
-      <ToggleField label="Yalnızca borçlu takımlar" value={onlyDebt} onChange={setOnlyDebt} />
-      <ChipGroup scrollable contentPadding={0}>
-        {([["outstanding", "Alacak"], ["billed", "Faturalanan"], ["matches", "Maç"], ["name", "Ad"]] as const).map(([k, l]) => (
-          <Chip key={k} label={l} size="sm" selected={sort === k} onPress={() => setSort(k)} />
-        ))}
-        <Chip label="CSV" icon="share-outline" size="sm" onPress={onExport} />
-      </ChipGroup>
-      {!rows.length ? <Muted>Kayıt yok.</Muted> : null}
-      {rows.map((r) => {
-        const age = ageInDays(r.oldestPending);
-        return (
-          <RecordCard
-            key={String(r.teamId ?? r.name)}
-            title={r.name}
-            subtitle={`${r.matches} maç · ücret girilen ${r.matches - r.unbilledMatches} · faturalanan ${money(r.billed)} · tahsil ${money(r.collected)}`}
-            icon="shield-outline"
-            value={money(r.outstanding)}
-            valueTone={r.outstanding > 0 ? "danger" : "neutral"}
-            badges={[
-              r.unbilledMatches > 0 ? { label: `${r.unbilledMatches} eksik`, tone: "warn" } : null,
-              age != null ? { label: `${age} gün`, tone: age > 30 ? "danger" : age > 7 ? "warn" : "neutral" } : null,
-              r.billed ? { label: `%${Math.round((r.collected / r.billed) * 100)} tahsil`, tone: "info" } : null,
-            ]}
-            onPress={() => onStatement(r)}
-          >
-            {canManage && r.pendingEntryIds.length ? (
-              <View style={styles.inline}>
-                <Button label="Tahsil edildi yap" icon="checkmark" size="sm" variant="secondary" onPress={() => onMarkPaid(r.pendingEntryIds, `${r.name} takımının ${money(r.outstanding)} alacağı tahsil edildi olarak işaretlensin mi?`)} />
-              </View>
-            ) : null}
-          </RecordCard>
-        );
-      })}
+      <ListTools
+        query={query}
+        onQuery={setQuery}
+        placeholder="Takım ara"
+        toggleLabel="Borçlular"
+        toggle={onlyDebt}
+        onToggle={setOnlyDebt}
+        sorts={[["outstanding", "Alacak"], ["billed", "Faturalanan"], ["matches", "Maç"], ["name", "Ad"]] as const}
+        sort={sort}
+        onSort={setSort}
+        onExport={onExport}
+      />
+      {!rows.length ? (
+        <EmptyState icon="shield-outline" title="Kayıt yok" body="Bu dönemde ücret girilen takım yok." variant="inline" compact />
+      ) : (
+        <Lines>
+          {rows.map((r) => {
+            const age = ageInDays(r.oldestPending);
+            const ratio = r.billed ? r.collected / r.billed : 0;
+            return (
+              <LineRow
+                key={String(r.teamId ?? r.name)}
+                leading={<TeamLogo name={r.name} size={40} />}
+                title={r.name}
+                sub={`${r.matches} maç · faturalanan ${money(r.billed)} · tahsil ${money(r.collected)}`}
+                value={money(r.outstanding)}
+                valueTone={r.outstanding > 0 ? "danger" : "neutral"}
+                valueSub={age != null ? `${age} gündür` : r.outstanding > 0 ? "alacak" : "kapandı"}
+                stripe={r.outstanding > 0 ? (age != null && age > 30 ? colors.danger : colors.warn) : null}
+                onPress={() => onStatement(r)}
+                accessibilityLabel={`${r.name}, kalan alacak ${money(r.outstanding)}. Ekstre`}
+              >
+                <View style={styles.payLine}>
+                  <GradientBar value={ratio} height={4} style={styles.flex} />
+                  <Text style={styles.payPct} {...textScale.badge}>
+                    %{Math.round(ratio * 100)}
+                  </Text>
+                </View>
+                {r.unbilledMatches > 0 || (canManage && r.pendingEntryIds.length) ? (
+                  <View style={styles.rowActions}>
+                    {r.unbilledMatches > 0 ? <Badge label={`${r.unbilledMatches} maç ücretsiz`} tone="warn" size="xs" /> : null}
+                    {canManage && r.pendingEntryIds.length ? (
+                      <Button label="Tahsil edildi" icon="checkmark" size="sm" variant="secondary" onPress={() => onMarkPaid(r.pendingEntryIds, `${r.name} takımının ${money(r.outstanding)} alacağı tahsil edildi olarak işaretlensin mi?`)} />
+                    ) : null}
+                  </View>
+                ) : null}
+              </LineRow>
+            );
+          })}
+        </Lines>
+      )}
     </View>
   );
 }
@@ -904,8 +985,20 @@ export function GeneralView({
   const expense = entries.filter((e) => e.direction === "expense").reduce((n, e) => n + e.amount, 0);
   return (
     <View style={styles.gap}>
-      <Muted>Maça bağlı olmayan kalemler: kira, ekipman, reklam, sponsor geliri, gün sonu giderleri. Defterde ilgili günün sonunda da görünür.</Muted>
-      {canManage ? <Button label="Kayıt ekle" icon="add" onPress={onAdd} /> : null}
+      <ToolStage
+        icon="wallet"
+        tone="mint"
+        overline="Genel kayıtlar · net"
+        value={money(income - expense, { signed: true })}
+        valueTone={income - expense >= 0 ? "win" : "danger"}
+        caption="Maça bağlı olmayan kalemler: kira, ekipman, reklam, sponsor geliri, gün sonu giderleri."
+        stats={[
+          { label: "Gelir", value: money(income), tone: "win" },
+          { label: "Gider", value: money(expense), tone: "danger" },
+          { label: "Kayıt", value: entries.length },
+        ]}
+      />
+      {canManage ? <Button label="Kayıt ekle" icon="add" size="lg" onPress={onAdd} fullWidth /> : null}
       <SegmentedControl
         items={[
           { key: "all", label: "Tümü" },
@@ -919,44 +1012,42 @@ export function GeneralView({
         size="sm"
       />
       <Input variant="search" leadingIcon="search" value={query} onChangeText={setQuery} placeholder="Kayıtlarda ara" autoCapitalize="none" />
-      {entries.length ? (
-        <StatRow
-          items={[
-            { label: "Gelir", value: money(income), tone: "win" },
-            { label: "Gider", value: money(expense), tone: "danger" },
-            { label: "Net", value: money(income - expense, { signed: true }), tone: income - expense >= 0 ? "win" : "danger" },
-          ]}
-        />
+      {!entries.length ? (
+        <EmptyState icon="receipt-outline" title="Genel kayıt yok" body="Bu dönemde ya da bu süzgeçte kayıt bulunmuyor." variant="inline" compact />
       ) : (
-        <Muted>Bu dönemde genel kayıt yok.</Muted>
+        <Lines>
+          {entries.map((e) => {
+            const locked = isLockedDay(book.settings, e.date);
+            const expanded = open === e.id;
+            const visual = categoryVisual(e.categoryLabel, e.direction === "income" ? "income" : "expense");
+            return (
+              <LineRow
+                key={e.id}
+                icon={visual.icon}
+                tone={visual.tone}
+                title={e.title || e.categoryLabel || "—"}
+                sub={[e.categoryLabel, e.staffName, paymentMethods.find((m) => m.key === e.paymentMethod)?.label].filter(Boolean).join(" · ")}
+                meta={[`${shortDay(e.date)}.${e.date.slice(0, 4)}`, e.note].filter(Boolean).join(" · ")}
+                metaIcon={locked ? "lock-closed-outline" : "calendar-outline"}
+                value={money(e.direction === "income" ? e.amount : -e.amount, { signed: true })}
+                valueTone={e.direction === "income" ? "win" : "danger"}
+                badge={{ label: e.status === "paid" ? "Ödendi" : "Bekliyor", tone: e.status === "paid" ? "win" : "warn" }}
+                selected={expanded}
+                onPress={canManage ? () => setOpen(expanded ? null : e.id) : undefined}
+              >
+                {expanded ? (
+                  <View style={styles.actionsRow}>
+                    <Button label={e.status === "paid" ? "Bekliyor yap" : "Ödendi yap"} size="sm" variant="secondary" onPress={() => onToggle(e)} />
+                    {!locked ? <Button label="Düzenle" size="sm" variant="secondary" onPress={() => onEdit(e)} /> : null}
+                    <Button label={`Sonraki aya (${shortDay(nextMonthDay(e.date))})`} size="sm" variant="ghost" onPress={() => onCopyNext(e)} />
+                    {!locked ? <Button label="Sil" size="sm" variant="danger" onPress={() => onDelete(e)} /> : null}
+                  </View>
+                ) : null}
+              </LineRow>
+            );
+          })}
+        </Lines>
       )}
-      {entries.map((e) => {
-        const locked = isLockedDay(book.settings, e.date);
-        const expanded = open === e.id;
-        return (
-          <RecordCard
-            key={e.id}
-            title={e.title || "—"}
-            subtitle={[e.categoryLabel, e.staffName, paymentMethods.find((m) => m.key === e.paymentMethod)?.label].filter(Boolean).join(" · ")}
-            meta={[`${shortDay(e.date)}.${e.date.slice(0, 4)}`, e.note].filter(Boolean).join(" · ")}
-            icon={e.direction === "income" ? "arrow-down" : "arrow-up"}
-            iconTone={e.direction === "income" ? "win" : "danger"}
-            value={money(e.direction === "income" ? e.amount : -e.amount, { signed: true })}
-            valueTone={e.direction === "income" ? "win" : "danger"}
-            badges={[{ label: e.status === "paid" ? "Ödendi" : "Bekliyor", tone: e.status === "paid" ? "win" : "warn" }, locked ? { label: "Kilitli", icon: "lock-closed-outline", tone: "neutral" } : null]}
-            onPress={canManage ? () => setOpen(expanded ? null : e.id) : undefined}
-          >
-            {expanded ? (
-              <View style={styles.actionsRow}>
-                <Button label={e.status === "paid" ? "Bekliyor yap" : "Ödendi yap"} size="sm" variant="secondary" onPress={() => onToggle(e)} />
-                {!locked ? <Button label="Düzenle" size="sm" variant="secondary" onPress={() => onEdit(e)} /> : null}
-                <Button label={`Sonraki aya (${shortDay(nextMonthDay(e.date))})`} size="sm" variant="ghost" onPress={() => onCopyNext(e)} />
-                {!locked ? <Button label="Sil" size="sm" variant="danger" onPress={() => onDelete(e)} /> : null}
-              </View>
-            ) : null}
-          </RecordCard>
-        );
-      })}
     </View>
   );
 }
@@ -969,47 +1060,68 @@ export function MissingView({ book, canManage, onOpenMatch, onFill }: { book: Ac
   const rows = all.filter((r) => kind === "all" || (kind === "income" ? r.noIncome : r.noExpense));
   const byId = new Map(book.days.flatMap((d) => d.matches).map((m) => [m.id, m]));
   const fillable = rows.filter((r) => !byId.get(r.matchId)?.locked).map((r) => r.matchId);
-  if (!all.length) return <Note tone="win" icon="checkmark-circle-outline" text="Tüm maçların gelir ve gider girişleri tamam." />;
+  if (!all.length) return <EmptyState icon="checkmark-done-circle-outline" title="Eksik yok" body="Tüm maçların gelir ve gider girişleri tamam." variant="inline" />;
+  const noIncome = all.filter((r) => r.noIncome).length;
+  const noExpense = all.filter((r) => r.noExpense).length;
   return (
     <View style={styles.gap}>
-      <Muted>Takım ücreti ya da hiçbir gideri girilmemiş maçlar. Maça dokunup tamamlayın ya da varsayılan tutarlarla toplu doldurun.</Muted>
+      <ToolStage
+        icon="alert-circle"
+        tone="gold"
+        overline="Eksik girişli maç"
+        value={all.length}
+        caption="Takım ücreti ya da hiçbir gideri girilmemiş maçlar. Maça dokunup tamamla ya da varsayılan tutarlarla toplu doldur."
+        stats={[
+          { label: "Ücret yok", value: noIncome, tone: noIncome ? "warn" : undefined },
+          { label: "Gider yok", value: noExpense, tone: noExpense ? "warn" : undefined },
+          { label: "Doldurulabilir", value: fillable.length, tone: "accent" },
+        ]}
+      />
       <SegmentedControl
         items={[
           { key: "all", label: `Tümü (${all.length})` },
-          { key: "income", label: `Ücret yok (${all.filter((r) => r.noIncome).length})` },
-          { key: "expense", label: `Gider yok (${all.filter((r) => r.noExpense).length})` },
+          { key: "income", label: `Ücret yok (${noIncome})` },
+          { key: "expense", label: `Gider yok (${noExpense})` },
         ]}
         value={kind}
         onChange={setKind}
         stretch
         size="sm"
       />
-      {canManage && fillable.length ? <Button label={`${fillable.length} maçı varsayılanla doldur`} icon="flash-outline" onPress={() => onFill(fillable)} /> : null}
-      {rows.map((r) => {
-        const m = byId.get(r.matchId);
-        return (
-          <RecordCard
-            key={r.matchId}
-            title={r.label}
-            subtitle={`${dayLabel(r.date)}${m?.field ? ` · ${m.field}` : ""}`}
-            icon="alert-circle-outline"
-            iconTone="warn"
-            badges={[
-              r.noIncome ? { label: "Takım ücreti yok", tone: "warn" } : null,
-              r.noExpense ? { label: "Gider yok", tone: "warn" } : null,
-              r.status === "taslak" ? { label: "Taslak", tone: "neutral" } : null,
-              m?.locked ? { label: "Kilitli", icon: "lock-closed-outline", tone: "neutral" } : null,
-            ]}
-            onPress={m ? () => onOpenMatch(m) : undefined}
-          />
-        );
-      })}
+      {canManage && fillable.length ? <Button label={`${fillable.length} maçı varsayılanla doldur`} icon="flash-outline" size="lg" onPress={() => onFill(fillable)} fullWidth /> : null}
+      <Lines>
+        {rows.map((r) => {
+          const m = byId.get(r.matchId);
+          return (
+            <LineRow
+              key={r.matchId}
+              icon={m?.locked ? "lock-closed-outline" : "alert-circle-outline"}
+              tone={m?.locked ? "neutral" : "gold"}
+              title={r.label}
+              sub={`${dayLabel(r.date)}${m?.field ? ` · ${m.field}` : ""}`}
+              stripe={colors.warn}
+              chevron={Boolean(m)}
+              onPress={m ? () => onOpenMatch(m) : undefined}
+            >
+              <View style={styles.rowActions}>
+                {r.noIncome ? <Badge label="Takım ücreti yok" tone="warn" size="xs" /> : null}
+                {r.noExpense ? <Badge label="Gider yok" tone="warn" size="xs" /> : null}
+                {r.status === "taslak" ? <Badge label="Taslak" tone="neutral" size="xs" /> : null}
+              </View>
+            </LineRow>
+          );
+        })}
+      </Lines>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   gap: { gap: space.sm },
+  tools: { gap: space.sm },
+  payLine: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.xs },
+  payPct: { ...type.numSm, color: colors.textTertiary, minWidth: 32, textAlign: "right" },
+  rowActions: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs, marginTop: space.xs },
   flex: { flex: 1 },
   row: { flexDirection: "row", alignItems: "center", gap: space.sm },
   inline: { flexDirection: "row", marginTop: space.xs },

@@ -14,8 +14,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { FieldLabel, SegmentField, ToggleField, confirmAction } from "@/components/admin";
-import { Badge, BottomSheet, Button, Chip, ChipGroup, Odometer, Skeleton, Stepper } from "@/components/ui";
-import { NumberedSection } from "@/components/admin/matches/opsKit";
+import { Badge, BottomSheet, Button, Chip, ChipGroup, Odometer, Skeleton } from "@/components/ui";
+import { BumpButtons, NumberedSection } from "@/components/admin/matches/opsKit";
 import { errorText } from "@/lib/admin/errors";
 import { buildStructure, previewStructure, type StructureTemplate } from "@/lib/api/admin/leagues";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
@@ -310,7 +310,9 @@ function CountCell({ label, value, min, max, onChange }: { label: string; value:
         {label.toLocaleUpperCase("tr-TR")}
       </Text>
       <Odometer value={value} style={styles.cellValue} />
-      <Stepper value={value} min={min} max={max} size="sm" onChange={onChange} accessibilityLabel={label} style={styles.cellStepper} />
+      <View style={styles.cellStepper}>
+        <BumpButtons value={value} min={min} max={max} onChange={onChange} label={label} />
+      </View>
     </View>
   );
 }

@@ -171,9 +171,9 @@ export default function RecruitmentScreen() {
         <Reveal index={0}>
           <MetricGrid columns={3}>
             <MetricTile
-              label="Başvuru"
+              label="Aday"
               value={joins.isLoading ? "…" : String(pendingApplications)}
-              hint="bekliyor"
+              hint="başvuru bekliyor"
               icon="mail-unread"
               tone={pendingApplications ? "warn" : "neutral"}
             />

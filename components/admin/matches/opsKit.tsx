@@ -1231,3 +1231,44 @@ const kit2 = StyleSheet.create({
   dotDone: { backgroundColor: colors.win },
   no: { ...type.numSmStrong, color: colors.onDark },
 });
+
+/** Büyük rakamın altındaki ± düğme çifti (sayaç hücreleri; değer ayrı çizilir). */
+export function BumpButtons({ value, min, max, step = 1, onChange, label }: { value: number; min: number; max: number; step?: number; onChange: (v: number) => void; label: string }) {
+  return (
+    <View style={kit3.row}>
+      {([-step, step] as const).map((d) => {
+        const next = value + d;
+        const off = next < min || next > max;
+        return (
+          <Touchable
+            key={d}
+            onPress={() => !off && onChange(next)}
+            disabled={off}
+            haptic="selection"
+            feedback="icon"
+            style={[kit3.btn, off ? kit3.off : null]}
+            accessibilityRole="button"
+            accessibilityLabel={`${label} ${d > 0 ? "artır" : "azalt"}`}
+          >
+            <Ionicons name={d > 0 ? "add" : "remove"} size={16} color={colors.textPrimary} />
+          </Touchable>
+        );
+      })}
+    </View>
+  );
+}
+
+const kit3 = StyleSheet.create({
+  row: { flexDirection: "row", gap: space.xs },
+  btn: {
+    width: 38,
+    height: 32,
+    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  off: { opacity: 0.35 },
+});

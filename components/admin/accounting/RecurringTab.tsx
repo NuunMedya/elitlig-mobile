@@ -13,11 +13,13 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
-import { ActionSheet, Panel, RecordCard, StatRow, confirmAction, useAdminMutation, type FormValues } from "@/components/admin";
-import { Button, EmptyState, SkeletonCard } from "@/components/ui";
+import { ActionSheet, confirmAction, useAdminMutation, type FormValues } from "@/components/admin";
+import { LineRow, Lines, StageChip, ToolStage } from "@/components/admin/tools/ToolKit";
+import { Button, EmptyState, SectionHeader, Skeleton, SkeletonCard, type IconTileTone } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { formatDate } from "@/lib/admin/format";
 import {
@@ -40,7 +42,7 @@ import {
   type RecurringKind,
   type RecurringOccurrence,
 } from "@/lib/api/admin/accounting";
-import { space } from "@/theme";
+import { colors, radius, space, textScale, type } from "@/theme";
 
 import { EditorSheet } from "./EditorSheet";
 import { Muted, Note } from "./parts";
@@ -100,7 +102,13 @@ export function RecurringTab() {
     }
   };
 
-  if (query.isLoading) return <SkeletonCard />;
+  if (query.isLoading)
+    return (
+      <View style={styles.stack}>
+        <Skeleton height={150} radius="xl" />
+        <SkeletonCard />
+      </View>
+    );
   if (query.error) return <Note tone="danger" text={errorText(query.error)} action={{ label: "Tekrar dene", onPress: () => void query.refetch() }} />;
 
   const data = query.data;
@@ -109,73 +117,106 @@ export function RecurringTab() {
   const month = data?.occurrences || [];
   const lateEarlier = (data?.overdue || []).filter((o) => !month.some((m) => m.key === o.key));
   const summary = data?.summary;
+  const paidRatio = summary && summary.expected_expense > 0 ? summary.paid_expense / summary.expected_expense : 0;
 
-  const card = (o: RecurringOccurrence) => (
-    <RecordCard
-      key={o.key}
-      title={o.name}
-      subtitle={[o.period_label, o.party].filter(Boolean).join(" · ")}
-      meta={`Vade ${formatDate(o.due_date)}${open(o) || o.status === "accrued" ? ` · ${dayText(o)}` : ""}`}
-      icon={o.type === "income" ? "arrow-down" : "repeat-outline"}
-      iconTone={o.type === "income" ? "win" : o.late ? "danger" : "neutral"}
-      value={`${o.estimated ? "~" : ""}${money(o.amount)}`}
-      valueTone={o.type === "income" ? "win" : "danger"}
-      badges={[{ label: o.late && o.status === "accrued" ? "Vadesi geçti" : STATUS[o.status].label, tone: o.late ? "danger" : STATUS[o.status].tone }]}
-      onPress={() => setMenu(o)}
-      onLongPress={() => setMenu(o)}
-    >
-      {open(o) ? (
-        <View style={styles.inline}>
-          <Button label={o.type === "income" ? "Tahsil edildi" : "Ödendi"} icon="checkmark" size="sm" variant="secondary" loading={post.isPending && post.variables?.o.key === o.key} onPress={() => pay(o)} />
-        </View>
-      ) : null}
-    </RecordCard>
-  );
+  const row = (o: RecurringOccurrence) => {
+    const status = o.late && o.status === "accrued" ? { label: "Vadesi geçti", tone: "danger" as const } : { label: STATUS[o.status].label, tone: o.late ? ("danger" as const) : STATUS[o.status].tone };
+    return (
+      <LineRow
+        key={o.key}
+        leading={<DueStamp date={o.due_date} tone={o.late ? "danger" : o.status === "paid" ? "win" : o.status === "due_soon" ? "warn" : "neutral"} />}
+        title={o.name}
+        sub={[o.period_label, o.party].filter(Boolean).join(" · ")}
+        meta={open(o) || o.status === "accrued" ? dayText(o) : `Vade ${formatDate(o.due_date)}`}
+        metaIcon="time-outline"
+        value={`${o.type === "income" ? "+" : "−"}${o.estimated ? "~" : ""}${money(o.amount)}`}
+        valueTone={o.type === "income" ? "win" : "danger"}
+        badge={status}
+        stripe={o.late ? colors.danger : null}
+        muted={o.status === "skipped" || o.status === "untracked"}
+        onPress={() => setMenu(o)}
+        onLongPress={() => setMenu(o)}
+      >
+        {open(o) ? (
+          <View style={styles.inline}>
+            <Button
+              label={o.type === "income" ? "Tahsil edildi" : "Ödendi"}
+              icon="checkmark"
+              size="sm"
+              variant="secondary"
+              loading={post.isPending && post.variables?.o.key === o.key}
+              onPress={() => pay(o)}
+            />
+          </View>
+        ) : null}
+      </LineRow>
+    );
+  };
 
   return (
     <>
       {summary && items.length ? (
-        <StatRow
-          items={[
-            { label: "Bu ay beklenen", value: money(summary.expected_expense), tone: "danger" },
+        <ToolStage
+          icon="repeat"
+          tone="mint"
+          overline="Bu ay beklenen gider"
+          value={money(summary.expected_expense)}
+          caption={summary.overdue_count ? `${summary.overdue_count} dönem gecikti — en üstte listelenir.` : "Geciken dönem yok."}
+          chips={summary.overdue_count ? <StageChip label={`${summary.overdue_count} geciken`} icon="alert-circle" tone="danger" /> : <StageChip label="Zamanında" icon="checkmark-circle" tone="win" />}
+          stats={[
             { label: "Ödenen", value: money(summary.paid_expense), tone: "win" },
-            { label: "Kalan", value: money(summary.remaining_expense) },
-            { label: "Geciken", value: summary.overdue_count, tone: summary.overdue_count ? "danger" : undefined },
+            { label: "Kalan", value: money(summary.remaining_expense), tone: summary.remaining_expense ? "warn" : undefined },
+            { label: "Tamam", value: `%${Math.round(paidRatio * 100)}`, tone: "accent" },
           ]}
         />
       ) : null}
 
       {lateEarlier.length ? (
-        <Panel title={`Önceki aylardan geciken · ${lateEarlier.length}`}>
-          <View style={styles.list}>{lateEarlier.map(card)}</View>
-        </Panel>
+        <View style={styles.section}>
+          <SectionHeader title="Önceki aylardan geciken" meta={String(lateEarlier.length)} inset="flush" icon="alert-circle-outline" iconTone="red" />
+          <Lines>{lateEarlier.map(row)}</Lines>
+        </View>
       ) : null}
 
       {month.length ? (
-        <Panel title="Bu ayın dönemleri">
-          <View style={styles.list}>{month.map(card)}</View>
-        </Panel>
+        <View style={styles.section}>
+          <SectionHeader title="Bu ayın dönemleri" meta={String(month.length)} inset="flush" icon="calendar-outline" iconTone="cyan" />
+          <Lines>{month.map(row)}</Lines>
+        </View>
       ) : items.length ? (
         <Muted>Bu ay vadesi gelen düzenli ödeme yok.</Muted>
       ) : null}
 
       {items.length ? (
-        <Panel title={`Tanımlar · ${items.length}`} action={{ label: "Ekle", onPress: () => setEditor({ nonce: Date.now() }) }}>
-          <View style={styles.list}>
+        <View style={styles.section}>
+          <SectionHeader
+            title="Tanımlar"
+            meta={String(items.length)}
+            inset="flush"
+            icon="repeat-outline"
+            iconTone="violet"
+            action={{ label: "Ekle", onPress: () => setEditor({ nonce: Date.now() }) }}
+          />
+          <Lines>
             {items.map((item) => (
-              <RecordCard
+              <LineRow
                 key={item.id}
+                icon={KIND_ICON[item.kind] ?? "repeat-outline"}
+                tone={item.type === "income" ? "mint" : KIND_TONE[item.kind] ?? "violet"}
                 title={item.name}
-                subtitle={[item.kind_label, RECURRING_FREQUENCIES.find((f) => f.key === item.frequency)?.label, item.party].filter(Boolean).join(" · ")}
+                sub={[item.kind_label, RECURRING_FREQUENCIES.find((f) => f.key === item.frequency)?.label, item.party].filter(Boolean).join(" · ")}
                 meta={item.next_due ? `Sıradaki vade ${formatDate(item.next_due.due_date)}` : item.active ? "Sıradaki dönem yok" : "Durduruldu"}
-                icon="repeat-outline"
+                metaIcon="calendar-outline"
                 value={`${item.variable_amount ? "~" : ""}${money(item.amount)}`}
-                badges={item.active ? undefined : [{ label: "Pasif", tone: "neutral" }]}
+                valueSub={item.variable_amount ? "değişken" : null}
+                badge={item.active ? null : { label: "Pasif", tone: "neutral" }}
+                muted={!item.active}
+                chevron
                 onPress={() => setEditor({ item, nonce: Date.now() })}
               />
             ))}
-          </View>
-        </Panel>
+          </Lines>
+        </View>
       ) : (
         <EmptyState
           icon="repeat-outline"
@@ -298,7 +339,51 @@ export function RecurringTab() {
   );
 }
 
+/** Kalem türü → ikon ve karo tonu. */
+const KIND_ICON: Partial<Record<RecurringKind, keyof typeof Ionicons.glyphMap>> = {
+  bill: "receipt-outline",
+  salary: "person-outline",
+  rent: "home-outline",
+  subscription: "card-outline",
+  loan: "layers-outline",
+  tax: "document-text-outline",
+  insurance: "shield-checkmark-outline",
+  income: "arrow-down-outline",
+  other: "ellipsis-horizontal",
+};
+const KIND_TONE: Partial<Record<RecurringKind, IconTileTone>> = {
+  bill: "cyan",
+  salary: "violet",
+  rent: "pink",
+  subscription: "gold",
+  loan: "red",
+  tax: "neutral",
+  insurance: "mint",
+};
+
+/** Vade pulu: gün rakamı (Archivo) + kısa ay; ton vade durumunu söyler. */
+function DueStamp({ date, tone }: { date: string; tone: "danger" | "warn" | "win" | "neutral" }) {
+  const d = new Date(`${String(date).slice(0, 10)}T12:00:00`);
+  const valid = !Number.isNaN(d.getTime());
+  const fg = tone === "danger" ? colors.danger : tone === "warn" ? colors.warn : tone === "win" ? colors.win : colors.textPrimary;
+  const bg = tone === "danger" ? colors.dangerDim : tone === "warn" ? colors.warnDim : tone === "win" ? colors.winDim : colors.surface2;
+  return (
+    <View style={[styles.stamp, { backgroundColor: bg }]}>
+      <Text style={[styles.stampDay, { color: fg }]} {...textScale.badge}>
+        {valid ? d.getDate() : "–"}
+      </Text>
+      <Text style={styles.stampMon} {...textScale.badge}>
+        {valid ? d.toLocaleDateString("tr-TR", { month: "short" }).toLocaleUpperCase("tr-TR") : ""}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  list: { gap: space.sm },
+  stack: { gap: space.md },
+  section: { gap: space.sm },
   inline: { flexDirection: "row", marginTop: space.xs },
+  stamp: { width: 40, height: 44, borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
+  stampDay: { ...type.scoreXs },
+  stampMon: { ...type.nano, color: colors.textTertiary },
 });
