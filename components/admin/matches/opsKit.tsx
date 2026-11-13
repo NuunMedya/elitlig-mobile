@@ -917,3 +917,270 @@ const styles = StyleSheet.create({
   recValueLabel: { ...type.overline, color: colors.textTertiary },
   recSpecs: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, paddingLeft: 42 + space.md },
 });
+
+/* ═══════════════════════════════ EK PARÇALAR (adım içleri) ═══════════════════════════════
+ * Maç öncesi / maç sonu adımlarının ve lig ayarı düzenleyicilerinin ortak
+ * parçaları. Geriye uyumlu eklemedir; yukarıdaki API değişmez.
+ *
+ *   · NextStepCard — "sıradaki adım" kartı: degrade IconTile + versal üst
+ *                    etiket + başlık + açıklama; sağda yuvarlak ok düğmesi.
+ *   · CheckGrid    — hazırlık denetimi: üstte yüzde + GradientBar, altında
+ *                    iki sütun onay/eksik satırları.
+ *   · FieldPair    — iki form alanını yan yana dizer (tarih + saat gibi).
+ *   · VersusDivider — iki takım seçimi arasındaki "VS" ayracı.
+ *   · MiniStat     — kart içi küçük rakam hücresi (Archivo + versal etiket).
+ */
+
+export function NextStepCard({
+  icon,
+  overline = "Sıradaki adım",
+  title,
+  text,
+  tone = "signature",
+  onPress,
+  actionLabel,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  overline?: string;
+  title: string;
+  text?: string | null;
+  tone?: IconTileTone;
+  onPress?: () => void;
+  actionLabel?: string;
+}) {
+  const body = (
+    <>
+      <LinearGradient colors={colors.gradientSignature} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={kit.nextRail} />
+      <IconTile icon={icon} tone={tone} size={44} />
+      <View style={styles.flex}>
+        <Text style={kit.nextOver} numberOfLines={1} {...textScale.badge}>
+          {upperTR(overline)}
+        </Text>
+        <Text style={kit.nextTitle} numberOfLines={1} {...textScale.dense}>
+          {title}
+        </Text>
+        {text ? (
+          <Text style={kit.nextText} {...textScale.long}>
+            {text}
+          </Text>
+        ) : null}
+      </View>
+      {onPress ? (
+        <View style={kit.nextGo}>
+          <LinearGradient colors={colors.gradientSignature} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, kit.nextGoFill]} />
+          <Ionicons name="arrow-forward" size={18} color={colors.onDark} />
+        </View>
+      ) : null}
+    </>
+  );
+  return onPress ? (
+    <Touchable feedback="card" onPress={onPress} style={kit.next} accessibilityRole="button" accessibilityLabel={`${actionLabel ?? title}. ${text ?? ""}`}>
+      {body}
+    </Touchable>
+  ) : (
+    <View style={kit.next} accessible accessibilityLabel={`${title}. ${text ?? ""}`}>
+      {body}
+    </View>
+  );
+}
+
+export interface CheckItem {
+  label: string;
+  ok: boolean;
+  /** Eksikken gösterilen kısa not; verilmezse "Eksik". */
+  hint?: string;
+  /** Zorunlu değilse eksik uyarı tonu yerine nötr görünür. */
+  optional?: boolean;
+  /** Etiketin yanında küçük sayaç ("7/11"). */
+  meta?: string;
+  /** Verilirse satır dokunulabilir olur (ilgili bölüme git). */
+  onPress?: () => void;
+}
+
+export function CheckGrid({
+  title = "Hazırlık",
+  items,
+  style,
+  footer,
+}: {
+  title?: string;
+  items: CheckItem[];
+  style?: StyleProp<ViewStyle>;
+  /** Kartın dibinde ek satır (kaydedilmemiş değişiklik notu gibi). */
+  footer?: React.ReactNode;
+}) {
+  const done = items.filter((i) => i.ok).length;
+  const ratio = items.length ? done / items.length : 0;
+  const full = done === items.length;
+  const missingRequired = items.filter((i) => !i.ok && !i.optional).length;
+  return (
+    <View style={[styles.group, kit.checkBox, style]} accessible accessibilityLabel={`${title}: ${done}/${items.length} tamam`}>
+      <View style={kit.checkHead}>
+        <View style={styles.flex}>
+          <Text style={styles.groupTitle} {...textScale.dense}>
+            {upperTR(title)}
+          </Text>
+          <Text style={kit.checkSub} numberOfLines={1} {...textScale.dense}>
+            {full ? "Her şey hazır" : missingRequired ? `${missingRequired} zorunlu bilgi eksik` : "Zorunlu bilgiler tamam"}
+          </Text>
+        </View>
+        <Text style={[kit.checkPct, full || !missingRequired ? { color: colors.win } : null]} {...textScale.badge}>
+          {done}
+          <Text style={kit.checkPctOf}>/{items.length}</Text>
+        </Text>
+      </View>
+      <GradientBarLite value={ratio} />
+      <View style={kit.checkGrid}>
+        {items.map((item) => {
+          const fg = item.ok ? colors.win : item.optional ? colors.textTertiary : colors.warn;
+          const Cell = item.onPress ? Touchable : View;
+          const cellProps = item.onPress
+            ? {
+                onPress: item.onPress,
+                feedback: "row" as const,
+                haptic: "selection" as const,
+                accessibilityRole: "button" as const,
+                accessibilityLabel: `${item.label}${item.meta ? ` ${item.meta}` : ""}, ${item.ok ? "tamam" : "eksik"}. Bölüme git`,
+              }
+            : {};
+          return (
+            <Cell key={item.label} style={[kit.checkCell, item.onPress ? kit.checkCellTap : null]} {...cellProps}>
+              <View style={[kit.checkIcon, { backgroundColor: item.ok ? colors.winDim : item.optional ? colors.surface2 : colors.warnDim }]}>
+                <Ionicons name={item.ok ? "checkmark" : item.optional ? "remove" : "alert"} size={12} color={fg} />
+              </View>
+              <View style={styles.flex}>
+                <Text style={kit.checkLabel} numberOfLines={1} {...textScale.dense}>
+                  {item.label}
+                  {item.meta ? <Text style={kit.checkMeta}>{`  ${item.meta}`}</Text> : null}
+                </Text>
+                {!item.ok ? (
+                  <Text style={[kit.checkHint, { color: fg }]} numberOfLines={1} {...textScale.dense}>
+                    {item.hint ?? (item.optional ? "İsteğe bağlı" : "Eksik")}
+                  </Text>
+                ) : null}
+              </View>
+            </Cell>
+          );
+        })}
+      </View>
+      {footer}
+    </View>
+  );
+}
+
+/** GradientBar'ın hareketsiz, bağımlılıksız küçük eşi (kit içi). */
+function GradientBarLite({ value }: { value: number }) {
+  const v = Math.max(0, Math.min(1, value));
+  return (
+    <View style={kit.barTrack}>
+      <LinearGradient
+        colors={v >= 1 ? [colors.win, colors.win] : colors.gradientSignature}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={[kit.barFill, { width: `${v * 100}%` }]}
+      />
+    </View>
+  );
+}
+
+export function FieldPair({ children }: { children: React.ReactNode }) {
+  return (
+    <View style={kit.pair}>
+      {React.Children.map(children, (child) => (child ? <View style={styles.flex}>{child}</View> : null))}
+    </View>
+  );
+}
+
+export function VersusDivider({ label = "VS" }: { label?: string }) {
+  return (
+    <View style={kit.vs} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <View style={kit.vsLine} />
+      <View style={kit.vsBadge}>
+        <Text style={kit.vsText} {...textScale.badge}>
+          {label}
+        </Text>
+      </View>
+      <View style={kit.vsLine} />
+    </View>
+  );
+}
+
+export function MiniStat({ label, value, tone, style }: { label: string; value: string | number; tone?: Tone; style?: StyleProp<ViewStyle> }) {
+  return (
+    <View style={[kit.mini, style]} accessible accessibilityLabel={`${label}: ${value}`}>
+      {typeof value === "number" ? (
+        <Odometer value={value} style={[kit.miniValue, tone ? { color: toneColor(tone) } : null]} />
+      ) : (
+        <Text style={[kit.miniValue, tone ? { color: toneColor(tone) } : null]} numberOfLines={1} {...textScale.badge}>
+          {value}
+        </Text>
+      )}
+      <Text style={kit.miniLabel} numberOfLines={1} {...textScale.badge}>
+        {upperTR(label)}
+      </Text>
+    </View>
+  );
+}
+
+const kit = StyleSheet.create({
+  next: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    padding: space.md,
+    paddingLeft: space.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+    overflow: "hidden",
+  },
+  nextRail: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3 },
+  nextOver: { ...type.overline, color: colors.brandAccent },
+  nextTitle: { ...type.h3, color: colors.textPrimary, marginTop: space.xxs },
+  nextText: { ...type.caption, color: colors.textSecondary, marginTop: space.xxs },
+  nextGo: { width: 40, height: 40, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  nextGoFill: { borderRadius: radius.pill },
+
+  checkBox: { gap: space.m },
+  checkHead: { flexDirection: "row", alignItems: "flex-end", gap: space.md },
+  checkSub: { ...type.h4, color: colors.textPrimary, marginTop: space.xxs },
+  checkPct: { ...type.scoreMd, color: colors.textPrimary },
+  checkPctOf: { ...type.scoreXs, color: colors.textTertiary },
+  checkGrid: { flexDirection: "row", flexWrap: "wrap", rowGap: space.m },
+  checkCell: { width: "50%", flexDirection: "row", alignItems: "center", gap: space.s, paddingRight: space.s },
+  checkIcon: { width: 22, height: 22, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  checkCellTap: { minHeight: 36, borderRadius: radius.md },
+  checkLabel: { ...type.labelSm, color: colors.textPrimary },
+  checkMeta: { ...type.numSm, color: colors.textTertiary },
+  checkHint: { ...type.meta },
+  barTrack: { height: 6, borderRadius: 3, backgroundColor: colors.surface3, overflow: "hidden" },
+  barFill: { height: 6, borderRadius: 3 },
+
+  pair: { flexDirection: "row", gap: space.m },
+
+  vs: { flexDirection: "row", alignItems: "center", gap: space.m, marginVertical: -space.xs },
+  vsLine: { flex: 1, height: hairline, backgroundColor: colors.separator },
+  vsBadge: {
+    paddingHorizontal: space.m,
+    paddingVertical: space.xxs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  vsText: { ...type.overline, color: colors.brandAccent },
+
+  mini: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: space.m,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+    gap: space.xxs,
+  },
+  miniValue: { ...type.scoreMd, color: colors.textPrimary },
+  miniLabel: { ...type.overline, color: colors.textTertiary },
+});

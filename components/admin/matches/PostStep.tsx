@@ -24,8 +24,8 @@ import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Image, StyleSheet, Text, View } from "react-native";
 
-import { ActionSheet, Panel, SelectField, confirmAction, useAdminMutation, type Option } from "@/components/admin";
-import { Button, Chip, ChipGroup, EmptyState, Input, SkeletonListRow, StatBar, Touchable } from "@/components/ui";
+import { ActionSheet, SelectField, confirmAction, useAdminMutation, type Option } from "@/components/admin";
+import { Badge, Button, Chip, ChipGroup, EmptyState, Input, Odometer, SkeletonListRow, StatBar, TeamLogo, Touchable } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { errorText } from "@/lib/admin/errors";
 import {
@@ -57,10 +57,11 @@ import {
 } from "@/lib/api/admin/matches";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, ratingColors, space, textScale, type } from "@/theme";
 
 import { EventSheet, draftToBody, type EventDraft } from "./EventSheet";
 import { clientEventId, eventSide, toSquad, type Side, type SquadPlayer, type StepKey } from "./model";
+import { CheckGrid, FieldPair, MiniStat, NextStepCard, OpsGroup } from "./opsKit";
 import { Note, SidePicker, StepSaveBar } from "./parts";
 import { ResultSheet } from "./ResultSheet";
 import { StatsEditor } from "./StatsEditor";
@@ -451,14 +452,22 @@ export function PostStep({
     { key: "awards", label: "Maçın enleri", done: highlightCount === HIGHLIGHT_FIELDS.length, meta: `${highlightCount}/${HIGHLIGHT_FIELDS.length}`, tab: "awards" },
     { key: "interview", label: "Röportaj linki", done: Boolean(content.interview.trim()), tab: "content" },
   ];
-  const checksDone = checks.filter((c) => c.done).length;
 
   const loading = lineupQuery.isLoading;
   const noSquad = !loading && allPlayers.length === 0;
 
+  /* Puan sekmesinin özeti: seçili takımın puanlı oyuncu sayısı ve ortalaması. */
+  const sideValues = squads[ratingSide]
+    .map((p) => normalizeRating(ratings[p.id]))
+    .filter((v): v is number => v != null && Number.isFinite(v));
+  const sideAvg = sideValues.length ? sideValues.reduce((a, b) => a + b, 0) / sideValues.length : null;
+
   /* Sabit kaydet çubuğu: bulunduğun sekmenin kaydı; başka sekmedeysen bekleyen kayıt. */
   const barKind: "ratings" | "content" | null =
     tab === "ratings" ? (canStats ? "ratings" : null) : tab === "awards" || tab === "content" ? (canContent ? "content" : null) : ratingsDirty && canStats ? "ratings" : contentDirty && canContent ? "content" : null;
+
+  const homeScore = Number(match.first_team_score ?? 0);
+  const awayScore = Number(match.second_team_score ?? 0);
 
   return (
     <View style={styles.stack}>
@@ -473,28 +482,57 @@ export function PostStep({
         />
       ) : null}
 
-      {/* Sonuç */}
-      <Panel title={finished ? "MAÇ SONUCU" : "ANLIK SKOR"}>
-        <View style={styles.summaryRow}>
-          <SideSummary name={match.first_team_name} goals={summary.goals.home} cards={summary.cards.home} />
-          <View style={styles.summaryScore}>
-            <Text style={styles.score} {...textScale.badge}>
-              {match.first_team_score ?? 0} – {match.second_team_score ?? 0}
+      {/* Sonuç — skor plakası + iki taraflı golcü / kart listesi */}
+      <OpsGroup
+        title={finished ? "Maç sonucu" : "Anlık skor"}
+        icon="football-outline"
+        tone={finished ? "mint" : "cyan"}
+        right={manual ? <Badge label="Tescilli" tone="warn" size="xs" icon="ribbon-outline" /> : finished ? <Badge label="Yayında" tone="win" size="xs" dot /> : null}
+      >
+        <View style={styles.board}>
+          <View style={styles.boardSide}>
+            <TeamLogo name={homeName} size={40} />
+            <Text style={[styles.boardName, finished && awayScore > homeScore ? styles.dim : null]} numberOfLines={2} {...textScale.dense}>
+              {homeName}
             </Text>
-            {manual ? (
-              <Text style={styles.source} {...textScale.dense}>
-                {resultSourceLabel(match)}
-                {match.result_note ? ` · ${match.result_note}` : ""}
+          </View>
+          <View style={styles.boardScore}>
+            <View style={styles.boardDigits}>
+              <Odometer value={homeScore} style={[styles.score, awayScore > homeScore ? styles.dim : null]} />
+              <Text style={styles.scoreDash} {...textScale.badge}>
+                :
               </Text>
-            ) : null}
+              <Odometer value={awayScore} style={[styles.score, homeScore > awayScore ? styles.dim : null]} />
+            </View>
             {summary.subs ? (
               <Text style={styles.subtle} {...textScale.dense}>
                 {summary.subs} değişiklik
               </Text>
             ) : null}
           </View>
-          <SideSummary name={match.second_team_name} goals={summary.goals.away} cards={summary.cards.away} alignRight />
+          <View style={styles.boardSide}>
+            <TeamLogo name={awayName} size={40} />
+            <Text style={[styles.boardName, finished && homeScore > awayScore ? styles.dim : null]} numberOfLines={2} {...textScale.dense}>
+              {awayName}
+            </Text>
+          </View>
         </View>
+        {manual ? (
+          <View style={styles.sourceRow}>
+            <Ionicons name="ribbon-outline" size={13} color={colors.warn} />
+            <Text style={styles.source} numberOfLines={2} {...textScale.dense}>
+              {resultSourceLabel(match)}
+              {match.result_note ? ` · ${match.result_note}` : ""}
+            </Text>
+          </View>
+        ) : null}
+        {summary.goals.home.length + summary.goals.away.length + summary.cards.home.length + summary.cards.away.length > 0 ? (
+          <View style={styles.scorers}>
+            <SideSummary goals={summary.goals.home} cards={summary.cards.home} />
+            <View style={styles.scorersSep} />
+            <SideSummary goals={summary.goals.away} cards={summary.cards.away} alignRight />
+          </View>
+        ) : null}
         <View style={styles.actions}>
           {canResult ? (
             <Button
@@ -513,54 +551,60 @@ export function PostStep({
         {!finished && onGoStep && status !== "canli" ? (
           <Button label="Canlı akıştan dakika dakika gir" icon="radio-outline" variant="ghost" size="sm" onPress={() => onGoStep("canli")} />
         ) : null}
-      </Panel>
+      </OpsGroup>
 
       {noSquad ? (
-        <View style={styles.stack}>
-          <Note
-            tone="warn"
-            text="Bu maçın kadrosu girilmemiş. Puan, istatistik, maçın enleri ve olaylar kadrodaki oyunculara yazılır; önce iki takımın kadrosunu gir. Skor tescili ve içerik kadro olmadan da girilebilir."
-          />
-          {onGoStep ? <Button label="Kadroyu gir" icon="people-outline" onPress={() => onGoStep("kadro")} fullWidth /> : null}
-        </View>
+        <NextStepCard
+          icon="people-outline"
+          tone="gold"
+          overline="Önce kadro"
+          title="Kadro girilmemiş"
+          text="Puan, istatistik, maçın enleri ve olaylar kadrodaki oyunculara yazılır. Skor tescili ve içerik kadro olmadan da girilebilir."
+          onPress={onGoStep ? () => onGoStep("kadro") : undefined}
+          actionLabel="Kadroyu gir"
+        />
       ) : null}
 
       {/* Takım istatistikleri */}
       {sortedEvents.length ? (
-        <Panel title="TAKIM İSTATİSTİKLERİ">
+        <OpsGroup title="Takım istatistikleri" icon="stats-chart-outline" tone="cyan" right={<Text style={styles.groupCount} {...textScale.badge}>{sortedEvents.length} olay</Text>}>
+          <View style={styles.statSides}>
+            <Text style={styles.statSide} numberOfLines={1} {...textScale.dense}>
+              {homeName}
+            </Text>
+            <Text style={[styles.statSide, styles.right]} numberOfLines={1} {...textScale.dense}>
+              {awayName}
+            </Text>
+          </View>
           {summary.stats.map((row) => (
             <StatBar key={row.key} label={row.label} home={row.home} away={row.away} tone={row.home + row.away ? "sides" : "neutral"} animate={false} />
           ))}
-        </Panel>
+        </OpsGroup>
       ) : null}
 
       {/* Kontrol listesi */}
-      <Panel title={`KONTROL LİSTESİ · ${checksDone}/${checks.length}`}>
-        <View style={styles.checks}>
-          {checks.map((item) => (
-            <Touchable
-              key={item.key}
-              onPress={() => setTab(item.tab)}
-              haptic="selection"
-              style={styles.check}
-              accessibilityRole="button"
-              accessibilityLabel={`${item.label}${item.meta ? ` ${item.meta}` : ""}, ${item.done ? "tamam" : "eksik"}. Bölüme git`}
-            >
-              <Ionicons name={item.done ? "checkmark-circle" : "ellipse-outline"} size={18} color={item.done ? colors.win : colors.textTertiary} />
-              <Text style={styles.checkText} numberOfLines={1} {...textScale.dense}>
-                {item.label}
-                {item.meta ? ` ${item.meta}` : ""}
+      <CheckGrid
+        title="Yayın kontrolü"
+        items={checks.map((c) => ({
+          label: c.label,
+          ok: c.done,
+          meta: c.meta,
+          hint: "Bölüme git",
+          optional: c.key === "interview" || c.key === "cover",
+          onPress: () => setTab(c.tab),
+        }))}
+        footer={
+          anyDirty ? (
+            <View style={styles.dirtyRow}>
+              <View style={styles.dirtyDot} />
+              <Text style={styles.dirtyText} {...textScale.dense}>
+                Kaydedilmemiş değişiklik var{ratingsDirty ? " · puanlar" : ""}
+                {contentDirty ? " · içerik / enler" : ""}
               </Text>
-            </Touchable>
-          ))}
-        </View>
-        {anyDirty ? (
-          <Text style={styles.source} {...textScale.dense}>
-            Kaydedilmemiş değişiklik var{ratingsDirty ? " (puanlar)" : ""}
-            {contentDirty ? " (içerik / enler)" : ""}.
-          </Text>
-        ) : null}
-      </Panel>
+            </View>
+          ) : null
+        }
+      />
 
       <ChipGroup contentPadding={0}>
         {(
@@ -588,95 +632,145 @@ export function PostStep({
         <SkeletonListRow count={6} />
       ) : tab === "ratings" ? (
         <View style={styles.stack}>
-          <Text style={styles.subtle} {...textScale.dense}>
-            {filled} / {allPlayers.length} oyuncuya puan verildi{invalidCount ? ` · ${invalidCount} geçersiz` : ""} · 0–10 arası, ondalık olabilir
-          </Text>
           <SidePicker value={ratingSide} onChange={setRatingSide} homeName={homeName} awayName={awayName} />
+          <View style={styles.miniRow}>
+            <MiniStat label="Puanlanan" value={`${sideValues.length}/${squads[ratingSide].length}`} />
+            <MiniStat label="Ortalama" value={sideAvg != null ? sideAvg.toFixed(1).replace(".", ",") : "—"} tone={sideAvg != null ? "brand" : undefined} />
+            <MiniStat label="Geçersiz" value={invalidCount} tone={invalidCount ? "danger" : undefined} />
+          </View>
           {clearedRatings ? <Note text="Kayıtlı bir puan boşaltılarak silinemez; yeni bir değer yazarak değiştir." /> : null}
           {squads[ratingSide].length === 0 ? (
             <Note text="Bu takımın kadrosu boş; puan vermek için önce Kadro adımını tamamla." />
           ) : (
-            squads[ratingSide].map((p) => (
-              <View key={p.id} style={styles.ratingRow}>
-                <View style={styles.flex}>
-                  <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
-                    {p.number ? `#${p.number} ` : ""}
-                    {p.name}
-                  </Text>
-                  <Text style={styles.subtle} numberOfLines={1} {...textScale.dense}>
-                    {[p.role === "starter" ? "İlk 11" : p.role === "bench" ? "Yedek" : null, p.position].filter(Boolean).join(" · ")}
-                  </Text>
-                </View>
-                {canStats ? (
-                  <Touchable onPress={() => bumpRating(p.id, -0.5)} haptic="selection" style={styles.bump} accessibilityRole="button" accessibilityLabel={`${p.name} puanını yarım azalt`}>
-                    <Ionicons name="remove" size={18} color={colors.textPrimary} />
-                  </Touchable>
-                ) : null}
-                <Input
-                  value={ratings[p.id] ?? ""}
-                  onChangeText={(t) => setRatings((r) => ({ ...r, [p.id]: t.replace(/[^\d.,]/g, "").slice(0, 4) }))}
-                  keyboardType="decimal-pad"
-                  placeholder="–"
-                  size="sm"
-                  error={isRatingInvalid(ratings[p.id]) ? "0–10" : undefined}
-                  containerStyle={styles.ratingInput}
-                  editable={canStats}
-                  accessibilityLabel={`${p.name} puanı`}
-                />
-                {canStats ? (
-                  <Touchable onPress={() => bumpRating(p.id, 0.5)} haptic="selection" style={styles.bump} accessibilityRole="button" accessibilityLabel={`${p.name} puanını yarım artır`}>
-                    <Ionicons name="add" size={18} color={colors.textPrimary} />
-                  </Touchable>
-                ) : null}
-              </View>
-            ))
+            <OpsGroup title={`${ratingSide === "home" ? homeName : awayName} · oyuncu puanları`} hint="0–10 arası; ± yarım puan, ondalık olabilir." flush>
+              {squads[ratingSide].map((p, index) => {
+                const value = normalizeRating(ratings[p.id]);
+                const rc = ratingColors(colors, value != null && !isRatingInvalid(ratings[p.id]) ? value : null);
+                return (
+                  <View key={p.id} style={[styles.ratingRow, index > 0 ? styles.rowDivider : null]}>
+                    <View style={[styles.shirt, p.role === "starter" ? styles.shirtStarter : null]}>
+                      <Text style={[styles.shirtNo, p.role === "starter" ? styles.shirtNoStarter : null]} {...textScale.badge}>
+                        {p.number || "–"}
+                      </Text>
+                    </View>
+                    <View style={styles.flex}>
+                      <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
+                        {p.name}
+                        {p.captain ? <Text style={styles.captain}>  (K)</Text> : null}
+                      </Text>
+                      <Text style={styles.subtle} numberOfLines={1} {...textScale.dense}>
+                        {[p.role === "starter" ? "İlk 11" : p.role === "bench" ? "Yedek" : null, p.position].filter(Boolean).join(" · ") || "Kadroda"}
+                      </Text>
+                    </View>
+                    <View style={[styles.stepper, { backgroundColor: rc.bg }]}>
+                      {canStats ? (
+                        <Touchable onPress={() => bumpRating(p.id, -0.5)} haptic="selection" style={styles.bump} accessibilityRole="button" accessibilityLabel={`${p.name} puanını yarım azalt`}>
+                          <Ionicons name="remove" size={16} color={colors.textPrimary} />
+                        </Touchable>
+                      ) : null}
+                      <Input
+                        value={ratings[p.id] ?? ""}
+                        onChangeText={(t) => setRatings((r) => ({ ...r, [p.id]: t.replace(/[^\d.,]/g, "").slice(0, 4) }))}
+                        keyboardType="decimal-pad"
+                        placeholder="–"
+                        size="sm"
+                        error={isRatingInvalid(ratings[p.id]) ? "0–10" : undefined}
+                        containerStyle={styles.ratingInput}
+                        editable={canStats}
+                        accessibilityLabel={`${p.name} puanı`}
+                      />
+                      {canStats ? (
+                        <Touchable onPress={() => bumpRating(p.id, 0.5)} haptic="selection" style={styles.bump} accessibilityRole="button" accessibilityLabel={`${p.name} puanını yarım artır`}>
+                          <Ionicons name="add" size={16} color={colors.textPrimary} />
+                        </Touchable>
+                      ) : null}
+                    </View>
+                  </View>
+                );
+              })}
+            </OpsGroup>
           )}
         </View>
       ) : tab === "awards" ? (
         <View style={styles.stack}>
           {noSquad ? <Note text="Ödüller kadrodaki oyunculardan seçilir; önce Kadro adımını tamamla." /> : null}
-          {HIGHLIGHT_FIELDS.map(({ key, label }) => {
-            const suggestion = suggestions[key];
-            return (
-              <View key={key} style={styles.award}>
-                <SelectField<string>
-                  label={label}
-                  value={highlights[key] || null}
-                  options={playerOptions}
-                  icon={key === "best_player" ? "star-outline" : "ribbon-outline"}
-                  placeholder="Oyuncu seç"
-                  clearable
-                  disabled={!canContent}
-                  onChange={(v) => setHighlights((h) => ({ ...h, [key]: v ?? "" }))}
-                />
-                {suggestion && suggestion.id !== highlights[key] && canContent ? (
-                  <Chip
-                    label={`Öneri: ${nameOf(suggestion.id)} (${suggestion.reason})`}
-                    icon="sparkles-outline"
-                    size="sm"
-                    onPress={() => setHighlights((h) => ({ ...h, [key]: suggestion.id }))}
+          <OpsGroup
+            title="Maçın enleri"
+            icon="trophy-outline"
+            tone="gold"
+            hint="Öneriler olaylardan ve puanlardan hesaplanır; dokununca seçilir."
+            right={<Badge label={`${highlightCount}/${HIGHLIGHT_FIELDS.length}`} tone={highlightCount === HIGHLIGHT_FIELDS.length ? "win" : "neutral"} size="xs" />}
+          >
+            {HIGHLIGHT_FIELDS.map(({ key, label }) => {
+              const suggestion = suggestions[key];
+              return (
+                <View key={key} style={styles.award}>
+                  <SelectField<string>
+                    label={label}
+                    value={highlights[key] || null}
+                    options={playerOptions}
+                    icon={AWARD_ICON[key] ?? "ribbon-outline"}
+                    placeholder="Oyuncu seç"
+                    clearable
+                    disabled={!canContent}
+                    onChange={(v) => setHighlights((h) => ({ ...h, [key]: v ?? "" }))}
                   />
-                ) : null}
-              </View>
-            );
-          })}
+                  {suggestion && suggestion.id !== highlights[key] && canContent ? (
+                    <Touchable
+                      onPress={() => setHighlights((h) => ({ ...h, [key]: suggestion.id }))}
+                      feedback="row"
+                      haptic="selection"
+                      style={styles.suggest}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Öneriyi seç: ${nameOf(suggestion.id)}, ${suggestion.reason}`}
+                    >
+                      <Ionicons name="sparkles" size={13} color={colors.brandAccent} />
+                      <Text style={styles.suggestText} numberOfLines={1} {...textScale.dense}>
+                        Öneri: <Text style={styles.suggestName}>{nameOf(suggestion.id)}</Text> · {suggestion.reason}
+                      </Text>
+                      <Text style={styles.suggestAct} {...textScale.badge}>
+                        SEÇ
+                      </Text>
+                    </Touchable>
+                  ) : null}
+                </View>
+              );
+            })}
+          </OpsGroup>
         </View>
       ) : tab === "content" ? (
         <View style={styles.stack}>
-          <Input label="Manşet" value={content.title} onChangeText={(title) => setContent((c) => ({ ...c, title }))} placeholder="Maçın manşeti" maxLength={255} editable={canContent} />
-          <Input
-            label="Maç raporu / özet"
-            value={content.report}
-            onChangeText={(report) => setContent((c) => ({ ...c, report }))}
-            placeholder="Maçın hikâyesi, öne çıkan anlar"
-            multiline
-            numberOfLines={6}
-            editable={canContent}
-          />
-          <View style={styles.cover}>
-            {content.coverImage ? <Image source={{ uri: content.coverImage }} style={styles.coverImage} resizeMode="cover" accessibilityLabel="Kapak görseli" /> : null}
+          <OpsGroup title="Haber" icon="newspaper-outline" tone="violet" hint="Manşet ve rapor maç sayfasında ve haber akışında görünür.">
+            <Input label="Manşet" floating value={content.title} onChangeText={(title) => setContent((c) => ({ ...c, title }))} placeholder="Maçın manşeti" maxLength={255} editable={canContent} />
+            <Input
+              label="Maç raporu / özet"
+              value={content.report}
+              onChangeText={(report) => setContent((c) => ({ ...c, report }))}
+              placeholder="Maçın hikâyesi, öne çıkan anlar"
+              multiline
+              numberOfLines={6}
+              editable={canContent}
+            />
+            <Text style={styles.counter} {...textScale.dense}>
+              {content.report.trim() ? `${content.report.trim().split(/\s+/).length} kelime` : "Rapor boş"}
+            </Text>
+          </OpsGroup>
+          <OpsGroup title="Kapak görseli" icon="image-outline" tone="pink">
+            <View style={styles.coverFrame}>
+              {content.coverImage ? (
+                <Image source={{ uri: content.coverImage }} style={styles.coverImage} resizeMode="cover" accessibilityLabel="Kapak görseli" />
+              ) : (
+                <View style={styles.coverEmpty}>
+                  <Ionicons name="image-outline" size={28} color={colors.textTertiary} />
+                  <Text style={styles.subtle} {...textScale.dense}>
+                    Kapak yok · 16:9 önerilir
+                  </Text>
+                </View>
+              )}
+            </View>
             <Input
               label="Kapak görseli adresi"
+              floating
               value={content.coverImage}
               onChangeText={(coverImage) => setContent((c) => ({ ...c, coverImage }))}
               placeholder="https://…"
@@ -684,77 +778,82 @@ export function PostStep({
               keyboardType="url"
               editable={canContent}
             />
-            {canContent ? <Button label="Galeriden yükle" icon="image-outline" variant="secondary" size="sm" onPress={pickCover} loading={uploading} /> : null}
-          </View>
-          <Input
-            label="Canlı yayın / maç videosu"
-            value={content.liveLink}
-            onChangeText={(liveLink) => setContent((c) => ({ ...c, liveLink }))}
-            placeholder="https://youtube.com/…"
-            autoCapitalize="none"
-            keyboardType="url"
-            editable={canContent}
-          />
-          <Input
-            label="Röportaj linki"
-            value={content.interview}
-            onChangeText={(interview) => setContent((c) => ({ ...c, interview }))}
-            placeholder="https://…"
-            autoCapitalize="none"
-            keyboardType="url"
-            editable={canContent}
-          />
-          <Input
-            label="Fotoğraflar linki"
-            value={content.photos}
-            onChangeText={(photos) => setContent((c) => ({ ...c, photos }))}
-            placeholder="https://…"
-            autoCapitalize="none"
-            keyboardType="url"
-            editable={canContent}
-          />
+            {canContent ? <Button label="Galeriden yükle" icon="cloud-upload-outline" variant="secondary" size="sm" onPress={pickCover} loading={uploading} /> : null}
+          </OpsGroup>
+          <OpsGroup title="Bağlantılar" icon="link-outline" tone="cyan">
+            <Input
+              label="Canlı yayın / maç videosu"
+              floating
+              leadingIcon="videocam-outline"
+              value={content.liveLink}
+              onChangeText={(liveLink) => setContent((c) => ({ ...c, liveLink }))}
+              placeholder="https://youtube.com/…"
+              autoCapitalize="none"
+              keyboardType="url"
+              editable={canContent}
+            />
+            <Input
+              label="Röportaj linki"
+              floating
+              leadingIcon="mic-outline"
+              value={content.interview}
+              onChangeText={(interview) => setContent((c) => ({ ...c, interview }))}
+              placeholder="https://…"
+              autoCapitalize="none"
+              keyboardType="url"
+              editable={canContent}
+            />
+            <Input
+              label="Fotoğraflar linki"
+              floating
+              leadingIcon="images-outline"
+              value={content.photos}
+              onChangeText={(photos) => setContent((c) => ({ ...c, photos }))}
+              placeholder="https://…"
+              autoCapitalize="none"
+              keyboardType="url"
+              editable={canContent}
+            />
+          </OpsGroup>
         </View>
       ) : tab === "stats" ? (
         <View style={styles.stack}>
           <StatsEditor match={match} squads={squads} />
-          <Panel title="TAKIM YÜZDELERİ">
-            <Text style={styles.subtle} {...textScale.long}>
-              Maç kaydındaki takım yüzdesi alanları (0–100); web “İstatistik Gir” ekranındaki İlk / İkinci Takım Yüzdesi ile aynıdır.
-            </Text>
-            <View style={styles.actions}>
+          <OpsGroup
+            title="Takım yüzdeleri"
+            icon="pie-chart-outline"
+            tone="mint"
+            hint="Maç kaydındaki takım yüzdesi alanları (0–100); web “İstatistik Gir” ekranıyla aynıdır."
+          >
+            <FieldPair>
               <Input
                 label={homeName}
+                floating
                 value={pct.home}
                 onChangeText={(t) => setPct((v) => ({ ...v, home: t.replace(/\D/g, "").slice(0, 3) }))}
                 keyboardType="number-pad"
                 placeholder="0"
-                containerStyle={styles.flex}
                 editable={canContent}
                 error={pct.home !== "" && Number(pct.home) > 100 ? "0–100" : undefined}
               />
               <Input
                 label={awayName}
+                floating
                 value={pct.away}
                 onChangeText={(t) => setPct((v) => ({ ...v, away: t.replace(/\D/g, "").slice(0, 3) }))}
                 keyboardType="number-pad"
                 placeholder="0"
-                containerStyle={styles.flex}
                 editable={canContent}
                 error={pct.away !== "" && Number(pct.away) > 100 ? "0–100" : undefined}
               />
-            </View>
+            </FieldPair>
             {canContent ? (
               <Button label="Yüzdeleri kaydet" icon="save-outline" variant="secondary" onPress={() => pctMut.mutate(undefined)} loading={pctMut.isPending} disabled={!pctDirty || pctInvalid} />
             ) : null}
-          </Panel>
+          </OpsGroup>
         </View>
       ) : (
         <View style={styles.stack}>
-          <Text style={styles.subtle} {...textScale.long}>
-            {manual
-              ? "Skor elle / hükmen tescilli: olaylar istatistik ve golcü listesi için yazılır, skoru değiştirmez."
-              : "Gol olayı ekleyip sildikçe skor olaylardan yeniden hesaplanır."}
-          </Text>
           {canEvents ? (
             <Button label="Olay ekle" icon="add-circle-outline" onPress={openAdd} disabled={noSquad} fullWidth />
           ) : (
@@ -773,36 +872,55 @@ export function PostStep({
               compact
             />
           ) : (
-            <View style={styles.timeline}>
-              {sortedEvents.map((ev) => {
+            <OpsGroup
+              title="Olay akışı"
+              hint={
+                manual
+                  ? "Skor elle / hükmen tescilli: olaylar istatistik ve golcü listesi için yazılır, skoru değiştirmez."
+                  : "Gol olayı ekleyip sildikçe skor olaylardan yeniden hesaplanır."
+              }
+              flush
+            >
+              {sortedEvents.map((ev, index) => {
                 const code = String(ev.olay_kodu).toUpperCase();
                 const s = eventSide(ev, homeTeamId, awayTeamId);
+                const tint = eventColor(code);
                 return (
                   <Touchable
                     key={ev.id}
                     onPress={canEvents ? () => setActionFor(ev) : undefined}
-                    style={styles.event}
+                    feedback="row"
+                    style={[styles.event, index > 0 ? styles.rowDivider : null]}
                     accessibilityRole="button"
                     accessibilityLabel={`${ev.dakika ?? "–"}. dakika ${eventLabel(code)}, ${describeEvent(ev)}. Düzenle ya da sil`}
                   >
-                    <Text style={styles.minute} {...textScale.badge}>
-                      {ev.dakika != null ? `${ev.dakika}'` : "–"}
-                    </Text>
-                    <View style={[styles.dot, { backgroundColor: eventColor(code) }]} />
+                    <View style={[styles.sideRail, { backgroundColor: s === "home" ? colors.brandAccent : s === "away" ? colors.accentText : colors.surface3 }]} />
+                    <View style={styles.minuteBox}>
+                      <Text style={styles.minute} {...textScale.badge}>
+                        {ev.dakika != null ? `${ev.dakika}'` : "–"}
+                      </Text>
+                      {Number(ev.devre) > 1 ? (
+                        <Text style={styles.period} {...textScale.badge}>
+                          {Number(ev.devre) === 2 ? "2Y" : "UZ"}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <View style={[styles.eventIcon, { borderColor: tint }]}>
+                      <Ionicons name={eventIcon(code)} size={14} color={tint} />
+                    </View>
                     <View style={styles.flex}>
                       <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
                         {eventLabel(code)}
                       </Text>
                       <Text style={styles.subtle} numberOfLines={1} {...textScale.dense}>
                         {describeEvent(ev)} · {s === "home" ? homeName : s === "away" ? awayName : "Takım yok"}
-                        {Number(ev.devre) > 1 ? ` · ${Number(ev.devre) === 2 ? "2. yarı" : "Uzatma"}` : ""}
                       </Text>
                     </View>
                     {canEvents ? <Ionicons name="ellipsis-horizontal" size={18} color={colors.textTertiary} /> : null}
                   </Touchable>
                 );
               })}
-            </View>
+            </OpsGroup>
           )}
         </View>
       )}
@@ -852,87 +970,192 @@ export function PostStep({
 }
 
 function SideSummary({
-  name,
   goals,
   cards,
   alignRight,
 }: {
-  name: string;
   goals: { name: string; minute: number | null; own: boolean }[];
   cards: { name: string; minute: number | null; red: boolean }[];
   alignRight?: boolean;
 }) {
-  const align = alignRight ? styles.right : null;
+  const row = [styles.line, alignRight ? styles.lineRight : null];
   return (
     <View style={styles.flex}>
-      <Text style={[styles.name, align]} numberOfLines={2} {...textScale.dense}>
-        {name}
-      </Text>
       {goals.map((g, i) => (
-        <Text key={`g${i}`} style={[styles.line, align]} numberOfLines={1} {...textScale.dense}>
-          {g.name}
-          {g.own ? " (k.k.)" : ""} {g.minute != null ? `${g.minute}'` : ""}
-        </Text>
+        <View key={`g${i}`} style={row}>
+          <Ionicons name="football" size={12} color={g.own ? colors.danger : colors.textSecondary} />
+          <Text style={styles.lineText} numberOfLines={1} {...textScale.dense}>
+            {g.name}
+            {g.own ? " (k.k.)" : ""}
+          </Text>
+          {g.minute != null ? (
+            <Text style={styles.lineMin} {...textScale.badge}>
+              {g.minute}'
+            </Text>
+          ) : null}
+        </View>
       ))}
       {cards.map((c, i) => (
-        <Text key={`c${i}`} style={[styles.line, align, { color: c.red ? colors.danger : colors.warn }]} numberOfLines={1} {...textScale.dense}>
-          {c.red ? "Kırmızı" : "Sarı"} · {c.name} {c.minute != null ? `${c.minute}'` : ""}
-        </Text>
+        <View key={`c${i}`} style={row}>
+          <View style={[styles.card, { backgroundColor: c.red ? colors.danger : colors.warn }]} />
+          <Text style={styles.lineText} numberOfLines={1} {...textScale.dense}>
+            {c.name}
+          </Text>
+          {c.minute != null ? (
+            <Text style={styles.lineMin} {...textScale.badge}>
+              {c.minute}'
+            </Text>
+          ) : null}
+        </View>
       ))}
     </View>
   );
 }
 
+/** Ödül → ikon. */
+const AWARD_ICON: Partial<Record<HighlightKey, keyof typeof Ionicons.glyphMap>> = {
+  best_player: "star-outline",
+  best_goalkeeper: "hand-left-outline",
+  best_defender: "shield-outline",
+  best_midfielder: "git-network-outline",
+  best_forward: "flash-outline",
+};
+
+/** Olay kodu → ikon (zaman akışı). */
+function eventIcon(code: string): keyof typeof Ionicons.glyphMap {
+  if (code.startsWith("GOAL_")) return "football";
+  if (code === "YELLOW_CARD" || code === "RED_CARD") return "square";
+  if (code === "SUBSTITUTION") return "swap-vertical";
+  if (code === "SAVE") return "hand-left";
+  if (code === "ASSIST") return "navigate";
+  if (code === "FOUL") return "warning";
+  return "ellipse";
+}
+
 const styles = StyleSheet.create({
   stack: { gap: space.md },
-  flex: { flex: 1 },
+  flex: { flex: 1, minWidth: 0 },
   right: { textAlign: "right" },
-  summaryRow: { flexDirection: "row", gap: space.sm, alignItems: "flex-start" },
-  summaryScore: { alignItems: "center", gap: space.xxs, minWidth: 80 },
-  score: { ...type.scoreMd, color: colors.textPrimary },
-  source: { ...type.caption, color: colors.warn, textAlign: "center" },
+  dim: { opacity: 0.5 },
+
+  board: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  boardSide: { flex: 1, alignItems: "center", gap: space.s },
+  boardName: { ...type.h4, color: colors.textPrimary, textAlign: "center" },
+  boardScore: { alignItems: "center", gap: space.xxs, minWidth: 96 },
+  boardDigits: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  score: { ...type.scoreLg, color: colors.textPrimary },
+  scoreDash: { ...type.scoreMd, color: colors.textTertiary },
+  sourceRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.xs },
+  source: { ...type.caption, color: colors.warn, textAlign: "center", flexShrink: 1 },
+  scorers: {
+    flexDirection: "row",
+    gap: space.md,
+    paddingTop: space.m,
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+  },
+  scorersSep: { width: hairline, backgroundColor: colors.separator },
+  line: { flexDirection: "row", alignItems: "center", gap: space.xs, minHeight: 20 },
+  lineRight: { flexDirection: "row-reverse" },
+  lineText: { ...type.caption, color: colors.textSecondary, flexShrink: 1 },
+  lineMin: { ...type.numSm, color: colors.textTertiary },
+  card: { width: 8, height: 11, borderRadius: 2 },
+
+  groupCount: { ...type.numSm, color: colors.textTertiary },
+  statSides: { flexDirection: "row", justifyContent: "space-between", gap: space.md },
+  statSide: { ...type.overline, color: colors.textTertiary, flex: 1 },
+
+  dirtyRow: { flexDirection: "row", alignItems: "center", gap: space.s, paddingTop: space.xs },
+  dirtyDot: { width: 7, height: 7, borderRadius: radius.pill, backgroundColor: colors.warn },
+  dirtyText: { ...type.caption, color: colors.warn },
+
   subtle: { ...type.caption, color: colors.textTertiary },
-  name: { ...type.label, color: colors.textPrimary },
-  line: { ...type.caption, color: colors.textSecondary },
+  name: { ...type.h4, color: colors.textPrimary },
+  captain: { ...type.caption, color: colors.brandAccent },
+  miniRow: { flexDirection: "row", gap: space.sm },
+  rowDivider: { borderTopWidth: hairline, borderTopColor: colors.separator },
   ratingRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
-    paddingVertical: space.xs,
-    borderBottomWidth: hairline,
-    borderBottomColor: colors.separator,
+    gap: space.m,
+    minHeight: 60,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.s,
   },
-  ratingInput: { width: 68 },
-  bump: {
-    width: 44,
-    height: 44,
+  shirt: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: radius.md,
     backgroundColor: colors.surface2,
     borderWidth: hairline,
-    borderColor: colors.border,
+    borderColor: colors.glassLine,
+  },
+  shirtStarter: { backgroundColor: colors.brandDim, borderColor: colors.brandBorder },
+  shirtNo: { ...type.numSmStrong, color: colors.textSecondary },
+  shirtNoStarter: { color: colors.brandAccent },
+  stepper: { flexDirection: "row", alignItems: "center", gap: space.xxs, padding: space.xxs, borderRadius: radius.md },
+  ratingInput: { width: 56 },
+  bump: {
+    width: 32,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.sm,
   },
   actions: { flexDirection: "row", gap: space.sm, alignItems: "flex-start" },
-  checks: { flexDirection: "row", flexWrap: "wrap" },
-  check: { flexBasis: "50%", flexDirection: "row", alignItems: "center", gap: space.xs, minHeight: 44, paddingRight: space.sm },
-  checkText: { ...type.label, color: colors.textPrimary, flex: 1 },
-  timeline: { gap: space.xs },
+
+  award: { gap: space.xs },
+  suggest: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+    minHeight: 36,
+    paddingHorizontal: space.m,
+    borderRadius: radius.md,
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+  },
+  suggestText: { ...type.caption, color: colors.textSecondary, flex: 1 },
+  suggestName: { color: colors.textPrimary },
+  suggestAct: { ...type.overline, color: colors.brandAccent },
+
+  counter: { ...type.caption, color: colors.textTertiary, textAlign: "right", marginTop: -space.xs },
+  coverFrame: { borderRadius: radius.lg, overflow: "hidden", backgroundColor: colors.surface2, borderWidth: hairline, borderColor: colors.glassLine },
+  coverImage: { width: "100%", aspectRatio: 16 / 9 },
+  coverEmpty: { width: "100%", aspectRatio: 16 / 9, alignItems: "center", justifyContent: "center", gap: space.xs },
+
   event: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
-    minHeight: 52,
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
+    gap: space.m,
+    minHeight: 56,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.s,
   },
-  minute: { ...type.tableNumStrong, color: colors.textPrimary, width: 36 },
-  dot: { width: 8, height: 8, borderRadius: radius.pill },
-  award: { gap: space.xs },
-  cover: { gap: space.sm },
-  coverImage: { width: "100%", aspectRatio: 16 / 9, borderRadius: radius.md, backgroundColor: colors.surface2 },
+  sideRail: { position: "absolute", left: 0, top: space.sm, bottom: space.sm, width: 3, borderRadius: 2 },
+  minuteBox: { width: 36, alignItems: "center" },
+  minute: { ...type.scoreXs, color: colors.textPrimary },
+  period: { ...type.nano, color: colors.textTertiary },
+  eventIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    backgroundColor: colors.surface2,
+  },
 });

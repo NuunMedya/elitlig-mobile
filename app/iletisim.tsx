@@ -40,29 +40,32 @@ import React, { useCallback, useMemo, useState } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
+  Badge,
   BottomSheet,
   Button,
-  Card,
+  EmptyState,
   ErrorState,
+  IconTile,
   Input,
-  ListRow,
+  Reveal,
   ScreenHeader,
   SectionHeader,
   SkeletonCard,
   Touchable,
-  toneColors,
   useHeaderScroll,
   useRefresh,
   useToast,
+  type IconTileTone,
   type LeadingIcon,
 } from "@/components/ui";
+import { StageCard } from "@/components/league/kit";
 import { ApiError, get, post } from "@/lib/http";
 import { openLink } from "@/lib/links";
 import { instagramUrl } from "@/lib/socials";
 import { youtubeChannelUrl } from "@/lib/youtube";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, elevate, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { colors, elevate, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 /* ========================= SUNUCU SÖZLEŞMESİ / TİPLER ===================== */
 
@@ -98,6 +101,8 @@ interface Channel {
   /** Değerin ne olduğu: "Telefon", "WhatsApp"… */
   label: string;
   leading: LeadingIcon;
+  /** Gece kiti ikon kutusunun tonu (kanalın kimlik rengi). */
+  tile: IconTileTone;
   url: string;
 }
 
@@ -110,6 +115,14 @@ const FALLBACK = {
   whatsapp: "905071690888",
   email: "destek@elitlig.com",
 } as const;
+
+/** Konu kısayolları — formu bu konuyla açar. */
+const TOPICS: { label: string; hint: string; icon: keyof typeof Ionicons.glyphMap; tone: IconTileTone }[] = [
+  { label: "Maç talebi", hint: "Rakip, saha, tarih", icon: "football", tone: "pink" },
+  { label: "Lige katılım", hint: "Takım kaydı ve kadro", icon: "trophy", tone: "gold" },
+  { label: "Saha ve hakem", hint: "Tesis, görevli, saat", icon: "flag", tone: "cyan" },
+  { label: "Geri bildirim", hint: "Öneri ve şikâyet", icon: "chatbubble-ellipses", tone: "violet" },
+];
 
 /* ============================== SAF YARDIMCILAR =========================== */
 
@@ -193,6 +206,7 @@ export default function ContactScreen() {
     if (phoneRaw) {
       list.push({
         key: "phone",
+        tile: "cyan",
         value: formatPhone(phoneRaw),
         label: "Ara",
         leading: { icon: "call", tone: "info" },
@@ -204,6 +218,7 @@ export default function ContactScreen() {
     if (waRaw) {
       list.push({
         key: "whatsapp",
+        tile: "mint",
         value: formatPhone(waRaw),
         label: "WhatsApp",
         leading: { icon: "logo-whatsapp", tone: "win" },
@@ -215,6 +230,7 @@ export default function ContactScreen() {
     if (mail) {
       list.push({
         key: "email",
+        tile: "violet",
         value: mail,
         label: "E-posta",
         leading: { icon: "mail", tone: "brand" },
@@ -227,6 +243,7 @@ export default function ContactScreen() {
     if (instagram) {
       list.push({
         key: "instagram",
+        tile: "pink",
         value: handleOf(instagram, "Instagram"),
         label: "Instagram",
         leading: { icon: "logo-instagram", tone: "brand" },
@@ -238,6 +255,7 @@ export default function ContactScreen() {
     if (youtube) {
       list.push({
         key: "youtube",
+        tile: "red",
         value: `${scope.cityLabel || "Elitlig"} kanalı`,
         label: "YouTube — maç yayınları",
         // Kırmızı ton: kanal canlı yayın kimliğidir, "live" tonu tam karşılığı.
@@ -250,6 +268,7 @@ export default function ContactScreen() {
     if (facebook) {
       list.push({
         key: "facebook",
+        tile: "cyan",
         value: handleOf(facebook, "ElitLig Facebook sayfası"),
         label: "Facebook",
         leading: { icon: "logo-facebook", tone: "info" },
@@ -261,6 +280,7 @@ export default function ContactScreen() {
     if (tiktok) {
       list.push({
         key: "tiktok",
+        tile: "neutral",
         value: handleOf(tiktok, "TikTok"),
         label: "TikTok",
         leading: { icon: "logo-tiktok", tone: "neutral" },
@@ -325,6 +345,13 @@ export default function ContactScreen() {
 
   /* ------------------------------- Çizim --------------------------------- */
 
+  const openTopic = useCallback((topic: string) => {
+    setSubject(topic);
+    setFormOpen(true);
+  }, []);
+
+  const cityName = query.data?.city_name ?? scope.cityLabel;
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
@@ -340,11 +367,6 @@ export default function ContactScreen() {
         refreshControl={refresh.control}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.intro} {...textScale.long}>
-          Maç talebi, lige katılım, saha ve hakem soruları ya da geri bildirim —
-          size en uygun kanaldan yazın, aynı gün dönüş yapıyoruz.
-        </Text>
-
         {query.isError ? (
           <ErrorState
             error={query.error}
@@ -354,73 +376,142 @@ export default function ContactScreen() {
           />
         ) : null}
 
-        {/* 1) HIZLI EYLEMLER — arama, WhatsApp, e-posta tek dokunuşta. */}
-        <View style={styles.quick}>
-          {direct.map((channel) => (
-            <QuickTile key={channel.key} channel={channel} />
+        {/* 1) SAHNE — kimin cevap verdiği + üç hızlı kanal tek blokta. */}
+        <Reveal>
+          <StageCard style={styles.hero}>
+            <View style={styles.heroTop}>
+              <Text style={styles.heroOver} {...textScale.badge}>
+                {upperTR(cityName ? `${cityName} destek hattı` : "Destek hattı")}
+              </Text>
+              <View style={styles.heroPill}>
+                <View style={styles.heroDot} />
+                <Text style={styles.heroPillText} {...textScale.badge}>
+                  Aynı gün dönüş
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.heroTitle} {...textScale.dense}>
+              Size nasıl ulaşalım?
+            </Text>
+            <Text style={styles.heroBody} {...textScale.long}>
+              Maç talebi, lige katılım, saha ve hakem soruları ya da geri bildirim — en hızlı kanaldan yazın.
+            </Text>
+            <View style={styles.quick}>
+              {direct.map((channel, index) => (
+                <Reveal key={channel.key} index={index + 1} style={styles.quickCell}>
+                  <QuickTile channel={channel} />
+                </Reveal>
+              ))}
+            </View>
+          </StageCard>
+        </Reveal>
+
+        {/* 2) KONU KISAYOLLARI — formu konusu doldurulmuş açar. */}
+        <SectionHeader
+          title="Ne hakkında?"
+          subtitle="Konuyu seç, form hazır gelsin"
+          icon="chatbubbles-outline"
+          iconTone="violet"
+          inset="flush"
+          style={styles.sectionHeader}
+        />
+        <View style={styles.topics}>
+          {TOPICS.map((topic, index) => (
+            <Reveal key={topic.label} index={index} limit={6} style={styles.topicCell}>
+              <Touchable
+                feedback="card"
+                haptic="selection"
+                onPress={() => openTopic(topic.label)}
+                accessibilityRole="button"
+                accessibilityLabel={`${topic.label} konusunda yaz`}
+                style={styles.topic}
+              >
+                <IconTile icon={topic.icon} tone={topic.tone} size={32} glow={false} />
+                <View style={styles.topicText}>
+                  <Text style={styles.topicTitle} numberOfLines={1} {...textScale.dense}>
+                    {topic.label}
+                  </Text>
+                  <Text style={styles.topicSub} numberOfLines={1} {...textScale.dense}>
+                    {topic.hint}
+                  </Text>
+                </View>
+              </Touchable>
+            </Reveal>
           ))}
         </View>
 
-        {/* 2) SOSYAL HESAPLAR */}
-        {social.length ? <SectionHeader title="Sosyal medya" style={styles.sectionHeader} /> : null}
-        {social.map((channel, index) => (
-          <ChannelRow
-            key={channel.key}
-            channel={channel}
-            position={
-              social.length === 1
-                ? "single"
-                : index === 0
-                  ? "first"
-                  : index === social.length - 1
-                    ? "last"
-                    : "middle"
-            }
-          />
-        ))}
-
-        <SectionHeader title="Bölge sorumluları" style={styles.sectionHeader} />
+        {/* 3) BÖLGE SORUMLULARI */}
+        <SectionHeader
+          title="Bölge sorumluları"
+          meta={sections.length ? String(sections.length) : undefined}
+          icon="people-outline"
+          iconTone="cyan"
+          inset="flush"
+          style={styles.sectionHeader}
+        />
         {query.isLoading ? (
           <SkeletonCard lines={3} />
         ) : sections.length ? (
-          sections.map((section) => (
-            <ManagerCard
-              key={section.id}
-              section={section}
-              cityName={query.data?.city_name ?? scope.cityLabel}
-            />
-          ))
+          <View style={styles.stack}>
+            {sections.map((section, index) => (
+              <Reveal key={section.id} index={index} limit={4}>
+                <ManagerCard section={section} cityName={cityName} />
+              </Reveal>
+            ))}
+          </View>
         ) : (
-          <Card>
-            <Text style={styles.cardBody} {...textScale.long}>
-              {scope.cityLabel ? `${scope.cityLabel} için` : "Bu şehir için"} ayrı bir bölge
-              sorumlusu tanımlı değil. Yukarıdaki merkez numaralarından bize
-              ulaşabilirsiniz.
-            </Text>
-          </Card>
+          <EmptyState
+            icon="person-circle-outline"
+            title="Bölge sorumlusu tanımlı değil"
+            body={`${scope.cityLabel || "Bu şehir"} için yukarıdaki merkez kanallarından bize ulaşabilirsiniz.`}
+            variant="inline"
+            compact
+          />
         )}
 
-        <SectionHeader title="İletişim formu" style={styles.sectionHeader} />
-        <Card
-          title="Bize yazın"
-          subtitle="Form doğrudan bölge yönetimine düşer"
-          footer={
-            <Button
-              label="Formu doldur"
-              icon="create-outline"
-              variant="primary"
-              fullWidth
-              haptic="medium"
-              onPress={openForm}
+        {/* 4) SOSYAL HESAPLAR — 2'li ızgara karolar. */}
+        {social.length ? (
+          <>
+            <SectionHeader
+              title="Sosyal medya"
+              meta={String(social.length)}
+              icon="globe-outline"
+              iconTone="pink"
+              inset="flush"
+              style={styles.sectionHeader}
             />
-          }
-        >
-          <Text style={styles.cardBody} {...textScale.long}>
-            Telefonla ulaşamadığınız saatlerde formu bırakın: adınız, ulaşım
-            bilginiz ve mesajınız yeterli. Talebiniz kayda geçer ve yönetim
-            panelinden takip edilir.
-          </Text>
-        </Card>
+            <View style={styles.socialGrid}>
+              {social.map((channel, index) => (
+                <Reveal key={channel.key} index={index} limit={6} style={styles.socialCell}>
+                  <SocialTile channel={channel} />
+                </Reveal>
+              ))}
+            </View>
+          </>
+        ) : null}
+
+        {/* 5) FORM ÇAĞRISI */}
+        <View style={styles.formCta}>
+          <IconTile icon="create" tone="signature" size={44} />
+          <View style={styles.formCtaText}>
+            <Text style={styles.formCtaTitle} {...textScale.dense}>
+              Bize yazın
+            </Text>
+            <Text style={styles.formCtaBody} {...textScale.long}>
+              Telefonla ulaşamadığınız saatlerde formu bırakın; talebiniz kayda geçer ve bölge yönetimine düşer.
+            </Text>
+          </View>
+        </View>
+        <Button
+          label="Formu doldur"
+          icon="create-outline"
+          variant="primary"
+          size="lg"
+          fullWidth
+          haptic="medium"
+          onPress={openForm}
+          style={styles.formButton}
+        />
       </Animated.ScrollView>
 
       {/* Form alt sayfası — klavye açıkken yarım ekran yeterli alanı bırakır. */}
@@ -493,11 +584,11 @@ export default function ContactScreen() {
 /* ============================== ALT BİLEŞENLER ============================ */
 
 /**
- * Hızlı eylem kutusu — ikon, eylem adı ve değer (numara/adres). Üç kutu yan
- * yana eşit genişliktedir; değer kutuya sığmazsa kırpılır, eylem adı kalır.
+ * Hızlı eylem kutusu — sahnenin üstünde cam karo: degrade ikon kutusu, eylem
+ * adı ve değer (numara/adres). Üç kutu yan yana eşit genişliktedir; değer
+ * sığmazsa kırpılır, eylem adı kalır.
  */
 const QuickTile = React.memo(function QuickTile({ channel }: { channel: Channel }) {
-  const tone = toneColors(channel.leading.tone ?? "brand");
   const handlePress = useCallback(() => {
     void openLink(channel.url);
   }, [channel.url]);
@@ -510,9 +601,7 @@ const QuickTile = React.memo(function QuickTile({ channel }: { channel: Channel 
       accessibilityLabel={`${channel.label}: ${channel.value}`}
       style={styles.quickTile}
     >
-      <View style={[styles.quickIcon, { backgroundColor: tone.dim }]}>
-        <Ionicons name={channel.leading.icon} size={20} color={tone.fg} />
-      </View>
+      <IconTile icon={channel.leading.icon} tone={channel.tile} size={40} />
       <Text style={styles.quickLabel} numberOfLines={1} {...textScale.dense}>
         {channel.label}
       </Text>
@@ -523,34 +612,47 @@ const QuickTile = React.memo(function QuickTile({ channel }: { channel: Channel 
   );
 });
 
-/** Tek kanal satırı: basınca ilgili uygulamayı açar (arama/WhatsApp/tarayıcı). */
-const ChannelRow = React.memo(function ChannelRow({
-  channel,
-  position,
-}: {
-  channel: Channel;
-  position: "single" | "first" | "middle" | "last";
-}) {
+/** Sosyal hesap karosu: basınca ilgili uygulamayı/tarayıcıyı açar. */
+const SocialTile = React.memo(function SocialTile({ channel }: { channel: Channel }) {
   const handlePress = useCallback(() => {
     void openLink(channel.url);
   }, [channel.url]);
 
   return (
-    <ListRow
-      leading={channel.leading}
-      title={channel.value}
-      subtitle={channel.label}
-      position={position}
-      onPress={handlePress}
+    <Touchable
+      feedback="card"
       haptic="light"
-    />
+      onPress={handlePress}
+      accessibilityRole="link"
+      accessibilityLabel={`${channel.label}: ${channel.value}`}
+      style={styles.social}
+    >
+      <IconTile icon={channel.leading.icon} tone={channel.tile} size={34} glow={false} />
+      <View style={styles.socialText}>
+        <Text style={styles.socialValue} numberOfLines={1} {...textScale.dense}>
+          {channel.value}
+        </Text>
+        <Text style={styles.socialLabel} numberOfLines={1} {...textScale.dense}>
+          {channel.label}
+        </Text>
+      </View>
+      <Ionicons name="open-outline" size={14} color={colors.textTertiary} />
+    </Touchable>
   );
 });
 
+/** "Ahmet Yılmaz" / "MERKEZ" → "AY" / "ME" — sorumlu kartının monogramı. */
+function monogram(value: string): string {
+  const words = value.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return upperTR(`${words[0][0]}${words[1][0]}`);
+  return upperTR(value.trim().slice(0, 2)) || "EL";
+}
+
 /**
- * Şehir yöneticisi (bayilik) kartı: etiket, adres ve doğrudan arama/WhatsApp
- * düğmeleri. Telefonu olmayan kayıt için düğme çizilmez — çalışmayan düğme
- * kullanıcıyı yanıltır.
+ * Şehir yöneticisi (bayilik) kartı: monogram + etiket + şehir başlığı,
+ * kanal satırları (ikonlu, sağda değer) ve dipte iki eylem düğmesi.
+ * Telefonu olmayan kayıt için düğme çizilmez — çalışmayan düğme kullanıcıyı
+ * yanıltır.
  */
 const ManagerCard = React.memo(function ManagerCard({
   section,
@@ -563,6 +665,7 @@ const ManagerCard = React.memo(function ManagerCard({
   const whatsapp = trimmed(section.whatsapp) || phone;
   const email = trimmed(section.email);
   const address = trimmed(section.address);
+  const label = trimmed(section.label) || "Bölge sorumlusu";
 
   const call = useCallback(() => {
     void openLink(`tel:${digitsOf(phone)}`);
@@ -572,59 +675,59 @@ const ManagerCard = React.memo(function ManagerCard({
     void openLink(`https://wa.me/${whatsappNumber(whatsapp)}`);
   }, [whatsapp]);
 
-  /**
-   * Tek satırlık değerler KeyValueRow'a girer (satır `numberOfLines={1}`);
-   * ADRES oraya konmaz — kırpılırdı, ayrı bir sarmalanan metin satırıdır.
-   */
-  const rows: { label: string; value: string; numeric?: boolean }[] = [];
-  if (phone) rows.push({ label: "Telefon", value: formatPhone(phone), numeric: true });
-  if (email) rows.push({ label: "E-posta", value: email });
+  const mail = useCallback(() => {
+    void openLink(`mailto:${email}`);
+  }, [email]);
+
+  const rows: { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; value: string; onPress?: () => void }[] = [];
+  if (phone) rows.push({ key: "tel", icon: "call-outline", label: "Telefon", value: formatPhone(phone), onPress: call });
+  if (email) rows.push({ key: "mail", icon: "mail-outline", label: "E-posta", value: email, onPress: mail });
 
   return (
-    <Card
-      title={trimmed(section.label) || "Bölge sorumlusu"}
-      subtitle={trimmed(cityName) || undefined}
-      style={styles.managerCard}
-      footer={
-        phone || whatsapp ? (
-          <View style={styles.managerActions}>
-            {phone ? (
-              <Button
-                label="Ara"
-                icon="call"
-                variant="secondary"
-                onPress={call}
-                style={styles.managerButton}
-              />
-            ) : null}
-            {whatsapp ? (
-              <Button
-                label="WhatsApp"
-                icon="logo-whatsapp"
-                variant="secondary"
-                onPress={chat}
-                style={styles.managerButton}
-              />
-            ) : null}
+    <View style={styles.manager}>
+      <View style={styles.managerHead}>
+        <View style={styles.monogram}>
+          <Text style={styles.monogramText} {...textScale.badge}>
+            {monogram(label)}
+          </Text>
+        </View>
+        <View style={styles.managerTitleBox}>
+          <Text style={styles.managerTitle} numberOfLines={1} {...textScale.dense}>
+            {label}
+          </Text>
+          <View style={styles.managerMetaRow}>
+            <Ionicons name="location" size={11} color={colors.textTertiary} />
+            <Text style={styles.managerMeta} numberOfLines={1} {...textScale.dense}>
+              {trimmed(cityName) || "Bölge"}
+            </Text>
           </View>
-        ) : undefined
-      }
-    >
-      {/* Kartın kendi satırları — iç içe kart (grup kabuğu) yok (Arena §1.3). */}
-      {rows.map((row, index) => (
-        <View key={row.label} style={[styles.kv, index > 0 ? styles.kvDivided : null]}>
+        </View>
+        <Badge label="Yetkili" tone="brand" size="xs" icon="shield-checkmark" />
+      </View>
+
+      {rows.map((row) => (
+        <Touchable
+          key={row.key}
+          feedback="row"
+          haptic="light"
+          onPress={row.onPress}
+          accessibilityRole="button"
+          accessibilityLabel={`${row.label}: ${row.value}`}
+          style={styles.kv}
+        >
+          <Ionicons name={row.icon} size={16} color={colors.textTertiary} />
           <Text style={styles.kvLabel} {...textScale.dense}>
             {row.label}
           </Text>
-          <Text style={[styles.kvValue, row.numeric ? styles.kvNumeric : null]} numberOfLines={1} {...textScale.dense}>
+          <Text style={styles.kvValue} numberOfLines={1} {...textScale.dense}>
             {row.value}
           </Text>
-        </View>
+        </Touchable>
       ))}
 
       {address ? (
         <View style={styles.addressRow}>
-          <Ionicons name="location-outline" size={14} color={colors.textTertiary} />
+          <Ionicons name="navigate-outline" size={16} color={colors.textTertiary} />
           <Text style={styles.address} {...textScale.long}>
             {address}
           </Text>
@@ -636,7 +739,25 @@ const ManagerCard = React.memo(function ManagerCard({
           Bu bölge için iletişim bilgisi henüz girilmemiş.
         </Text>
       ) : null}
-    </Card>
+
+      {phone || whatsapp ? (
+        <View style={styles.managerActions}>
+          {phone ? (
+            <Button label="Ara" icon="call" variant="secondary" size="sm" onPress={call} style={styles.managerButton} />
+          ) : null}
+          {whatsapp ? (
+            <Button
+              label="WhatsApp"
+              icon="logo-whatsapp"
+              variant="secondary"
+              size="sm"
+              onPress={chat}
+              style={styles.managerButton}
+            />
+          ) : null}
+        </View>
+      ) : null}
+    </View>
   );
 });
 
@@ -649,67 +770,181 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: layout.screenPadding,
-    paddingBottom: space.giant,
-  },
-  intro: {
-    ...type.bodySm,
-    color: colors.textSecondary,
-    lineHeight: 20,
     paddingTop: space.sm,
-    paddingBottom: space.xs,
+    paddingBottom: space.giant,
   },
   banner: {
     marginBottom: space.sm,
   },
-  /** SectionHeader kendi yatay boşluğunu taşır; ekran boşluğu geri alınır. */
   sectionHeader: {
-    marginHorizontal: -layout.screenPadding,
-    marginTop: space.md,
+    marginTop: space.xl,
+    marginBottom: space.sm,
   },
-  managerCard: {
-    marginTop: space.sm,
+  stack: {
+    gap: space.sm,
+  },
+
+  /* — Sahne — */
+  hero: {
+    padding: space.lg,
+    gap: space.sm,
+  },
+  heroTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: space.sm,
+  },
+  heroOver: {
+    ...type.overline,
+    color: colors.brandOnDark,
+    flexShrink: 1,
+  },
+  heroPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xxs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.inkPillBorder,
+  },
+  heroDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.win,
+  },
+  heroPillText: {
+    ...type.micro,
+    color: colors.onDark,
+  },
+  heroTitle: {
+    ...type.display,
+    color: colors.onDark,
+  },
+  heroBody: {
+    ...type.bodySm,
+    color: colors.onDarkMuted,
   },
   quick: {
     flexDirection: "row",
     gap: space.sm,
-    marginTop: space.md,
+    marginTop: space.sm,
+  },
+  quickCell: {
+    flex: 1,
   },
   quickTile: {
-    flex: 1,
     alignItems: "center",
     gap: space.xs,
     paddingVertical: space.md,
     paddingHorizontal: space.s,
     borderRadius: radius.lg,
-    backgroundColor: colors.surface1,
+    backgroundColor: colors.inkTile,
     borderWidth: hairline,
-    borderColor: colors.border,
-    ...elevate(1),
-  },
-  quickIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: space.xxs,
+    borderColor: colors.inkTileBorder,
   },
   quickLabel: {
     ...type.h4,
-    color: colors.textPrimary,
+    color: colors.onDark,
+    marginTop: space.xxs,
   },
   quickValue: {
+    ...type.caption,
+    color: colors.onDarkMuted,
+  },
+
+  /* — Konu kısayolları — */
+  topics: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.sm,
+  },
+  topicCell: {
+    width: "48.5%",
+    flexGrow: 1,
+  },
+  topic: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    padding: space.m,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  topicText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  topicTitle: {
+    ...type.h4,
+    color: colors.textPrimary,
+  },
+  topicSub: {
+    ...type.caption,
+    color: colors.textTertiary,
+  },
+
+  /* — Sorumlu kartı — */
+  manager: {
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    paddingHorizontal: space.md,
+    paddingTop: space.md,
+    paddingBottom: space.md,
+    overflow: "hidden",
+    ...elevate(1),
+  },
+  managerHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    paddingBottom: space.sm,
+  },
+  monogram: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+  },
+  monogramText: {
+    ...type.label,
+    color: colors.brandAccent,
+  },
+  managerTitleBox: {
+    flex: 1,
+    minWidth: 0,
+    gap: space.xxs,
+  },
+  managerTitle: {
+    ...type.h3,
+    color: colors.textPrimary,
+  },
+  managerMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+  },
+  managerMeta: {
     ...type.caption,
     color: colors.textTertiary,
   },
   kv: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: space.md,
-    minHeight: 40,
-  },
-  kvDivided: {
+    gap: space.sm,
+    minHeight: 44,
     borderTopWidth: hairline,
     borderTopColor: colors.separator,
   },
@@ -720,15 +955,14 @@ const styles = StyleSheet.create({
   kvValue: {
     ...type.h4,
     color: colors.textPrimary,
-    flexShrink: 1,
+    flex: 1,
     textAlign: "right",
-  },
-  kvNumeric: {
     fontVariant: ["tabular-nums"],
   },
   managerActions: {
     flexDirection: "row",
     gap: space.sm,
+    marginTop: space.sm,
   },
   managerButton: {
     flex: 1,
@@ -736,20 +970,82 @@ const styles = StyleSheet.create({
   addressRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: space.s,
-    paddingTop: space.sm,
+    gap: space.sm,
+    paddingTop: space.m,
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
   },
   address: {
     ...type.bodySm,
     color: colors.textSecondary,
-    lineHeight: 19,
     flex: 1,
   },
   cardBody: {
     ...type.bodySm,
     color: colors.textSecondary,
-    lineHeight: 20,
   },
+
+  /* — Sosyal ızgara — */
+  socialGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.sm,
+  },
+  socialCell: {
+    width: "48.5%",
+    flexGrow: 1,
+  },
+  social: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    padding: space.m,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  socialText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  socialValue: {
+    ...type.h4,
+    color: colors.textPrimary,
+  },
+  socialLabel: {
+    ...type.caption,
+    color: colors.textTertiary,
+  },
+
+  /* — Form çağrısı — */
+  formCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    marginTop: space.xxl,
+    padding: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+  },
+  formCtaText: {
+    flex: 1,
+    gap: space.xxs,
+  },
+  formCtaTitle: {
+    ...type.h3,
+    color: colors.textPrimary,
+  },
+  formCtaBody: {
+    ...type.bodySm,
+    color: colors.textSecondary,
+  },
+  formButton: {
+    marginTop: space.md,
+  },
+
   form: {
     gap: space.md,
   },
