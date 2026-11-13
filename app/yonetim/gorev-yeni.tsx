@@ -8,6 +8,11 @@
  *
  * Bitiş zamanı hızlı seçimlerle verilir (bugün akşam, yarın, 3 gün, 1 hafta);
  * sunucu her görev için bitişe 1 saat kala ve süre geçince hatırlatma gönderir.
+ *
+ * GÖRÜNÜM (yönetim form dili): üstte üç TÜR KARTI (IconTile + ad + tek satır
+ * açıklama, seçili olan marka çerçeveli); alanlar versal başlıklı cam grup
+ * kartlarında (İçerik · Zamanlama · Kime); başlık `Input floating`; öncelik
+ * çipleri renk noktalı; birincil eylem altta sabit `Button lg`.
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -16,7 +21,9 @@ import { useCallback, useMemo, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { Button, Chip, Input, ListRow, ScreenHeader, SkeletonListRow, useToast } from "@/components/ui";
+import Ionicons from "@expo/vector-icons/Ionicons";
+
+import { Button, Chip, IconTile, Input, ListRow, ScreenHeader, SkeletonListRow, Touchable, useToast, type IconTileTone } from "@/components/ui";
 import {
   createTodo,
   getTodoAssignees,
@@ -27,15 +34,15 @@ import {
 } from "@/lib/api/todos";
 import { ROLE_LABELS } from "@/lib/api/admin";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, space, textScale, type } from "@/theme";
+import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 type Kind = TodoCreateInput["kind"];
 type DueChoice = "none" | "today" | "tomorrow" | "3d" | "1w";
 
-const KINDS: { key: Kind; label: string }[] = [
-  { key: "task", label: "Görev" },
-  { key: "reminder", label: "Hatırlatma" },
-  { key: "note", label: "Kişisel not" },
+const KINDS: { key: Kind; label: string; hint: string; icon: keyof typeof Ionicons.glyphMap; tone: IconTileTone }[] = [
+  { key: "task", label: "Görev", hint: "Yapılacak iş", icon: "checkbox", tone: "violet" },
+  { key: "reminder", label: "Hatırlatma", hint: "Zamanı gelince", icon: "notifications", tone: "gold" },
+  { key: "note", label: "Kişisel not", hint: "Yalnız sende", icon: "document-text", tone: "cyan" },
 ];
 
 const PRIORITIES: { key: TodoPriority; label: string }[] = [
@@ -147,17 +154,34 @@ export default function NewTodoScreen() {
             eylem altta SABİT durur — uzun ekip listesinde "Kaydet" kaydırma
             sonunda kaybolmasın. */}
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel} {...textScale.dense}>Tür</Text>
-            <View style={styles.chips}>
-              {KINDS.map((item) => (
-                <Chip key={item.key} label={item.label} selected={kind === item.key} onPress={() => setKind(item.key)} />
-              ))}
-            </View>
+          <View style={styles.kinds}>
+            {KINDS.map((item) => {
+              const on = kind === item.key;
+              return (
+                <Touchable
+                  key={item.key}
+                  feedback="card"
+                  haptic="selection"
+                  onPress={() => setKind(item.key)}
+                  style={[styles.kind, on ? styles.kindOn : null]}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={`${item.label}: ${item.hint}`}
+                >
+                  <IconTile icon={item.icon} tone={on ? item.tone : "neutral"} size={36} glow={on} />
+                  <Text style={[styles.kindLabel, on ? styles.kindLabelOn : null]} numberOfLines={1} {...textScale.dense}>
+                    {item.label}
+                  </Text>
+                  <Text style={styles.kindHint} numberOfLines={1} {...textScale.dense}>
+                    {item.hint}
+                  </Text>
+                </Touchable>
+              );
+            })}
           </View>
 
-          <View style={styles.field}>
-            <Input label="Başlık" value={title} onChangeText={setTitle} placeholder="Ne yapılacak?" maxLength={200} autoFocus />
+          <Group title="İçerik">
+            <Input floating label="Başlık" value={title} onChangeText={setTitle} placeholder="Ne yapılacak?" maxLength={200} autoFocus />
             <Input
               label="Açıklama"
               value={body}
@@ -165,45 +189,40 @@ export default function NewTodoScreen() {
               placeholder="Ayrıntılar (isteğe bağlı)"
               multiline
             />
-          </View>
+          </Group>
 
-          <View style={styles.field}>
+          <Group title="Öncelik ve zamanlama">
             <Text style={styles.fieldLabel} {...textScale.dense}>Öncelik</Text>
             <View style={styles.chips}>
               {PRIORITIES.map((item) => (
                 <Chip
                   key={item.key}
                   label={item.label}
+                  icon={item.key === "high" ? "flag" : item.key === "low" ? "arrow-down" : "remove"}
                   selected={priority === item.key}
                   tone={item.key === "high" ? "warn" : undefined}
                   onPress={() => setPriority(item.key)}
                 />
               ))}
             </View>
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel} {...textScale.dense}>Bitiş</Text>
+            <Text style={[styles.fieldLabel, styles.fieldGap]} {...textScale.dense}>Bitiş</Text>
             <View style={styles.chips}>
               {DUE_CHOICES.map((item) => (
-                <Chip key={item.key} label={item.label} selected={due === item.key} onPress={() => setDue(item.key)} />
+                <Chip key={item.key} label={item.label} icon={item.key === "none" ? undefined : "time-outline"} selected={due === item.key} onPress={() => setDue(item.key)} />
               ))}
             </View>
             {due !== "none" ? (
-              <Text style={styles.hint} {...textScale.dense}>
-                Bitişe 1 saat kala ve süre geçince bildirim gelir.
-              </Text>
-            ) : null}
-          </View>
-
-          {canAssign ? (
-            <View style={styles.field}>
-              <View style={styles.fieldHead}>
-                <Text style={styles.fieldLabel} {...textScale.dense}>Kime atansın?</Text>
-                <Text style={styles.fieldMeta} {...textScale.dense}>
-                  {assignees.length ? `${assignees.length} kişi` : "Seçilmezse sana"}
+              <View style={styles.note}>
+                <Ionicons name="notifications-outline" size={14} color={colors.brandAccent} />
+                <Text style={styles.hint} {...textScale.dense}>
+                  Bitişe 1 saat kala ve süre geçince bildirim gelir.
                 </Text>
               </View>
+            ) : null}
+          </Group>
+
+          {canAssign ? (
+            <Group title="Kime atansın?" meta={assignees.length ? `${assignees.length} kişi` : "Seçilmezse sana"}>
               {selectedNames.length ? (
                 <Text style={styles.hint} numberOfLines={2} {...textScale.dense}>
                   {selectedNames.join(", ")}
@@ -225,7 +244,7 @@ export default function NewTodoScreen() {
                   ))}
                 </View>
               )}
-            </View>
+            </Group>
           ) : kind === "note" ? (
             <Text style={styles.hint} {...textScale.dense}>
               Kişisel not yalnız senin listende durur.
@@ -249,13 +268,58 @@ export default function NewTodoScreen() {
   );
 }
 
+/** Versal başlıklı cam grup kartı. */
+function Group({ title, meta, children }: { title: string; meta?: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.group}>
+      <View style={styles.fieldHead}>
+        <Text style={styles.groupTitle} {...textScale.dense}>
+          {upperTR(title)}
+        </Text>
+        {meta ? (
+          <Text style={styles.fieldMeta} {...textScale.dense}>
+            {meta}
+          </Text>
+        ) : null}
+      </View>
+      <View style={styles.groupCard}>{children}</View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  kinds: { flexDirection: "row", gap: space.sm },
+  kind: {
+    flex: 1,
+    gap: space.xs,
+    padding: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  kindOn: { borderColor: colors.brand, backgroundColor: colors.brandDim },
+  kindLabel: { ...type.h4, color: colors.textPrimary, marginTop: space.xs },
+  kindLabelOn: { color: colors.brandAccent },
+  kindHint: { ...type.caption, color: colors.textTertiary },
+  group: { gap: space.sm },
+  groupTitle: { ...type.overline, color: colors.textTertiary, paddingHorizontal: space.xs },
+  groupCard: {
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  fieldGap: { marginTop: space.xs },
+  note: { flexDirection: "row", alignItems: "center", gap: space.xs },
   flex: { flex: 1 },
   content: { padding: layout.screenPadding, gap: layout.sectionGap, paddingBottom: space.xxl },
   field: { gap: space.sm },
   fieldHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space.sm },
-  fieldLabel: { ...type.h4, color: colors.textSecondary },
+  fieldLabel: { ...type.labelSm, color: colors.textSecondary },
   fieldMeta: { ...type.caption, color: colors.textTertiary },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: space.s },
   hint: { ...type.caption, color: colors.textSecondary },

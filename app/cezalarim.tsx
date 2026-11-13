@@ -22,7 +22,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useMemo } from "react";
-import { FlatList, StyleSheet, View } from "react-native";
+import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Badge,
@@ -31,6 +31,9 @@ import {
   EmptyState,
   ErrorState,
   ListRow,
+  MetricGrid,
+  MetricTile,
+  Reveal,
   ScreenHeader,
   SkeletonListRow,
   useHeaderScroll,
@@ -41,7 +44,7 @@ import { DeadlineBanner, isUrgentDeadline, remainingShort } from "@/components/c
 import { getMyPenalties, type Penalty } from "@/lib/api/panel";
 import { formatDateShort } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, space } from "@/theme";
+import { colors, layout, radius, space, textScale, type } from "@/theme";
 
 /* ============================ SABİTLER / TİPLER ============================ */
 
@@ -55,6 +58,9 @@ const STAGE_META: Record<
   cas_basvuru: { short: "CAS'ta", icon: "hourglass", tone: "info" },
   cas_karari: { short: "CAS kararı", icon: "checkmark-done-circle", tone: "neutral" },
 };
+
+/** Dosya yolu: sevk → kurul kararı → CAS başvurusu → CAS kararı (satırdaki basamaklar). */
+const STAGE_ORDER = ["sevk", "kurul_karari", "cas_basvuru", "cas_karari"];
 
 const stageMeta = (status: string) =>
   STAGE_META[status] ?? {
@@ -150,6 +156,13 @@ export default function PenaltiesScreen() {
     return items.filter((penalty) => def.match(penalty));
   }, [filter, items]);
 
+  /** Kapanmamış dosya (CAS kararı = son aşama) ve süren men cezası (maç). */
+  const openCount = useMemo(() => items.filter((penalty) => penalty.status !== "cas_karari").length, [items]);
+  const banMatches = useMemo(
+    () => items.filter((penalty) => penalty.ban_state === "active").reduce((sum, penalty) => sum + (penalty.match_count ?? 0), 0),
+    [items],
+  );
+
   /** En yakın son tarih — başlık altındaki uyarı cümlesi için. */
   const urgent = useMemo(() => {
     const open = items
@@ -184,18 +197,47 @@ export default function PenaltiesScreen() {
 
   const renderItem = useCallback(
     ({ item, index }: { item: Penalty; index: number }) => (
-      <PenaltyRow
-        penalty={item}
-        position={rowPosition(index, visible.length)}
-        onPress={openPenalty}
-      />
+      <Reveal index={index} limit={8} replayKey={filter}>
+        <PenaltyRow
+          penalty={item}
+          position={rowPosition(index, visible.length)}
+          onPress={openPenalty}
+        />
+      </Reveal>
     ),
-    [openPenalty, visible.length],
+    [filter, openPenalty, visible.length],
   );
 
   const listHeader = useMemo(
     () => (
       <View style={styles.headerBlock}>
+        {/* ÖZET: açık dosya · aksiyon gereken · süren men cezası (maç). */}
+        <Reveal>
+          <MetricGrid columns={3}>
+            <MetricTile label="Dosya" value={String(items.length)} hint={`${openCount} açık`} tone="brand" onPress={() => selectFilter("tumu")} />
+            <MetricTile
+              label="Aksiyon"
+              value={String(counts.aksiyon)}
+              hint={counts.aksiyon ? "süre işliyor" : "bekleyen yok"}
+              tone={counts.aksiyon ? "danger" : "neutral"}
+             
+              onPress={() => selectFilter("aksiyon")}
+            />
+            <MetricTile label="Men" value={String(banMatches)} hint="maç cezası" tone={banMatches ? "warn" : "neutral"} />
+          </MetricGrid>
+        </Reveal>
+
+        {/* En yakın son tarih: kendi bandında, kalan süre rakamla. */}
+        {urgent ? (
+          <DeadlineBanner
+            title={urgent.kind === "savunma" ? "Savunma süresi işliyor" : "İtiraz süresi işliyor"}
+            detail={[urgent.penalty.match_label, urgent.penalty.player_name].filter(Boolean).join(" · ")}
+            deadline={urgent.deadline}
+            actionLabel="Dosyayı aç"
+            onPress={() => openPenalty(urgent.penalty.public_id)}
+          />
+        ) : null}
+
         <ChipGroup style={styles.chips}>
           {/* Boş aşama çipi gösterilmez: "CAS 0" bir seçenek değil, gürültü. */}
           {FILTERS.filter((def) => def.key === "tumu" || def.key === filter || counts[def.key] > 0).map((def) => (
@@ -209,23 +251,12 @@ export default function PenaltiesScreen() {
           ))}
         </ChipGroup>
 
-        {/* En yakın son tarih: kendi bandında, kalan süre rakamla. */}
-        {urgent ? (
-          <DeadlineBanner
-            title={urgent.kind === "savunma" ? "Savunma süresi işliyor" : "İtiraz süresi işliyor"}
-            detail={[urgent.penalty.match_label, urgent.penalty.player_name].filter(Boolean).join(" · ")}
-            deadline={urgent.deadline}
-            actionLabel="Dosyayı aç"
-            onPress={() => openPenalty(urgent.penalty.public_id)}
-          />
-        ) : null}
-
         {query.isError && items.length > 0 ? (
           <ErrorState error={query.error} onRetry={query.refetch} variant="banner" />
         ) : null}
       </View>
     ),
-    [counts, filter, items.length, openPenalty, query.error, query.isError, query.refetch, selectFilter, urgent],
+    [banMatches, counts, filter, items.length, openCount, openPenalty, query.error, query.isError, query.refetch, selectFilter, urgent],
   );
 
   if (!auth.user) {
@@ -342,12 +373,15 @@ const PenaltyRow = React.memo(function PenaltyRow({
       leading={leading}
       title={penalty.match_label ?? penalty.team_name ?? "Disiplin dosyası"}
       subtitle={subtitle || undefined}
-      badge={
-        left ? (
-          <Badge icon="time" label={left} tone={isUrgentDeadline(deadline) ? "danger" : "warn"} size="xs" />
-        ) : (
-          <Badge label={stage.short} tone={stage.tone} size="xs" />
-        )
+      trailing={
+        <View style={styles.trail}>
+          {left ? (
+            <Badge icon="time" label={left} tone={isUrgentDeadline(deadline) ? "danger" : "warn"} size="xs" />
+          ) : (
+            <Badge label={stage.short} tone={stage.tone} size="xs" />
+          )}
+          <StageSteps status={penalty.status} />
+        </View>
       }
       highlighted={defenseOpen || objectionOpen}
       position={position}
@@ -355,6 +389,22 @@ const PenaltyRow = React.memo(function PenaltyRow({
     />
   );
 });
+
+/** Dört basamaklı dosya yolu — geçilen basamaklar dolu, bulunulan vurgulu. */
+function StageSteps({ status }: { status: string }) {
+  const at = STAGE_ORDER.indexOf(status);
+  if (at < 0) return null;
+  return (
+    <View style={styles.steps} accessibilityLabel={`Aşama ${at + 1} / ${STAGE_ORDER.length}`}>
+      {STAGE_ORDER.map((key, index) => (
+        <View key={key} style={[styles.step, index < at ? styles.stepDone : index === at ? styles.stepNow : null]} />
+      ))}
+      <Text style={styles.stepText} {...textScale.badge}>
+        {`${at + 1}/${STAGE_ORDER.length}`}
+      </Text>
+    </View>
+  );
+}
 
 /* ================================ STİLLER ================================= */
 
@@ -382,4 +432,10 @@ const styles = StyleSheet.create({
   chips: {
     marginHorizontal: -layout.screenPadding,
   },
+  trail: { alignItems: "flex-end", gap: space.xs, marginLeft: space.sm },
+  steps: { flexDirection: "row", alignItems: "center", gap: space.xxs },
+  step: { width: 10, height: 4, borderRadius: radius.pill, backgroundColor: colors.surface3 },
+  stepDone: { backgroundColor: colors.textTertiary },
+  stepNow: { width: 16, backgroundColor: colors.brand },
+  stepText: { ...type.nano, color: colors.textTertiary, marginLeft: space.xxs },
 });

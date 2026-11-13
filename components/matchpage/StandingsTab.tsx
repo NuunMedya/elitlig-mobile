@@ -16,7 +16,8 @@ import { useRouter } from "expo-router";
 import React, { memo, useCallback } from "react";
 import { FlatList, StyleSheet, Text, View, type RefreshControlProps } from "react-native";
 
-import { EmptyState, ErrorState, SkeletonStandings, TeamLogo, Touchable } from "@/components/ui";
+import { LinearGradient } from "expo-linear-gradient";
+import { Aurora, EmptyState, ErrorState, Odometer, RankBadge, Reveal, SkeletonStandings, TeamLogo, Touchable } from "@/components/ui";
 import { colors, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
 import type { StandingRow } from "@/lib/types";
 import type { ScrollChrome } from "./shared";
@@ -109,13 +110,20 @@ export function StandingsTab({
       ListHeaderComponent={
         list.length ? (
           <View>
+            <DuelSlice
+              rows={list}
+              homeTeamId={homeTeamId}
+              awayTeamId={awayTeamId}
+              power={power}
+              onOpen={openTeam}
+            />
             {leagueLabel ? (
               <Text style={styles.caption} numberOfLines={1} {...textScale.dense}>
                 {leagueLabel}
               </Text>
             ) : null}
             <View style={[styles.slice, styles.sliceFirst, styles.head]}>
-              <Text style={[styles.headText, styles.rank]} {...textScale.badge}>
+              <Text style={[styles.headText, styles.rank, styles.rankText]} {...textScale.badge}>
                 #
               </Text>
               <Text style={[styles.headText, styles.teamHead]} {...textScale.badge}>
@@ -148,18 +156,149 @@ export function StandingsTab({
   );
 }
 
+
+/**
+ * PUAN KESİTİ — tablonun bu maçı ilgilendiren dilimi, tam tablodan ÖNCE.
+ *
+ * Üstte iki takımın yeri büyük (sıra rozeti · puan Odometer), ortada puan
+ * farkı; altında iki takımın ve komşularının satırları. Takımlar birbirinden
+ * uzaksa aradaki boşluk "⋯" ile kısaltılır — kesit en fazla yedi satırdır.
+ */
+const DuelSlice = memo(function DuelSlice({
+  rows,
+  homeTeamId,
+  awayTeamId,
+  power,
+  onOpen,
+}: {
+  rows: StandingRow[];
+  homeTeamId: number | null;
+  awayTeamId: number | null;
+  power: boolean;
+  onOpen: (teamId: number) => void;
+}) {
+  const homeIndex = rows.findIndex((row) => Number(row.team_id) === Number(homeTeamId));
+  const awayIndex = rows.findIndex((row) => Number(row.team_id) === Number(awayTeamId));
+  if (homeIndex < 0 && awayIndex < 0) return null;
+
+  const picks = new Set<number>();
+  for (const index of [homeIndex, awayIndex]) {
+    if (index < 0) continue;
+    for (const near of [index - 1, index, index + 1]) if (near >= 0 && near < rows.length) picks.add(near);
+  }
+  const ordered = [...picks].sort((a, b) => a - b);
+  const home = homeIndex >= 0 ? rows[homeIndex] : null;
+  const away = awayIndex >= 0 ? rows[awayIndex] : null;
+  const gap = home && away ? Math.abs(Number(home.display_points) - Number(away.display_points)) : null;
+
+  return (
+    <Reveal scaleFrom={0.98}>
+      <View style={styles.duel}>
+        <LinearGradient
+          colors={colors.gradientInk}
+          start={{ x: 1, y: 0.5 }}
+          end={{ x: 0, y: 0.5 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <Aurora variant="stage" style={StyleSheet.absoluteFill} />
+        <View style={styles.duelHead}>
+          <DuelSide row={home} rank={homeIndex + 1} power={power} />
+          <View style={styles.duelGap}>
+            {gap != null ? (
+              <>
+                <Odometer value={gap} style={styles.duelGapValue} />
+                <Text style={styles.duelGapLabel} {...textScale.badge}>
+                  PUAN FARKI
+                </Text>
+              </>
+            ) : null}
+          </View>
+          <DuelSide row={away} rank={awayIndex + 1} power={power} align="right" />
+        </View>
+      </View>
+      <View style={styles.sliceCard}>
+        {ordered.map((index, position) => {
+          const skipped = position > 0 && index - ordered[position - 1] > 1;
+          const row = rows[index];
+          return (
+            <React.Fragment key={row.team_id}>
+              {skipped ? (
+                <View style={styles.ellipsis}>
+                  <Text style={styles.ellipsisText} {...textScale.badge}>
+                    ⋯
+                  </Text>
+                </View>
+              ) : null}
+              <StandingItem
+                rank={index + 1}
+                row={row}
+                last={false}
+                bare
+                highlighted={index === homeIndex || index === awayIndex}
+                onPress={onOpen}
+              />
+            </React.Fragment>
+          );
+        })}
+      </View>
+      <Text style={styles.fullTitle} {...textScale.dense}>
+        Tam tablo
+      </Text>
+    </Reveal>
+  );
+});
+
+const DuelSide = memo(function DuelSide({
+  row,
+  rank,
+  power,
+  align = "left",
+}: {
+  row: StandingRow | null;
+  rank: number;
+  power: boolean;
+  align?: "left" | "right";
+}) {
+  if (!row) return <View style={styles.duelSide} />;
+  const right = align === "right";
+  return (
+    <View style={[styles.duelSide, right ? styles.duelSideRight : null]}>
+      <View style={[styles.duelTop, right ? styles.duelTopRight : null]}>
+        <TeamLogo name={row.team_name} logo={row.logo} size={layout.crestLg} />
+        <View style={styles.duelRank}>
+          <Text style={styles.duelRankText} {...textScale.badge}>
+            {`${rank}.`}
+          </Text>
+        </View>
+      </View>
+      <Text style={[styles.duelName, right ? styles.alignRight : null]} numberOfLines={1} {...textScale.dense}>
+        {row.team_name}
+      </Text>
+      <View style={[styles.duelPoints, right ? styles.duelTopRight : null]}>
+        <Odometer value={row.display_points} style={styles.duelPointsValue} />
+        <Text style={styles.duelPointsUnit} {...textScale.badge}>
+          {power ? "GP" : "P"}
+        </Text>
+      </View>
+    </View>
+  );
+});
+
 const StandingItem = memo(function StandingItem({
   rank,
   row,
   last,
   highlighted,
   onPress,
+  bare = false,
 }: {
   rank: number;
   row: StandingRow;
   last: boolean;
   highlighted: boolean;
   onPress: (teamId: number) => void;
+  /** Kesit kartının içinde: kart dilimi kenarları çizilmez. */
+  bare?: boolean;
 }) {
   const open = useCallback(() => onPress(Number(row.team_id)), [onPress, row.team_id]);
   const diff = Number(row.goal_diff ?? 0);
@@ -169,14 +308,32 @@ const StandingItem = memo(function StandingItem({
       feedback="row"
       haptic="selection"
       onPress={open}
-      style={[styles.slice, styles.row, last ? styles.sliceLast : null, highlighted ? styles.rowActive : null]}
+      style={[
+        bare ? styles.bareRow : styles.slice,
+        styles.row,
+        last ? styles.sliceLast : null,
+        highlighted ? styles.rowActive : null,
+      ]}
       accessibilityRole="button"
       accessibilityLabel={`${rank}. ${row.team_name}, ${row.played} maç, ${row.display_points} puan`}
     >
-      {highlighted ? <View style={styles.mark} /> : null}
-      <Text style={[styles.cell, styles.rank, highlighted ? styles.strong : null]} {...textScale.dense}>
-        {rank}
-      </Text>
+      {highlighted ? (
+        <LinearGradient
+          colors={colors.gradientSignature}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.mark}
+        />
+      ) : null}
+      <View style={styles.rank}>
+        {rank <= 3 ? (
+          <RankBadge rank={rank} size={20} />
+        ) : (
+          <Text style={[styles.cell, styles.rankText, highlighted ? styles.strong : null]} {...textScale.dense}>
+            {rank}
+          </Text>
+        )}
+      </View>
       <TeamLogo name={row.team_name} logo={row.logo} size={layout.crestSm} />
       <Text style={[styles.name, highlighted ? styles.nameActive : null]} numberOfLines={1} {...textScale.dense}>
         {row.team_name}
@@ -184,15 +341,20 @@ const StandingItem = memo(function StandingItem({
       <Text style={[styles.cell, styles.num]} {...textScale.dense}>
         {row.played}
       </Text>
-      <Text style={[styles.cell, styles.num]} {...textScale.dense}>
-        {row.wins}
-      </Text>
-      <Text style={[styles.cell, styles.num]} {...textScale.dense}>
-        {row.draws}
-      </Text>
-      <Text style={[styles.cell, styles.num]} {...textScale.dense}>
-        {row.losses}
-      </Text>
+      {/* Kesitte G/B/M yok: ad sığsın, göz puana gitsin. */}
+      {bare ? null : (
+        <>
+          <Text style={[styles.cell, styles.num]} {...textScale.dense}>
+            {row.wins}
+          </Text>
+          <Text style={[styles.cell, styles.num]} {...textScale.dense}>
+            {row.draws}
+          </Text>
+          <Text style={[styles.cell, styles.num]} {...textScale.dense}>
+            {row.losses}
+          </Text>
+        </>
+      )}
       <Text style={[styles.cell, styles.numWide]} {...textScale.dense}>
         {diff > 0 ? `+${diff}` : diff}
       </Text>
@@ -256,7 +418,13 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   rowActive: {
-    backgroundColor: colors.accentDim,
+    backgroundColor: colors.brandDim,
+  },
+  bareRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+    paddingHorizontal: space.md,
   },
   mark: {
     position: "absolute",
@@ -266,7 +434,6 @@ const styles = StyleSheet.create({
     width: 3,
     borderTopRightRadius: radius.xs,
     borderBottomRightRadius: radius.xs,
-    backgroundColor: colors.accent,
   },
   cell: {
     ...type.tableNum,
@@ -277,8 +444,115 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   rank: {
-    width: 20,
+    width: 28,
+    alignItems: "center",
+  },
+  rankText: {
     textAlign: "center",
+  },
+
+  /* — Kesit — */
+  duel: {
+    marginHorizontal: layout.screenPadding,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    overflow: "hidden",
+    backgroundColor: colors.inkBlock,
+  },
+  duelHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: space.lg,
+  },
+  duelSide: {
+    flex: 1,
+    minWidth: 0,
+    gap: space.xs,
+  },
+  duelSideRight: {
+    alignItems: "flex-end",
+  },
+  duelTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+  },
+  duelTopRight: {
+    flexDirection: "row-reverse",
+  },
+  duelRank: {
+    height: 22,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.inkPillBorder,
+    justifyContent: "center",
+  },
+  duelRankText: {
+    ...type.numSmStrong,
+    color: colors.onDark,
+  },
+  duelName: {
+    ...type.h4,
+    color: colors.onDark,
+  },
+  duelPoints: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: space.xxs,
+  },
+  duelPointsValue: {
+    ...type.scoreLg,
+    color: colors.onDark,
+  },
+  duelPointsUnit: {
+    ...type.overline,
+    color: colors.brandOnDark,
+    marginBottom: space.xs,
+  },
+  duelGap: {
+    width: 84,
+    alignItems: "center",
+  },
+  duelGapValue: {
+    ...type.scoreMd,
+    color: colors.brandOnDark,
+  },
+  duelGapLabel: {
+    ...type.overline,
+    color: colors.onDarkMuted,
+  },
+  sliceCard: {
+    marginHorizontal: layout.screenPadding,
+    borderBottomLeftRadius: radius.xl,
+    borderBottomRightRadius: radius.xl,
+    overflow: "hidden",
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderTopWidth: 0,
+    borderColor: colors.border,
+  },
+  ellipsis: {
+    height: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+  },
+  ellipsisText: {
+    ...type.label,
+    color: colors.textTertiary,
+  },
+  fullTitle: {
+    ...type.h2,
+    color: colors.textPrimary,
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.xl,
+    paddingBottom: space.xs,
+  },
+  alignRight: {
+    textAlign: "right",
   },
   name: {
     ...type.bodySm,
@@ -291,11 +565,11 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semibold,
   },
   num: {
-    width: 20,
+    width: 22,
     textAlign: "center",
   },
   numWide: {
-    width: 28,
+    width: 34,
     textAlign: "right",
   },
   points: {

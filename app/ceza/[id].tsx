@@ -36,7 +36,9 @@ import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import {
+  Aurora,
   Badge,
   BottomSheet,
   Button,
@@ -253,10 +255,6 @@ export default function PenaltyDetailScreen() {
     mutation.mutate({ penalty, kind: compose, text: text.trim(), side: effectiveSide });
   }, [compose, effectiveSide, mutation, penalty, text]);
 
-  if (!auth.user) {
-    return <Redirect href="/giris" />;
-  }
-
   /* -------------------------------- DURUM -------------------------------- */
 
   const defenseOpen = penalty ? windowOpen(penalty.defense_deadline_at) : false;
@@ -320,6 +318,12 @@ export default function PenaltyDetailScreen() {
     return rows;
   }, [penalty]);
 
+  /* Giriş kapısı TÜM kancalardan sonra: oturum açılınca kanca sayısı değişmesin
+     ("Rendered more hooks…" hatası). Davranış aynı: oturum yoksa /giris. */
+  if (!auth.user) {
+    return <Redirect href="/giris" />;
+  }
+
   /* -------------------------------- ÇİZİM -------------------------------- */
 
   return (
@@ -359,7 +363,9 @@ export default function PenaltyDetailScreen() {
           refreshControl={refresh.control}
         >
           {/* Künye */}
-          <Surface level={1} radius="lg" style={styles.hero}>
+          <View style={styles.hero}>
+              <LinearGradient colors={colors.gradientInk} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+              <Aurora variant="stage" style={StyleSheet.absoluteFill} />
             <Text style={styles.heroTitle} numberOfLines={3} {...textScale.dense}>
               {penalty.match_label ?? penalty.team_name ?? "Disiplin dosyası"}
             </Text>
@@ -377,10 +383,10 @@ export default function PenaltyDetailScreen() {
                 {banText}
               </Text>
             ) : null}
-          </Surface>
+          </View>
 
           {/* Aşama çizelgesi */}
-          <SectionHeader style={styles.flushHeader} title="Süreç" meta={`${Math.max(stageIndex + 1, 1)}/${STAGES.length}`} />
+          <SectionHeader style={styles.flushHeader} title="Süreç" icon="git-commit" iconTone="signature" meta={`${Math.max(stageIndex + 1, 1)}/${STAGES.length}`} />
           <Surface level={1} radius="lg" style={styles.stages}>
             {STAGES.map((stage, index) => (
               <StageStep
@@ -396,7 +402,7 @@ export default function PenaltyDetailScreen() {
           {/* Kurul kararı metni */}
           {penalty.disiplin_karari ? (
             <>
-              <SectionHeader style={styles.flushHeader} title="Kurul kararı" />
+              <SectionHeader style={styles.flushHeader} title="Kurul kararı" icon="shield" iconTone="red" />
               <Surface level={1} radius="lg" style={styles.decision}>
                 <Ionicons name="shield" size={16} color={colors.danger} />
                 <Text style={styles.decisionText} {...textScale.long}>
@@ -409,7 +415,7 @@ export default function PenaltyDetailScreen() {
           {/* Dosya künyesi */}
           {facts.length > 0 ? (
             <>
-              <SectionHeader style={styles.flushHeader} title="Dosya bilgileri" />
+              <SectionHeader style={styles.flushHeader} title="Dosya bilgileri" icon="folder-open" iconTone="neutral" />
               {facts.map((row, index) => (
                 <KeyValueRow
                   key={row.key}
@@ -423,7 +429,7 @@ export default function PenaltyDetailScreen() {
           ) : null}
 
           {/* Savunma / itiraz kapıları */}
-          <SectionHeader style={styles.flushHeader} title="Savunma ve itiraz" />
+          <SectionHeader style={styles.flushHeader} title="Savunma ve itiraz" icon="chatbox-ellipses" iconTone="gold" />
 
           {penalty.available_sides.length > 1 ? (
             <View style={styles.sideBlock}>
@@ -481,7 +487,7 @@ export default function PenaltyDetailScreen() {
           {/* Gönderdiğim metinler */}
           {submissions.length > 0 ? (
             <>
-              <SectionHeader style={styles.flushHeader} title="Gönderdiklerim" meta={String(submissions.length)} />
+              <SectionHeader style={styles.flushHeader} title="Gönderdiklerim" icon="paper-plane" iconTone="cyan" meta={String(submissions.length)} />
               {submissions.map((event) => (
                 <Surface key={event.id} level={1} radius="lg" style={styles.submission}>
                   <View style={styles.submissionHead}>
@@ -506,7 +512,7 @@ export default function PenaltyDetailScreen() {
           ) : null}
 
           {/* Olay zinciri */}
-          <SectionHeader style={styles.flushHeader} title="Olay zinciri" meta={String(timeline.length)} />
+          <SectionHeader style={styles.flushHeader} title="Olay zinciri" icon="list" iconTone="violet" meta={String(timeline.length)} />
           {timeline.length === 0 ? (
             <EmptyState
               icon="time-outline"
@@ -738,13 +744,18 @@ const styles = StyleSheet.create({
     gap: space.md,
   },
   hero: {
-    padding: space.md,
+    padding: space.lg,
     marginTop: space.md,
     gap: space.sm,
+    borderRadius: radius.xxl,
+    overflow: "hidden",
+    backgroundColor: colors.inkBlock,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderOnDark,
   },
   heroTitle: {
-    ...type.h2,
-    color: colors.textPrimary,
+    ...type.h1,
+    color: colors.onDark,
   },
   heroBadges: {
     flexDirection: "row",
@@ -753,7 +764,7 @@ const styles = StyleSheet.create({
   },
   heroBan: {
     ...type.bodySm,
-    color: colors.textSecondary,
+    color: colors.onDarkMuted,
   },
   stages: {
     flexDirection: "row",

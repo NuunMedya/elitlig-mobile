@@ -2,8 +2,9 @@
  * Mobil reji — olayın oyuncusunu seçme katmanı (yatay ekrana göre ızgara).
  *
  * Kadrodaki oyuncular (önce İlk 11, sonra yedekler) iki-üç sütunlu ızgarada
- * gelir; tek dokunuş olayı kaydeder. "Oyuncusuz kaydet" gol/kartı oyuncu
- * bilgisi olmadan yazar (sonra masaüstü rejiden düzeltilebilir).
+ * gelir; tek dokunuş olayı kaydeder. Gollerde en üstte belirgin bir
+ * "İsimsiz gol" düğmesi vardır: kadro girilmemiş maçta da golü oyuncu
+ * belirtmeden takıma yazar (skorbord + maç sonucu).
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -30,6 +31,9 @@ export interface PlayerPickerProps {
   otherLabel?: string;
   /** Kadro boşken gösterilen açıklama. */
   emptyText?: string;
+  /** "İsimsiz gol" düğmesinin metni; null → düğme yok. Dokununca onPick(null). */
+  anonymousLabel?: string | null;
+  anonymousHint?: string;
 }
 
 export function PlayerPicker({
@@ -44,7 +48,32 @@ export function PlayerPicker({
   starterLabel = "İLK 11",
   otherLabel = "YEDEKLER",
   emptyText = "Bu takımın maç kadrosu girilmemiş. Olayı oyuncusuz kaydedebilirsin.",
+  anonymousLabel = null,
+  anonymousHint,
 }: PlayerPickerProps) {
+  const anonymous = anonymousLabel ? (
+    <Touchable
+      style={[styles.anon, { borderColor: accent }]}
+      onPress={() => onPick(null)}
+      disabled={busy}
+      accessibilityLabel={anonymousLabel}
+      haptic="medium"
+    >
+      <View style={[styles.anonIcon, { backgroundColor: accent }]}>
+        <Ionicons name="football" size={18} color={RIG.ink} />
+      </View>
+      <View style={styles.flex}>
+        <Text style={styles.anonTitle} numberOfLines={1} allowFontScaling={false}>
+          {anonymousLabel}
+        </Text>
+        {anonymousHint ? (
+          <Text style={styles.subtitle} numberOfLines={2} allowFontScaling={false}>
+            {anonymousHint}
+          </Text>
+        ) : null}
+      </View>
+    </Touchable>
+  ) : null;
   const starters = players.filter((p) => p.role === "starter");
   const others = players.filter((p) => p.role !== "starter");
   const renderGroup = (label: string, list: SquadPlayer[]) =>
@@ -104,11 +133,13 @@ export function PlayerPicker({
         </View>
         {players.length ? (
           <ScrollView contentContainerStyle={styles.body}>
+            {anonymous}
             {renderGroup(starterLabel, starters)}
             {renderGroup(otherLabel, others)}
           </ScrollView>
         ) : (
-          <View style={styles.empty}>
+          <View style={[styles.empty, styles.body]}>
+            {anonymous}
             <Text style={styles.subtitle} allowFontScaling={false}>
               {emptyText}
             </Text>
@@ -184,4 +215,17 @@ const styles = StyleSheet.create({
   numberText: { ...type.numSmStrong, color: RIG.text },
   name: { ...type.label, color: RIG.text, flex: 1 },
   empty: { padding: space.lg },
+  anon: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    minHeight: 56,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    backgroundColor: RIG.panelStrong,
+  },
+  anonIcon: { width: 34, height: 34, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  anonTitle: { ...type.label, color: RIG.text },
 });

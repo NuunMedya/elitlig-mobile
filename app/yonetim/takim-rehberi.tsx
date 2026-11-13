@@ -17,10 +17,13 @@ import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { ActionSheet, AdminList, AdminScreen, OptionSheet, StatRow } from "@/components/admin";
+import { LinearGradient } from "expo-linear-gradient";
+
+import { ActionSheet, AdminList, AdminScreen, OptionSheet } from "@/components/admin";
+import { CountStrip } from "@/components/admin/team/ManageKit";
 import { TeamNotesSheet } from "@/components/admin/contacts/TeamNotesSheet";
 import { useContactActions, type ContactActions } from "@/components/admin/contacts/useContactActions";
-import { Badge, Chip, ChipGroup, TeamLogo, Touchable, type Tone } from "@/components/ui";
+import { Avatar, Badge, Chip, ChipGroup, TeamLogo, Touchable, type Tone } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { formatDate } from "@/lib/admin/format";
 import {
@@ -32,7 +35,7 @@ import {
 } from "@/lib/api/admin/contacts";
 import { mediaUrl } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
 
 const PERMS = ["teams.directory"];
 const ORIGIN_TONE: Record<TeamOrigin, Tone> = { created: "win", claimed: "info", unmanaged: "neutral" };
@@ -87,18 +90,15 @@ export default function TeamsDirectoryScreen() {
 
   const header = (
     <View style={styles.extra}>
-      <StatRow
+      <CountStrip
         items={[
-          { label: "takım", value: items.length },
-          { label: "oluşturdu", value: counts.created, tone: "win", onPress: () => setOrigin(origin === "created" ? null : "created") },
-          { label: "sahiplendi", value: counts.claimed, tone: "info", onPress: () => setOrigin(origin === "claimed" ? null : "claimed") },
-          { label: "yetkilisiz", value: counts.unmanaged, onPress: () => setOrigin(origin === "unmanaged" ? null : "unmanaged") },
+          { key: "created", label: "Oluşturdu", value: counts.created, tone: "win", icon: "add-circle", selected: origin === "created", onPress: () => setOrigin(origin === "created" ? null : "created") },
+          { key: "claimed", label: "Sahiplendi", value: counts.claimed, tone: "info", icon: "hand-left", selected: origin === "claimed", onPress: () => setOrigin(origin === "claimed" ? null : "claimed") },
+          { key: "unmanaged", label: "Yetkilisiz", value: counts.unmanaged, tone: "warn", icon: "person-remove", selected: origin === "unmanaged", onPress: () => setOrigin(origin === "unmanaged" ? null : "unmanaged") },
         ]}
       />
       <ChipGroup scrollable contentPadding={0}>
-        {(Object.keys(ORIGIN_LABELS) as TeamOrigin[]).map((key) => (
-          <Chip key={key} label={ORIGIN_LABELS[key]} size="sm" selected={origin === key} onPress={() => setOrigin(origin === key ? null : key)} />
-        ))}
+        <Chip label={`Tümü · ${items.length}`} size="sm" selected={!origin} onPress={() => setOrigin(null)} />
         {data?.scope?.nationwide ? (
           <Chip
             label={city ?? "Tüm iller"}
@@ -140,13 +140,12 @@ export default function TeamsDirectoryScreen() {
         renderItem={({ item }) =>
           item.kind === "header" ? (
             <View style={styles.groupHead}>
-              <Ionicons name="location-outline" size={14} color={colors.textTertiary} />
+              <LinearGradient colors={colors.gradientSignature} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={styles.groupRail} />
+              <Ionicons name="location" size={13} color={colors.brandAccent} />
               <Text style={styles.groupTitle} {...textScale.dense}>
-                {item.label}
+                {upperTR(item.label)}
               </Text>
-              <Text style={styles.groupCount} {...textScale.dense}>
-                {item.count}
-              </Text>
+              <Badge label={item.count} size="xs" />
             </View>
           ) : (
             <DirectoryRow team={item.team} actions={actions} canNotes={canNotes} onPress={() => setMenu(item.team)} onNotes={() => setNotesFor(item.team)} />
@@ -243,8 +242,8 @@ const DirectoryRow = React.memo(function DirectoryRow({
       </View>
 
       <View style={styles.manager}>
-        <Ionicons name="person-outline" size={14} color={colors.textTertiary} />
-        <Text style={styles.managerText} numberOfLines={1} {...textScale.dense}>
+        {team.manager ? <Avatar name={team.manager.name} size={24} /> : <Ionicons name="person-remove-outline" size={16} color={colors.warn} />}
+        <Text style={[styles.managerText, team.manager ? null : { color: colors.warn }]} numberOfLines={1} {...textScale.dense}>
           {team.manager ? `${team.manager.name}${team.manager.username ? ` · @${team.manager.username}` : ""}` : "Yetkilisi yok"}
           {team.contact?.contact_name && team.contact.contact_name !== team.manager?.name ? ` · İletişim: ${team.contact.contact_name}` : ""}
         </Text>
@@ -289,15 +288,16 @@ const DirectoryRow = React.memo(function DirectoryRow({
 });
 
 const styles = StyleSheet.create({
-  extra: { gap: space.sm },
+  extra: { gap: space.md },
+  groupRail: { width: 3, height: 13, borderRadius: radius.pill },
   scope: { ...type.caption, color: colors.textTertiary },
-  groupHead: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingTop: space.sm },
-  groupTitle: { ...type.overline, color: colors.textTertiary, flex: 1 },
+  groupHead: { flexDirection: "row", alignItems: "center", gap: space.s, paddingTop: space.md },
+  groupTitle: { ...type.overline, color: colors.textSecondary, flex: 1 },
   groupCount: { ...type.caption, color: colors.textTertiary },
   card: {
     padding: space.md,
-    gap: space.sm,
-    borderRadius: radius.lg,
+    gap: space.md,
+    borderRadius: radius.xl,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
     borderColor: colors.border,
@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
   badges: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: space.xxs },
   notesBtn: { flexDirection: "row", alignItems: "center", gap: space.xxs, padding: space.xs },
   notesCount: { ...type.numSmStrong, color: colors.textSecondary },
-  manager: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  manager: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingTop: space.sm, borderTopWidth: hairline, borderTopColor: colors.separator },
   managerText: { ...type.bodySm, color: colors.textSecondary, flex: 1 },
   lines: { flexDirection: "row", flexWrap: "wrap", gap: space.s },
   line: {
@@ -319,7 +319,7 @@ const styles = StyleSheet.create({
     paddingVertical: space.xs,
     paddingHorizontal: space.sm,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface3,
+    backgroundColor: colors.brandDim,
     maxWidth: "100%",
   },
   lineText: { ...type.labelSm, color: colors.textPrimary, flexShrink: 1 },

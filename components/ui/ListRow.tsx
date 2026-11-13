@@ -26,7 +26,21 @@ import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-na
 import { colors, elevate, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
 import { Toggle } from "./Toggle";
 import { toneColors, type Tone } from "./Badge";
+import { LinearGradient } from "expo-linear-gradient";
+import { IconTile, type IconTileTone } from "./NightKit";
 import { Touchable } from "./Pressable";
+
+/** Anlamsal ton → degrade ikon kutusu tonu (Gece teması: renkli kutu + beyaz ikon). */
+const TILE_TONE: Record<Tone, IconTileTone> = {
+  neutral: "neutral",
+  brand: "violet",
+  accent: "cyan",
+  live: "pink",
+  win: "mint",
+  warn: "gold",
+  danger: "red",
+  info: "cyan",
+};
 
 /** Sol taraftaki ikon tanımı — hazır bir düğüm yerine kısayol. */
 export interface LeadingIcon {
@@ -122,20 +136,31 @@ export const ListRow = React.memo(function ListRow({
        * Nötr ton `surface3` alır: Arena kartı saf beyazdır ve `surface2`
        * (#F7F8FA) beyazın üstünde kutuyu görünmez kılıyordu.
        */
-      const tone = leading.tone && leading.tone !== "neutral" ? toneColors(leading.tone) : null;
-      const box = tone ? tone.dim : colors.surface3;
-      const tint = tone ? tone.fg : colors.textSecondary;
-      return (
-        <View style={[styles.leading, { backgroundColor: disabled ? colors.surface2 : box }]}>
-          <Ionicons name={leading.icon} size={18} color={disabled ? colors.textDisabled : tint} />
-        </View>
-      );
+      /* Nötr ton sakin bir yüzey kutusunda kalır (ayar listeleri renk
+         cümbüşüne dönmesin); tonlu satır degrade IconTile taşır. */
+      if (disabled || !leading.tone || leading.tone === "neutral") {
+        const tint = disabled ? colors.textDisabled : toneColors("neutral").fg;
+        return (
+          <View style={[styles.leading, { backgroundColor: disabled ? colors.surface2 : colors.surface3 }]}>
+            <Ionicons name={leading.icon} size={18} color={tint} />
+          </View>
+        );
+      }
+      return <IconTile icon={leading.icon} tone={TILE_TONE[leading.tone]} size={LEADING_BOX} glow={false} />;
     }
     return <View style={styles.leadingNode}>{leading}</View>;
   }, [disabled, leading]);
 
   const content = (
     <>
+      {highlighted ? (
+        <LinearGradient
+          colors={colors.gradientSignature}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.highlightStrip}
+        />
+      ) : null}
       {leadingNode}
 
       <View style={styles.texts}>
@@ -173,7 +198,9 @@ export const ListRow = React.memo(function ListRow({
         />
       ) : null}
       {showChevron ? (
-        <Ionicons name="chevron-forward" size={14} color={colors.textDisabled} />
+        <View style={styles.chevron}>
+          <Ionicons name="chevron-forward" size={13} color={colors.textTertiary} />
+        </View>
       ) : null}
 
       {showDivider ? (
@@ -223,7 +250,7 @@ export const ListRow = React.memo(function ListRow({
 });
 
 /** Sol ikon kutusunun kenarı — mockup ".lrow .lic" 32px. */
-const LEADING_BOX = 32;
+const LEADING_BOX = 36;
 
 /**
  * Grup kartının kabuğu — tema.html ".group": yüzey + hairline kenarlık.
@@ -247,7 +274,7 @@ const LEADING_BOX = 32;
 const GROUP_SHELL = {
   backgroundColor: colors.surface1,
   borderWidth: hairline,
-  borderColor: colors.border,
+  borderColor: colors.glassLine,
 } as const;
 
 const styles = StyleSheet.create({
@@ -285,8 +312,23 @@ const styles = StyleSheet.create({
   },
   highlighted: {
     backgroundColor: colors.brandDim,
-    borderLeftWidth: 3,
-    borderLeftColor: colors.brand,
+  },
+  highlightStrip: {
+    position: "absolute",
+    left: 0,
+    top: space.sm,
+    bottom: space.sm,
+    width: 3,
+    borderTopRightRadius: 3,
+    borderBottomRightRadius: 3,
+  },
+  chevron: {
+    width: 24,
+    height: 24,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface2,
   },
   leading: {
     width: LEADING_BOX,
@@ -318,7 +360,7 @@ const styles = StyleSheet.create({
       satırı SemiBold yazmak listeyi bağıran bir başlık yığınına çeviriyordu. */
   title: {
     ...type.h3,
-    fontFamily: fonts.medium,
+    fontFamily: fonts.semibold,
     color: colors.textPrimary,
   },
   titleDestructive: {

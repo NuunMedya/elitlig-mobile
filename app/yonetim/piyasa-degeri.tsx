@@ -20,18 +20,18 @@ import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
+import Ionicons from "@expo/vector-icons/Ionicons";
+
 import {
   ActionSheet,
   AdminList,
   AdminScreen,
-  InfoLine,
-  Panel,
-  RecordCard,
   ToggleField,
   confirmAction,
   useAdminMutation,
 } from "@/components/admin";
-import { Badge, Button, Chip, ChipGroup, EmptyState, ErrorState, Input, SegmentedControl, SkeletonCard } from "@/components/ui";
+import { CountStrip, DangerNote, GroupCard, ListLine, PositionAvatar } from "@/components/admin/team/ManageKit";
+import { Button, Chip, ChipGroup, EmptyState, ErrorState, GradientBar, IconTile, Input, RankBadge, SegmentedControl, SkeletonCard, Touchable } from "@/components/ui";
 import { hasPermission } from "@/lib/admin/access";
 import { formatDateTime } from "@/lib/admin/format";
 import {
@@ -61,7 +61,7 @@ import {
 } from "@/lib/api/admin/marketValue";
 import { positionLabel } from "@/lib/api/admin/players";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 const PERMS = ["market_value.view", "market_value.recalculate", "market_value.settings"];
 const KEY = ["admin", "market-value"] as const;
@@ -163,19 +163,28 @@ function RankingTab({ canRecalc }: { canRecalc: boolean }) {
         search={q}
         onSearch={setQ}
         searchPlaceholder="Oyuncu ara"
-        filters={[{ key: "", label: "Tüm mevkiler" }, ...Object.entries(POSITION_GROUP_LABELS).map(([k, label]) => ({ key: k, label }))]}
-        filter={position}
-        onFilter={setPosition}
         extraHeader={
           <View style={styles.stack}>
+            {rows.length ? (
+              <CountStrip
+                items={[
+                  { key: "total", label: "Oyuncu", value: total, icon: "people" },
+                  { key: "top", label: "Zirve", value: compactEtl(rows[0]?.currentValue), tone: "accent", icon: "trophy", hint: rows[0]?.playerName },
+                  { key: "up", label: "Yükselen", value: rows.filter((r) => r.previousValue != null && r.currentValue > r.previousValue).length, tone: "win", icon: "trending-up", hint: "bu sayfada" },
+                ]}
+              />
+            ) : null}
             <ChipGroup scrollable contentPadding={0}>
+              {[{ key: "", label: "Tüm mevkiler" }, ...Object.entries(POSITION_GROUP_LABELS).map(([k, label]) => ({ key: k, label }))].map((f) => (
+                <Chip key={f.key || "all"} label={f.label} size="sm" selected={position === f.key} onPress={() => setPosition(f.key)} />
+              ))}
+            </ChipGroup>
+            <ChipGroup scrollable contentPadding={0}>
+              {canRecalc ? <Chip label="Tümünü hesapla" icon="refresh" size="sm" tone="warn" selected onPress={() => void askAll()} /> : null}
               {RANKING_SORTS.map((s) => (
                 <Chip key={s.key} label={s.label} size="sm" icon={sort === s.key ? "arrow-down" : undefined} selected={sort === s.key} onPress={() => setSort(s.key)} />
               ))}
             </ChipGroup>
-            {canRecalc ? (
-              <Button label="Tümünü yeniden hesapla" icon="refresh" variant="secondary" size="sm" loading={recalcAll.isPending} onPress={() => void askAll()} />
-            ) : null}
           </View>
         }
         summary={query.data ? `${total.toLocaleString("tr-TR")} oyuncu${canRecalc ? " · tekil hesap için oyuncuya basılı tut" : ""}` : null}
@@ -184,26 +193,56 @@ function RankingTab({ canRecalc }: { canRecalc: boolean }) {
         emptyTitle="Piyasa değeri kaydı yok"
         renderItem={({ item, index }) => {
           const change = item.previousValue != null ? item.currentValue - item.previousValue : 0;
+          const rank = item.globalRank ?? index + 1;
           return (
-            <RecordCard
-              title={`${item.globalRank ?? index + 1}. ${item.playerName}`}
-              subtitle={[positionLabel(item.position) || POSITION_GROUP_LABELS[item.positionGroup ?? ""] || null, `${item.totalMatches ?? 0} maç`, `${item.totalGoals ?? 0} gol`]
-                .filter(Boolean)
-                .join(" · ")}
-              meta={[
-                item.cityRank != null ? `İl sırası ${item.cityRank}` : null,
-                item.positionRank != null ? `Mevki sırası ${item.positionRank}` : null,
-                item.marketScore != null ? `Skor ${Number(item.marketScore).toFixed(1)}` : null,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-              avatar={{ name: item.playerName, image: item.playerImg }}
-              value={formatEtl(item.currentValue)}
-              valueTone="brand"
-              badges={[change ? { label: `${change > 0 ? "+" : "-"}${formatEtl(Math.abs(change))}`, tone: change > 0 ? "win" : "danger" } : null]}
+            <Touchable
+              feedback="card"
+              haptic="selection"
               onPress={() => router.push(`/yonetim/oyuncular/${item.playerId}`)}
               onLongPress={canRecalc ? () => setMenu(item) : undefined}
-            />
+              style={[styles.rank, rank <= 3 ? styles.rankTop : null]}
+              accessibilityRole="button"
+              accessibilityLabel={`${rank}. ${item.playerName}, ${formatEtl(item.currentValue)}`}
+            >
+              {rank <= 3 ? (
+                <RankBadge rank={rank} size={28} />
+              ) : (
+                <Text style={styles.rankNo} {...textScale.badge}>
+                  {rank}
+                </Text>
+              )}
+              <PositionAvatar name={item.playerName} image={item.playerImg} position={item.position} size={38} />
+              <View style={styles.rankMain}>
+                <Text style={styles.rankName} numberOfLines={1} {...textScale.dense}>
+                  {item.playerName}
+                </Text>
+                <Text style={styles.rankMeta} numberOfLines={1} {...textScale.dense}>
+                  {[positionLabel(item.position) || POSITION_GROUP_LABELS[item.positionGroup ?? ""] || null, `${item.totalMatches ?? 0} maç`, `${item.totalGoals ?? 0} gol`].filter(Boolean).join(" · ")}
+                </Text>
+                {item.marketScore != null ? (
+                  <View style={styles.scoreRow}>
+                    <GradientBar value={Number(item.marketScore) / 100} height={4} style={styles.flex} />
+                    <Text style={styles.scoreText} {...textScale.badge}>
+                      {Number(item.marketScore).toFixed(0)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+              <View style={styles.rankValue}>
+                <Text style={styles.value} numberOfLines={1} {...textScale.badge}>
+                  {compactEtl(item.currentValue)}
+                </Text>
+                {change ? (
+                  <Text style={[styles.delta, { color: change > 0 ? colors.win : colors.loss }]} numberOfLines={1} {...textScale.badge}>
+                    {change > 0 ? "▲" : "▼"} {compactEtl(Math.abs(change))}
+                  </Text>
+                ) : (
+                  <Text style={styles.deltaFlat} {...textScale.badge}>
+                    ETL
+                  </Text>
+                )}
+              </View>
+            </Touchable>
           );
         }}
       />
@@ -292,21 +331,32 @@ function FormulaTab() {
 
   return (
     <>
-      <Panel title="DEĞER ARALIĞI">
-        <InfoLine label="Alt değer" value={formatEtl(s?.launch?.minValue)} />
-        <InfoLine label="Üst değer" value={formatEtl(s?.launch?.maxValue)} />
-        <InfoLine label="Olay başı değişim" value={`±%${str(s?.smoothing?.perEventMaxPct) || "—"}`} />
-      </Panel>
+      <CountStrip
+        items={[
+          { key: "min", label: "Alt değer", value: compactEtl(s?.launch?.minValue), icon: "arrow-down" },
+          { key: "max", label: "Üst değer", value: compactEtl(s?.launch?.maxValue), tone: "accent", icon: "arrow-up" },
+          { key: "step", label: "Olay başı", value: `±%${str(s?.smoothing?.perEventMaxPct) || "—"}`, icon: "pulse" },
+        ]}
+      />
 
-      <Panel title="BİLEŞEN AĞIRLIKLARI">
-        <View style={styles.sumRow}>
-          <Text style={styles.note} {...textScale.long}>
-            Piyasa skorunun hangi kriterden ne kadar etkileneceği. Toplam %100 olmalı.
-          </Text>
-          <Badge label={`Toplam %${Math.round(sum * 100) / 100}`} tone={Math.round(sum) === 100 ? "win" : "danger"} />
+      <GroupCard title="Bileşen ağırlıkları" step={1}>
+        {/* TOPLAM ÇUBUĞU — %100'e ne kadar uzak; bileşen payları renkli şerit. */}
+        <View style={styles.sumBox}>
+          <View style={styles.sumHead}>
+            <Text style={styles.note} {...textScale.dense}>
+              Toplam %100 olmalı
+            </Text>
+            <Text style={[styles.sumValue, { color: Math.round(sum) === 100 ? colors.win : colors.danger }]} {...textScale.badge}>
+              %{Math.round(sum * 100) / 100}
+            </Text>
+          </View>
+          <GradientBar value={sum / 100} height={8} gradient={Math.round(sum) === 100 ? colors.tileTones.mint : sum > 100 ? colors.tileTones.red : undefined} />
         </View>
         {COMPONENT_KEYS.map((k) => (
-          <NumberInput key={k} label={BREAKDOWN_LABELS[k]} hint={COMPONENT_HINTS[k]} suffix="%" value={weights[k] ?? ""} onChange={(v) => setWeights((w) => ({ ...w, [k]: v }))} />
+          <View key={k} style={styles.weight}>
+            <NumberInput label={BREAKDOWN_LABELS[k]} hint={COMPONENT_HINTS[k]} suffix="%" value={weights[k] ?? ""} onChange={(v) => setWeights((w) => ({ ...w, [k]: v }))} />
+            <GradientBar value={parseNumber(weights[k]) / 100} height={3} />
+          </View>
         ))}
         <Button
           label="Ağırlıkları kaydet"
@@ -314,41 +364,44 @@ function FormulaTab() {
           onPress={() => saveWeights.mutate(undefined)}
           loading={saveWeights.isPending}
           disabled={Math.round(sum) !== 100}
+          fullWidth
         />
         {Math.round(sum) !== 100 ? (
           <Text style={styles.warn} {...textScale.dense}>
             Kaydetmek için toplamı %100 yap.
           </Text>
         ) : null}
-      </Panel>
+      </GroupCard>
 
-      <Panel title="ÖDÜL PUANLARI">
+      <GroupCard title="Ödül puanları" step={2}>
         <Text style={styles.note} {...textScale.long}>
           "Ödüller" bileşenini besler.
         </Text>
         {Object.entries(AWARD_POINT_LABELS).map(([k, label]) => (
           <NumberInput key={k} label={label} value={awards[k] ?? ""} onChange={(v) => setAwards((a) => ({ ...a, [k]: v }))} />
         ))}
-      </Panel>
-      <Panel title="GELİŞİM PUANLARI">
+      </GroupCard>
+      <GroupCard title="Gelişim puanları" step={3}>
         <Text style={styles.note} {...textScale.long}>
           Oyuncunun değer hedefini kademeli olarak yukarı / aşağı çeker.
         </Text>
         {Object.entries(GROWTH_POINT_LABELS).map(([k, label]) => (
           <NumberInput key={k} label={label} value={growth[k] ?? ""} onChange={(v) => setGrowth((g) => ({ ...g, [k]: v }))} />
         ))}
-        <Button label="Puanları kaydet" icon="save-outline" onPress={() => savePoints.mutate(undefined)} loading={savePoints.isPending} />
-      </Panel>
+        <Button label="Puanları kaydet" icon="save-outline" onPress={() => savePoints.mutate(undefined)} loading={savePoints.isPending} fullWidth />
+      </GroupCard>
 
-      <Panel title="İNCE AYARLAR">
+      <GroupCard title="İnce ayarlar" step={4}>
         {FINE_FIELDS.map((f) => (
           <NumberInput key={f.key} label={f.label} suffix={f.suffix} hint={f.hint} value={fine[f.key] ?? ""} onChange={(v) => setFine((x) => ({ ...x, [f.key]: v }))} />
         ))}
-        <Button label="İnce ayarları kaydet" icon="save-outline" onPress={() => saveFine.mutate(undefined)} loading={saveFine.isPending} />
-      </Panel>
-      <Text style={styles.note} {...textScale.long}>
-        Değerler otomatik güncellenir: maç yayınlandığında, haftanın enleri yayınlandığında ve gece toplu hesabında. Tekil oyuncu işlemleri (yeniden hesap, manuel düzeltme) oyuncu profilindedir.
-      </Text>
+        <Button label="İnce ayarları kaydet" icon="save-outline" onPress={() => saveFine.mutate(undefined)} loading={saveFine.isPending} fullWidth />
+      </GroupCard>
+      <DangerNote
+        tone="info"
+        title="Değerler otomatik güncellenir"
+        body="Maç yayınlandığında, haftanın enleri yayınlandığında ve gece toplu hesabında. Tekil oyuncu işlemleri (yeniden hesap, manuel düzeltme) oyuncu profilindedir."
+      />
     </>
   );
 }
@@ -377,14 +430,26 @@ function PositionsTab() {
 
   return (
     <>
-      <Text style={styles.note} {...textScale.long}>
-        "Pozisyona Özel" bileşeninin içeriği: her pozisyon grubunda hangi istatistiğin ne kadar sayılacağı. Pasif satırlar hesaba katılmaz; aktif satırların toplamı %100 olmalı.
-      </Text>
+      <DangerNote
+        tone="info"
+        title="Pozisyona özel bileşen"
+        body="Her pozisyon grubunda hangi istatistiğin ne kadar sayılacağı. Pasif satırlar hesaba katılmaz; aktif satırların toplamı %100 olmalı."
+      />
       {positions.map((pos) => {
         const sum = rows.filter((r) => r.position === pos && r.is_active).reduce((n, r) => n + parseNumber(r.weight), 0);
         return (
-          <Panel key={pos} title={(POSITION_GROUP_LABELS[pos] ?? pos).toLocaleUpperCase("tr-TR")}>
-            <Badge label={`Aktif toplam %${Math.round(sum * 100) / 100}`} tone={Math.round(sum) === 100 ? "win" : "danger"} />
+          <GroupCard key={pos} title={POSITION_GROUP_LABELS[pos] ?? pos} icon="body" tone={Math.round(sum) === 100 ? "mint" : "red"}>
+            <View style={styles.sumBox}>
+              <View style={styles.sumHead}>
+                <Text style={styles.note} {...textScale.dense}>
+                  Aktif toplam
+                </Text>
+                <Text style={[styles.sumValue, { color: Math.round(sum) === 100 ? colors.win : colors.danger }]} {...textScale.badge}>
+                  %{Math.round(sum * 100) / 100}
+                </Text>
+              </View>
+              <GradientBar value={sum / 100} height={6} gradient={Math.round(sum) === 100 ? colors.tileTones.mint : sum > 100 ? colors.tileTones.red : undefined} />
+            </View>
             {rows.map((r, index) =>
               r.position !== pos ? null : (
                 <View key={`${r.position}-${r.stat_key}`} style={styles.statRow}>
@@ -400,7 +465,7 @@ function PositionsTab() {
                 </View>
               )
             )}
-          </Panel>
+          </GroupCard>
         );
       })}
       {rows.length ? (
@@ -426,17 +491,19 @@ function AuditTab() {
 
   return (
     <>
-      <Panel title="FORMÜL VERSİYONLARI">
+      <GroupCard title="Formül versiyonları" icon="git-branch" tone="violet" padded={false}>
         {versions.isLoading ? (
           <SkeletonCard />
         ) : versions.data?.length ? (
-          versions.data.map((v) => (
-            <RecordCard
+          versions.data.map((v, i) => (
+            <ListLine
               key={v.id}
+              last={i === versions.data!.length - 1}
+              leading={<IconTile icon={v.is_active ? "checkmark-circle" : "git-commit-outline"} tone={v.is_active ? "mint" : "neutral"} size={34} glow={false} />}
               title={v.version}
               subtitle={v.name}
-              icon="git-commit-outline"
-              badges={[v.is_active ? { label: "Aktif", tone: "win" } : null]}
+              selected={Boolean(v.is_active)}
+              pills={[v.is_active && { label: "Aktif", tone: "win" }]}
               trailing={
                 v.is_active ? undefined : (
                   <Button
@@ -456,34 +523,40 @@ function AuditTab() {
             />
           ))
         ) : (
-          <Text style={styles.note}>Kayıtlı formül versiyonu yok.</Text>
+          <Text style={[styles.note, styles.inset]}>Kayıtlı formül versiyonu yok.</Text>
         )}
-      </Panel>
-      <Panel title={`DENETİM KAYDI${audit.data ? ` · SON ${audit.data.items?.length ?? 0} / ${audit.data.total ?? 0}` : ""}`}>
+      </GroupCard>
+      <GroupCard title={`Denetim kaydı${audit.data ? ` · son ${audit.data.items?.length ?? 0} / ${audit.data.total ?? 0}` : ""}`} icon="document-text" tone="neutral">
         {audit.isLoading ? (
           <SkeletonCard />
         ) : audit.error ? (
           <ErrorState error={audit.error} onRetry={audit.refetch} variant="inline" />
         ) : audit.data?.items?.length ? (
           audit.data.items.map((a) => (
-            <RecordCard
-              key={a.id}
-              title={AUDIT_ACTION_LABELS[a.action] ?? a.action}
-              subtitle={[a.user_name || (a.user_id ? `Kullanıcı #${a.user_id}` : "Sistem"), formatDateTime(a.createdAt)].join(" · ")}
-              icon="document-text-outline"
-              onPress={() => setOpen(open === a.id ? null : a.id)}
-            >
+            <View key={a.id} style={styles.audit}>
+              <Touchable onPress={() => setOpen(open === a.id ? null : a.id)} style={styles.auditHead} accessibilityRole="button" accessibilityState={{ expanded: open === a.id }}>
+                <View style={styles.auditDot} />
+                <View style={styles.flex}>
+                  <Text style={styles.auditTitle} numberOfLines={1} {...textScale.dense}>
+                    {AUDIT_ACTION_LABELS[a.action] ?? a.action}
+                  </Text>
+                  <Text style={styles.rankMeta} numberOfLines={1} {...textScale.dense}>
+                    {[a.user_name || (a.user_id ? `Kullanıcı #${a.user_id}` : "Sistem"), formatDateTime(a.createdAt)].join(" · ")}
+                  </Text>
+                </View>
+                <Ionicons name={open === a.id ? "chevron-up" : "chevron-down"} size={14} color={colors.textTertiary} />
+              </Touchable>
               {open === a.id ? (
                 <Text style={styles.code} selectable {...textScale.long}>
                   {auditJson(a.new_data)}
                 </Text>
               ) : null}
-            </RecordCard>
+            </View>
           ))
         ) : (
           <Text style={styles.note}>Henüz kayıt yok.</Text>
         )}
-      </Panel>
+      </GroupCard>
     </>
   );
 }
@@ -501,11 +574,52 @@ function auditJson(value: unknown): string {
   return JSON.stringify(data, null, 2) ?? "—";
 }
 
+/** Kısa değer: 18.450 → "18,5B". */
+function compactEtl(value: unknown): string {
+  const n = Number(value);
+  if (value == null || !Number.isFinite(n)) return "—";
+  if (Math.abs(n) >= 1e6) return `${(n / 1e6).toLocaleString("tr-TR", { maximumFractionDigits: 1 })}M`;
+  if (Math.abs(n) >= 1e3) return `${(n / 1e3).toLocaleString("tr-TR", { maximumFractionDigits: 1 })}B`;
+  return String(Math.round(n));
+}
+
 const styles = StyleSheet.create({
-  stack: { gap: space.sm },
-  sumRow: { gap: space.xs },
+  stack: { gap: space.md },
+  flex: { flex: 1, minWidth: 0 },
+  inset: { paddingHorizontal: space.lg, paddingBottom: space.md },
   statRow: { gap: space.xs, paddingVertical: space.xs },
   note: { ...type.bodySm, color: colors.textSecondary },
-  warn: { ...type.caption, color: colors.danger },
-  code: { ...type.caption, color: colors.textSecondary, marginTop: space.xs },
+  warn: { ...type.caption, color: colors.danger, textAlign: "center" },
+  code: { ...type.caption, color: colors.textSecondary, padding: space.sm, borderRadius: radius.md, backgroundColor: colors.surface2 },
+  sumBox: { gap: space.s, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surface2 },
+  sumHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
+  sumValue: { ...type.scoreSm },
+  weight: { gap: space.xs },
+  rank: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    minHeight: 68,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  rankTop: { borderColor: colors.brandBorder },
+  rankNo: { ...type.tableNumStrong, color: colors.textTertiary, width: 28, textAlign: "center" },
+  rankMain: { flex: 1, minWidth: 0, gap: 2 },
+  rankName: { ...type.h4, color: colors.textPrimary },
+  rankMeta: { ...type.caption, color: colors.textTertiary },
+  scoreRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: 2 },
+  scoreText: { ...type.numSm, color: colors.textSecondary, width: 20, textAlign: "right" },
+  rankValue: { alignItems: "flex-end", minWidth: 64 },
+  value: { ...type.scoreSm, color: colors.textPrimary },
+  delta: { ...type.numSmStrong },
+  deltaFlat: { ...type.micro, color: colors.textTertiary },
+  audit: { gap: space.xs, paddingVertical: space.xs },
+  auditHead: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 44 },
+  auditDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: colors.brandAccent },
+  auditTitle: { ...type.label, color: colors.textPrimary },
 });

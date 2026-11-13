@@ -24,6 +24,14 @@
  * kendi başlığıyla çizilir — oyuncu sayfasındaki kuralın aynısı. Bir oyuncu
  * kapsam listesinde yoksa "Bu kapsamda" kartı hiç çizilmez; alan uydurulmaz.
  *
+ * İKİNCİ TUR — DÜELLO DÜZENİ: iki yuva koyu bir sahnede (gradientInk +
+ * aurora) karşı karşıya durur; fotoğraflar taraf renginde degrade halkalı
+ * (A camgöbeği, B mor), ortada "VS" ve kazanılan metrik skoru (5 – 2).
+ * Her metrik `DuelBar`: değerler uçlarda, başlık ortada, KAZANAN taraf kendi
+ * renginde dolu hapta ve tam renkli çubukta; kaybeden sönük. Kart sayıları
+ * gibi "az olan iyi" metrikler ters sayılır. Her kartın başlığında kartın
+ * kendi skoru durur.
+ *
  * SEÇİCİ NEDEN SIRALAMA LİSTESİ: `app/ara.tsx` oyuncu aramasını aynı uçla
  * yapıyor (sunucu kapsamsız tam oyuncu listesi vermiyor). Aynı önbellek
  * anahtarı kullanıldığı için arama ekranından gelen kullanıcıda istek atılmaz.
@@ -37,20 +45,25 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { memo, useCallback, useMemo, useState } from "react";
 import { FlatList, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import {
+  Aurora,
   Avatar,
   BottomSheet,
   EmptyState,
   ErrorState,
+  IconTile,
   Input,
+  Reveal,
   ScreenHeader,
   SkeletonCard,
-  StatBar,
   TeamLogo,
   Touchable,
   useHeaderScroll,
   useRefresh,
+  type IconTileTone,
 } from "@/components/ui";
+import { DUEL_A, DUEL_B, DuelBar, DuelScore, HaloFrame, duelWinner } from "@/components/teampage/ProfileKit";
 import { getPlayer, getPlayerRankings } from "@/lib/api/players";
 import { positionLabel } from "@/lib/api/team";
 import { getTeam } from "@/lib/api/teams";
@@ -58,6 +71,10 @@ import { get } from "@/lib/http";
 import { queryKeys } from "@/lib/queryKeys";
 import { useScope } from "@/providers/ScopeProvider";
 import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
+
+/* Sahne gradyanı yatay, sağdan sola (yüzey gradyanı kuralı). */
+const INK_START = { x: 1, y: 0.5 };
+const INK_END = { x: 0, y: 0.5 };
 import type { ApiPlayer, PlayerRankRow } from "@/lib/types";
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -127,6 +144,84 @@ function marketOf(player: ApiPlayer | null | undefined, market: MarketValue | un
   if (raw == null || raw === "") return null;
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Kıyas kartının tek satırı. */
+interface Metric {
+  key: string;
+  label: string;
+  a: number;
+  b: number;
+  unit?: string;
+  lowerIsBetter?: boolean;
+  neutral?: boolean;
+}
+
+/** Kartın skoru: her taraf kaç metriği kazandı (nötr satırlar sayılmaz). */
+function tally(metrics: Metric[]): { a: number; b: number } {
+  let a = 0;
+  let b = 0;
+  for (const m of metrics) {
+    if (m.neutral) continue;
+    const w = duelWinner(m.a, m.b, m.lowerIsBetter);
+    if (w === "a") a += 1;
+    else if (w === "b") b += 1;
+  }
+  return { a, b };
+}
+
+function careerMetrics(
+  playerA: ApiPlayer | null,
+  playerB: ApiPlayer | null,
+  marketA: number | null,
+  marketB: number | null,
+  currency: string,
+): Metric[] {
+  const a = careerOf(playerA);
+  const b = careerOf(playerB);
+  const list: Metric[] = [
+    { key: "m", label: "Maç", a: a.matches, b: b.matches },
+    { key: "g", label: "Gol", a: a.goals, b: b.goals },
+    { key: "gpm", label: "Maç başı gol", a: ratio(a.goals, a.matches), b: ratio(b.goals, b.matches) },
+    { key: "pts", label: "Ort. puan", a: ratio(a.points, a.matches), b: ratio(b.points, b.matches) },
+    { key: "w", label: "Galibiyet", a: a.wins, b: b.wins },
+  ];
+  if (a.decided > 0 || b.decided > 0) {
+    list.push({
+      key: "wr",
+      label: "Galibiyet oranı",
+      a: a.decided > 0 ? Math.round((a.wins / a.decided) * 100) : 0,
+      b: b.decided > 0 ? Math.round((b.wins / b.decided) * 100) : 0,
+      unit: "%",
+    });
+  }
+  list.push({ key: "y", label: "Sarı kart", a: a.yellow, b: b.yellow, lowerIsBetter: true });
+  list.push({ key: "r", label: "Kırmızı kart", a: a.red, b: b.red, lowerIsBetter: true });
+  if (marketA != null || marketB != null) {
+    /* Büyük sayılar bar başlığına sığsın: milyon ya da bin birimine indirilir. */
+    const max = Math.max(marketA ?? 0, marketB ?? 0);
+    const div = max >= 1_000_000 ? 1_000_000 : max >= 1_000 ? 1_000 : 1;
+    list.push({
+      key: "mv",
+      label: `Piyasa değeri (${currency})`,
+      a: round1((marketA ?? 0) / div),
+      b: round1((marketB ?? 0) / div),
+      unit: div === 1_000_000 ? " M" : div === 1_000 ? " B" : "",
+      neutral: marketA == null || marketB == null,
+    });
+  }
+  return list;
+}
+
+function scopeMetrics(rowA: PlayerRankRow, rowB: PlayerRankRow): Metric[] {
+  return [
+    { key: "m", label: "Maç", a: num(rowA.matches), b: num(rowB.matches) },
+    { key: "g", label: "Gol", a: num(rowA.goals), b: num(rowB.goals) },
+    { key: "as", label: "Asist", a: num(rowA.assists), b: num(rowB.assists) },
+    { key: "gpm", label: "Maç başı gol", a: round1(num(rowA.goalsPerMatch)), b: round1(num(rowB.goalsPerMatch)) },
+    { key: "ppm", label: "Maç başı puan", a: round1(num(rowA.pointsPerMatch)), b: round1(num(rowB.pointsPerMatch)) },
+    { key: "c", label: "Kart", a: num(rowA.cards), b: num(rowB.cards), lowerIsBetter: true },
+  ];
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -245,6 +340,21 @@ export default function PlayerCompareScreen() {
   const nameA = playerA?.player_name || rowA?.name || "Oyuncu A";
   const nameB = playerB?.player_name || rowB?.name || "Oyuncu B";
 
+  const career = useMemo(
+    () =>
+      careerMetrics(
+        playerA,
+        playerB,
+        marketOf(playerA, sideA.marketQuery.data),
+        marketOf(playerB, sideB.marketQuery.data),
+        sideA.marketQuery.data?.currency ?? sideB.marketQuery.data?.currency ?? "ETL",
+      ),
+    [playerA, playerB, sideA.marketQuery.data, sideB.marketQuery.data],
+  );
+  const scopeList = useMemo(() => (rowA && rowB ? scopeMetrics(rowA, rowB) : null), [rowA, rowB]);
+  const totalTally = useMemo(() => tally([...career, ...(scopeList ?? [])]), [career, scopeList]);
+  const showScore = ready && !loading && Boolean(playerA && playerB);
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
@@ -259,39 +369,63 @@ export default function PlayerCompareScreen() {
         refreshControl={ready ? refresh.control : undefined}
         contentContainerStyle={styles.content}
       >
-        {/* ————— Seçim: iki yuva, her biri seçiciyi açar ————— */}
-        <View style={styles.slots}>
-          <PlayerSlot
-            side="a"
-            player={playerA}
-            rankRow={rowA}
-            teamName={sideA.teamQuery.data?.team_name ?? rowA?.teamName ?? null}
-            teamLogo={sideA.teamQuery.data?.logo ?? null}
-            loading={Boolean(ids.a) && sideA.playerQuery.isLoading}
-            onPick={openPickerA}
-            onOpen={openPlayer}
-          />
-          <Touchable
-            feedback="icon"
-            haptic="selection"
-            onPress={swap}
-            disabled={!ids.a && !ids.b}
-            style={styles.swap}
-            accessibilityRole="button"
-            accessibilityLabel="Tarafları değiştir"
-          >
-            <Ionicons name="swap-horizontal" size={16} color={colors.textTertiary} />
-          </Touchable>
-          <PlayerSlot
-            side="b"
-            player={playerB}
-            rankRow={rowB}
-            teamName={sideB.teamQuery.data?.team_name ?? rowB?.teamName ?? null}
-            teamLogo={sideB.teamQuery.data?.logo ?? null}
-            loading={Boolean(ids.b) && sideB.playerQuery.isLoading}
-            onPick={openPickerB}
-            onOpen={openPlayer}
-          />
+        {/* ————— Düello sahnesi: iki yuva + VS + skor ————— */}
+        <View style={styles.stage}>
+          <View style={styles.stageClip}>
+            <LinearGradient colors={colors.gradientInk} start={INK_START} end={INK_END} style={StyleSheet.absoluteFill} />
+            <Aurora variant="stage" style={StyleSheet.absoluteFill} />
+          </View>
+          <View style={styles.slots}>
+            <PlayerSlot
+              side="a"
+              player={playerA}
+              rankRow={rowA}
+              teamName={sideA.teamQuery.data?.team_name ?? rowA?.teamName ?? null}
+              teamLogo={sideA.teamQuery.data?.logo ?? null}
+              loading={Boolean(ids.a) && sideA.playerQuery.isLoading}
+              onPick={openPickerA}
+              onOpen={openPlayer}
+            />
+            <View style={styles.center}>
+              {showScore ? (
+                <DuelScore a={totalTally.a} b={totalTally.b} onDark caption="metrik" />
+              ) : (
+                <View style={styles.vs}>
+                  <Text style={styles.vsText} {...textScale.badge}>
+                    VS
+                  </Text>
+                </View>
+              )}
+              <Touchable
+                feedback="icon"
+                haptic="selection"
+                onPress={swap}
+                disabled={!ids.a && !ids.b}
+                style={styles.swap}
+                accessibilityRole="button"
+                accessibilityLabel="Tarafları değiştir"
+              >
+                <Ionicons name="swap-horizontal" size={16} color={colors.onDark} />
+              </Touchable>
+            </View>
+            <PlayerSlot
+              side="b"
+              player={playerB}
+              rankRow={rowB}
+              teamName={sideB.teamQuery.data?.team_name ?? rowB?.teamName ?? null}
+              teamLogo={sideB.teamQuery.data?.logo ?? null}
+              loading={Boolean(ids.b) && sideB.playerQuery.isLoading}
+              onPick={openPickerB}
+              onOpen={openPlayer}
+            />
+          </View>
+          {showScore ? (
+            <Text style={styles.verdict} numberOfLines={2} {...textScale.dense}>
+              {totalTally.a === totalTally.b
+                ? "Denk bir kıyas — metriklerin yarısı ikisine de gidiyor."
+                : `${totalTally.a > totalTally.b ? nameA : nameB} ${Math.max(totalTally.a, totalTally.b)} metrikte önde.`}
+            </Text>
+          ) : null}
         </View>
 
         {!ready ? (
@@ -312,14 +446,14 @@ export default function PlayerCompareScreen() {
           <ErrorState variant="inline" error={failedQuery.error} onRetry={failedQuery.refetch} />
         ) : (
           <>
-            <CareerCard
-              playerA={playerA}
-              playerB={playerB}
-              marketA={marketOf(playerA, sideA.marketQuery.data)}
-              marketB={marketOf(playerB, sideB.marketQuery.data)}
-              currency={sideA.marketQuery.data?.currency ?? sideB.marketQuery.data?.currency ?? "ETL"}
-            />
-            {rowA && rowB ? <ScopeCard rowA={rowA} rowB={rowB} /> : null}
+            <Reveal index={0}>
+              <CompareCard title="Kariyer" icon="briefcase" tone="violet" metrics={career} nameA={nameA} nameB={nameB} />
+            </Reveal>
+            {scopeList ? (
+              <Reveal index={1}>
+                <CompareCard title="Bu kapsamda" icon="podium" tone="cyan" metrics={scopeList} nameA={nameA} nameB={nameB} />
+              </Reveal>
+            ) : null}
             <Text style={styles.footnote} {...textScale.dense}>
               Kariyer rakamları yayınlanmış ve puanlanmış maçlardan, kapsam rakamları seçili
               şehir · lig · sezondan sayılır.
@@ -388,16 +522,22 @@ const PlayerSlot = memo(function PlayerSlot({
       accessibilityLabel={filled ? `${name}, oyuncuyu değiştir` : "Oyuncu seç"}
       accessibilityHint={filled ? "Uzun bas: oyuncu sayfası" : undefined}
     >
-      <View style={[styles.sideDot, side === "a" ? styles.sideDotA : styles.sideDotB]} />
       {filled ? (
         <>
-          <Avatar name={name} image={image} size={layout.crestXl} />
+          <HaloFrame
+            size={64}
+            ring={side === "a" ? [DUEL_A, colors.gradientSignature[1]] : [DUEL_B, colors.gradientSignature[0]]}
+            thickness={3}
+            gap={3}
+          >
+            <Avatar name={name} image={image} size={64} />
+          </HaloFrame>
           <Text style={styles.slotName} numberOfLines={2} {...textScale.dense}>
             {name}
           </Text>
           {teamName ? (
             <View style={styles.slotTeam}>
-              <TeamLogo name={teamName} logo={teamLogo} size={14} />
+              <TeamLogo name={teamName} logo={teamLogo} size={14} plain onDark />
               <Text style={styles.slotMeta} numberOfLines={1} {...textScale.dense}>
                 {teamName}
               </Text>
@@ -408,14 +548,17 @@ const PlayerSlot = memo(function PlayerSlot({
               {position}
             </Text>
           ) : null}
-          <Text style={styles.slotChange} {...textScale.badge}>
-            {upperTR("Değiştir")}
-          </Text>
+          <View style={styles.slotChange}>
+            <Ionicons name="repeat" size={10} color={colors.onDarkMuted} />
+            <Text style={styles.slotChangeText} {...textScale.badge}>
+              {upperTR("Değiştir")}
+            </Text>
+          </View>
         </>
       ) : (
         <>
           <View style={styles.slotEmptyIcon}>
-            <Ionicons name={loading ? "hourglass-outline" : "add"} size={20} color={colors.textTertiary} />
+            <Ionicons name={loading ? "hourglass-outline" : "add"} size={24} color={colors.onDark} />
           </View>
           <Text style={styles.slotMeta} {...textScale.dense}>
             {loading ? "Yükleniyor" : "Oyuncu seç"}
@@ -426,58 +569,59 @@ const PlayerSlot = memo(function PlayerSlot({
   );
 });
 
-/** Kariyer kartı — oyuncu kaydının `total_*` toplamları ve piyasa değeri. */
-const CareerCard = memo(function CareerCard({
-  playerA,
-  playerB,
-  marketA,
-  marketB,
-  currency,
+/** Kıyas kartı — başlık, kartın kendi skoru, taraf lejantı ve düello satırları. */
+const CompareCard = memo(function CompareCard({
+  title,
+  icon,
+  tone,
+  metrics,
+  nameA,
+  nameB,
 }: {
-  playerA: ApiPlayer | null;
-  playerB: ApiPlayer | null;
-  marketA: number | null;
-  marketB: number | null;
-  currency: string;
+  title: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  tone: IconTileTone;
+  metrics: Metric[];
+  nameA: string;
+  nameB: string;
 }) {
-  const a = careerOf(playerA);
-  const b = careerOf(playerB);
-
-  /* Büyük sayılar bar başlığına sığsın: milyon ya da bin birimine indirilir. */
-  const showMarket = marketA != null || marketB != null;
-  const marketMax = Math.max(marketA ?? 0, marketB ?? 0);
-  const marketDiv = marketMax >= 1_000_000 ? 1_000_000 : marketMax >= 1_000 ? 1_000 : 1;
-  const marketUnit = marketDiv === 1_000_000 ? " M" : marketDiv === 1_000 ? " B" : "";
-
+  const score = tally(metrics);
   return (
     <View style={styles.card}>
-      <Text style={styles.cardTitle} {...textScale.badge}>
-        {upperTR("Kariyer")}
-      </Text>
-      <StatBar label="Maç" home={a.matches} away={b.matches} />
-      <StatBar label="Gol" home={a.goals} away={b.goals} />
-      <StatBar label="Maç başı gol" home={ratio(a.goals, a.matches)} away={ratio(b.goals, b.matches)} />
-      <StatBar label="Ort. puan" home={ratio(a.points, a.matches)} away={ratio(b.points, b.matches)} />
-      <StatBar label="Galibiyet" home={a.wins} away={b.wins} />
-      {a.decided > 0 || b.decided > 0 ? (
-        <StatBar
-          label="Galibiyet oranı"
-          home={a.decided > 0 ? Math.round((a.wins / a.decided) * 100) : 0}
-          away={b.decided > 0 ? Math.round((b.wins / b.decided) * 100) : 0}
-          unit="%"
-        />
-      ) : null}
-      <StatBar label="Sarı kart" home={a.yellow} away={b.yellow} />
-      <StatBar label="Kırmızı kart" home={a.red} away={b.red} />
-      {showMarket ? (
-        <StatBar
-          label={`Piyasa değeri (${currency})`}
-          home={round1((marketA ?? 0) / marketDiv)}
-          away={round1((marketB ?? 0) / marketDiv)}
-          unit={marketUnit}
-          tone={marketA == null || marketB == null ? "neutral" : "sides"}
-        />
-      ) : null}
+      <View style={styles.cardHead}>
+        <IconTile icon={icon} tone={tone} size={32} glow={false} />
+        <Text style={styles.cardTitle} numberOfLines={1} {...textScale.dense}>
+          {title}
+        </Text>
+        <View style={styles.cardScore}>
+          <Text style={[styles.cardScoreNum, score.a > score.b ? styles.cardScoreA : null]} {...textScale.badge}>
+            {score.a}
+          </Text>
+          <Text style={styles.cardScoreDash} {...textScale.badge}>
+            –
+          </Text>
+          <Text style={[styles.cardScoreNum, score.b > score.a ? styles.cardScoreB : null]} {...textScale.badge}>
+            {score.b}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.legend}>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: DUEL_A }]} />
+          <Text style={styles.legendText} numberOfLines={1} {...textScale.dense}>
+            {nameA}
+          </Text>
+        </View>
+        <View style={[styles.legendItem, styles.legendRight]}>
+          <Text style={[styles.legendText, styles.legendTextRight]} numberOfLines={1} {...textScale.dense}>
+            {nameB}
+          </Text>
+          <View style={[styles.legendDot, { backgroundColor: DUEL_B }]} />
+        </View>
+      </View>
+      {metrics.map((m) => (
+        <DuelBar key={m.key} label={m.label} a={m.a} b={m.b} unit={m.unit} lowerIsBetter={m.lowerIsBetter} neutral={m.neutral} />
+      ))}
     </View>
   );
 });
@@ -494,23 +638,6 @@ function careerOf(player: ApiPlayer | null) {
     red: num(player?.total_red_cards),
   };
 }
-
-/** Kapsam kartı — sıralama listesinin satırları (asist yalnız burada var). */
-const ScopeCard = memo(function ScopeCard({ rowA, rowB }: { rowA: PlayerRankRow; rowB: PlayerRankRow }) {
-  return (
-    <View style={styles.card}>
-      <Text style={styles.cardTitle} {...textScale.badge}>
-        {upperTR("Bu kapsamda")}
-      </Text>
-      <StatBar label="Maç" home={num(rowA.matches)} away={num(rowB.matches)} />
-      <StatBar label="Gol" home={num(rowA.goals)} away={num(rowB.goals)} />
-      <StatBar label="Asist" home={num(rowA.assists)} away={num(rowB.assists)} />
-      <StatBar label="Maç başı gol" home={round1(num(rowA.goalsPerMatch))} away={round1(num(rowB.goalsPerMatch))} />
-      <StatBar label="Maç başı puan" home={round1(num(rowA.pointsPerMatch))} away={round1(num(rowB.pointsPerMatch))} />
-      <StatBar label="Kart" home={num(rowA.cards)} away={num(rowB.cards)} />
-    </View>
-  );
-});
 
 /* ══════════════════════════════════════════════════════════════════════════
    SEÇİCİ — arama kutulu alt sayfa
@@ -669,39 +796,39 @@ const styles = StyleSheet.create({
     gap: space.md,
   },
 
-  /* — Seçim yuvaları — */
+  /* — Düello sahnesi — */
+  stage: {
+    borderRadius: radius.xxl,
+    paddingVertical: space.lg,
+    paddingHorizontal: space.sm,
+    gap: space.md,
+  },
+  stageClip: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: radius.xxl,
+    overflow: "hidden",
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
+  },
   slots: {
     flexDirection: "row",
     alignItems: "stretch",
-    gap: space.sm,
   },
   slot: {
     flex: 1,
     alignItems: "center",
     gap: space.xs,
-    paddingVertical: space.md,
-    paddingHorizontal: space.sm,
-    backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.xs,
     borderRadius: radius.xl,
-    minHeight: 150,
+    minHeight: 160,
     justifyContent: "center",
   },
-  sideDot: {
-    position: "absolute",
-    top: space.sm,
-    left: space.sm,
-    width: 8,
-    height: 8,
-    borderRadius: radius.pill,
-  },
-  sideDotA: { backgroundColor: colors.accent },
-  sideDotB: { backgroundColor: colors.slate },
   slotName: {
     ...type.h4,
-    color: colors.textPrimary,
+    color: colors.onDark,
     textAlign: "center",
+    marginTop: space.xs,
   },
   slotTeam: {
     flexDirection: "row",
@@ -711,29 +838,70 @@ const styles = StyleSheet.create({
   },
   slotMeta: {
     ...type.caption,
-    color: colors.textTertiary,
+    color: colors.onDarkMuted,
     textAlign: "center",
     flexShrink: 1,
   },
   slotChange: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xxs,
+    marginTop: space.xs,
+    paddingHorizontal: space.sm,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkTile,
+  },
+  slotChangeText: {
     ...type.overline,
-    color: colors.textDisabled,
-    marginTop: space.xxs,
+    color: colors.onDarkMuted,
   },
   slotEmptyIcon: {
-    width: layout.crestXl,
-    height: layout.crestXl,
+    width: 72,
+    height: 72,
     borderRadius: radius.pill,
-    borderWidth: hairline,
-    borderColor: colors.border,
+    borderWidth: 1.5,
+    borderColor: colors.inkPillBorder,
     borderStyle: "dashed",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surface2,
+    backgroundColor: colors.inkTile,
+  },
+  center: {
+    width: 84,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.sm,
+  },
+  vs: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.inkPillBorder,
+  },
+  vsText: {
+    ...type.scoreSm,
+    color: colors.onDark,
   },
   swap: {
-    alignSelf: "center",
-    padding: space.xs,
+    width: 32,
+    height: 32,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
+  },
+  verdict: {
+    ...type.labelSm,
+    color: colors.onDark,
+    textAlign: "center",
+    paddingHorizontal: space.lg,
   },
 
   /* — Kartlar — */
@@ -743,11 +911,72 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.xl,
     padding: space.lg,
-    gap: space.md,
+    gap: space.xs,
+  },
+  cardHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    marginBottom: space.xs,
   },
   cardTitle: {
-    ...type.overline,
+    ...type.h2,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  cardScore: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xxs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface2,
+  },
+  cardScoreNum: {
+    ...type.scoreXs,
+    color: colors.textSecondary,
+  },
+  cardScoreA: {
+    color: colors.accentText,
+  },
+  cardScoreB: {
+    color: colors.brandAccent,
+  },
+  cardScoreDash: {
+    ...type.scoreXs,
     color: colors.textTertiary,
+  },
+  legend: {
+    flexDirection: "row",
+    gap: space.md,
+    paddingBottom: space.xs,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.separator,
+    marginBottom: space.xs,
+  },
+  legendItem: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    minWidth: 0,
+  },
+  legendRight: {
+    justifyContent: "flex-end",
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: radius.pill,
+  },
+  legendText: {
+    ...type.caption,
+    color: colors.textSecondary,
+    flexShrink: 1,
+  },
+  legendTextRight: {
+    textAlign: "right",
   },
   footnote: {
     ...type.caption,

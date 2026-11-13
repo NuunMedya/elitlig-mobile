@@ -20,15 +20,16 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, StyleSheet, Text, View } from "react-native";
-import Svg, { Circle } from "react-native-svg";
+import { LinearGradient } from "expo-linear-gradient";
+import Svg, { Circle, Defs, Line, LinearGradient as SvgGradient, Stop } from "react-native-svg";
 
 import { AdminScreen, ToggleField } from "@/components/admin";
 import { isoDate } from "@/components/admin/tools/agendaUtils";
 import { FOCUS_STATS_KEY, formatClock as clockOf, type FocusStats } from "@/components/admin/tools/focusUtils";
-import { Button, Chip, ChipGroup, SegmentedControl, Stepper, Touchable } from "@/components/ui";
+import { Aurora, Button, Chip, ChipGroup, IconTile, Odometer, SegmentedControl, Stepper, Touchable } from "@/components/ui";
 import { haptics } from "@/lib/haptics";
 import { FOCUS_COLORS } from "@/lib/admin/toolPalette";
-import { colors, hairline, radius, space, textScale, type } from "@/theme";
+import { colors, glowStyle, hairline, radius, space, textScale, type } from "@/theme";
 
 
 const STATE_KEY = "tools:focus:state";
@@ -306,8 +307,8 @@ export default function FocusTimerScreen() {
   };
 
   const tone = state.mode === "pomodoro" ? FOCUS_COLORS[state.phase] : state.mode === "countdown" ? FOCUS_COLORS.countdown : FOCUS_COLORS.stopwatch;
-  const SIZE = 260;
-  const R = 116;
+  const SIZE = 290;
+  const R = 110;
   const C = 2 * Math.PI * R;
   const display = state.mode === "stopwatch" ? clockOf(elapsed, true) : clockOf(remaining);
   const laps = state.laps.map((total, i) => ({ total, split: total - (state.laps[i + 1] || 0), n: state.laps.length - i }));
@@ -338,15 +339,42 @@ export default function FocusTimerScreen() {
         </ChipGroup>
       ) : null}
 
+      <View style={styles.stage}>
+        <LinearGradient colors={colors.gradientAdminStage} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
+        <Aurora variant="stage" />
       <View style={styles.dial} accessible accessibilityLabel={`${state.mode === "pomodoro" ? PHASE_LABELS[state.phase] : state.mode === "countdown" ? "Geri sayım" : "Kronometre"} ${display}`}>
         <Svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
-          <Circle cx={SIZE / 2} cy={SIZE / 2} r={R} stroke={colors.surface3} strokeWidth={12} fill="none" />
+          <Defs>
+            <SvgGradient id="focusRing" x1="0" y1="0" x2="1" y2="1">
+              <Stop offset="0" stopColor={tone} />
+              <Stop offset="1" stopColor={colors.tileTones.cyan[0]} />
+            </SvgGradient>
+          </Defs>
+          {/* Kadran çizgileri: 60 ince çentik, her 5'te bir uzun. */}
+          {Array.from({ length: 60 }, (_, i) => {
+            const a = (i / 60) * Math.PI * 2;
+            const r1 = R + 16;
+            const r2 = R + (i % 5 === 0 ? 24 : 20);
+            return (
+              <Line
+                key={i}
+                x1={SIZE / 2 + r1 * Math.sin(a)}
+                y1={SIZE / 2 - r1 * Math.cos(a)}
+                x2={SIZE / 2 + r2 * Math.sin(a)}
+                y2={SIZE / 2 - r2 * Math.cos(a)}
+                stroke={i / 60 <= progress ? tone : colors.inkTileBorder}
+                strokeWidth={i % 5 === 0 ? 2 : 1}
+                strokeLinecap="round"
+              />
+            );
+          })}
+          <Circle cx={SIZE / 2} cy={SIZE / 2} r={R} stroke={colors.inkTile} strokeWidth={14} fill="none" />
           <Circle
             cx={SIZE / 2}
             cy={SIZE / 2}
             r={R}
-            stroke={tone}
-            strokeWidth={12}
+            stroke="url(#focusRing)"
+            strokeWidth={14}
             fill="none"
             strokeLinecap="round"
             strokeDasharray={`${C} ${C}`}
@@ -371,19 +399,19 @@ export default function FocusTimerScreen() {
 
       <View style={styles.controls}>
         <Touchable feedback="icon" onPress={reset} style={styles.ghostBtn} accessibilityLabel="Sıfırla">
-          <Ionicons name="refresh" size={26} color={colors.textPrimary} />
+          <Ionicons name="refresh" size={24} color={colors.onDark} />
         </Touchable>
         <Touchable
           feedback="fab"
           onPress={toggle}
-          style={[styles.mainBtn, { backgroundColor: tone }]}
+          style={[styles.mainBtn, { backgroundColor: tone }, glowStyle(tone, 3)]}
           accessibilityLabel={state.running ? "Duraklat" : "Başlat"}
         >
           <Ionicons name={state.running ? "pause" : "play"} size={36} color={colors.onDark} />
         </Touchable>
         {state.mode === "stopwatch" ? (
           <Touchable feedback="icon" onPress={lap} disabled={!state.running} style={[styles.ghostBtn, !state.running ? styles.disabled : null]} accessibilityLabel="Tur">
-            <Ionicons name="flag-outline" size={26} color={colors.textPrimary} />
+            <Ionicons name="flag-outline" size={24} color={colors.onDark} />
           </Touchable>
         ) : (
           <Touchable feedback="icon" onPress={addMinute} style={styles.ghostBtn} accessibilityLabel="1 dakika ekle">
@@ -393,6 +421,7 @@ export default function FocusTimerScreen() {
           </Touchable>
         )}
       </View>
+      </View>
 
       <View style={styles.card}>
         <Text style={styles.cardTitle} {...textScale.dense}>
@@ -400,19 +429,17 @@ export default function FocusTimerScreen() {
         </Text>
         <View style={styles.statsRow}>
           <View style={styles.stat}>
-            <Text style={styles.statValue} {...textScale.badge}>
-              {stats.sessions}
-            </Text>
+            <IconTile icon="flame" tone="red" size={32} glow={false} />
+            <Odometer value={stats.sessions} style={styles.statValue} />
             <Text style={styles.statLabel} {...textScale.badge}>
-              odak turu
+              ODAK TURU
             </Text>
           </View>
           <View style={[styles.stat, styles.statDivided]}>
-            <Text style={styles.statValue} {...textScale.badge}>
-              {stats.minutes}
-            </Text>
+            <IconTile icon="time" tone="violet" size={32} glow={false} />
+            <Odometer value={stats.minutes} style={styles.statValue} />
             <Text style={styles.statLabel} {...textScale.badge}>
-              dakika
+              DAKİKA
             </Text>
           </View>
         </View>
@@ -487,10 +514,11 @@ export default function FocusTimerScreen() {
 const styles = StyleSheet.create({
   segment: { paddingHorizontal: space.lg, paddingBottom: space.sm },
   flex: { flex: 1 },
-  dial: { alignSelf: "center", alignItems: "center", justifyContent: "center", marginVertical: space.md },
+  stage: { borderRadius: radius.xxl, overflow: "hidden", backgroundColor: colors.adminBar, paddingVertical: space.lg, gap: space.md, borderWidth: hairline, borderColor: colors.inkTileBorder },
+  dial: { alignSelf: "center", alignItems: "center", justifyContent: "center" },
   dialCenter: { position: "absolute", alignItems: "center", gap: space.xs },
-  dialLabel: { ...type.label, color: colors.textSecondary },
-  dialTime: { ...type.scoreJumbo, color: colors.textPrimary },
+  dialLabel: { ...type.overline, color: colors.onDarkMuted },
+  dialTime: { ...type.scoreJumbo, color: colors.onDark },
   dialDone: { ...type.label },
   controls: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.xxl },
   ghostBtn: {
@@ -499,11 +527,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surface2,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
   },
   mainBtn: { width: 80, height: 80, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
   disabled: { opacity: 0.4 },
-  plus: { ...type.scoreXs, color: colors.textPrimary },
+  plus: { ...type.scoreXs, color: colors.onDark },
   card: {
     gap: space.md,
     padding: space.lg,
@@ -514,12 +544,12 @@ const styles = StyleSheet.create({
   },
   cardTitle: { ...type.h3, color: colors.textPrimary },
   statsRow: { flexDirection: "row" },
-  stat: { flex: 1, alignItems: "center", gap: 2 },
+  stat: { flex: 1, alignItems: "center", gap: space.xs },
   statDivided: { borderLeftWidth: hairline, borderLeftColor: colors.separator },
   statValue: { ...type.metric, color: colors.textPrimary },
-  statLabel: { ...type.caption, color: colors.textTertiary },
+  statLabel: { ...type.nano, color: colors.textTertiary },
   dots: { flexDirection: "row", flexWrap: "wrap", gap: space.s, justifyContent: "center" },
-  dot: { width: 12, height: 12, borderRadius: radius.pill, backgroundColor: colors.surface3 },
+  dot: { width: 22, height: 8, borderRadius: radius.pill, backgroundColor: colors.surface3 },
   lapRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.xs, borderTopWidth: hairline, borderTopColor: colors.separator },
   lapN: { flex: 1, ...type.bodySm, color: colors.textSecondary },
   lapSplit: { ...type.tableNumStrong, color: colors.textPrimary },

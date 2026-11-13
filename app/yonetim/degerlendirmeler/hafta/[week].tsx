@@ -11,15 +11,16 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { StyleSheet, Text } from "react-native";
+import { ScrollView, StyleSheet, Text } from "react-native";
 
 import { AdminScreen, confirmAction, useAdminMutation } from "@/components/admin";
 import { EvaluationForm } from "@/components/admin/evaluations/EvaluationForm";
-import { Chip, ChipGroup, EmptyState, ErrorState, SkeletonCard, useToast } from "@/components/ui";
+import { SysStage, toneFg } from "@/components/admin/system/SysKit";
+import { Avatar, EmptyState, ErrorState, IconTile, SkeletonCard, Touchable, useToast } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
-import { deleteEvaluation, formatPct, formatTl, getWeekDetail, saveWeekEvaluation, type SavePayload } from "@/lib/api/admin/evaluations";
+import { deleteEvaluation, formatPct, formatTl, getWeekDetail, saveWeekEvaluation, scoreLevel, type SavePayload } from "@/lib/api/admin/evaluations";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 const PERMS = ["evaluations.view", "evaluations.submit", "evaluations.manage"] as const;
 const NEW = -1;
@@ -84,23 +85,43 @@ export default function WeekEvaluationScreen() {
         <ErrorState error={query.error} onRetry={query.refetch} variant="inline" />
       ) : (
         <>
-          <Text style={styles.meta} {...textScale.long}>
-            Haftalık paylaşım performansı. Her kişi bu hafta için bir kez değerlendirilir.{note}
-          </Text>
-          <ChipGroup scrollable contentPadding={0}>
-            {evaluations.map((e) => (
-              <Chip
-                key={e.id}
-                size="sm"
-                label={`${e.staffName || `#${e.staffId}`} · ${formatPct(e.scorePct)} · ${formatTl(e.net, true)}`}
-                selected={selected === e.id}
-                onPress={() => setSelected(e.id)}
-              />
-            ))}
+          <SysStage eyebrow="Sosyal medya · haftalık" title={query.data?.week.label ?? "Hafta"} icon="share-social" tone="signature">
+            <Text style={styles.stageNote} {...textScale.long}>
+              Haftalık paylaşım performansı. Her kişi bu hafta için bir kez değerlendirilir.{note}
+            </Text>
+          </SysStage>
+
+          {/* Kişi seçici: değerlendirilen kişiler avatar karosu, sonda "yeni". */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.people}>
+            {evaluations.map((e) => {
+              const on = selected === e.id;
+              return (
+                <Touchable key={e.id} feedback="card" haptic="selection" onPress={() => setSelected(e.id)} style={[styles.person, on ? styles.personOn : null]} accessibilityRole="tab" accessibilityState={{ selected: on }} accessibilityLabel={`${e.staffName || e.staffId}, ${formatPct(e.scorePct)}`}>
+                  <Avatar name={e.staffName || "?"} size={36} />
+                  <Text style={styles.personName} numberOfLines={1} {...textScale.dense}>
+                    {e.staffName || `#${e.staffId}`}
+                  </Text>
+                  <Text style={[styles.personScore, { color: toneFg(scoreLevel(e.scorePct).tone) }]} {...textScale.badge}>
+                    {formatPct(e.scorePct)}
+                  </Text>
+                  <Text style={styles.personNet} {...textScale.badge}>
+                    {formatTl(e.net, true)}
+                  </Text>
+                </Touchable>
+              );
+            })}
             {canSubmit && area.questions.length ? (
-              <Chip size="sm" icon="add" label={`Yeni değerlendirme (${freeStaff.length} kişi)`} selected={selected === NEW} onPress={() => setSelected(NEW)} />
+              <Touchable feedback="card" haptic="selection" onPress={() => setSelected(NEW)} style={[styles.person, styles.personNew, selected === NEW ? styles.personOn : null]} accessibilityRole="tab" accessibilityState={{ selected: selected === NEW }} accessibilityLabel="Yeni değerlendirme">
+                <IconTile icon="add" tone="violet" size={36} glow={false} />
+                <Text style={styles.personName} numberOfLines={1} {...textScale.dense}>
+                  Yeni form
+                </Text>
+                <Text style={styles.personNet} {...textScale.badge}>
+                  {freeStaff.length} kişi
+                </Text>
+              </Touchable>
             ) : null}
-          </ChipGroup>
+          </ScrollView>
 
           {current ? (
             <EvaluationForm
@@ -140,5 +161,12 @@ export default function WeekEvaluationScreen() {
 }
 
 const styles = StyleSheet.create({
-  meta: { ...type.caption, color: colors.textSecondary },
+  stageNote: { ...type.caption, color: colors.onDarkMuted },
+  people: { gap: space.sm, paddingRight: space.lg },
+  person: { width: 96, alignItems: "center", gap: 3, padding: space.sm, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
+  personNew: { borderStyle: "dashed" },
+  personOn: { backgroundColor: colors.brandDim, borderColor: colors.brand },
+  personName: { ...type.labelSm, color: colors.textPrimary },
+  personScore: { ...type.scoreXs },
+  personNet: { ...type.micro, color: colors.textTertiary },
 });

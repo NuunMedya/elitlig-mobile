@@ -15,11 +15,12 @@ import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import { AdminList, AdminScreen, RecordCard, SelectField } from "@/components/admin";
+import { AdminList, AdminScreen } from "@/components/admin";
+import { CountStrip, PickerChip, RequestCard } from "@/components/admin/team/ManageKit";
 import { DraftReviewSheet } from "@/components/admin/team/DraftReviewSheet";
 import { SubmissionReviewSheet } from "@/components/admin/team/SubmissionReviewSheet";
-import { SegmentedControl, TeamLogo } from "@/components/ui";
-import { formatDate } from "@/lib/admin/format";
+import { Badge, Button, Chip, ChipGroup, SegmentedControl, TeamLogo } from "@/components/ui";
+import { timeAgo } from "@/lib/admin/format";
 import { foldText } from "@/lib/api/admin/lookups";
 import {
   ROW_STATUS_LABELS,
@@ -101,8 +102,8 @@ export default function RostersScreen() {
       bottom={
         <SegmentedControl<Section>
           items={[
-            { key: "bekleyen", label: `Onay bekleyenler ${pending.length}`, dot: pending.length > 0 },
-            { key: "tumu", label: "Tüm kadro listeleri" },
+            { key: "bekleyen", label: "Onay bekleyenler", dot: pending.length > 0 },
+            { key: "tumu", label: "Tüm kayıtlar" },
           ]}
           value={section}
           onChange={setSection}
@@ -121,51 +122,46 @@ export default function RostersScreen() {
         search={q}
         onSearch={setQ}
         searchPlaceholder="Takım, il ya da sezon ara"
-        filters={[
-          { key: "", label: "Tümü" },
-          { key: "sezon", label: "Sezon kadrosu", count: pending.filter((r) => r.kind === "sezon").length },
-          { key: "liste", label: "Kadro listesi", count: pending.filter((r) => r.kind === "liste").length },
-        ]}
-        filter={kind}
-        onFilter={setKind}
         extraHeader={
-          <View style={styles.filters}>
-            {section === "tumu" ? (
-              <View style={styles.filter}>
-                <SelectField<string>
-                  value={status}
+          <View style={styles.head}>
+            <CountStrip
+              items={[
+                { key: "sezon", label: "Sezon", value: pending.filter((r) => r.kind === "sezon").length, icon: "people", selected: kind === "sezon", onPress: () => setKind(kind === "sezon" ? "" : "sezon") },
+                { key: "liste", label: "Liste", value: pending.filter((r) => r.kind === "liste").length, icon: "list", selected: kind === "liste", onPress: () => setKind(kind === "liste" ? "" : "liste") },
+                { key: "problems", label: "Hatalı", value: pending.filter((r) => r.problems > 0).length, tone: "danger", icon: "alert-circle" },
+              ]}
+            />
+            <ChipGroup scrollable contentPadding={0}>
+              <Chip label="Tüm türler" size="sm" selected={!kind} onPress={() => setKind("")} />
+              {section === "tumu" ? (
+                <PickerChip<string>
+                  icon="funnel-outline"
+                  placeholder="Durum"
+                  title="Durum"
+                  value={status === "all" ? null : status}
                   onChange={(v) => setStatus(v ?? "all")}
                   options={[
-                    { value: "all", label: "Tüm durumlar" },
                     { value: "pending", label: "Bekleyen" },
                     { value: "approved", label: "Onaylı" },
                     { value: "rejected", label: "Reddedilen" },
                   ]}
-                  icon="funnel-outline"
-                  sheetTitle="Durum"
                 />
-              </View>
-            ) : null}
-            {cities.length > 1 ? (
-              <View style={styles.filter}>
-                <SelectField<string> value={city} onChange={setCity} options={cities.map((c) => ({ value: c, label: c }))} placeholder="Tüm iller" icon="location-outline" clearable sheetTitle="İl" />
-              </View>
-            ) : null}
-            {kind !== "liste" && leagues.length ? (
-              <View style={styles.filter}>
-                <SelectField<number> value={league} onChange={setLeague} options={leagues.map((l) => ({ value: l.id, label: l.name }))} placeholder="Tüm ligler" icon="trophy-outline" clearable sheetTitle="Lig" />
-              </View>
-            ) : null}
-            {kind !== "liste" && seasons.length ? (
-              <View style={styles.filter}>
-                <SelectField<number> value={season} onChange={setSeason} options={seasons.map((s) => ({ value: s.id, label: s.name }))} placeholder="Tüm sezonlar" icon="calendar-outline" clearable sheetTitle="Sezon" />
-              </View>
-            ) : null}
+              ) : null}
+              {cities.length > 1 ? (
+                <PickerChip<string> icon="location-outline" placeholder="İl" title="İl" value={city} onChange={setCity} options={cities.map((c) => ({ value: c, label: c }))} />
+              ) : null}
+              {kind !== "liste" && leagues.length ? (
+                <PickerChip<number> icon="trophy-outline" placeholder="Lig" title="Lig" value={league} onChange={setLeague} options={leagues.map((l) => ({ value: l.id, label: l.name }))} />
+              ) : null}
+              {kind !== "liste" && seasons.length ? (
+                <PickerChip<number> icon="calendar-outline" placeholder="Sezon" title="Sezon" value={season} onChange={setSeason} options={seasons.map((x) => ({ value: x.id, label: x.name }))} />
+              ) : null}
+            </ChipGroup>
           </View>
         }
         summary={
           (league || season) && kind !== "sezon"
-            ? `${visible.length} kayıt · kadro listeleri sezona bağlı değildir; lig/sezon seçiliyken yalnız sezon kadrosu taslakları görünür`
+            ? `${visible.length} kayıt · lig/sezon seçiliyken yalnız sezon kadrosu taslakları görünür`
             : `${visible.length} kayıt`
         }
         keyExtractor={(r) => r.key}
@@ -173,23 +169,32 @@ export default function RostersScreen() {
         emptyTitle={section === "bekleyen" ? "Onay bekleyen kadro yok" : "Bu süzgeçte kayıt yok"}
         emptyBody={section === "bekleyen" ? "Takımlar yeni kadro gönderince burada görünür." : "Süzgeçleri değiştir ya da temizle."}
         emptyAction={section === "bekleyen" ? { label: "Tüm kadro listelerini gör", onPress: () => setSection("tumu") } : undefined}
-        renderItem={({ item }) => (
-          <RecordCard
-            title={item.team.name}
-            subtitle={[item.team.city, item.league?.name, item.season?.name].filter(Boolean).join(" · ") || "—"}
-            meta={`${rowSummary(item)}${item.problems ? ` · ${item.problems} kural hatası` : ""}${item.at ? ` · ${formatDate(item.at)}` : ""}`}
-            trailing={<TeamLogo name={item.team.name} logo={item.team.logo} size={32} />}
-            badges={[
-              { label: item.kind === "sezon" ? "Sezon kadrosu" : "Kadro listesi", icon: item.kind === "sezon" ? "people-outline" : "list-outline" },
-              item.status && {
-                label: ROW_STATUS_LABELS[item.status],
-                tone: item.status === "pending" ? "warn" : item.status === "rejected" ? "danger" : "win",
-              },
-              item.problems > 0 && { label: "Kural hatası", tone: "danger" },
-            ]}
-            onPress={() => open(item)}
-          />
-        )}
+        renderItem={({ item }) => {
+          const isPending = item.status === "pending";
+          const tone = item.status === "pending" ? "warn" : item.status === "rejected" ? "danger" : "win";
+          return (
+            <RequestCard
+              leading={<TeamLogo name={item.team.name} logo={item.team.logo} size={42} />}
+              who={item.team.name}
+              when={[item.at ? timeAgo(item.at) : null, item.team.city].filter(Boolean).join(" · ")}
+              priority={isPending ? (item.problems ? { label: `${item.problems} kural hatası`, tone: "danger", icon: "alert-circle" } : { label: "Onay bekliyor", tone: "warn", icon: "hourglass" }) : null}
+              status={isPending || !item.status ? null : { label: ROW_STATUS_LABELS[item.status], tone }}
+              title={item.kind === "sezon" ? "Sezon kadrosu taslağı" : "Kadro listesi (Tüm Oyuncularım)"}
+              subtitle={[item.league?.name, item.season?.name].filter(Boolean).join(" · ") || null}
+              onPress={() => open(item)}
+              done={!isPending}
+              extraActions={isPending ? <Button label="Kadroyu incele" icon="search" variant="secondary" onPress={() => open(item)} style={styles.grow} /> : null}
+            >
+              <View style={styles.deltas}>
+                {item.counts.add ? <Badge label={`+${item.counts.add} ${item.kind === "liste" ? "transfer" : "ekleme"}`} tone="win" size="sm" /> : null}
+                {item.counts.remove ? <Badge label={`−${item.counts.remove} çıkarma`} tone="danger" size="sm" /> : null}
+                {item.counts.license ? <Badge label={`${item.counts.license} lisans`} tone="info" icon="id-card-outline" size="sm" /> : null}
+                {item.kind === "liste" && item.counts.players ? <Badge label={`${item.counts.players} oyuncu`} size="sm" /> : null}
+                {!item.counts.add && !item.counts.remove && !item.counts.license ? <Badge label={rowSummary(item)} size="sm" /> : null}
+              </View>
+            </RequestCard>
+          );
+        }}
       />
 
       <DraftReviewSheet draft={draftOpen} onClose={() => setOpenDraft(null)} invalidate={[KEY]} />
@@ -199,6 +204,7 @@ export default function RostersScreen() {
 }
 
 const styles = StyleSheet.create({
-  filters: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  filter: { flexGrow: 1, flexBasis: 140 },
+  head: { gap: space.md },
+  grow: { flex: 1 },
+  deltas: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: space.xxs },
 });

@@ -14,7 +14,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { toneColors, type Tone } from "@/components/ui";
+import { IconTile, Reveal, type IconTileTone, type Tone } from "@/components/ui";
 import { colors, radius, space, textScale, type } from "@/theme";
 import { surfaces } from "./shared";
 
@@ -69,22 +69,30 @@ export function buildAchievements({
   return list;
 }
 
+/** Rozet tonu → degrade ikon karosu tonu (İkinci tur: madalya düz daire değil). */
+const TILE_TONE: Partial<Record<Tone, IconTileTone>> = {
+  warn: "gold",
+  brand: "violet",
+  info: "cyan",
+  win: "mint",
+  live: "pink",
+  danger: "red",
+  accent: "cyan",
+};
+
 export const Achievements = React.memo(function Achievements({ items }: { items: Achievement[] }) {
   if (items.length === 0) return null;
   return (
     <View style={styles.grid}>
-      {items.map((item) => {
-        const tone = toneColors(item.tone);
+      {items.map((item, index) => {
         return (
+          <Reveal key={item.key} index={index} style={styles.cell}>
           <View
-            key={item.key}
             style={[surfaces.card, styles.tile]}
             accessible
             accessibilityLabel={`Başarı: ${item.title}, ${item.proof}`}
           >
-            <View style={[styles.medal, { backgroundColor: tone.dim }]}>
-              <Ionicons name={item.icon} size={18} color={tone.fg} />
-            </View>
+            <IconTile icon={item.icon} tone={TILE_TONE[item.tone] ?? "signature"} size={40} />
             <View style={styles.text}>
               <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
                 {item.title}
@@ -94,6 +102,7 @@ export const Achievements = React.memo(function Achievements({ items }: { items:
               </Text>
             </View>
           </View>
+          </Reveal>
         );
       })}
     </View>
@@ -107,9 +116,11 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   /* İki sütun: gap'i düşerek yarım genişlik. */
-  tile: {
+  cell: {
     flexBasis: "47%",
     flexGrow: 1,
+  },
+  tile: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.m,

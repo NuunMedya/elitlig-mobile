@@ -17,12 +17,15 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import React, { useMemo, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
-import { ActionSheet, AdminList, AdminScreen, confirmAction, SelectField, StatRow, useAdminMutation } from "@/components/admin";
+import Ionicons from "@expo/vector-icons/Ionicons";
+
+import { ActionSheet, AdminList, AdminScreen, confirmAction, SelectField, useAdminMutation } from "@/components/admin";
+import { CountStrip } from "@/components/admin/team/ManageKit";
 import { MemberCard } from "@/components/admin/members/MemberCard";
 import { AccountRequestsBoard, ChangeRequestsBoard } from "@/components/admin/members/RequestBoards";
-import { BottomSheet, Button, SegmentedControl } from "@/components/ui";
+import { BottomSheet, Button, Chip, ChipGroup, GradientBar, SegmentedControl } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import {
   ACCOUNT_STATUS_LABELS,
@@ -38,7 +41,7 @@ import {
   type MemberListParams,
 } from "@/lib/api/admin/users";
 import { useAuth } from "@/providers/AuthProvider";
-import { space } from "@/theme";
+import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
 
 type Section = "users" | "requests" | "changes";
 type Filters = Omit<MemberListParams, "q" | "page" | "limit">;
@@ -166,26 +169,42 @@ export default function MembersScreen() {
           search={q}
           onSearch={setQ}
           searchPlaceholder="Ad, e-posta, telefon ya da takım ara"
-          filters={[
-            { key: "", label: "Tümü" },
-            { key: "pending", label: "Onay bekleyen", count: t?.pendingMembers || undefined },
-            { key: "active", label: "Aktif" },
-            { key: "suspended", label: "Askıda" },
-          ]}
-          filter={filters.status ?? ""}
-          onFilter={(key) => setFilter("status", key)}
           extraHeader={
-            t ? (
-              <StatRow
-                items={[
-                  { label: "Üye", value: t.users },
-                  { label: "Aktif", value: t.activeUsers },
-                  { label: "Oyuncu", value: t.players },
-                  { label: "Başkan", value: t.teamManagers },
-                  { label: "Premium", value: t.activePremiumPlans, tone: "brand" },
-                ]}
-              />
-            ) : null
+            <View style={styles.head}>
+              {t ? (
+                <CountStrip
+                  items={[
+                    { key: "active", label: "Aktif", value: t.activeUsers, tone: "win", selected: filters.status === "active", onPress: () => setFilter("status", filters.status === "active" ? null : "active") },
+                    { key: "pending", label: "Onay", value: t.pendingMembers, tone: "warn", icon: "hourglass", selected: filters.status === "pending", onPress: () => setFilter("status", filters.status === "pending" ? null : "pending") },
+                    { key: "premium", label: "Premium", value: t.activePremiumPlans, tone: "brand", icon: "diamond" },
+                  ]}
+                />
+              ) : null}
+              {t ? (
+                <View style={styles.roles}>
+                  <RoleShare icon="football" label="Oyuncu" value={t.players} total={t.users} color={colors.accent} />
+                  <RoleShare icon="shield-half" label="Başkan" value={t.teamManagers} total={t.users} color={colors.brandAccent} />
+                  <RoleShare icon="star" label="Double" value={t.doubleProfiles} total={t.users} color={colors.adminAccent} />
+                </View>
+              ) : null}
+              <ChipGroup scrollable contentPadding={0}>
+                {[
+                  { key: "", label: "Tümü" },
+                  { key: "pending", label: "Onay bekleyen", count: t?.pendingMembers || undefined },
+                  { key: "active", label: "Aktif" },
+                  { key: "suspended", label: "Askıda" },
+                ].map((f) => (
+                  <Chip key={f.key || "all"} label={f.label} count={f.count} size="sm" selected={(filters.status ?? "") === f.key} onPress={() => setFilter("status", f.key)} />
+                ))}
+                <Chip
+                  label={activeFilters ? `Süzgeç · ${activeFilters}` : "Süzgeç"}
+                  icon="options-outline"
+                  size="sm"
+                  selected={activeFilters > (filters.status ? 1 : 0)}
+                  onPress={() => setFiltersOpen(true)}
+                />
+              </ChipGroup>
+            </View>
           }
           summary={total != null ? `${total} üye` : null}
           keyExtractor={(m) => String(m.id)}
@@ -281,7 +300,39 @@ export default function MembersScreen() {
   );
 }
 
+/** Rol dağılımı hücresi: ikon + sayı + oran çubuğu (rol rengiyle). */
+function RoleShare({ icon, label, value, total, color }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: number; total: number; color: string }) {
+  return (
+    <View style={styles.role} accessible accessibilityLabel={`${label}: ${value}`}>
+      <View style={styles.roleHead}>
+        <Ionicons name={icon} size={12} color={color} />
+        <Text style={styles.roleLabel} numberOfLines={1} {...textScale.badge}>
+          {upperTR(label)}
+        </Text>
+      </View>
+      <Text style={styles.roleValue} {...textScale.badge}>
+        {value.toLocaleString("tr-TR")}
+      </Text>
+      <GradientBar value={total ? value / total : 0} height={4} gradient={[color, color]} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  head: { gap: space.md },
+  roles: {
+    flexDirection: "row",
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  role: { flex: 1, gap: space.xs },
+  roleHead: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  roleLabel: { ...type.micro, color: colors.textTertiary },
+  roleValue: { ...type.scoreSm, color: colors.textPrimary },
   segment: { paddingHorizontal: space.lg, paddingBottom: space.sm },
   sheet: { gap: space.md },
   footer: { flexDirection: "row", gap: space.sm },

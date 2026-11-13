@@ -21,12 +21,18 @@
  * dizilir; sıra kuralları sunucudaki `SORT_SQL` ile aynıdır. "Asist Krallığı"
  * (web'de var, sunucuda sıralaması yok) bu sayede eklenebildi.
  *
+ * İKİNCİ TUR: ölçüt çipleri ikonludur; podyum koyu sahnede (madalyalı,
+ * dönen rakam); liste satırının sonunda değer bir HAP içinde vurgulanır ve
+ * adın altındaki ince imza çubuğu değeri lidere oranlar. Listenin üstünde
+ * "Sıralama · 1.204 oyuncu" başlığı ve ölçütün birimi durur.
+ *
  * YOĞUN SATIR: liste ortak `PlayerRow` (60px, 34px avatar, 15px ad) yerine bu
  * dosyadaki ince `RankRow`la çizilir — 42px satır, 24px avatar, 12px ad.
  * Sıralamada mevki ve forma numarası yoktur; ortak satırın o yükü burada
  * gereksizdi ve Lig sekmesinde ekrana iki kat oyuncu sığar.
  */
 
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
@@ -41,16 +47,18 @@ import {
   SkeletonListRow,
   Chip,
   ChipGroup,
+  GradientBar,
   Touchable,
   refreshControlProps,
   useRefresh,
 } from "@/components/ui";
 import { getPlayerRankings } from "@/lib/api/players";
-import { formatDecimal } from "@/lib/format";
+import { formatDecimal, formatNumber } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 import type { PlayerRankRow, PlayerSort } from "@/lib/types";
 import { useScope } from "@/providers/ScopeProvider";
 import { colors, hairline, layout, space, textScale, type, upperTR } from "@/theme";
+import { StatPill } from "./kit";
 import { Podium } from "./Podium";
 import { GROUP_RADIUS, JUNK_PLAYER } from "./shared";
 
@@ -66,6 +74,7 @@ interface SortDef {
   /** Sağdaki büyük rakam. */
   metric: (row: PlayerRankRow) => string;
   unit: string;
+  icon: keyof typeof Ionicons.glyphMap;
   /** Sıra kuralı — sunucudaki SORT_SQL ile aynı öncelikler. */
   compare: (a: PlayerRankRow, b: PlayerRankRow) => number;
 }
@@ -91,15 +100,15 @@ const points = (r: PlayerRankRow) => num(r.points);
  * sıralaması" olduğunu söyleyen daha sessiz bir dil.
  */
 const SORTS: SortDef[] = [
-  { key: "topScorers", label: "Gol Krallığı", metric: (r) => String(goals(r)), unit: "gol", compare: by(goals, assists, matches) },
-  { key: "mostAssists", label: "Asist Krallığı", metric: (r) => String(assists(r)), unit: "asist", compare: by(assists, goals, matches) },
+  { key: "topScorers", label: "Gol Krallığı", icon: "football", metric: (r) => String(goals(r)), unit: "gol", compare: by(goals, assists, matches) },
+  { key: "mostAssists", label: "Asist Krallığı", icon: "git-pull-request", metric: (r) => String(assists(r)), unit: "asist", compare: by(assists, goals, matches) },
   /* "En Değerliler" maç PUANI toplamıdır (ekranda yazan sayı); ETL piyasa
      değeri oyuncu sayfasındadır. */
-  { key: "mostValuable", label: "En Değerliler", metric: (r) => String(points(r)), unit: "puan", compare: by(points, goals, matches) },
-  { key: "mostMatches", label: "En Çok Maç", metric: (r) => String(matches(r)), unit: "maç", compare: by(matches, goals) },
-  { key: "pointsPerMatch", label: "Puan / Maç", metric: (r) => formatDecimal(num(r.pointsPerMatch), 2), unit: "puan", compare: by((r) => num(r.pointsPerMatch), points, matches) },
-  { key: "goalsPerMatch", label: "Gol / Maç", metric: (r) => formatDecimal(num(r.goalsPerMatch), 2), unit: "gol", compare: by((r) => num(r.goalsPerMatch), goals, matches) },
-  { key: "mostCards", label: "Kartlar", metric: (r) => String(num(r.cards)), unit: "kart", compare: by((r) => num(r.cards), (r) => num(r.red), (r) => num(r.yellow)) },
+  { key: "mostValuable", label: "En Değerliler", icon: "diamond", metric: (r) => String(points(r)), unit: "puan", compare: by(points, goals, matches) },
+  { key: "mostMatches", label: "En Çok Maç", icon: "calendar", metric: (r) => String(matches(r)), unit: "maç", compare: by(matches, goals) },
+  { key: "pointsPerMatch", label: "Puan / Maç", icon: "trending-up", metric: (r) => formatDecimal(num(r.pointsPerMatch), 2), unit: "puan", compare: by((r) => num(r.pointsPerMatch), points, matches) },
+  { key: "goalsPerMatch", label: "Gol / Maç", icon: "flash", metric: (r) => formatDecimal(num(r.goalsPerMatch), 2), unit: "gol", compare: by((r) => num(r.goalsPerMatch), goals, matches) },
+  { key: "mostCards", label: "Kartlar", icon: "albums", metric: (r) => String(num(r.cards)), unit: "kart", compare: by((r) => num(r.cards), (r) => num(r.red), (r) => num(r.yellow)) },
 ];
 
 const normalize = (value: string) => value.trim().toLocaleLowerCase("tr-TR");
@@ -114,12 +123,15 @@ const GroupSeparator = () => <View style={styles.separator} />;
    ══════════════════════════════════════════════════════════════════════════ */
 
 /** Satır yüksekliği — `getItemLayout` bunu kullanır; stil ile aynı sabit. */
-const RANK_ROW_HEIGHT = 42;
-const RANK_AVATAR = 24;
-/** Sağdaki rakam sütunu — başlıktaki birim de aynı genişlikte durur. */
-const RANK_METRIC_W = 32;
+const RANK_ROW_HEIGHT = 60;
+const RANK_AVATAR = 36;
+/** Sağdaki değer hapının en küçük genişliği — başlıktaki birim de aynı hizada. */
+const RANK_METRIC_W = 52;
 
-/** [sıra] · [avatar] · [ad + bağlam] · [tek sayı] — `PlayerRow` anatomisinin küçüğü. */
+/** Ekrandaki ondalık ("2,15") sayıya çevrilir — çubuk oranı için. */
+const metricNumber = (text: string) => Number(String(text).replace(",", ".")) || 0;
+
+/** [sıra] · [avatar] · [ad + bağlam + oran çubuğu] · [değer hapı] */
 const RankRow = React.memo(function RankRow({
   playerId,
   rank,
@@ -127,6 +139,7 @@ const RankRow = React.memo(function RankRow({
   image,
   meta,
   metric,
+  ratio,
   onPress,
   style,
 }: {
@@ -136,6 +149,8 @@ const RankRow = React.memo(function RankRow({
   image: string | null;
   meta: (string | null | undefined)[];
   metric: string;
+  /** Değerin lidere oranı (0–1). */
+  ratio: number;
   onPress: (playerId: number) => void;
   style?: StyleProp<ViewStyle>;
 }) {
@@ -149,7 +164,7 @@ const RankRow = React.memo(function RankRow({
       haptic="selection"
       accessibilityLabel={`${rank}. ${name}, ${metric}`}
     >
-      <Text style={styles.rankNum} {...textScale.dense}>
+      <Text style={styles.rankNum} numberOfLines={1} {...textScale.dense}>
         {rank}
       </Text>
       <Avatar name={name} image={image} size={RANK_AVATAR} />
@@ -162,10 +177,9 @@ const RankRow = React.memo(function RankRow({
             {metaText}
           </Text>
         ) : null}
+        <GradientBar value={ratio} height={3} style={styles.rankBar} />
       </View>
-      <Text style={styles.rankMetric} numberOfLines={1} {...textScale.dense}>
-        {metric}
-      </Text>
+      <StatPill value={metric} tone={rank <= 10 ? "brand" : "neutral"} minWidth={RANK_METRIC_W} />
     </Touchable>
   );
 });
@@ -263,6 +277,8 @@ export function PlayersPane({ scrollProps, initialSort = "topScorers" }: Players
     [rows, showPodium],
   );
   const lastIndex = listData.length - 1;
+  /* Çubukların ölçeği: ölçütün birincisi (podyumdaki lider dahil). */
+  const leaderValue = useMemo(() => (rows[0] ? metricNumber(active.metric(rows[0])) : 0), [active, rows]);
 
   const renderItem = useCallback(
     ({ item, index }: { item: PlayerRankRow; index: number }) => (
@@ -283,12 +299,13 @@ export function PlayersPane({ scrollProps, initialSort = "topScorers" }: Players
           item.teamName || "Takımsız",
         ]}
         metric={active.metric(item)}
+        ratio={leaderValue > 0 ? metricNumber(active.metric(item)) / leaderValue : 0}
         onPress={openPlayer}
         /* Son satır kartın tabanıdır: alt kenarlık ve alt köşeler onda. */
         style={index === lastIndex ? styles.groupRowLast : styles.groupRow}
       />
     ),
-    [active, lastIndex, openPlayer, showPodium],
+    [active, lastIndex, leaderValue, openPlayer, showPodium],
   );
 
   return (
@@ -323,6 +340,7 @@ export function PlayersPane({ scrollProps, initialSort = "topScorers" }: Players
                   <Chip
                     key={item.key}
                     label={item.label}
+                    icon={item.icon}
                     selected={item.key === sort}
                     size="sm"
                     onPress={() => setSort(item.key)}
@@ -351,8 +369,18 @@ export function PlayersPane({ scrollProps, initialSort = "topScorers" }: Players
 
               {/* Sütun başlığı kartın TEPESİDİR: üst kenarlık ve üst köşeler onda. */}
               {!busy && listData.length > 0 ? (
-                <View style={styles.groupHead}>
-                  <RankHead unit={active.unit} />
+                <View>
+                  <View style={styles.listTitleRow}>
+                    <Text style={styles.listTitle} {...textScale.dense}>
+                      {searching ? "Arama sonuçları" : "Sıralama"}
+                    </Text>
+                    <Text style={styles.listMeta} {...textScale.dense}>
+                      {`${formatNumber(rows.length)} oyuncu`}
+                    </Text>
+                  </View>
+                  <View style={styles.groupHead}>
+                    <RankHead unit={active.unit} />
+                  </View>
                 </View>
               ) : null}
             </View>
@@ -408,7 +436,7 @@ const styles = StyleSheet.create({
     marginHorizontal: -layout.screenPadding,
   },
   listHeader: {
-    gap: space.sm,
+    gap: space.md,
     paddingTop: space.sm,
   },
 
@@ -419,7 +447,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: GROUP_RADIUS,
     borderTopRightRadius: GROUP_RADIUS,
     /* Başlığın kendi üst dolgusu ve alt çizgisi yok; kart tepesinde ikisi de gerekir. */
-    paddingTop: space.s,
+    paddingTop: space.m,
     borderBottomColor: colors.separator,
     overflow: "hidden",
   },
@@ -451,18 +479,36 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
 
-  /* — İnce sıralama satırı — */
+  /* — Liste başlığı — */
+  listTitleRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    paddingTop: space.sm,
+    paddingBottom: space.sm,
+    paddingHorizontal: space.xxs,
+  },
+  listTitle: {
+    ...type.h2,
+    color: colors.textPrimary,
+  },
+  listMeta: {
+    ...type.caption,
+    color: colors.textTertiary,
+  },
+
+  /* — Sıralama satırı — */
   rankRow: {
     height: RANK_ROW_HEIGHT,
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
-    paddingHorizontal: space.m,
+    gap: space.m,
+    paddingHorizontal: space.md,
   },
-  /* Sıra sabit genişlikte: "4" ile "14" avatar sütununu kaydırmaz. */
+  /* Sıra sabit genişlikte: "4" ile "140" avatar sütununu kaydırmaz. */
   rankNum: {
-    ...type.numSm,
-    width: 20,
+    ...type.tableNumStrong,
+    width: 26,
     textAlign: "center",
     color: colors.textTertiary,
   },
@@ -471,24 +517,22 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   rankName: {
-    ...type.labelSm,
+    ...type.h4,
     color: colors.textPrimary,
   },
   rankMeta: {
-    ...type.meta,
+    ...type.caption,
     color: colors.textTertiary,
   },
-  rankMetric: {
-    ...type.scoreXs,
-    minWidth: RANK_METRIC_W,
-    textAlign: "right",
-    color: colors.textPrimary,
+  rankBar: {
+    marginTop: space.xs,
+    width: "70%",
   },
   rankHead: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: space.m,
-    paddingBottom: space.xs,
+    paddingHorizontal: space.md,
+    paddingBottom: space.s,
   },
   headLabel: {
     ...type.overline,
@@ -498,6 +542,6 @@ const styles = StyleSheet.create({
   headMetric: {
     marginLeft: "auto",
     minWidth: RANK_METRIC_W,
-    textAlign: "right",
+    textAlign: "center",
   },
 });

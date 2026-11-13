@@ -8,10 +8,10 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { memo, useCallback } from "react";
+import { memo, useCallback, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { Avatar, Button, SectionHeader, Touchable, useToast } from "@/components/ui";
+import { Avatar, Button, GradientBar, IconTile, Odometer, SectionHeader, Touchable, useToast } from "@/components/ui";
 import {
   castFanVote,
   getDuel,
@@ -25,7 +25,7 @@ import {
 import { formatDateShort, mediaUrl } from "@/lib/format";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, radius, space, textScale, type } from "@/theme";
+import { colors, fonts, hairline, radius, space, textScale, type } from "@/theme";
 import { PaperCard } from "./parts";
 
 /* ═══════════════════════════ DERBİ DÜELLOSU ═══════════════════════════ */
@@ -51,10 +51,7 @@ export const DuelCard = memo(function DuelCard({ matchId }: { matchId: number })
           </Text>
           <SideScore name={duel.away.name} score={duel.away.score} lead={duel.leader === "away"} alignEnd />
         </View>
-        <View style={styles.bar}>
-          <View style={[styles.barHome, { flex: Math.max(0.02, homeShare) }]} />
-          <View style={[styles.barAway, { flex: Math.max(0.02, 1 - homeShare) }]} />
-        </View>
+        <GradientBar value={duel.home.score + duel.away.score > 0 ? homeShare : 0.5} height={8} track={colors.slateSoft} style={styles.duelBar} />
         <Text style={styles.meta} {...textScale.dense}>
           {`${duel.home.participants} – ${duel.away.participants} oyuncu katıldı`}
         </Text>
@@ -72,9 +69,7 @@ function SideScore({ name, score, lead, alignEnd }: { name: string; score: numbe
       <Text style={styles.sideName} numberOfLines={1} {...textScale.dense}>
         {name}
       </Text>
-      <Text style={[styles.sideScore, lead && styles.lead]} {...textScale.dense}>
-        {score.toLocaleString("tr-TR")}
-      </Text>
+      <Odometer value={score.toLocaleString("tr-TR")} style={[styles.sideScore, lead && styles.lead]} />
     </View>
   );
 }
@@ -97,9 +92,17 @@ export const FanVoteCard = memo(function FanVoteCard({ matchId }: { matchId: num
     },
     onError: (error) => toast.show({ message: error instanceof ApiError ? error.userMessage : "Oy verilemedi.", tone: "danger" }),
   });
+  const [expanded, setExpanded] = useState(false);
   const data: FanVoteState | undefined = query.data;
   if (!data || !data.candidates.length || (!data.open && !data.total)) return null;
-  const top = data.open ? data.candidates : data.candidates.slice(0, 5);
+  const all = data.open ? data.candidates : data.candidates.slice(0, 5);
+  /* Uzun aday listesi (16 oyuncu) Özet'i ikiye bölüyordu: ilk altı aday
+     görünür, kalanı tek dokunuşla açılır. Oy veren üyenin seçimi her zaman
+     görünür kalır. */
+  const top = expanded
+    ? all
+    : all.filter((item, index) => index < FAN_PREVIEW || item.playerId === data.myVote);
+  const hidden = all.length - top.length;
 
   return (
     <>
@@ -110,14 +113,20 @@ export const FanVoteCard = memo(function FanVoteCard({ matchId }: { matchId: num
       <PaperCard padded>
         {data.winner ? (
           <View style={styles.winner}>
-            <Ionicons name="trophy" size={18} color={colors.star} />
-            <Text style={styles.winnerText} {...textScale.dense}>
-              {`${data.winner.name} · ${data.winner.votes} oy`}
-            </Text>
+            <IconTile icon="trophy" tone="gold" size={36} />
+            <View style={styles.flex}>
+              <Text style={styles.winnerOverline} {...textScale.badge}>
+                TARAFTARIN SEÇİMİ
+              </Text>
+              <Text style={styles.winnerText} numberOfLines={1} {...textScale.dense}>
+                {`${data.winner.name} · ${data.winner.votes} oy`}
+              </Text>
+            </View>
           </View>
         ) : null}
-        {top.map((item) => {
+        {top.map((item, index) => {
           const mine = data.myVote === item.playerId;
+          const leading = index === 0 && item.votes > 0;
           return (
             <Touchable
               key={item.playerId}
@@ -135,17 +144,35 @@ export const FanVoteCard = memo(function FanVoteCard({ matchId }: { matchId: num
                 <Text style={styles.candidateName} numberOfLines={1} {...textScale.dense}>
                   {item.name}
                 </Text>
-                <View style={styles.shareTrack}>
-                  <View style={[styles.shareFill, { width: `${item.share}%` }]} />
-                </View>
+                <GradientBar
+                  value={item.share / 100}
+                  height={5}
+                  gradient={leading ? colors.medalGold : undefined}
+                  style={styles.shareBar}
+                />
               </View>
-              <Text style={styles.share} {...textScale.dense}>
+              <Text style={[styles.share, leading && styles.shareLead]} {...textScale.dense}>
                 {`%${item.share}`}
               </Text>
               {mine ? <Ionicons name="checkmark-circle" size={18} color={colors.accent} /> : null}
             </Touchable>
           );
         })}
+        {hidden > 0 || expanded ? (
+          <Touchable
+            feedback="button"
+            haptic="selection"
+            onPress={() => setExpanded((value) => !value)}
+            accessibilityRole="button"
+            accessibilityLabel={expanded ? "Aday listesini daralt" : `Tüm adayları göster, ${all.length}`}
+            style={styles.more}
+          >
+            <Text style={styles.moreText} {...textScale.dense}>
+              {expanded ? "Daha az göster" : `${hidden} aday daha`}
+            </Text>
+            <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={14} color={colors.brandAccent} />
+          </Touchable>
+        ) : null}
         {data.open ? (
           <Text style={styles.meta} {...textScale.long}>
             Oyunu maçta oynayanlardan birine ver; değiştirebilirsin. Editörün seçtiği maçın enleri ayrıdır.
@@ -155,6 +182,9 @@ export const FanVoteCard = memo(function FanVoteCard({ matchId }: { matchId: num
     </>
   );
 });
+
+/** Taraftar oylamasında ilk açılışta görünen aday sayısı. */
+const FAN_PREVIEW = 6;
 
 /* ═══════════════════════════ OLAY TEPKİLERİ ═══════════════════════════ */
 
@@ -193,16 +223,35 @@ const styles = StyleSheet.create({
   sideScore: { ...type.scoreLg, color: colors.textPrimary },
   lead: { color: colors.accentText },
   vs: { ...type.overline, color: colors.textTertiary },
-  bar: { flexDirection: "row", height: 6, borderRadius: radius.pill, overflow: "hidden", marginVertical: space.s, gap: space.xxs },
-  barHome: { backgroundColor: colors.accent },
-  barAway: { backgroundColor: colors.slate },
-  winner: { flexDirection: "row", alignItems: "center", gap: space.s, marginBottom: space.s },
+  duelBar: { marginVertical: space.s },
+  winner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.m,
+    marginBottom: space.sm,
+    paddingBottom: space.sm,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.separator,
+  },
+  winnerOverline: { ...type.overline, color: colors.textTertiary },
   winnerText: { ...type.h3, color: colors.textPrimary },
   candidate: { flexDirection: "row", alignItems: "center", gap: space.s, paddingVertical: space.s, borderRadius: radius.md, paddingHorizontal: space.xs },
-  candidateMine: { backgroundColor: colors.surface2 },
+  candidateMine: { backgroundColor: colors.brandDim },
   candidateName: { ...type.label, color: colors.textPrimary },
-  shareTrack: { height: 4, borderRadius: radius.pill, backgroundColor: colors.surface2, marginTop: space.xxs, overflow: "hidden" },
-  shareFill: { height: 4, backgroundColor: colors.accent },
-  share: { ...type.label, color: colors.textSecondary, minWidth: 36, textAlign: "right" },
+  shareBar: { marginTop: space.xs },
+  share: { ...type.tableNumStrong, color: colors.textSecondary, minWidth: 40, textAlign: "right" },
+  shareLead: { color: colors.textPrimary, fontFamily: fonts.bold },
+  more: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.xs,
+    height: 36,
+    marginTop: space.sm,
+    marginBottom: space.xs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brandDim,
+  },
+  moreText: { ...type.label, color: colors.brandAccent },
 });
 

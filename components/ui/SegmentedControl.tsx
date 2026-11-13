@@ -38,6 +38,7 @@ import {
   isDark,
   radius,
   space,
+  spring,
   textScale,
   type,
 } from "@/theme";
@@ -74,7 +75,7 @@ function SegmentedControlBase<T extends string>({
   style,
   testID,
 }: SegmentedControlProps<T>) {
-  const innerHeight = size === "sm" ? 26 : 32;
+  const innerHeight = size === "sm" ? 28 : 34;
   const index = Math.max(
     0,
     items.findIndex((item) => item.key === value),
@@ -83,6 +84,7 @@ function SegmentedControlBase<T extends string>({
   const [containerWidth, setContainerWidth] = useState(0);
   const [widths, setWidths] = useState<number[]>([]);
   const translate = useRef(new Animated.Value(0)).current;
+  const squish = useRef(new Animated.Value(0)).current;
   const firstRun = useRef(true);
 
   const segmentWidth = useCallback(
@@ -111,13 +113,17 @@ function SegmentedControlBase<T extends string>({
       if (offset > 0 || indicatorWidth > 0) firstRun.current = false;
       return;
     }
-    Animated.timing(translate, {
-      toValue: offset,
-      duration: duration.base,
-      easing: easing.decelerate,
-      useNativeDriver: true,
-    }).start();
-  }, [indicatorWidth, offset, translate]);
+    /* SLIDING THUMB: başparmak hedefe yaylanarak kayar, hafifçe aşar ve
+       geri oturur; yolda bir tık esner. */
+    squish.setValue(0);
+    Animated.parallel([
+      Animated.spring(translate, { toValue: offset, ...spring.slide }),
+      Animated.sequence([
+        Animated.timing(squish, { toValue: 1, duration: duration.base * 0.6, easing: easing.decelerate, useNativeDriver: true }),
+        Animated.spring(squish, { toValue: 0, ...spring.pop }),
+      ]),
+    ]).start();
+  }, [indicatorWidth, offset, translate, squish]);
 
   const handleContainerLayout = useCallback((event: LayoutChangeEvent) => {
     setContainerWidth(event.nativeEvent.layout.width);
@@ -148,7 +154,14 @@ function SegmentedControlBase<T extends string>({
           pointerEvents="none"
           style={[
             styles.indicator,
-            { width: indicatorWidth, height: innerHeight, transform: [{ translateX: translate }] },
+            {
+              width: indicatorWidth,
+              height: innerHeight,
+              transform: [
+                { translateX: translate },
+                { scaleX: squish.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] }) },
+              ],
+            },
           ]}
         />
       ) : null}
@@ -210,10 +223,10 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: isDark ? colors.bg : colors.surface3,
-    borderRadius: radius.pill,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
     borderWidth: hairline,
-    borderColor: isDark ? colors.border : colors.surface3,
+    borderColor: colors.border,
     padding: PAD,
   },
   /**
@@ -227,17 +240,22 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: PAD,
     top: PAD,
-    borderRadius: radius.pill,
+    borderRadius: radius.md,
     backgroundColor: isDark ? colors.surface3 : colors.surface1,
     borderWidth: hairline,
-    borderColor: isDark ? colors.borderStrong : colors.border,
+    borderColor: isDark ? colors.glassLine : colors.border,
+    shadowColor: colors.shadowColor,
+    shadowOpacity: isDark ? 0.45 : 0.14,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
   segment: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: space.xs,
-    borderRadius: radius.pill,
+    borderRadius: radius.md,
   },
   segmentStretch: {
     flex: 1,
@@ -259,7 +277,7 @@ const styles = StyleSheet.create({
       birincil eylemiyle yarışıyordu. */
   labelActive: {
     color: colors.textPrimary,
-    fontFamily: fonts.semibold,
+    fontFamily: fonts.heading,
   },
   dot: {
     width: 6,

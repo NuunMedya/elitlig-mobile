@@ -38,6 +38,14 @@ export type { TouchableProps, PressFeedback, HapticKind } from "./Pressable";
 
 export { Surface } from "./Surface";
 
+/** Gece teması atmosferi: kayan mor/camgöbeği/pembe ışık. */
+export { Aurora, type AuroraProps } from "./Aurora";
+/** Gece kiti: dönen sayaç, madalya, degrade ikon kutusu, degrade çubuk. */
+export { Odometer, RankBadge, IconTile, GradientBar, ICON_TILE_TONES } from "./NightKit";
+export type { OdometerProps, RankBadgeProps, IconTileProps, IconTileTone, GradientBarProps } from "./NightKit";
+/** Canlı kartın kenarında dolaşan neon ışık. */
+export { GlowRim, type GlowRimProps } from "./GlowRim";
+
 /** Kartların ışıklı mor gradyan katmanı. */
 export { Bloom, type BloomProps } from "./Bloom";
 export { GradientFill, type GradientTone } from "./GradientFill";

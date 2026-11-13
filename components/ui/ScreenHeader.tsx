@@ -63,6 +63,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, duration, easing, hairline, layout, radius, space, textScale, touchSlop, type } from "@/theme";
+import { Aurora } from "./Aurora";
 import { Badge, toneColors, type Tone } from "./Badge";
 import { Touchable } from "./Pressable";
 
@@ -330,6 +331,9 @@ export function ScreenHeader({
 
   return (
     <View style={style}>
+      {/* GECE TEMASI: kâğıt başlığın (süzgeç bandı dahil) arkasında yavaşça
+          kayan mor ışık; güvenli alana da taşar, alt kenarda kâğıda erir. */}
+      {isPaper ? <Aurora fadeTo={colors.bg} style={{ top: -insets.top }} /> : null}
       {/* MOR BLOK — güvenli alanı da kaplar (bkz. dosya başlığı). */}
       <HeaderToneContext.Provider value={dark ? "ink" : "paper"}>
       <View
@@ -339,13 +343,16 @@ export function ScreenHeader({
         ]}
       >
         {isPaper ? null : isInk ? (
-          <LinearGradient
-            colors={colors.gradientInk}
-            start={INK_START}
-            end={INK_END}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
+          <>
+            <LinearGradient
+              colors={colors.gradientInk}
+              start={INK_START}
+              end={INK_END}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
+            <Aurora variant="stage" />
+          </>
         ) : (
           /* Şeffaf kipte zemin, daralma ilerledikçe opaklaşır. */
           <Animated.View
@@ -484,7 +491,7 @@ const styles = StyleSheet.create({
   },
   /** Kâğıt başlık: zemin sayfayla aynı, ayrım kaydırınca beliren saç teli. */
   paperWrap: {
-    backgroundColor: colors.bg,
+    backgroundColor: "transparent",
   },
   bareWrap: {
     backgroundColor: "transparent",
@@ -553,13 +560,20 @@ const styles = StyleSheet.create({
   /* Kâğıtta eylem ÇIPLAK ikondur: her ikonun etrafındaki beyaz halka başlığı
      bir düğme dizisine çeviriyordu. Dokunma alanı 36px kutuda korunur. */
   actionOnPaper: {
-    borderRadius: radius.pill,
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    backgroundColor: colors.glass,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
   },
   actionBadgePaper: {
     borderColor: colors.bg,
   },
   actionOnInk: {
-    borderRadius: radius.pill,
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
     backgroundColor: colors.inkPill,
     borderWidth: hairline,
     borderColor: colors.borderOnDark,

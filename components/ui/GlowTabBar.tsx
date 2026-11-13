@@ -8,6 +8,10 @@
  *     ortada YÜKSELEN "Uygulamalar" düğmesi (`center`). Yönetici hangi modda
  *     olduğunu bara bakarak anlar; iki temada da aynı kalır.
  *
+ * GECE TEMASI (2026-11): bar ekranın dibine oturmaz, kenarlardan ayrık YÜZEN
+ * bir cam hap olarak durur. Seçili sekmede mor → camgöbeği kapsül, yeni
+ * sekmeye kayarken yatay ESNER ve yaylanarak oturur (Sliding Pill).
+ *
  * SEÇİMİN SİNYALİ — KAYAN KAPSÜL: seçili ikonu saran pul barın üstünde TEK bir
  * nesnedir ve sekme değişince yaylanarak yeni sekmeye KAYAR; hareket seçimin
  * yönünü de söyler.
@@ -47,12 +51,14 @@ import {
   colors,
   elevate,
   fonts,
+  glowStyle,
   hairline,
   haptics,
   layout,
   radius,
   space,
   spring,
+  stretch,
   textScale,
   type,
 } from "@/theme";
@@ -66,9 +72,11 @@ const BAR_END = { x: 0, y: 0.5 } as const;
 /* ÖLÇÜLER — barın iç geometrisi tek yerde.
    7 üst dolgu + 28 kapsül + 3 aralık + 13 etiket + 9 alt dolgu = 60
    (`layout.tabBarHeight`); güvenli alan bunun ALTINA eklenir. */
-const CAPSULE_WIDTH = 52;
-const CAPSULE_HEIGHT = 28;
+const CAPSULE_WIDTH = 54;
+const CAPSULE_HEIGHT = 32;
 const CAPSULE_TOP = 7;
+/** Yüzen barın ekran kenarlarından boşluğu. */
+const FLOAT_GAP = 12;
 /** Yönetim barının ortasındaki yükselen düğme. */
 const CENTER_SIZE = 50;
 const CENTER_LIFT = 16;
@@ -140,14 +148,25 @@ export function GlowTabBar({ state, navigation, insets, tabs, variant = "member"
   /* Kapsülün konumu YUVA İNDİSİ olarak tutulur, piksel olarak değil: bar
      ölçüsü değiştiğinde yalnız interpolasyonun çıktı aralığı değişir. */
   const travel = useRef(new Animated.Value(activeIndex)).current;
+  /* SLIDING PILL: kapsül yolda yatay esner, hedefe yaylanarak oturur. */
+  const squish = useRef(new Animated.Value(0)).current;
+  const firstRun = useRef(true);
 
   useEffect(() => {
-    if (reduceMotion) {
+    if (reduceMotion || firstRun.current) {
+      firstRun.current = false;
       travel.setValue(activeIndex);
       return;
     }
-    Animated.spring(travel, { toValue: activeIndex, ...spring.sheet }).start();
-  }, [activeIndex, reduceMotion, travel]);
+    squish.setValue(0);
+    Animated.parallel([
+      Animated.spring(travel, { toValue: activeIndex, ...spring.slide }),
+      Animated.sequence([
+        Animated.timing(squish, { toValue: 1, duration: stretch.ms * 0.38, useNativeDriver: true }),
+        Animated.spring(squish, { toValue: 0, ...spring.pop }),
+      ]),
+    ]).start();
+  }, [activeIndex, reduceMotion, travel, squish]);
 
   const slotWidth = slots.length > 0 ? barWidth / slots.length : 0;
   const span = Math.max(1, slots.length - 1);
@@ -160,23 +179,30 @@ export function GlowTabBar({ state, navigation, insets, tabs, variant = "member"
     setBarWidth(event.nativeEvent.layout.width);
   };
 
+  const capsuleScale = {
+    transform: [
+      { scaleX: squish.interpolate({ inputRange: [0, 1], outputRange: [1, stretch.peak] }) },
+      { scaleY: squish.interpolate({ inputRange: [0, 1], outputRange: [1, stretch.squash] }) },
+    ],
+  };
+
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, FLOAT_GAP) }]}>
       {banner}
       <View
-        /* YÜKSEKLİK GÜVENLİ ALANI DA SAYAR: React Native'de `height` dolguyu
-           İÇERİR (border-box). */
+        /* YÜZEN CAM BAR: kenarlardan ayrık, dört köşesi yuvarlak. Güvenli alan
+           barın İÇİNE değil ALTINA (sarmalayıcının dolgusu) eklenir. */
         style={[
           styles.bar,
-          elevate(2),
-          { height: layout.tabBarHeight + insets.bottom, paddingBottom: insets.bottom, backgroundColor: tone.bar },
+          elevate(4),
+          { height: layout.tabBarHeight + 6, backgroundColor: tone.bar },
         ]}
         onLayout={onBarLayout}
       >
         <View style={styles.barClip} pointerEvents="none">
           <LinearGradient colors={tone.gradient} start={BAR_START} end={BAR_END} style={StyleSheet.absoluteFill} />
           {/* Üst kenar: barı sayfadan ayıran ince ışık çizgisi. */}
-          <View style={[styles.edge, { backgroundColor: tone.border }]} />
+          <View style={[styles.edge, { borderColor: tone.border }]} />
         </View>
 
         {/* Kayan kapsül + altındaki ışık çizgisi — sekmelerden ÖNCE çizilir ki
@@ -190,8 +216,9 @@ export function GlowTabBar({ state, navigation, insets, tabs, variant = "member"
             ]}
             pointerEvents="none"
           >
-            <View style={[styles.capsuleOn, { backgroundColor: tone.capsule }]} />
-            <View style={[styles.beam, { backgroundColor: tone.active }]} />
+            <Animated.View style={[styles.capsuleOn, glowStyle(tone.glow, 2), capsuleScale]}>
+              <LinearGradient colors={tone.capsuleGradient} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.capsuleFill} />
+            </Animated.View>
           </Animated.View>
         ) : null}
 
@@ -233,6 +260,7 @@ export function GlowTabBar({ state, navigation, insets, tabs, variant = "member"
               focused={focused}
               reduceMotion={reduceMotion}
               activeColor={tone.active}
+              iconOnColor={tone.iconOn}
               inactiveColor={tone.inactive}
               ringColor={tone.bar}
               ripple={tone.border}
@@ -253,6 +281,7 @@ interface TabSlotProps {
   focused: boolean;
   reduceMotion: boolean;
   activeColor: string;
+  iconOnColor: string;
   inactiveColor: string;
   ringColor: string;
   ripple: string;
@@ -271,6 +300,7 @@ const TabSlot = React.memo(function TabSlot({
   focused,
   reduceMotion,
   activeColor,
+  iconOnColor,
   inactiveColor,
   ringColor,
   ripple,
@@ -295,7 +325,7 @@ const TabSlot = React.memo(function TabSlot({
 
   const iconStyle = {
     transform: [
-      { scale: lift.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] }) },
+      { scale: lift.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] }) },
       { translateY: lift.interpolate({ inputRange: [0, 1], outputRange: [0, -1] }) },
     ],
   };
@@ -322,7 +352,7 @@ const TabSlot = React.memo(function TabSlot({
           <TabBarIcon
             name={tab.icon}
             focused={focused}
-            color={focused ? activeColor : inactiveColor}
+            color={focused ? iconOnColor : inactiveColor}
             size={22}
             badge={tab.badge && tab.badge > 0 ? tab.badge : undefined}
             badgeTone={tab.badgeTone}
@@ -397,7 +427,10 @@ const MEMBER_TONE = {
   border: colors.tabBarBorder,
   active: colors.tabActive,
   inactive: colors.tabInactive,
-  capsule: colors.tabCapsule,
+  /** Seçili ikon: kapsülün ÜSTÜNDE beyaz. */
+  iconOn: colors.textOnBrand,
+  capsuleGradient: colors.gradientSignature,
+  glow: colors.glow,
 } as const;
 
 const ADMIN_TONE = {
@@ -406,13 +439,17 @@ const ADMIN_TONE = {
   border: colors.adminBarBorder,
   active: colors.adminTabActive,
   inactive: colors.adminTabInactive,
-  capsule: colors.adminCapsule,
+  iconOn: colors.adminAccentInk,
+  capsuleGradient: colors.gradientAdminAccent,
+  glow: colors.adminAccent,
 } as const;
 
 const styles = StyleSheet.create({
   /** Köşelerin arkasında sayfanın kâğıdı görünür. */
   wrap: {
     backgroundColor: colors.bg,
+    paddingHorizontal: FLOAT_GAP,
+    paddingTop: space.xs,
   },
   /**
    * Bar ekranın alt kenarına OTURUR; yalnız üst köşeleri yumuşaktır. Yükseklik
@@ -421,22 +458,20 @@ const styles = StyleSheet.create({
   bar: {
     flexDirection: "row",
     alignItems: "stretch",
-    borderTopLeftRadius: radius.xxl,
-    borderTopRightRadius: radius.xxl,
+    borderRadius: radius.xxl,
   },
   /** Gradyan ve kenar çizgisi köşe yarıçapına kırpılır; düğme taşabilir. */
   barClip: {
     ...StyleSheet.absoluteFillObject,
-    borderTopLeftRadius: radius.xxl,
-    borderTopRightRadius: radius.xxl,
+    borderRadius: radius.xxl,
     overflow: "hidden",
   },
+  /** Barın ışıklı cam kenarı — dört yanda ince çizgi. */
   edge: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: hairline,
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: radius.xxl,
+    borderWidth: hairline * 2,
+    backgroundColor: "transparent",
   },
   /** Kapsülün taşıyıcısı: bir yuva genişliğinde, sola yaslı. */
   capsuleSlot: {
@@ -452,15 +487,11 @@ const styles = StyleSheet.create({
   capsuleOn: {
     width: CAPSULE_WIDTH,
     height: CAPSULE_HEIGHT,
-    borderRadius: radius.pill,
+    borderRadius: radius.md,
   },
-  /** Seçili sekmenin dibinde, kapsülle birlikte kayan ışık çizgisi. */
-  beam: {
-    position: "absolute",
-    bottom: 3,
-    width: 14,
-    height: 3,
-    borderRadius: radius.pill,
+  capsuleFill: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: radius.md,
   },
   tab: {
     flex: 1,

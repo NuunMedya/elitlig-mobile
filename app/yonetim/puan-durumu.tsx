@@ -19,14 +19,17 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { AdminList, AdminScreen, FieldBox, RecordCard, confirmAction, useAdminMutation } from "@/components/admin";
+import Ionicons from "@expo/vector-icons/Ionicons";
+
+import { AdminList, AdminScreen, FieldBox, confirmAction, useAdminMutation } from "@/components/admin";
+import { StatusTiles } from "@/components/admin/matches/opsKit";
 import { ScopeFields, useInitialScope, type AdminScope } from "@/components/admin/matches/ScopeFields";
 import { Note } from "@/components/admin/matches/parts";
-import { BottomSheet, Button, Input, SegmentedControl, Stepper } from "@/components/ui";
+import { BottomSheet, Button, Input, RankBadge, SegmentedControl, Stepper, TeamLogo, Touchable } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { getAdminStandings, saveManualPoints, type AdminStandingRow } from "@/lib/api/admin/matches";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 const PERMS = ["standings.update"] as const;
 
@@ -131,13 +134,7 @@ export default function StandingsAdminScreen() {
         onSearch={setQ}
         searchPlaceholder="Takım ara"
         keyExtractor={(x) => String(x.row.team_id)}
-        summary={
-          query.data
-            ? `${query.data.standings.length} takım · toplam elle düzeltme ${manualSum > 0 ? "+" : ""}${manualSum} · aktif model: ${
-                activeType === "gucdengesi" ? "Güç dengesi" : "Standart"
-              }`
-            : null
-        }
+        summary={null}
         emptyIcon="podium-outline"
         emptyTitle={ready ? "Tabloda takım yok" : "Kapsam seç"}
         emptyBody={ready ? "Bu sezonda yayınlanmış maç ya da puanı olan takım yok." : "Düzeltme yapmak için il, lig ve sezon seç."}
@@ -163,25 +160,47 @@ export default function StandingsAdminScreen() {
               stretch
               size="sm"
             />
+            {query.data ? (
+              <StatusTiles
+                items={[
+                  { key: "teams", label: "Takım", value: query.data.standings.length, icon: "shield-outline", tone: "brand" },
+                  { key: "fixed", label: "Düzeltilen", value: query.data.standings.filter((r) => Number(mode === "gucdengesi" ? r.balance_manual_points : r.manual_points)).length, icon: "construct-outline", tone: "warn" },
+                  { key: "sum", label: "Net elle", value: Math.abs(manualSum), icon: manualSum < 0 ? "remove-circle-outline" : "add-circle-outline", tone: manualSum < 0 ? "danger" : "win" },
+                ]}
+              />
+            ) : null}
+            {query.data ? (
+              <View style={styles.modelRow}>
+                <Ionicons name="calculator-outline" size={13} color={colors.textTertiary} />
+                <Text style={styles.legend} numberOfLines={1} {...textScale.dense}>
+                  Aktif model: {activeType === "gucdengesi" ? "Güç dengesi" : "Standart"} · {mode === "gucdengesi" ? "güç dengesi + düzeltme" : "maç puanı + elle puan"} = toplam
+                </Text>
+              </View>
+            ) : null}
             {groupView ? <Note text="Grup tablosu grubun kendi maçlarından hesaplanır ve salt okunurdur. Düzeltme için grubu kaldır." /> : null}
-            <Text style={styles.legend} {...textScale.dense}>
-              O · G · B · M · AV — {mode === "gucdengesi" ? "güç dengesi + düzeltme" : "maç puanı + elle puan"} = toplam
-            </Text>
+            {/* Sütun başlıkları — satırlardaki tablo hizasıyla aynı genişlikler. */}
+            {rows.length ? (
+              <View style={styles.tableHead}>
+                <Text style={[styles.th, styles.thRank]} {...textScale.badge}>#</Text>
+                <Text style={[styles.th, styles.thTeam]} {...textScale.badge}>TAKIM</Text>
+                {["O", "G", "B", "M"].map((h) => (
+                  <Text key={h} style={[styles.th, styles.thNum]} {...textScale.badge}>{h}</Text>
+                ))}
+                <Text style={[styles.th, styles.thAv]} {...textScale.badge}>AV</Text>
+                <Text style={[styles.th, styles.thPts]} {...textScale.badge}>P</Text>
+              </View>
+            ) : null}
           </View>
         }
         renderItem={({ item }) => {
           const r = item.row;
           const manual = Number(mode === "gucdengesi" ? r.balance_manual_points : r.manual_points) || 0;
-          const base = Number(mode === "gucdengesi" ? r.balance_points : r.base_points) || 0;
           return (
-            <RecordCard
-              title={`${item.rank}. ${r.team_name}`}
-              subtitle={`O ${r.played} · G ${r.wins} · B ${r.draws} · M ${r.losses} · AV ${r.goal_diff > 0 ? "+" : ""}${r.goal_diff}`}
-              meta={`${base} ${manual >= 0 ? "+" : "−"} ${Math.abs(manual)} düzeltme`}
-              avatar={{ name: r.team_name, image: r.logo || null }}
-              value={`${item.total} P`}
-              valueTone={manual ? "warn" : "neutral"}
-              badges={[manual ? { label: `${manual > 0 ? "+" : ""}${manual} elle`, tone: manual > 0 ? "win" : "danger" } : null]}
+            <StandingLine
+              rank={item.rank}
+              row={r}
+              total={item.total}
+              manual={manual}
               onPress={canEdit && !groupView ? () => setEditing(r) : undefined}
             />
           );
@@ -216,6 +235,68 @@ export default function StandingsAdminScreen() {
         {scopeDraft ? <ScopeFields value={scopeDraft} onChange={setScopeDraft} withGroup /> : <Text style={styles.legend}>Kapsam yükleniyor…</Text>}
       </BottomSheet>
     </AdminScreen>
+  );
+}
+
+/** Tablo satırı: madalya/sıra, logo + ad, O·G·B·M·AV sütunları, sağda toplam
+    puan; elle düzeltme varsa puanın altında ± rozet ve solda uyarı şeridi. */
+function StandingLine({
+  rank,
+  row,
+  total,
+  manual,
+  onPress,
+}: {
+  rank: number;
+  row: AdminStandingRow;
+  total: number;
+  manual: number;
+  onPress?: () => void;
+}) {
+  const body = (
+    <>
+      {manual ? <View style={[styles.lineRail, { backgroundColor: manual > 0 ? colors.win : colors.danger }]} /> : null}
+      <View style={styles.thRank}>{rank <= 3 ? <RankBadge rank={rank} size={22} /> : <Text style={styles.rankText} {...textScale.badge}>{rank}</Text>}</View>
+      <View style={[styles.thTeam, styles.teamCell]}>
+        <TeamLogo name={row.team_name} logo={row.logo || null} size={24} />
+        <Text style={styles.teamName} numberOfLines={1} {...textScale.dense}>
+          {row.team_name}
+        </Text>
+      </View>
+      {[row.played, row.wins, row.draws, row.losses].map((n, i) => (
+        <Text key={i} style={[styles.num, styles.thNum]} {...textScale.badge}>
+          {n}
+        </Text>
+      ))}
+      <Text numberOfLines={1} style={[styles.num, styles.thAv, row.goal_diff > 0 ? { color: colors.win } : row.goal_diff < 0 ? { color: colors.loss } : null]} {...textScale.badge}>
+        {row.goal_diff > 0 ? "+" : ""}
+        {row.goal_diff}
+      </Text>
+      <View style={styles.thPts}>
+        <Text style={styles.pts} {...textScale.badge}>
+          {total}
+        </Text>
+        {manual ? (
+          <Text style={[styles.manual, { color: manual > 0 ? colors.win : colors.danger }]} {...textScale.badge}>
+            {manual > 0 ? "+" : "−"}
+            {Math.abs(manual)}
+          </Text>
+        ) : null}
+      </View>
+    </>
+  );
+  return onPress ? (
+    <Touchable
+      feedback="row"
+      onPress={onPress}
+      style={[styles.line, manual ? styles.lineFixed : null]}
+      accessibilityRole="button"
+      accessibilityLabel={`${rank}. ${row.team_name}, ${total} puan${manual ? `, elle ${manual}` : ""}. Düzeltmek için dokun`}
+    >
+      {body}
+    </Touchable>
+  ) : (
+    <View style={[styles.line, manual ? styles.lineFixed : null]}>{body}</View>
   );
 }
 
@@ -296,9 +377,23 @@ function AdjustSheet({
           <Button label="+1" size="sm" variant="secondary" onPress={() => setBoth(value + 1)} />
           <Button label="+3" size="sm" variant="secondary" onPress={() => setBoth(value + 3)} />
         </View>
-        <Text style={styles.total} {...textScale.badge}>
-          {base} {value >= 0 ? "+" : "−"} {Math.abs(value)} = {base + value} puan
-        </Text>
+        {/* Denklem: taban + düzeltme = toplam — üç cam karo. */}
+        <View style={styles.equation}>
+          <View style={styles.eqCell}>
+            <Text style={styles.eqLabel} {...textScale.badge}>{mode === "gucdengesi" ? "GÜÇ" : "MAÇ"}</Text>
+            <Text style={styles.eqValue} {...textScale.badge}>{base}</Text>
+          </View>
+          <Text style={styles.eqOp} {...textScale.badge}>{value >= 0 ? "+" : "−"}</Text>
+          <View style={[styles.eqCell, value ? { borderColor: value > 0 ? colors.win : colors.danger } : null]}>
+            <Text style={styles.eqLabel} {...textScale.badge}>ELLE</Text>
+            <Text style={[styles.eqValue, value > 0 ? { color: colors.win } : value < 0 ? { color: colors.danger } : null]} {...textScale.badge}>{Math.abs(value)}</Text>
+          </View>
+          <Text style={styles.eqOp} {...textScale.badge}>=</Text>
+          <View style={[styles.eqCell, styles.eqTotal]}>
+            <Text style={[styles.eqLabel, styles.eqLabelOn]} {...textScale.badge}>TOPLAM</Text>
+            <Text style={[styles.eqValue, styles.eqValueOn]} {...textScale.badge}>{base + value}</Text>
+          </View>
+        </View>
       </View>
     </BottomSheet>
   );
@@ -311,5 +406,48 @@ const styles = StyleSheet.create({
   adjust: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.md },
   adjustInput: { width: 84 },
   quick: { flexDirection: "row", justifyContent: "center", gap: space.xs, flexWrap: "wrap" },
-  total: { ...type.h3, color: colors.textPrimary, textAlign: "center" },
+  modelRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  tableHead: { flexDirection: "row", alignItems: "center", paddingHorizontal: space.md, paddingTop: space.xs },
+  th: { ...type.overline, color: colors.textTertiary, textAlign: "center" },
+  thRank: { width: 26, alignItems: "center" },
+  thTeam: { flex: 1, minWidth: 0, textAlign: "left", marginLeft: space.xs },
+  thNum: { width: 22, textAlign: "center" },
+  thAv: { width: 36, textAlign: "center" },
+  thPts: { width: 40, alignItems: "flex-end", textAlign: "right" },
+  line: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 56,
+    paddingHorizontal: space.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+    overflow: "hidden",
+  },
+  lineFixed: { backgroundColor: colors.warnDim },
+  lineRail: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3 },
+  rankText: { ...type.numSmStrong, color: colors.textSecondary },
+  teamCell: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  teamName: { ...type.h4, color: colors.textPrimary, flex: 1 },
+  num: { ...type.numSm, color: colors.textSecondary },
+  pts: { ...type.scoreXs, color: colors.textPrimary },
+  manual: { ...type.nano },
+  equation: { flexDirection: "row", alignItems: "center", gap: space.s },
+  eqCell: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: space.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: space.xxs,
+  },
+  eqTotal: { backgroundColor: colors.brand, borderColor: colors.brand },
+  eqLabel: { ...type.overline, color: colors.textTertiary },
+  eqLabelOn: { color: colors.textOnBrand },
+  eqValue: { ...type.scoreMd, color: colors.textPrimary },
+  eqValueOn: { color: colors.textOnBrand },
+  eqOp: { ...type.scoreSm, color: colors.textTertiary },
 });

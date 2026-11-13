@@ -16,12 +16,14 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import {
   colors,
   elevate,
   fonts,
+  glowStyle,
   hairline,
   radius,
   space,
@@ -73,8 +75,21 @@ export const EmptyState = React.memo(function EmptyState({
       ]}
     >
       {illustration ?? (
-        <View style={styles.iconTile}>
-          <Ionicons name={icon} size={22} color={colors.textSecondary} />
+        /* YÖRÜNGE: ikon kutusu iki ince halkanın ortasında durur — boş durum
+           "kırık" değil, sakin ve kasıtlı görünür. Halkalar durağandır. */
+        <View style={[styles.orbit, compact ? styles.orbitCompact : null]}>
+          {compact ? null : <View style={styles.ringOuter} />}
+          <View style={[styles.ringInner, compact ? styles.ringInnerCompact : null]} />
+          <View style={[styles.iconTile, glowStyle(colors.glow, 1)]}>
+            {/* Gece teması: ikon kutusu imza degradesiyle parlar. */}
+            <LinearGradient
+              colors={colors.gradientSignature}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[StyleSheet.absoluteFill, styles.iconFill]}
+            />
+            <Ionicons name={icon} size={24} color={colors.textOnBrand} />
+          </View>
         </View>
       )}
 
@@ -151,17 +166,53 @@ const styles = StyleSheet.create({
    * görünmüyordu; boş durumun TEK görseli olduğu için okunur olmalı ama renk
    * taşımamalı — renk yalnız bir şey söylediğinde kullanılır.
    */
+  iconFill: {
+    borderRadius: radius.lg,
+  },
   iconTile: {
-    width: 52,
-    height: 52,
+    width: 56,
+    height: 56,
     borderRadius: radius.lg,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
     borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: space.sm,
     ...elevate(1),
+  },
+  orbit: {
+    width: 120,
+    height: 120,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: space.xs,
+  },
+  orbitCompact: {
+    width: 84,
+    height: 84,
+    marginBottom: 0,
+  },
+  ringOuter: {
+    position: "absolute",
+    width: 120,
+    height: 120,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.glassLine,
+  },
+  ringInner: {
+    position: "absolute",
+    width: 88,
+    height: 88,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.brandBorder,
+    backgroundColor: colors.brandDim,
+  },
+  ringInnerCompact: {
+    width: 80,
+    height: 80,
+    borderRadius: radius.pill,
   },
   title: {
     ...type.h2,

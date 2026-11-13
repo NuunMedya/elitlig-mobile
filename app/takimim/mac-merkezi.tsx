@@ -37,9 +37,13 @@ import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   Badge,
   BottomSheet,
+  Odometer,
+  Reveal,
+  TeamLogo,
   Button,
   EmptyState,
   ErrorState,
@@ -60,7 +64,7 @@ import {
 } from "@/components/ui";
 import { AttendanceMeter } from "@/components/club/AttendanceMeter";
 import { daysUntil } from "@/components/club/NextMatchCard";
-import { PrepChecklist, StatStrip, type PrepStep } from "@/components/club/Panel";
+import { PrepChecklist, type PrepStep } from "@/components/club/Panel";
 import {
   MAX_STARTERS,
   REVIEW_SCORE_FIELDS,
@@ -221,18 +225,21 @@ export default function MatchCenterScreen() {
   const closeReview = useCallback(() => setReviewing(null), []);
 
   const renderItem = useCallback(
-    ({ item }: { item: TeamMatch }) =>
-      tab === "yaklasan" ? (
-        <UpcomingCard
-          match={item}
-          expanded={openId === item.id}
-          onToggle={toggleExpanded}
-          onOpenMatch={openMatch}
-          onEditSquad={editSquad}
-        />
-      ) : (
-        <PastCard match={item} onReview={openReview} onOpenMatch={openMatch} />
-      ),
+    ({ item, index }: { item: TeamMatch; index: number }) => (
+      <Reveal index={index} limit={8} replayKey={tab}>
+        {tab === "yaklasan" ? (
+          <UpcomingCard
+            match={item}
+            expanded={openId === item.id}
+            onToggle={toggleExpanded}
+            onOpenMatch={openMatch}
+            onEditSquad={editSquad}
+          />
+        ) : (
+          <PastCard match={item} onReview={openReview} onOpenMatch={openMatch} />
+        )}
+      </Reveal>
+    ),
     [editSquad, openId, openMatch, openReview, tab, toggleExpanded]
   );
 
@@ -323,19 +330,7 @@ export default function MatchCenterScreen() {
               />
             ) : null}
             {tab === "oynanan" && record ? (
-              <StatStrip
-                style={styles.banner}
-                items={[
-                  { label: "Maç", value: String(record.played) },
-                  { label: "G-B-M", value: `${record.G}-${record.B}-${record.M}` },
-                  { label: "Gol", value: `${record.scored}:${record.conceded}` },
-                  {
-                    label: "Galibiyet",
-                    value: `%${Math.round((record.G / record.played) * 100)}`,
-                    tone: record.G >= record.M ? "win" : "danger",
-                  },
-                ]}
-              />
+              <SeasonRecord record={record} />
             ) : null}
           </>
         }
@@ -445,7 +440,8 @@ const UpcomingCard = React.memo(function UpcomingCard({
   const countdown = daysUntil(match.date);
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, expanded ? styles.cardOpen : null]}>
+      {expanded ? <LinearGradient colors={colors.gradientSignature} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.strip} /> : null}
       <Touchable
         feedback="row"
         haptic="selection"
@@ -454,14 +450,8 @@ const UpcomingCard = React.memo(function UpcomingCard({
         accessibilityLabel={`${match.opponent_name ?? "Rakip"} maçının hazırlığını ${expanded ? "kapat" : "aç"}`}
         style={styles.cardHead}
       >
-        <View style={styles.dateCol}>
-          <Text style={styles.dateText} numberOfLines={1} {...textScale.dense}>
-            {formatDateShort(match.date)}
-          </Text>
-          <Text style={styles.timeText} numberOfLines={1} {...textScale.dense}>
-            {match.time ? formatTime(match.time) : "—"}
-          </Text>
-        </View>
+        <DateTile date={match.date} time={match.time} />
+        <TeamLogo name={match.opponent_name ?? "?"} size={layout.crestLg} />
 
         <View style={styles.cardBody}>
           <Text style={styles.opponent} numberOfLines={1} {...textScale.dense}>
@@ -472,11 +462,7 @@ const UpcomingCard = React.memo(function UpcomingCard({
           </Text>
         </View>
 
-        {countdown ? (
-          <Text style={styles.countdown} {...textScale.badge}>
-            {upperTR(countdown)}
-          </Text>
-        ) : null}
+        {countdown ? <Badge label={countdown} tone="brand" size="xs" /> : null}
 
         <Ionicons
           name={expanded ? "chevron-up" : "chevron-down"}
@@ -555,6 +541,7 @@ const PastCard = React.memo(function PastCard({
 
   return (
     <View style={styles.card}>
+      {result ? <View style={[styles.strip, { backgroundColor: palette.fg }]} /> : null}
       <Touchable
         feedback="row"
         haptic="selection"
@@ -563,35 +550,24 @@ const PastCard = React.memo(function PastCard({
         accessibilityLabel={`${match.opponent_name ?? "Rakip"} maçının detayı`}
         style={styles.cardHead}
       >
-        <View style={styles.dateCol}>
-          <Text style={styles.dateText} numberOfLines={1} {...textScale.dense}>
-            {formatDateShort(match.date)}
-          </Text>
-          <Text style={styles.timeText} numberOfLines={1} {...textScale.dense}>
-            {match.is_home ? "Ev sahibi" : "Deplasman"}
-          </Text>
-        </View>
+        <DateTile date={match.date} />
+        <TeamLogo name={match.opponent_name ?? "?"} size={layout.crestLg} />
 
         <View style={styles.cardBody}>
           <Text style={styles.opponent} numberOfLines={1} {...textScale.dense}>
             {upperTR(String(match.opponent_name ?? "Rakip"))}
           </Text>
           <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
-            {result ? RESULT_LABEL[result] : "Sonuç girilmedi"}
+            {[match.is_home ? "Ev sahibi" : "Deplasman", result ? RESULT_LABEL[result] : "Sonuç girilmedi"].join(" · ")}
           </Text>
         </View>
 
-        {result ? (
-          <View style={[styles.resultChip, { backgroundColor: palette.solidBg }]}>
-            <Text style={[styles.resultText, { color: palette.solidFg }]} {...textScale.badge}>
-              {result}
-            </Text>
-          </View>
-        ) : null}
-
-        <Text style={styles.score} numberOfLines={1} {...textScale.dense}>
-          {ours ?? "-"}–{theirs ?? "-"}
-        </Text>
+        {/* Skor kutusu sonucun renginde (G yeşil · B nötr · M kırmızı). */}
+        <View style={[styles.scoreBox, { backgroundColor: palette.dim, borderColor: palette.fg }]}>
+          <Text style={[styles.score, { color: result ? palette.fg : colors.textPrimary }]} numberOfLines={1} {...textScale.dense}>
+            {ours ?? "-"}–{theirs ?? "-"}
+          </Text>
+        </View>
       </Touchable>
 
       <Touchable
@@ -610,6 +586,82 @@ const PastCard = React.memo(function PastCard({
     </View>
   );
 });
+
+/** Takvim karosu: gün rakamı (Archivo) + ay; varsa altında saat. */
+const MONTHS_TR = ["OCA", "ŞUB", "MAR", "NİS", "MAY", "HAZ", "TEM", "AĞU", "EYL", "EKİ", "KAS", "ARA"];
+
+function DateTile({ date, time }: { date: string; time?: string | null }) {
+  const d = new Date(String(date).slice(0, 10) + "T12:00:00");
+  const valid = Number.isFinite(d.getTime());
+  return (
+    <View style={styles.dateTile} accessibilityLabel={formatDateShort(date)}>
+      <Text style={styles.dateDay} {...textScale.badge}>
+        {valid ? String(d.getDate()).padStart(2, "0") : "—"}
+      </Text>
+      <Text style={styles.dateMonth} {...textScale.badge}>
+        {valid ? MONTHS_TR[d.getMonth()] : ""}
+      </Text>
+      {time ? (
+        <Text style={styles.dateTime} {...textScale.badge}>
+          {formatTime(time)}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+/** Oynanan maçların karnesi: G-B-M dağılım çubuğu, gol averajı, galibiyet oranı. */
+function SeasonRecord({ record }: { record: { G: number; B: number; M: number; scored: number; conceded: number; played: number } }) {
+  const winRate = Math.round((record.G / record.played) * 100);
+  const diff = record.scored - record.conceded;
+  return (
+    <View style={styles.record}>
+      <View style={styles.recordTop}>
+        <View style={styles.recordMain}>
+          <Text style={styles.recordLabel} {...textScale.badge}>
+            {upperTR("Galibiyet oranı")}
+          </Text>
+          <View style={styles.recordRateRow}>
+            <Text style={[styles.recordRate, { color: record.G >= record.M ? colors.win : colors.danger }]} {...textScale.badge}>
+              %
+            </Text>
+            <Odometer value={winRate} style={[styles.recordRate, { color: record.G >= record.M ? colors.win : colors.danger }]} />
+          </View>
+        </View>
+        <View style={styles.recordStat}>
+          <Text style={styles.recordValue} {...textScale.badge}>
+            {record.played}
+          </Text>
+          <Text style={styles.recordLabel} {...textScale.badge}>
+            MAÇ
+          </Text>
+        </View>
+        <View style={styles.recordStat}>
+          <Text style={styles.recordValue} {...textScale.badge}>
+            {`${record.scored}:${record.conceded}`}
+          </Text>
+          <Text style={[styles.recordLabel, { color: diff > 0 ? colors.win : diff < 0 ? colors.loss : colors.textTertiary }]} {...textScale.badge}>
+            {diff > 0 ? `▲ +${diff}` : diff < 0 ? `▼ −${Math.abs(diff)}` : "AVERAJ 0"}
+          </Text>
+        </View>
+      </View>
+      {/* Dağılım çubuğu: segment genişliği maç sayısıyla orantılı. */}
+      <View style={styles.recordBar}>
+        {record.G ? <View style={[styles.recordSeg, { flex: record.G, backgroundColor: colors.win }]} /> : null}
+        {record.B ? <View style={[styles.recordSeg, { flex: record.B, backgroundColor: colors.draw }]} /> : null}
+        {record.M ? <View style={[styles.recordSeg, { flex: record.M, backgroundColor: colors.loss }]} /> : null}
+      </View>
+      <View style={styles.recordLegend}>
+        {(["G", "B", "M"] as const).map((key) => (
+          <Text key={key} style={styles.recordLegendText} {...textScale.badge}>
+            <Text style={{ color: key === "G" ? colors.win : key === "B" ? colors.draw : colors.loss }}>● </Text>
+            {`${record[key]} ${RESULT_LABEL[key].toLocaleLowerCase("tr-TR")}`}
+          </Text>
+        ))}
+      </View>
+    </View>
+  );
+}
 
 /* ══════════════════════════════════════════════════════════════════════════
    Maç karnesi alt sayfası
@@ -809,18 +861,68 @@ const styles = StyleSheet.create({
 
   /* Maç kartı */
   card: {
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     borderWidth: hairline,
-    borderColor: colors.border,
+    borderColor: colors.glassLine,
     backgroundColor: colors.surface1,
     marginBottom: space.sm,
     overflow: "hidden",
   },
+  cardOpen: {
+    borderColor: colors.brandBorder,
+  },
+  strip: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    zIndex: 1,
+  },
+  dateTile: {
+    width: 46,
+    paddingVertical: space.xs,
+    borderRadius: radius.md,
+    alignItems: "center",
+    backgroundColor: colors.surface2,
+  },
+  dateDay: { ...type.scoreSm, color: colors.textPrimary },
+  dateMonth: { ...type.nano, color: colors.textTertiary, letterSpacing: 0.6 },
+  dateTime: { ...type.nano, color: colors.brandAccent, marginTop: space.xxs },
+  scoreBox: {
+    minWidth: 56,
+    height: 34,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.md,
+    borderWidth: hairline,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  record: {
+    gap: space.md,
+    padding: space.md,
+    marginBottom: space.md,
+    borderRadius: radius.xl,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+    backgroundColor: colors.surface1,
+  },
+  recordTop: { flexDirection: "row", alignItems: "flex-end", gap: space.lg },
+  recordMain: { flex: 1, gap: space.xxs },
+  recordRateRow: { flexDirection: "row", alignItems: "flex-end" },
+  recordRate: { ...type.scoreLg },
+  recordStat: { alignItems: "flex-end", gap: space.xxs },
+  recordValue: { ...type.metricSm, color: colors.textPrimary },
+  recordLabel: { ...type.micro, color: colors.textTertiary },
+  recordBar: { flexDirection: "row", height: 8, gap: 2, borderRadius: radius.pill, overflow: "hidden", backgroundColor: colors.surface3 },
+  recordSeg: { height: 8 },
+  recordLegend: { flexDirection: "row", gap: space.md },
+  recordLegendText: { ...type.caption, color: colors.textSecondary },
   cardHead: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
-    minHeight: 54,
+    minHeight: 64,
     paddingHorizontal: space.md,
     paddingVertical: space.sm,
   },
@@ -860,10 +962,8 @@ const styles = StyleSheet.create({
     ...type.micro,
   },
   score: {
-    ...type.metricSm,
+    ...type.scoreSm,
     color: colors.textPrimary,
-    minWidth: 38,
-    textAlign: "right",
   },
   cardFooter: {
     flexDirection: "row",

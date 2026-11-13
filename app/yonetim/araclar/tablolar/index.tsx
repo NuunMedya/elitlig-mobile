@@ -31,7 +31,7 @@ import {
 import { ToolFab } from "@/components/admin/tools/ToolApp";
 import { ShareSheet } from "@/components/admin/sheets/ShareSheet";
 import { shareCsv } from "@/components/admin/sheets/shareFile";
-import { BottomSheet, Touchable, useToast } from "@/components/ui";
+import { Badge, BottomSheet, Touchable, useToast } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { formatDateTime } from "@/lib/admin/format";
 import {
@@ -343,36 +343,71 @@ const SheetCard = React.memo(function SheetCard({
     ...(!own ? [{ label: item.access === "editor" ? "Düzenleyici" : "Görüntüleyici", tone: item.access === "editor" ? ("brand" as const) : ("neutral" as const), icon: item.access === "editor" ? ("create-outline" as const) : ("eye-outline" as const) }] : []),
     ...(own && item.share_count ? [{ label: `${item.share_count} kişiyle paylaşıldı`, tone: "info" as const, icon: "people-outline" as const }] : []),
   ];
-  const sub = [!own && item.owner?.name ? `Sahibi: ${item.owner.name}` : null, `${item.sheet_count} sayfa · ${item.cell_count} dolu hücre`].filter(Boolean).join(" · ");
   return (
-    <RecordCard
-      title={item.title}
-      subtitle={sub}
-      meta={`Son düzenleme ${formatDateTime(item.updatedAt)}${item.updated_by_name ? ` · ${item.updated_by_name}` : ""}`}
-      icon="grid-outline"
-      iconTone="win"
-      badges={badges}
-      onPress={onPress}
-      onLongPress={onMenu}
-      trailing={
-        <View style={styles.trailing}>
-          {own ? (
-            <Touchable onPress={onStar} hitSlop={8} feedback="icon" accessibilityLabel={item.starred ? "Yıldızı kaldır" : "Yıldızla"}>
-              <Ionicons name={item.starred ? "star" : "star-outline"} size={18} color={item.starred ? colors.star : colors.textTertiary} />
-            </Touchable>
-          ) : null}
-          <Touchable onPress={onMenu} hitSlop={8} feedback="icon" accessibilityLabel={`${item.title} işlemleri`}>
-            <Ionicons name="ellipsis-vertical" size={18} color={colors.textSecondary} />
-          </Touchable>
+    <Touchable feedback="card" onPress={onPress} onLongPress={onMenu} style={styles.card} accessibilityRole="button" accessibilityLabel={`${item.title}, ${item.sheet_count} sayfa, ${item.cell_count} dolu hücre`}>
+      {/* Mini ızgara önizlemesi: tablo kimliği (dolu hücre oranıyla koyulaşır). */}
+      <View style={styles.preview}>
+        {Array.from({ length: 12 }, (_, i) => (
+          <View key={i} style={[styles.previewCell, i < 3 ? styles.previewHead : i % 3 === 2 && i / 3 < Math.min(4, 1 + item.cell_count / 40) ? styles.previewSum : null]} />
+        ))}
+      </View>
+      <View style={styles.body}>
+        <Text style={styles.title} numberOfLines={2} {...textScale.dense}>
+          {item.title}
+        </Text>
+        <View style={styles.figures}>
+          <Text style={styles.figure} {...textScale.badge}>
+            <Text style={styles.figureNum}>{item.sheet_count}</Text> sayfa
+          </Text>
+          <Text style={styles.figure} {...textScale.badge}>
+            <Text style={styles.figureNum}>{item.cell_count}</Text> hücre
+          </Text>
         </View>
-      }
-    />
+        <View style={styles.metaRow}>
+          <Ionicons name="time-outline" size={11} color={colors.textTertiary} />
+          <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+            {formatDateTime(item.updatedAt)}
+            {!own && item.owner?.name ? ` · Sahibi ${item.owner.name}` : item.updated_by_name ? ` · ${item.updated_by_name}` : ""}
+          </Text>
+        </View>
+        {badges.length ? (
+          <View style={styles.badges}>
+            {badges.map((b) => (
+              <Badge key={b.label} label={b.label} tone={b.tone} icon={b.icon} size="xs" />
+            ))}
+          </View>
+        ) : null}
+      </View>
+      <View style={styles.trailing}>
+        {own ? (
+          <Touchable onPress={onStar} hitSlop={8} feedback="icon" accessibilityLabel={item.starred ? "Yıldızı kaldır" : "Yıldızla"}>
+            <Ionicons name={item.starred ? "star" : "star-outline"} size={20} color={item.starred ? colors.star : colors.textTertiary} />
+          </Touchable>
+        ) : null}
+        <Touchable onPress={onMenu} hitSlop={8} feedback="icon" accessibilityLabel={`${item.title} işlemleri`}>
+          <Ionicons name="ellipsis-vertical" size={18} color={colors.textSecondary} />
+        </Touchable>
+      </View>
+    </Touchable>
   );
 });
 
 const styles = StyleSheet.create({
   section: { ...type.overline, color: colors.textTertiary, paddingTop: space.sm },
-  trailing: { flexDirection: "row", alignItems: "center", gap: space.md },
+  trailing: { alignItems: "center", gap: space.md, alignSelf: "stretch", justifyContent: "space-between", paddingVertical: space.xxs },
+  card: { flexDirection: "row", gap: space.md, padding: space.md, borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.border, backgroundColor: colors.surface1 },
+  preview: { width: 58, height: 64, flexDirection: "row", flexWrap: "wrap", gap: 2, padding: 4, borderRadius: radius.md, backgroundColor: colors.winDim, borderWidth: hairline, borderColor: colors.border, alignContent: "flex-start" },
+  previewCell: { width: 14, height: 11, borderRadius: 2, backgroundColor: colors.surface3 },
+  previewHead: { backgroundColor: colors.win },
+  previewSum: { backgroundColor: colors.tileTones.mint[0], opacity: 0.6 },
+  body: { flex: 1, minWidth: 0, gap: 3 },
+  title: { ...type.h4, color: colors.textPrimary },
+  figures: { flexDirection: "row", gap: space.md },
+  figure: { ...type.caption, color: colors.textTertiary },
+  figureNum: { ...type.numSmStrong, color: colors.textPrimary },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: 3 },
+  meta: { ...type.caption, color: colors.textTertiary, flex: 1 },
+  badges: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: 2 },
   templates: { gap: space.sm, paddingBottom: space.lg },
   intro: { ...type.bodySm, color: colors.textSecondary },
   template: {

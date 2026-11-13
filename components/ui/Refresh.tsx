@@ -23,7 +23,8 @@ import { colors, haptics } from "@/theme";
 /** Tek doğru renk yapılandırması — iOS `tintColor`, Android `colors` ister. */
 export const refreshTheme = {
   tintColor: colors.brandAccent,
-  colors: [colors.brandAccent],
+  /* Android dönen yayı renkler arasında geçer: mor → camgöbeği → pembe. */
+  colors: [colors.brandAccent, colors.accent, colors.live],
   progressBackgroundColor: colors.surface2,
   progressViewOffset: 0,
 } as const;

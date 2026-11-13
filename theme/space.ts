@@ -154,12 +154,12 @@ export const layout = {
  */
 export const radius = {
   none: 0,
-  xs:   6,   // form çipi, mikro rozet
-  sm:   8,   // amblem kutusu, küçük pul
-  md:  12,   // KART İÇİ ELEMAN: input, chip zemini, bar
-  lg:  14,   // küçük kart/karo (eski kart değeri)
-  xl:  16,   // KART ve satır grubu, panel
-  xxl: 20,   // sahne yüzeyi: skor tablosu, saha, yükselen sayfa
+  xs:   7,   // form çipi, mikro rozet
+  sm:  10,   // amblem kutusu, küçük pul
+  md:  14,   // KART İÇİ ELEMAN: input, chip zemini, bar, ikon düğmesi
+  lg:  16,   // küçük kart/karo, buton
+  xl:  20,   // KART ve satır grubu, panel (Gece teması: daha yumuşak)
+  xxl: 26,   // sahne yüzeyi: skor tablosu, saha, yüzen alt menü, sheet
   pill: 999,
 } as const;
 

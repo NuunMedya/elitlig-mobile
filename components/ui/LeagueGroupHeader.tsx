@@ -37,6 +37,8 @@ import {
 } from "@/theme";
 import { haptics } from "@/lib/haptics";
 import { mediaUrl } from "@/lib/format";
+import { GradientFill } from "./GradientFill";
+import { IconTile } from "./NightKit";
 import { TeamLogo } from "./TeamLogo";
 
 export interface LeagueGroupHeaderProps {
@@ -130,6 +132,12 @@ export const LeagueGroupHeader = memo(function LeagueGroupHeader({
         sticky && !detached && !collapsed ? styles.sticky : null,
       ]}
     >
+      {/* Cam başlık: kartın ışıklı yüzeyi + üst kenarda ince imza çizgisi. */}
+      <GradientFill
+        radius={detached || collapsed ? "xl" : undefined}
+        style={detached || collapsed ? null : styles.fillTop}
+      />
+      {!collapsed || detached ? <View style={styles.signature} pointerEvents="none" /> : null}
       <Pressable
         style={styles.body}
         onPress={handleBody}
@@ -139,15 +147,15 @@ export const LeagueGroupHeader = memo(function LeagueGroupHeader({
         }
         accessibilityState={{ expanded: !collapsed }}
       >
-        <View style={[styles.mark, icon ? styles.markBrand : null]}>
-          {icon ? (
-            <Ionicons name={icon} size={13} color={colors.brandAccent} />
-          ) : hasLogo ? (
+        {/* Lig işareti: amblem varsa beyaz pulda amblem, yoksa degrade ikon
+            kutusu (kupa mor, "Takip ettiklerin" yıldızı altın). */}
+        {hasLogo && !icon ? (
+          <View style={styles.mark}>
             <TeamLogo name={leagueName} logo={logo} size={22} />
-          ) : (
-            <Ionicons name="trophy" size={13} color={colors.textSecondary} />
-          )}
-        </View>
+          </View>
+        ) : (
+          <IconTile icon={icon ?? "trophy"} tone={icon === "star" ? "gold" : "violet"} size={28} glow={false} />
+        )}
 
         <View style={styles.texts}>
           <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
@@ -165,6 +173,9 @@ export const LeagueGroupHeader = memo(function LeagueGroupHeader({
         <View style={styles.countPill}>
           <Text style={styles.count} {...textScale.badge}>
             {matchCount}
+          </Text>
+          <Text style={styles.countUnit} {...textScale.badge}>
+            maç
           </Text>
         </View>
       ) : null}
@@ -233,7 +244,22 @@ const styles = StyleSheet.create({
     paddingLeft: space.md,
     paddingRight: space.xs,
     backgroundColor: colors.surface1,
-    borderColor: colors.border,
+    borderColor: colors.glassLine,
+    overflow: "hidden",
+  },
+  fillTop: {
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+  },
+  /** Başlığın tepesindeki ince imza ışığı — grubu "kapak" olarak işaretler. */
+  signature: {
+    position: "absolute",
+    top: 0,
+    left: radius.xl,
+    right: radius.xl,
+    height: 1.5,
+    borderRadius: 1,
+    backgroundColor: colors.brandBorder,
   },
   /**
    * BİTİŞİK (varsayılan): grubun kartının ÜST KAPAĞI. Alttaki satırlar
@@ -275,8 +301,8 @@ const styles = StyleSheet.create({
   },
   /** Lig işareti: amblem ya da kupa, küçük gri pulun içinde. */
   mark: {
-    width: 26,
-    height: 26,
+    width: 28,
+    height: 28,
     borderRadius: radius.sm,
     backgroundColor: colors.surface3,
     alignItems: "center",
@@ -291,7 +317,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   name: {
-    ...type.h4,
+    ...type.h3,
     color: colors.textPrimary,
   },
   city: {
@@ -300,16 +326,24 @@ const styles = StyleSheet.create({
   },
   countPill: {
     minWidth: 24,
-    height: 20,
-    paddingHorizontal: space.s,
+    height: 22,
+    paddingHorizontal: space.sm,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface3,
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    gap: 3,
   },
   count: {
     ...type.numSmStrong,
-    color: colors.textSecondary,
+    color: colors.brandAccent,
+  },
+  countUnit: {
+    ...type.meta,
+    color: colors.brandAccent,
   },
   iconButton: {
     width: 32,

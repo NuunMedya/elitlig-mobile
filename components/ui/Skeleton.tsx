@@ -213,6 +213,15 @@ export const SkeletonMatchRow = React.memo(function SkeletonMatchRow({
     const height = matchCardHeight({ variant: "compact", showVenue });
     return (
       <SkeletonGroup label="Maçlar yükleniyor" style={styles.compactGroup}>
+        {/* Lig başlığı: ikon kutusu + ad/şehir + sayaç hapı (LeagueGroupHeader'ın şekli). */}
+        <View style={styles.leagueHead}>
+          <Skeleton width={28} height={28} radius="sm" />
+          <View style={styles.listText}>
+            <Skeleton width="38%" height={12} radius="pill" />
+            <Skeleton width="22%" height={9} radius="pill" />
+          </View>
+          <Skeleton width={46} height={22} radius="pill" />
+        </View>
         {repeat(count, (index) => (
           <View
             key={index}
@@ -224,7 +233,8 @@ export const SkeletonMatchRow = React.memo(function SkeletonMatchRow({
                 <Skeleton width="58%" height={12} radius="pill" />
               </View>
               <View style={styles.compactCenter}>
-                <Skeleton width={40} height={16} radius="sm" />
+                <Skeleton width={44} height={22} radius="xs" />
+                <Skeleton width={22} height={10} radius="pill" />
               </View>
               <View style={styles.compactSide}>
                 <Skeleton width={24} height={24} radius="sm" />
@@ -284,12 +294,12 @@ export const SkeletonListRow = React.memo(function SkeletonListRow({
     <SkeletonGroup style={styles.block}>
       {repeat(count, (index) => (
         <View key={index} style={styles.listRow}>
-          {avatar ? <Skeleton width={32} height={32} radius="pill" /> : null}
+          {avatar ? <Skeleton width={36} height={36} radius="sm" /> : null}
           <View style={styles.listText}>
-            <Skeleton width="55%" height={13} />
-            <Skeleton width="34%" height={10} />
+            <Skeleton width={`${55 - (index % 3) * 8}%`} height={13} radius="pill" />
+            <Skeleton width={`${34 - (index % 2) * 8}%`} height={10} radius="pill" />
           </View>
-          <Skeleton width={24} height={12} />
+          <Skeleton width={30} height={18} radius="xs" />
         </View>
       ))}
     </SkeletonGroup>
@@ -334,7 +344,7 @@ export const SkeletonTable = React.memo(function SkeletonTable({
 
       {repeat(count, (index) => (
         <View key={index} style={[styles.tableRow, rowHeight ? { height: rowHeight } : null]}>
-          <Skeleton width={14} height={12} />
+          <Skeleton width={18} height={18} radius="pill" />
           <View style={styles.tableName}>
             <Skeleton width={20} height={20} radius="sm" />
             <Skeleton width="58%" height={12} />
@@ -380,7 +390,12 @@ export const SkeletonCard = React.memo(function SkeletonCard({
 }) {
   return (
     <SkeletonGroup style={[styles.card, style]}>
-      <Skeleton width="45%" height={14} radius="sm" />
+      <View style={styles.cardHead}>
+        <Skeleton width={28} height={28} radius="sm" />
+        <Skeleton width="42%" height={14} radius="pill" />
+        <View style={styles.flexFill} />
+        <Skeleton width={52} height={22} radius="pill" />
+      </View>
       <View style={styles.cardLines}>
         {repeat(lines, (index) => (
           <Skeleton key={index} width={index === lines - 1 ? "62%" : "100%"} height={11} />
@@ -428,6 +443,23 @@ export const SkeletonListFooter = React.memo(function SkeletonListFooter() {
 });
 
 const styles = StyleSheet.create({
+  leagueHead: {
+    height: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.m,
+    paddingHorizontal: space.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.separator,
+  },
+  cardHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.m,
+  },
+  flexFill: {
+    flex: 1,
+  },
   box: {
     backgroundColor: colors.skeletonBase,
     overflow: "hidden",
@@ -470,6 +502,7 @@ const styles = StyleSheet.create({
   compactCenter: {
     width: 70,
     alignItems: "center",
+    gap: space.xs,
   },
   compactMeta: {
     alignItems: "center",
@@ -540,7 +573,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface1,
     borderRadius: radiusScale.xl,
     borderWidth: hairline,
-    borderColor: colors.border,
+    borderColor: colors.glassLine,
     padding: space.lg,
     gap: space.md,
   },

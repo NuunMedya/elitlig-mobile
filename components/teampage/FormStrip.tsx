@@ -1,5 +1,10 @@
 /**
- * FORM ŞERİDİ — son beş maç, beş sütun.
+ * FORM ZAMAN ÇİZELGESİ — son beş maç, beş durak.
+ *
+ * İKİNCİ TUR: sütunlar bir RAYA dizildi. Her maç rayın üstünde sonuç
+ * renginde bir düğümdür (G/B/M harfiyle); üstünde rakip arması, altında
+ * takımın gözünden skor ve tarih. En yeni durak büyük ve parlak — form
+ * okunurken göz sağa, şimdiye akar.
  *
  * Eskiden "Son 5 maç" yatay kaydırılan büyük maç kartlarıydı: ekranda ancak
  * bir buçuk kart görünüyor, beş sonucu görmek için dört kez kaydırmak
@@ -17,17 +22,15 @@
 
 import React, { useCallback } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { TeamLogo, Touchable } from "@/components/ui";
+import { Reveal, TeamLogo, Touchable } from "@/components/ui";
 import { formatDateShort } from "@/lib/format";
 import type { ApiMatch } from "@/lib/types";
-import { colors, layout, radius, space, textScale, type } from "@/theme";
-import { perspective, RESULT_LABEL, type LogoFor, type Result } from "./model";
+import { colors, fonts, glowStyle, layout, radius, space, textScale, type } from "@/theme";
+import { perspective, RESULT_LABEL, RESULT_LETTER, type LogoFor } from "./model";
+import { resultColor } from "./ProfileKit";
 
-const RESULT_BG: Record<Result, string> = {
-  W: colors.win,
-  D: colors.draw,
-  L: colors.loss,
-};
+const NODE = 24;
+const NODE_LAST = 30;
 
 export const FormStrip = React.memo(function FormStrip({
   matches,
@@ -47,15 +50,18 @@ export const FormStrip = React.memo(function FormStrip({
 
   return (
     <View style={styles.row}>
-      {items.map((match) => (
-        <FormItem
-          key={match.id}
-          match={match}
-          teamId={teamId}
-          teamName={teamName}
-          logoFor={logoFor}
-          onOpen={onOpen}
-        />
+      {items.map((match, index) => (
+        <Reveal key={match.id} index={index} style={styles.cell}>
+          <FormItem
+            match={match}
+            teamId={teamId}
+            teamName={teamName}
+            logoFor={logoFor}
+            onOpen={onOpen}
+            first={index === 0}
+            last={index === items.length - 1}
+          />
+        </Reveal>
       ))}
     </View>
   );
@@ -67,16 +73,22 @@ const FormItem = React.memo(function FormItem({
   teamName,
   logoFor,
   onOpen,
+  first,
+  last,
 }: {
   match: ApiMatch;
   teamId: number;
   teamName: string;
   logoFor: LogoFor;
   onOpen: (matchId: number) => void;
+  first: boolean;
+  last: boolean;
 }) {
   const view = perspective(match, teamId, teamName);
   const handlePress = useCallback(() => onOpen(Number(match.id)), [onOpen, match.id]);
   const score = `${view.ours ?? "–"}–${view.theirs ?? "–"}`;
+  const tint = resultColor(view.result);
+  const size = last ? NODE_LAST : NODE;
 
   return (
     <Touchable
@@ -92,20 +104,24 @@ const FormItem = React.memo(function FormItem({
         logo={logoFor(view.opponentId, view.opponentName)}
         size={layout.crestLg}
       />
-      <View
-        style={[
-          styles.pill,
-          { backgroundColor: view.result ? RESULT_BG[view.result] : colors.surface3 },
-        ]}
-      >
-        <Text
-          style={[styles.score, view.result ? null : styles.scoreMuted]}
-          numberOfLines={1}
-          {...textScale.badge}
+      <View style={styles.rail}>
+        <View style={[styles.railHalf, first ? styles.railHidden : null]} />
+        <View style={[styles.railHalf, last ? styles.railHidden : null]} />
+        <View
+          style={[
+            styles.node,
+            { width: size, height: size, borderRadius: size / 2, backgroundColor: tint },
+            last ? glowStyle(tint, 2) : null,
+          ]}
         >
-          {score}
-        </Text>
+          <Text style={styles.nodeText} {...textScale.badge}>
+            {view.result ? RESULT_LETTER[view.result] : "–"}
+          </Text>
+        </View>
       </View>
+      <Text style={[styles.score, { color: view.result ? tint : colors.textSecondary }]} numberOfLines={1} {...textScale.badge}>
+        {score}
+      </Text>
       <Text style={styles.date} numberOfLines={1} {...textScale.badge}>
         {formatDateShort(match.date)}
       </Text>
@@ -116,28 +132,45 @@ const FormItem = React.memo(function FormItem({
 const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
-    gap: space.xs,
+  },
+  cell: {
+    flex: 1,
   },
   item: {
-    flex: 1,
     alignItems: "center",
-    gap: space.sm,
+    gap: space.s,
     paddingVertical: space.xs,
     borderRadius: radius.md,
   },
-  pill: {
-    minWidth: 46,
-    paddingHorizontal: space.s,
-    paddingVertical: 3,
-    borderRadius: radius.xs,
+  rail: {
+    alignSelf: "stretch",
+    height: NODE_LAST,
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
   },
-  score: {
-    ...type.tableNumStrong,
+  railHalf: {
+    flex: 1,
+    height: 2,
+    backgroundColor: colors.surface3,
+  },
+  railHidden: {
+    backgroundColor: "transparent",
+  },
+  node: {
+    position: "absolute",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: colors.surface1,
+  },
+  nodeText: {
+    ...type.nano,
+    fontFamily: fonts.bold,
     color: colors.textOnStatus,
   },
-  scoreMuted: {
-    color: colors.textSecondary,
+  score: {
+    ...type.scoreXs,
   },
   date: {
     ...type.caption,

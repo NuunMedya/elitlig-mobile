@@ -51,11 +51,14 @@ import {
   fonts,
   hairline,
   layout,
+  radius,
   space,
   textScale,
   type,
   upperTR,
 } from "@/theme";
+import { LinearGradient } from "expo-linear-gradient";
+import { IconTile, type IconTileTone } from "./NightKit";
 import { Touchable } from "./Pressable";
 
 export interface SectionHeaderProps {
@@ -86,6 +89,12 @@ export interface SectionHeaderProps {
   mark?: boolean;
   /** "inset" (varsayılan): ekran kenar payı; "flush": yatay pay yok. */
   inset?: "inset" | "flush";
+  /** İsteğe bağlı: başlığın solunda degrade ikon kutusu (IconTile). */
+  icon?: React.ComponentProps<typeof Ionicons>["name"];
+  /** `icon` kutusunun tonu (varsayılan "violet"). */
+  iconTone?: IconTileTone;
+  /** İsteğe bağlı: başlığın altında tek satırlık açıklama. */
+  subtitle?: string;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }
@@ -103,6 +112,9 @@ export const SectionHeader = React.memo(function SectionHeader({
   uppercase = false,
   mark = false,
   inset = "inset",
+  icon,
+  iconTone = "violet",
+  subtitle,
   style,
   testID,
 }: SectionHeaderProps) {
@@ -141,16 +153,32 @@ export const SectionHeader = React.memo(function SectionHeader({
       ) : null}
       {leading ? (
         <View style={styles.leading}>{leading}</View>
+      ) : icon ? (
+        <IconTile icon={icon} tone={iconTone} size={group ? 22 : 28} glow={false} />
       ) : mark ? (
-        <View style={styles.mark} />
+        <LinearGradient
+          colors={colors.gradientSignature}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.mark}
+        />
       ) : null}
-      <Text style={[styles.title, group ? styles.titleGroup : null]} numberOfLines={1} {...textScale.dense}>
-        {label}
-      </Text>
-      {meta ? (
-        <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
-          {meta}
+      <View style={styles.titleBox}>
+        <Text style={[styles.title, group ? styles.titleGroup : null]} numberOfLines={1} {...textScale.dense}>
+          {label}
         </Text>
+        {subtitle ? (
+          <Text style={styles.subtitle} numberOfLines={1} {...textScale.dense}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      {meta ? (
+        <View style={styles.metaPill}>
+          <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+            {meta}
+          </Text>
+        </View>
       ) : null}
     </>
   );
@@ -201,10 +229,12 @@ export const SectionHeader = React.memo(function SectionHeader({
             flush ? styles.flushAction : null,
           ]}
         >
-          <Text style={styles.actionLabel} numberOfLines={1} {...textScale.dense}>
-            {action.label}
-          </Text>
-          <Ionicons name="chevron-forward" size={12} color={colors.brandAccent} />
+          <View style={styles.actionPill}>
+            <Text style={styles.actionLabel} numberOfLines={1} {...textScale.dense}>
+              {action.label}
+            </Text>
+            <Ionicons name="chevron-forward" size={12} color={colors.brandAccent} />
+          </View>
         </Touchable>
       ) : null}
     </View>
@@ -254,16 +284,31 @@ const styles = StyleSheet.create({
   },
   /** Ray: 3×13px mor dikey işaret (maket ".sh i.bar"), başlıkla dikey ortalı. */
   mark: {
-    width: 3,
-    height: 13,
+    width: 4,
+    height: 18,
     borderRadius: 2,
-    backgroundColor: colors.brand,
+  },
+  titleBox: {
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  subtitle: {
+    ...type.caption,
+    color: colors.textTertiary,
+  },
+  /** Sayaç hapı: başlığın hemen yanında, sakin zeminde. */
+  metaPill: {
+    height: 20,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface3,
+    justifyContent: "center",
   },
   /** Archivo versal 11px, geniş aralık — etiket sesi, manşet değil. */
   /** Arena: cümle düzeninde kalın başlık — etiket değil, bölüm adı. */
   title: {
     ...type.h2,
-    fontFamily: fonts.semibold,
+    fontFamily: fonts.heading,
     color: colors.textPrimary,
     flexShrink: 1,
   },
@@ -274,8 +319,8 @@ const styles = StyleSheet.create({
   /** "4 MAÇ": başlıkla aynı aile, bir punto küçük, üçüncül mürekkep. */
   meta: {
     ...type.caption,
-    color: colors.textTertiary,
-    marginLeft: "auto",
+    fontFamily: fonts.semibold,
+    color: colors.textSecondary,
   },
   action: {
     flexDirection: "row",
@@ -283,8 +328,19 @@ const styles = StyleSheet.create({
     gap: space.xxs,
     paddingHorizontal: layout.screenPadding,
   },
+  /** "Tümü ›" eylemi: mor tülde küçük hap — dokunulabilir olduğu ilk bakışta okunur. */
+  actionPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xxs,
+    height: 28,
+    paddingLeft: space.m,
+    paddingRight: space.sm,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brandDim,
+  },
   actionLabel: {
-    ...type.label,
+    ...type.labelSm,
     color: colors.brandAccent,
   },
 });

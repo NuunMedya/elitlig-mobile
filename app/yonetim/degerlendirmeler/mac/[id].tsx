@@ -15,7 +15,10 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { AdminScreen, confirmAction, useAdminMutation } from "@/components/admin";
 import { EvaluationForm } from "@/components/admin/evaluations/EvaluationForm";
-import { Chip, ChipGroup, EmptyState, ErrorState, SkeletonCard, useToast } from "@/components/ui";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { AreaPicker } from "@/components/admin/evaluations/EvalParts";
+import { SysStage } from "@/components/admin/system/SysKit";
+import { Avatar, Badge, EmptyState, ErrorState, ProgressRing, SkeletonCard, useToast } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import {
   deleteEvaluation,
@@ -28,7 +31,7 @@ import {
   type SavePayload,
 } from "@/lib/api/admin/evaluations";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 const PERMS = ["evaluations.view", "evaluations.submit", "evaluations.manage"] as const;
 
@@ -115,30 +118,72 @@ export default function MatchEvaluationScreen() {
         <ErrorState error={query.error} onRetry={query.refetch} variant="inline" />
       ) : (
         <>
-          <Text style={styles.meta} {...textScale.long}>
-            {[m.city, m.league, m.season, m.field].filter(Boolean).join(" · ")} · {doneAreas}/{detail.areas.length} alan tamam
-          </Text>
-          <ChipGroup scrollable contentPadding={0}>
-            {detail.areas.map((a) => {
+          {/* Maç sahnesi: iki takım, tarih/saha hapları, alan ilerleme halkası. */}
+          <SysStage>
+            <View style={styles.stageTop}>
+              <View style={styles.flex}>
+                <Text style={styles.eyebrow} {...textScale.badge}>
+                  {[formatDay(m.day), m.time].filter(Boolean).join(" · ").toLocaleUpperCase("tr-TR")}
+                </Text>
+                <Text style={styles.team} numberOfLines={1} {...textScale.dense}>
+                  {m.homeTeam || "?"}
+                </Text>
+                <Text style={styles.vs} {...textScale.badge}>
+                  VS
+                </Text>
+                <Text style={styles.team} numberOfLines={1} {...textScale.dense}>
+                  {m.awayTeam || "?"}
+                </Text>
+              </View>
+              <View style={styles.ring}>
+                <ProgressRing value={detail.areas.length ? doneAreas / detail.areas.length : 0} size={78} thickness={7} tone={doneAreas === detail.areas.length ? "win" : "accent"} label={`${doneAreas}/${detail.areas.length}`} sublabel="alan" />
+              </View>
+            </View>
+            <View style={styles.pills}>
+              {[
+                { icon: "location" as const, text: m.field },
+                { icon: "trophy" as const, text: [m.league, m.season].filter(Boolean).join(" · ") },
+                { icon: "business" as const, text: m.city },
+              ]
+                .filter((p) => p.text)
+                .map((p) => (
+                  <View key={p.icon} style={styles.pill}>
+                    <Ionicons name={p.icon} size={11} color={colors.onDarkMuted} />
+                    <Text style={styles.pillText} numberOfLines={1} {...textScale.badge}>
+                      {p.text}
+                    </Text>
+                  </View>
+                ))}
+            </View>
+          </SysStage>
+
+          <AreaPicker
+            value={activeArea}
+            onChange={setActiveArea}
+            items={detail.areas.map((a) => {
               const done = a.evaluation;
-              return (
-                <Chip
-                  key={a.key}
-                  size="sm"
-                  icon={done ? "checkmark" : undefined}
-                  tone={done ? "win" : undefined}
-                  label={`${a.label}${done ? ` · ${formatPct(done.scorePct)}` : a.questions.length ? "" : " · soru yok"}`}
-                  selected={a.key === activeArea}
-                  onPress={() => setActiveArea(a.key)}
-                />
-              );
+              return {
+                key: a.key,
+                label: a.label,
+                status: done ? formatPct(done.scorePct) : a.questions.length ? "Bekliyor" : "Soru yok",
+                tone: done ? (done.failCount ? "danger" : "win") : a.questions.length ? "warn" : "neutral",
+              };
             })}
-          </ChipGroup>
+          />
           {area ? (
             <View style={styles.form}>
-              <Text style={styles.who} {...textScale.dense}>
-                {area.evaluation?.staffName || area.assignedStaffName || (area.duty ? "Görevli yok" : "Personel seçilecek")}
-              </Text>
+              <View style={styles.who}>
+                <Avatar name={area.evaluation?.staffName || area.assignedStaffName || "?"} size={36} />
+                <View style={styles.flex}>
+                  <Text style={styles.whoLabel} {...textScale.badge}>
+                    {area.label.toLocaleUpperCase("tr-TR")} · DEĞERLENDİRİLEN
+                  </Text>
+                  <Text style={styles.whoName} numberOfLines={1} {...textScale.dense}>
+                    {area.evaluation?.staffName || area.assignedStaffName || (area.duty ? "Görevli yok" : "Personel seçilecek")}
+                  </Text>
+                </View>
+                {area.evaluation ? <Badge label={formatPct(area.evaluation.scorePct)} tone={area.evaluation.failCount ? "warn" : "win"} size="sm" /> : <Badge label="Yeni form" tone="neutral" size="sm" />}
+              </View>
               <EvaluationForm
                 key={`${m.id}-${area.key}`}
                 questions={area.questions}
@@ -173,7 +218,17 @@ export default function MatchEvaluationScreen() {
 }
 
 const styles = StyleSheet.create({
-  meta: { ...type.caption, color: colors.textSecondary },
-  form: { gap: space.sm },
-  who: { ...type.overline, color: colors.textTertiary },
+  flex: { flex: 1, minWidth: 0 },
+  stageTop: { flexDirection: "row", alignItems: "center", gap: space.md },
+  eyebrow: { ...type.overline, color: colors.adminAccent, marginBottom: space.xs },
+  team: { ...type.h2, color: colors.onDark },
+  vs: { ...type.micro, color: colors.onDarkMuted, marginVertical: 2 },
+  ring: { padding: space.xs, borderRadius: radius.pill, backgroundColor: colors.inkPill },
+  pills: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
+  pill: { flexDirection: "row", alignItems: "center", gap: 4, maxWidth: "100%", paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.inkPill, borderWidth: hairline, borderColor: colors.inkPillBorder },
+  pillText: { ...type.labelXs, color: colors.onDark, flexShrink: 1 },
+  form: { gap: space.md },
+  who: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
+  whoLabel: { ...type.micro, color: colors.textTertiary },
+  whoName: { ...type.h4, color: colors.textPrimary },
 });

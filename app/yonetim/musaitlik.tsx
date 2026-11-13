@@ -14,10 +14,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 import React, { useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
-import { AdminList, AdminScreen, Panel, RecordCard, confirmAction, useAdminMutation } from "@/components/admin";
-import { BottomSheet, Button, Chip, ChipGroup, SegmentedControl, Touchable } from "@/components/ui";
+import { AdminList, AdminScreen, confirmAction, useAdminMutation } from "@/components/admin";
+import { InfoPill, OpsGroup, OpsRecord, StatusTiles } from "@/components/admin/matches/opsKit";
+import { Badge, BottomSheet, Button, Chip, ChipGroup, SegmentedControl, TeamLogo, Touchable, withAlpha } from "@/components/ui";
 import { timeAgo } from "@/lib/admin/format";
 import {
   PREFERENCE_LABELS,
@@ -135,6 +136,21 @@ export default function AvailabilityAdminScreen() {
 
   const header = (
     <View style={styles.header}>
+      {data ? (
+        <StatusTiles
+          items={[
+            { key: "sent", label: "Gönderen", value: data.teams.filter((t) => t.submitted_at).length, tone: "win", icon: "paper-plane-outline" },
+            { key: "draft", label: "Taslak", value: data.teams.filter((t) => !t.submitted_at).length, tone: "warn", icon: "create-outline" },
+            {
+              key: "hot",
+              label: "Maç çıkan saat",
+              value: Object.values(data.heat ?? {}).reduce((n, cells) => n + Object.values(cells).filter((c) => c.yes + c.maybe >= 2).length, 0),
+              tone: "brand",
+              icon: "flame-outline",
+            },
+          ]}
+        />
+      ) : null}
       <SegmentedControl<Mode>
         items={[
           { key: "teams", label: `Takımlar${data ? ` (${data.teams.length})` : ""}` },
@@ -189,13 +205,17 @@ export default function AvailabilityAdminScreen() {
           renderItem={({ item }) => {
             const counts = { yes: 0, maybe: 0, no: 0 };
             item.venues.forEach((v) => v.preference && (counts[v.preference] += 1));
+            const total = counts.yes + counts.maybe + counts.no;
             return (
-              <RecordCard
+              <OpsRecord
                 title={item.team.name}
-                subtitle={item.team.city || null}
-                meta={item.submitted_at ? `Gönderildi: ${timeAgo(item.submitted_at)}` : "Taslak — henüz gönderilmedi"}
-                avatar={{ name: item.team.name, image: item.team.logo }}
-                badges={(Object.keys(counts) as AvailabilityPref[]).map((k) => (counts[k] ? { label: `${PREF_SHORT[k]} ${counts[k]}`, tone: PREF_TONE[k] } : null))}
+                subtitle={item.submitted_at ? `Gönderildi ${timeAgo(item.submitted_at)}` : "Henüz gönderilmedi"}
+                leading={<TeamLogo name={item.team.name} logo={item.team.logo} size={42} />}
+                rail={item.submitted_at ? "win" : "warn"}
+                status={item.submitted_at ? null : { label: "Taslak", tone: "warn" }}
+                value={total || null}
+                valueLabel={total ? "saha" : undefined}
+                footer={total ? <PrefMeter counts={counts} /> : null}
                 onPress={() => setTeamOpen(item)}
               />
             );
@@ -215,11 +235,16 @@ export default function AvailabilityAdminScreen() {
             const teamCount = (data?.teams ?? []).filter((t) => t.venues.some((v) => v.venue_id === Number(item.id) && v.preference && v.preference !== "no")).length;
             const busy = Object.values(cells).filter((c) => c.yes + c.maybe >= 2).length;
             return (
-              <RecordCard
+              <OpsRecord
                 title={item.name}
                 subtitle={[item.location, `${item.open_label}–${item.close_label} · ${item.slot_minutes} dk`].filter(Boolean).join(" · ")}
-                meta={`${teamCount} takım oynayabilir · ${busy} saatte maç çıkar`}
-                icon="location-outline"
+                icon="location"
+                tone="mint"
+                rail={busy ? "win" : null}
+                value={busy}
+                valueLabel="maçlık saat"
+                specs={[{ icon: "people-outline", label: `${teamCount} takım oynayabilir`, tone: teamCount ? "win" : undefined }]}
+                footer={<DayHeatStrip venue={item} cells={cells} />}
                 onPress={() => setVenueOpen(item)}
               />
             );
@@ -235,17 +260,20 @@ export default function AvailabilityAdminScreen() {
           emptyIcon="trash-outline"
           emptyTitle="Çöp kutusu boş"
           renderItem={({ item }) => (
-            <RecordCard
+            <OpsRecord
               title={item.team.name}
-              subtitle={`${item.counts.yes} oynarız · ${item.counts.maybe} zorda kalırsak · ${item.counts.no} uymaz`}
-              meta={[item.hidden_at ? `Kaldırıldı: ${timeAgo(item.hidden_at)}` : null, item.hidden_by?.username ? `kaldıran: ${item.hidden_by.username}` : null]
+              subtitle={[item.hidden_at ? `Kaldırıldı ${timeAgo(item.hidden_at)}` : null, item.hidden_by?.username ? `@${item.hidden_by.username}` : null]
                 .filter(Boolean)
                 .join(" · ")}
-              avatar={{ name: item.team.name, image: item.team.logo }}
-              trailing={
-                data?.can_manage ? (
-                  <Button label="Geri al" size="sm" variant="secondary" icon="arrow-undo-outline" onPress={() => restoreMut.mutate(item.team.id)} loading={restoreMut.isPending && restoreMut.variables === item.team.id} />
-                ) : undefined
+              leading={<TeamLogo name={item.team.name} logo={item.team.logo} size={42} dimmed />}
+              muted
+              footer={
+                <View style={styles.trashFoot}>
+                  <PrefMeter counts={item.counts} />
+                  {data?.can_manage ? (
+                    <Button label="Geri al" size="sm" variant="secondary" icon="arrow-undo-outline" onPress={() => restoreMut.mutate(item.team.id)} loading={restoreMut.isPending && restoreMut.variables === item.team.id} />
+                  ) : null}
+                </View>
               }
             />
           )}
@@ -265,33 +293,36 @@ export default function AvailabilityAdminScreen() {
                 const yes = dayRanges(venue, v.slots, "yes");
                 const maybe = dayRanges(venue, v.slots, "maybe");
                 return (
-                  <Panel key={v.venue_id} title={venue.name.toLocaleUpperCase("tr-TR")}>
-                    <Text style={[styles.pref, { color: v.preference ? toneColor(PREF_TONE[v.preference]) : colors.textTertiary }]} {...textScale.dense}>
-                      {v.preference ? PREFERENCE_LABELS[v.preference] : "Tercih yok"}
-                    </Text>
+                  <OpsGroup
+                    key={v.venue_id}
+                    title={venue.name}
+                    icon="location"
+                    tone={v.preference === "yes" ? "mint" : v.preference === "maybe" ? "gold" : v.preference === "no" ? "red" : "neutral"}
+                    right={<Badge label={v.preference ? PREF_SHORT[v.preference] : "Tercih yok"} tone={v.preference ? PREF_TONE[v.preference] : "neutral"} size="xs" />}
+                    hint={v.preference ? PREFERENCE_LABELS[v.preference] : undefined}
+                  >
                     {yes.map((d) => (
-                      <Text key={`y${d.label}`} style={styles.range} {...textScale.dense}>
-                        <Text style={styles.rangeDay}>{d.label}: </Text>
-                        {d.ranges.join(", ")}
-                      </Text>
+                      <View key={`y${d.label}`} style={styles.rangeRow}>
+                        <Text style={styles.rangeDay} numberOfLines={1} {...textScale.dense}>{d.label}</Text>
+                        <View style={styles.rangePills}>
+                          {d.ranges.map((r) => <InfoPill key={r} icon="checkmark-circle" label={r} tone="win" />)}
+                        </View>
+                      </View>
                     ))}
-                    {maybe.length ? (
-                      <Text style={styles.maybeTitle} {...textScale.dense}>
-                        Zorda kalırsak
-                      </Text>
-                    ) : null}
                     {maybe.map((d) => (
-                      <Text key={`m${d.label}`} style={styles.range} {...textScale.dense}>
-                        <Text style={styles.rangeDay}>{d.label}: </Text>
-                        {d.ranges.join(", ")}
-                      </Text>
+                      <View key={`m${d.label}`} style={styles.rangeRow}>
+                        <Text style={styles.rangeDay} numberOfLines={1} {...textScale.dense}>{d.label}</Text>
+                        <View style={styles.rangePills}>
+                          {d.ranges.map((r) => <InfoPill key={r} icon="help-circle" label={r} tone="warn" />)}
+                        </View>
+                      </View>
                     ))}
                     {v.preference !== "no" && !yes.length && !maybe.length ? (
                       <Text style={styles.muted} {...textScale.dense}>
                         Saat işaretlenmedi.
                       </Text>
                     ) : null}
-                  </Panel>
+                  </OpsGroup>
                 );
               })}
             {data?.can_manage ? (
@@ -307,8 +338,52 @@ export default function AvailabilityAdminScreen() {
   );
 }
 
-function toneColor(tone: "win" | "warn" | "danger") {
-  return tone === "win" ? colors.win : tone === "warn" ? colors.warn : colors.danger;
+/** Tercih ölçeri: oynarız / zorda kalırsak / uymaz sayıları üç renkli tek çubukta. */
+function PrefMeter({ counts }: { counts: Record<AvailabilityPref, number> }) {
+  const total = counts.yes + counts.maybe + counts.no || 1;
+  return (
+    <View style={styles.meter}>
+      <View style={styles.meterBar}>
+        {(["yes", "maybe", "no"] as AvailabilityPref[]).map((k) =>
+          counts[k] ? <View key={k} style={{ flex: counts[k] / total, backgroundColor: k === "yes" ? colors.win : k === "maybe" ? colors.warn : colors.danger }} /> : null,
+        )}
+      </View>
+      <View style={styles.meterLegend}>
+        {(["yes", "maybe", "no"] as AvailabilityPref[]).map((k) => (
+          <Text key={k} style={[styles.meterText, { color: counts[k] ? (k === "yes" ? colors.win : k === "maybe" ? colors.warn : colors.danger) : colors.textDisabled }]} {...textScale.badge}>
+            {counts[k]} {PREF_SHORT[k].toLocaleLowerCase("tr-TR")}
+          </Text>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** Saha satırındaki 7 günlük ısı şeridi: her gün o günün en kalabalık saatinin takım sayısı. */
+function DayHeatStrip({ venue, cells }: { venue: AvailabilityAdminVenue; cells: Record<string, { yes: number; maybe: number }> }) {
+  const perDay = venue.weekly.days.map((d) => {
+    let best = 0;
+    for (const t of venue.weekly.times) {
+      const c = cells[`${d.weekday}:${t.key}`];
+      if (c) best = Math.max(best, c.yes + c.maybe);
+    }
+    return { label: d.label.slice(0, 2), best };
+  });
+  const max = Math.max(1, ...perDay.map((d) => d.best));
+  return (
+    <View style={styles.strip}>
+      {perDay.map((d, i) => (
+        <View key={`${d.label}${i}`} style={styles.stripCol}>
+          <View style={styles.stripTrack}>
+            <View style={[styles.stripFill, { height: `${Math.max(8, (d.best / max) * 100)}%`, backgroundColor: d.best >= 2 ? colors.win : d.best ? colors.warn : colors.surface3 }]} />
+          </View>
+          <Text style={styles.stripLabel} {...textScale.badge}>
+            {d.label}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
 }
 
 function VenueHeatSheet({
@@ -368,13 +443,13 @@ function VenueHeatSheet({
           <Text style={styles.muted} {...textScale.dense}>
             Hücredeki sayı o saatte oynayabilecek takım sayısı. İki ve üstü bir maç çıkarır. Dokununca takımlar listelenir.
           </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={styles.heatCard}>
             <View>
               <View style={styles.gridRow}>
                 <View style={styles.timeCell} />
                 {venue.weekly.days.map((d) => (
                   <Text key={d.weekday} style={styles.dayHead} numberOfLines={1} {...textScale.badge}>
-                    {d.label.slice(0, 3)}
+                    {d.label.slice(0, 3).toLocaleUpperCase("tr-TR")}
                   </Text>
                 ))}
               </View>
@@ -393,12 +468,12 @@ function VenueHeatSheet({
                         onPress={() => setCell(key)}
                         style={[
                           styles.cell,
-                          n ? { backgroundColor: strong ? colors.winDim : colors.warnDim, opacity: 0.45 + 0.55 * (n / max) } : null,
+                          n ? { backgroundColor: withAlpha(strong ? colors.win : colors.warn, 0.18 + 0.62 * (n / max)), borderColor: withAlpha(strong ? colors.win : colors.warn, 0.5) } : null,
                           cell === key ? styles.cellOn : null,
                         ]}
                         accessibilityLabel={`${d.label} ${t.label}: ${n} takım`}
                       >
-                        <Text style={styles.cellText} {...textScale.badge}>
+                        <Text style={[styles.cellText, strong ? styles.cellTextStrong : null]} {...textScale.badge}>
                           {n || ""}
                         </Text>
                       </Touchable>
@@ -407,9 +482,9 @@ function VenueHeatSheet({
                 </View>
               ))}
             </View>
-          </ScrollView>
+          </View>
           {cell ? (
-            <Panel title={cellTitle.toLocaleUpperCase("tr-TR")}>
+            <OpsGroup title={cellTitle} icon="time" tone="cyan">
               <Text style={styles.pref} {...textScale.dense}>
                 {cellTeams.yes.length} uygun · {cellTeams.maybe.length} zorda kalırsak
                 {cellTeams.yes.length + cellTeams.maybe.length >= 2 ? ` · ${Math.floor((cellTeams.yes.length + cellTeams.maybe.length) / 2)} maç çıkar` : ""}
@@ -426,7 +501,7 @@ function VenueHeatSheet({
                   {n}
                 </Text>
               ))}
-            </Panel>
+            </OpsGroup>
           ) : null}
         </View>
       ) : null}
@@ -434,22 +509,40 @@ function VenueHeatSheet({
   );
 }
 
-const CELL = 40;
 
 const styles = StyleSheet.create({
   header: { gap: space.sm },
   stack: { gap: space.md },
   pref: { ...type.label, color: colors.textPrimary },
   range: { ...type.bodySm, color: colors.textSecondary },
-  rangeDay: { ...type.label, color: colors.textPrimary },
+  rangeDay: { ...type.label, color: colors.textPrimary, width: 82 },
+  rangeRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  rangePills: { flex: 1, flexDirection: "row", flexWrap: "wrap", gap: space.xs },
+  trashFoot: { flexDirection: "row", alignItems: "center", gap: space.md },
+  meter: { gap: space.xs, flex: 1 },
+  meterBar: { flexDirection: "row", height: 6, borderRadius: 3, overflow: "hidden", backgroundColor: colors.surface3, gap: 2 },
+  meterLegend: { flexDirection: "row", gap: space.md },
+  meterText: { ...type.labelXs },
+  strip: { flexDirection: "row", gap: space.xs, height: 44, paddingTop: space.xxs },
+  stripCol: { flex: 1, alignItems: "center", gap: space.xxs },
+  stripTrack: { flex: 1, width: "70%", justifyContent: "flex-end", borderRadius: radius.xs, backgroundColor: colors.surface2, overflow: "hidden" },
+  stripFill: { width: "100%", borderRadius: radius.xs },
+  stripLabel: { ...type.nano, color: colors.textTertiary },
+  heatCard: {
+    padding: space.sm,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
   maybeTitle: { ...type.overline, color: colors.warn, marginTop: space.xs },
   muted: { ...type.caption, color: colors.textTertiary },
-  gridRow: { flexDirection: "row", gap: 2, marginBottom: 2 },
-  timeCell: { width: 48, ...type.micro, color: colors.textTertiary, alignSelf: "center" },
-  dayHead: { width: CELL, ...type.micro, color: colors.textSecondary, textAlign: "center" },
+  gridRow: { flexDirection: "row", gap: 3, marginBottom: 3 },
+  timeCell: { width: 40, ...type.numSm, color: colors.textTertiary, alignSelf: "center" },
+  dayHead: { flex: 1, ...type.overline, color: colors.textSecondary, textAlign: "center" },
   cell: {
-    width: CELL,
-    height: 28,
+    flex: 1,
+    height: 32,
     borderRadius: radius.xs,
     backgroundColor: colors.surface2,
     alignItems: "center",
@@ -458,5 +551,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   cellOn: { borderColor: colors.brand, borderWidth: 2 },
-  cellText: { ...type.labelXs, color: colors.textPrimary },
+  cellText: { ...type.numSmStrong, color: colors.textPrimary },
+  cellTextStrong: { color: colors.textPrimary },
 });

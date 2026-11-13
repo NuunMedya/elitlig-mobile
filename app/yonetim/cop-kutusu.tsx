@@ -15,7 +15,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { ActionSheet, AdminList, AdminScreen, RecordCard, StatRow, confirmAction, useAdminMutation } from "@/components/admin";
+import { ActionSheet, AdminList, AdminScreen, confirmAction, useAdminMutation } from "@/components/admin";
+import { SysStage } from "@/components/admin/system/SysKit";
+import { Badge, Button, IconTile, SectionHeader, Touchable } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { formatDateTime } from "@/lib/admin/format";
 import { getTrash, purgeAllTrash, purgeTrash, restoreTrash, systemKeys, type TrashItem } from "@/lib/api/admin/system";
@@ -119,10 +121,16 @@ export default function TrashScreen() {
         extraHeader={
           <View style={styles.gap}>
             {query.data ? (
-              <StatRow
-                items={[
-                  { label: "Kayıt", value: query.data.total },
-                  { label: "Başlık", value: groups.length },
+              <SysStage
+                eyebrow="Geri alınabilir"
+                title="Silinen kayıtlar burada bekler"
+                icon="trash"
+                tone="red"
+                value={query.data.total}
+                valueLabel="kayıt"
+                stats={[
+                  { label: "Başlık", value: groups.length, icon: "folder-open" },
+                  { label: "Bağlı", value: groups.reduce((n, g) => n + g.items.reduce((m, it) => m + (it.relatedCount || 0), 0), 0), icon: "link", tone: "info" },
                 ]}
               />
             ) : null}
@@ -143,18 +151,51 @@ export default function TrashScreen() {
         renderItem={({ item, index }) => (
           <View style={styles.gap}>
             {index === 0 || rows[index - 1]?.groupKey !== item.groupKey ? (
-              <Text style={styles.section} {...textScale.dense}>
-                {item.groupLabel.toLocaleUpperCase("tr-TR")} · {groups.find((g) => g.key === item.groupKey)?.count ?? 0}
-              </Text>
+              <SectionHeader
+                title={item.groupLabel}
+                meta={`${groups.find((g) => g.key === item.groupKey)?.count ?? 0} kayıt`}
+                icon={trashIcon(item.groupKey)}
+                iconTone="neutral"
+                size="group"
+              />
             ) : null}
-            <RecordCard
-              title={item.label}
-              subtitle={item.summary}
-              meta={[item.deletedByName ? `Silen: ${item.deletedByName}` : null, item.deletedAt ? formatDateTime(item.deletedAt) : null].filter(Boolean).join(" · ")}
-              icon="trash-outline"
-              badges={[item.relatedCount > 0 ? { label: `${item.relatedCount} bağlı kayıt`, tone: "info" } : null]}
+            <Touchable
+              feedback="card"
               onPress={canRestore || canPurge ? () => setActive(item) : undefined}
-            />
+              disabled={!canRestore && !canPurge}
+              style={styles.card}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.label}${item.summary ? `, ${item.summary}` : ""}`}
+            >
+              <View style={styles.cardHead}>
+                <IconTile icon={trashIcon(item.groupKey)} tone="neutral" size={40} glow={false} />
+                <View style={styles.flex}>
+                  <Text style={styles.title} numberOfLines={2} {...textScale.dense}>
+                    {item.label}
+                  </Text>
+                  {item.summary ? (
+                    <Text style={styles.sub} numberOfLines={1} {...textScale.dense}>
+                      {item.summary}
+                    </Text>
+                  ) : null}
+                  <View style={styles.metaRow}>
+                    <Ionicons name="time-outline" size={11} color={colors.textTertiary} />
+                    <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+                      {[item.deletedAt ? formatDateTime(item.deletedAt) : null, item.deletedByName ? `Silen: ${item.deletedByName}` : null].filter(Boolean).join(" · ")}
+                    </Text>
+                  </View>
+                </View>
+                {item.relatedCount > 0 ? <Badge label={`+${item.relatedCount} bağlı`} tone="info" icon="link" size="xs" /> : null}
+              </View>
+              {canRestore || canPurge ? (
+                <View style={styles.actions}>
+                  {canRestore ? (
+                    <Button label="Geri yükle" icon="arrow-undo" size="sm" variant="secondary" onPress={() => restore.mutate(item)} style={styles.flex} />
+                  ) : null}
+                  {canPurge ? <Button label="Kalıcı sil" icon="trash-outline" size="sm" variant="danger" onPress={() => void askPurge(item)} style={styles.flex} /> : null}
+                </View>
+              ) : null}
+            </Touchable>
           </View>
         )}
       />
@@ -189,14 +230,33 @@ export default function TrashScreen() {
   );
 }
 
+const TRASH_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  team: "shield",
+  player: "person",
+  news: "newspaper",
+  staff: "briefcase",
+  match: "football",
+  league: "trophy",
+  user: "id-card",
+};
+const trashIcon = (key: string) => TRASH_ICONS[key] ?? "document";
+
 const styles = StyleSheet.create({
   gap: { gap: space.sm },
+  flex: { flex: 1, minWidth: 0, gap: 2 },
+  card: { gap: space.md, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
+  cardHead: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
+  title: { ...type.h4, color: colors.textPrimary },
+  sub: { ...type.bodySm, color: colors.textSecondary },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  meta: { ...type.caption, color: colors.textTertiary, flexShrink: 1 },
+  actions: { flexDirection: "row", gap: space.sm, paddingTop: space.sm, borderTopWidth: hairline, borderTopColor: colors.separator },
   section: { ...type.overline, color: colors.textTertiary, marginTop: space.sm },
   notice: {
     flexDirection: "row",
     gap: space.sm,
     padding: space.md,
-    borderRadius: radius.md,
+    borderRadius: radius.xl,
     backgroundColor: colors.infoDim,
     borderWidth: hairline,
     borderColor: colors.border,

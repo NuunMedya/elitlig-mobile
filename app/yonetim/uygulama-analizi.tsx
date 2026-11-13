@@ -17,10 +17,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { AdminScreen, InfoLine, Panel } from "@/components/admin";
+import { AdminScreen, InfoLine } from "@/components/admin";
+import { SysGroup, SysStage } from "@/components/admin/system/SysKit";
 import { BarList, KpiGrid, KpiTile, SERIES_COLORS, TrendChart, WeekHourGrid } from "@/components/admin/system/charts";
 import { DataList } from "@/components/admin/system/DataList";
-import { Badge, Chip, ChipGroup, ErrorState, SegmentedControl, SkeletonCard, Toggle } from "@/components/ui";
+import { Badge, Chip, ChipGroup, ErrorState, IconTile, ProgressRing, SectionHeader, SegmentedControl, SkeletonCard, Sparkline, Toggle } from "@/components/ui";
 import { APP_PLATFORMS, APP_RANGES, fmtBucket, fmtDuration, fmtNum, fmtPct, getAppReport, systemKeys } from "@/lib/api/admin/system";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
@@ -124,10 +125,26 @@ export default function AppAnalyticsScreen() {
             </View>
           ) : null}
 
+          <SysStage
+            eyebrow={data.range ? `${fmtBucket(data.range.from)} – ${fmtBucket(data.range.to)}` : "Uygulama"}
+            title="Uygulama nabzı"
+            icon="phone-portrait"
+            tone="cyan"
+            value={Number(k.devices || 0)}
+            valueLabel="aktif cihaz"
+            stats={[
+              { label: "Üye", value: Number(k.members || 0), icon: "people", tone: "info" },
+              { label: "Oturum", value: Number(k.sessions || 0), icon: "pulse", tone: "win" },
+              { label: "Ort. oturum", value: fmtDuration(k.avgSessionMs), icon: "time", tone: "warn" },
+            ]}
+          >
+            {series.length > 1 ? <StageSpark values={series.map((p) => Number(p.devices || 0))} /> : null}
+          </SysStage>
+
           <KpiGrid>
-            <KpiTile label="Aktif cihaz" value={k.devices} previous={prev.devices} />
-            <KpiTile label="Aktif üye" value={k.members} previous={prev.members} />
-            <KpiTile label="Oturum" value={k.sessions} previous={prev.sessions} />
+            <KpiTile label="Aktif cihaz" value={k.devices} previous={prev.devices} icon="phone-portrait-outline" spark={series.map((p) => Number(p.devices || 0))} />
+            <KpiTile label="Aktif üye" value={k.members} previous={prev.members} icon="people-outline" />
+            <KpiTile label="Oturum" value={k.sessions} previous={prev.sessions} icon="pulse-outline" spark={series.map((p) => Number(p.sessions || 0))} />
             <KpiTile label="Ortalama oturum" value={k.avgSessionMs} format={fmtDuration} hint={`Ortanca ${fmtDuration(k.medianSessionMs)}`} />
             <KpiTile label="Toplam süre" value={k.totalMs} format={fmtDuration} />
             <KpiTile label="Cihaz başına günlük" value={k.avgDailyMsPerDevice} format={fmtDuration} />
@@ -136,14 +153,14 @@ export default function AppAnalyticsScreen() {
           </KpiGrid>
 
           {noUsage ? (
-            <Panel>
+            <SysGroup>
               <Text style={styles.hint} {...textScale.long}>
                 Bu aralıkta uygulamadan ekran olayı gelmedi. Aralığı genişlet ya da platform süzgecini kaldır.
               </Text>
-            </Panel>
+            </SysGroup>
           ) : usage ? (
             <>
-              <Panel title="Uygulamada geçen süre · günlük">
+              <SysGroup title="Uygulamada geçen süre · günlük" icon="time" tone="violet">
                 <SegmentedControl<TrendMetric>
                   items={[
                     { key: "time", label: "Süre" },
@@ -161,21 +178,46 @@ export default function AppAnalyticsScreen() {
                   series={[{ label: trendMetric === "time" ? "Süre" : trendMetric === "devices" ? "Aktif cihaz" : "Oturum", data: trendData }]}
                   format={trendFormat}
                 />
-              </Panel>
+              </SysGroup>
 
-              <Panel title="Bağlılık · aralığın son gününe göre">
-                <InfoLine label="Günlük aktif (DAU)" value={fmtNum(usage.engagement?.dau)} />
-                <InfoLine label="Haftalık aktif (WAU)" value={fmtNum(usage.engagement?.wau)} />
-                <InfoLine label="Aylık aktif (MAU)" value={fmtNum(usage.engagement?.mau)} />
+              <SysGroup title="Bağlılık · aralığın son gününe göre" icon="magnet" tone="pink">
+                <View style={styles.engage}>
+                  <ProgressRing
+                    value={Math.max(0, Math.min(1, Number(usage.engagement?.stickiness || 0) > 1 ? Number(usage.engagement?.stickiness) / 100 : Number(usage.engagement?.stickiness || 0)))}
+                    size={84}
+                    thickness={8}
+                    tone="live"
+                    label={fmtPct(usage.engagement?.stickiness, 0)}
+                    sublabel="DAU/MAU"
+                  />
+                  <View style={styles.engageCols}>
+                    {[
+                      { k: "DAU", v: usage.engagement?.dau, l: "Günlük" },
+                      { k: "WAU", v: usage.engagement?.wau, l: "Haftalık" },
+                      { k: "MAU", v: usage.engagement?.mau, l: "Aylık" },
+                    ].map((e) => (
+                      <View key={e.k} style={styles.engageCol}>
+                        <Text style={styles.engageValue} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
+                          {fmtNum(e.v)}
+                        </Text>
+                        <Text style={styles.engageKey} {...textScale.badge}>
+                          {e.k}
+                        </Text>
+                        <Text style={styles.hint} {...textScale.badge}>
+                          {e.l}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
                 <InfoLine label="Ortalama DAU" value={fmtNum(usage.engagement?.avgDau)} />
-                <InfoLine label="Yapışkanlık (DAU/MAU)" value={fmtPct(usage.engagement?.stickiness, 0)} />
                 <InfoLine label="Ekran / oturum" value={String(k.screensPerSession ?? "—").replace(".", ",")} />
                 {usage.errors?.count > 0 ? (
                   <InfoLine label="Uygulama hatası" value={`${fmtNum(usage.errors.count)} (${fmtNum(usage.errors.sessions)} oturumda)`} tone="danger" />
                 ) : null}
-              </Panel>
+              </SysGroup>
 
-              <Panel title="Platform">
+              <SysGroup title="Platform" icon="phone-portrait" tone="cyan">
                 <View style={styles.split}>
                   {list(usage.platforms).map((p, i) => (
                     <View
@@ -187,22 +229,22 @@ export default function AppAnalyticsScreen() {
                 <BarList
                   rows={list(usage.platforms).map((p, i) => ({ key: p.key, label: p.key, value: p.devices, note: "cihaz", color: SERIES_COLORS[i] }))}
                 />
-              </Panel>
+              </SysGroup>
 
-              <Panel title="Oturum süresi dağılımı">
+              <SysGroup title="Oturum süresi dağılımı" icon="hourglass" tone="gold">
                 <BarList rows={list(usage.sessionLengths).map((b) => ({ key: b.key, label: b.label, value: b.sessions }))} />
-              </Panel>
-              <Panel title="Cihaz başına oturum">
+              </SysGroup>
+              <SysGroup title="Cihaz başına oturum" icon="repeat" tone="mint">
                 <BarList rows={list(usage.sessionsPerDevice).map((b) => ({ key: b.key, label: b.label, value: b.devices }))} />
-              </Panel>
-              <Panel title="Uygulama sürümleri · cihaz">
+              </SysGroup>
+              <SysGroup title="Uygulama sürümleri · cihaz" icon="git-branch" tone="neutral">
                 <BarList
                   rows={list(usage.versions).map((v) => ({ key: v.key, label: v.key === "Bilinmiyor" ? "Bilinmiyor (eski kayıt)" : `Sürüm ${v.key}`, value: v.devices }))}
                   limit={6}
                 />
-              </Panel>
+              </SysGroup>
 
-              <Panel title="Ekran süreleri">
+              <SysGroup title="Ekran süreleri" icon="albums" tone="violet">
                 <DataList
                   rows={[...list(usage.screens)].sort((a, b) => b.totalMs - a.totalMs)}
                   primary={(r) => `${r.gameArea ? "Oyun · " : ""}${r.name}${r.name !== r.key ? ` (${r.key})` : ""}`}
@@ -217,36 +259,34 @@ export default function AppAnalyticsScreen() {
                     { key: "exitShare", label: "Son ekran", render: (r) => fmtPct(r.exitShare, 0) },
                   ]}
                 />
-              </Panel>
+              </SysGroup>
 
-              <Panel title="Saatlere göre kullanım · başlayan oturumlar">
+              <SysGroup title="Saatlere göre kullanım · başlayan oturumlar" icon="grid" tone="cyan">
                 <WeekHourGrid grid={usage.heatmap} unit="oturum" />
-              </Panel>
+              </SysGroup>
             </>
           ) : null}
 
-          <Text style={styles.section} {...textScale.dense}>
-            OYUNLAR
-          </Text>
+          <SectionHeader title="Oyunlar" icon="game-controller" iconTone="pink" meta={games?.totals?.plays ? `${fmtNum(games.totals.plays)} oynanma` : undefined} />
           <KpiGrid>
-            <KpiTile label="Oynanma" value={games?.totals?.plays} />
-            <KpiTile label="Oyuncu" value={games?.totals?.players} />
+            <KpiTile label="Oynanma" value={games?.totals?.plays} icon="play-outline" spark={playsSeries.map((p) => Number(p.plays || 0))} />
+            <KpiTile label="Oyuncu" value={games?.totals?.players} icon="people-outline" />
             <KpiTile label="Oyun süresi" value={games?.totals?.playMs} format={fmtDuration} />
             <KpiTile label="Oyun ekranlarında" value={games?.totals?.screenMs} format={fmtDuration} />
           </KpiGrid>
 
           {!games?.totals?.plays && !games?.totals?.screenMs ? (
-            <Panel>
+            <SysGroup>
               <Text style={styles.hint} {...textScale.dense}>
                 Bu aralıkta oyun oynanmadı.
               </Text>
-            </Panel>
+            </SysGroup>
           ) : (
             <>
               {arena.map((g) => (
                 <GameCard key={g.key} game={g} />
               ))}
-              <Panel title="Oyun karşılaştırması">
+              <SysGroup title="Oyun karşılaştırması" icon="podium" tone="gold">
                 <SegmentedControl<GameMetric>
                   items={[
                     { key: "plays", label: "Oynanma" },
@@ -259,15 +299,13 @@ export default function AppAnalyticsScreen() {
                   stretch
                 />
                 <BarList rows={compare} limit={12} format={gameMetric === "time" ? fmtMinutes : (v) => fmtNum(v)} />
-              </Panel>
-              <Panel title="Günlük oynanma · tüm arena oyunları">
+              </SysGroup>
+              <SysGroup title="Günlük oynanma · tüm arena oyunları" icon="bar-chart" tone="mint">
                 <TrendChart type="bar" labels={playsSeries.map((p) => fmtBucket(p.key))} series={[{ label: "Oynanma", data: playsSeries.map((p) => p.plays) }]} height={140} />
-              </Panel>
+              </SysGroup>
               {features.length ? (
                 <>
-                  <Text style={styles.section} {...textScale.dense}>
-                    REKABET VE KARİYER
-                  </Text>
+                  <SectionHeader title="Rekabet ve kariyer" icon="trophy" iconTone="gold" size="group" />
                   {features.map((g) => (
                     <GameCard key={g.key} game={g} />
                   ))}
@@ -276,7 +314,7 @@ export default function AppAnalyticsScreen() {
             </>
           )}
 
-          <Panel title={playerGame ? `En çok oynayanlar · ${gameName(playerGame)}` : "En çok oynayanlar · tüm arena oyunları"}>
+          <SysGroup icon="trophy" tone="gold" title={playerGame ? `En çok oynayanlar · ${gameName(playerGame)}` : "En çok oynayanlar · tüm arena oyunları"}>
             <ChipGroup scrollable contentPadding={0}>
               <Chip label="Tüm oyunlar" size="sm" selected={!playerGame} onPress={() => setPlayerGame("")} />
               {arena
@@ -299,7 +337,7 @@ export default function AppAnalyticsScreen() {
               ]}
               emptyText="Bu aralıkta skor kaydı yok."
             />
-          </Panel>
+          </SysGroup>
 
           <Text style={styles.foot} {...textScale.long}>
             Uygulama her ekran değişiminde bir kayıt gönderir. Ekranda geçen süre, aynı oturumdaki bir sonraki ekrana kadar geçen zamandır (en
@@ -320,9 +358,7 @@ function GameCard({ game }: { game: Row }) {
   return (
     <View style={[styles.game, quiet ? styles.quiet : null]}>
       <View style={styles.gameHead}>
-        <View style={styles.gameIcon}>
-          <Ionicons name={isArena ? "game-controller-outline" : "trophy-outline"} size={18} color={colors.brandAccent} />
-        </View>
+        <IconTile icon={isArena ? "game-controller" : "trophy"} tone={isArena ? "pink" : "gold"} size={38} glow={!quiet} />
         <View style={styles.flex}>
           <Text style={styles.gameName} {...textScale.dense}>
             {game.name}
@@ -361,6 +397,16 @@ function GameCard({ game }: { game: Row }) {
   );
 }
 
+/** Sahne altında cihaz seyri (beyaz çizgi). */
+function StageSpark({ values }: { values: number[] }) {
+  const [w, setW] = useState(0);
+  return (
+    <View onLayout={(e) => setW(Math.round(e.nativeEvent.layout.width))} style={styles.stageSpark}>
+      {w > 0 ? <Sparkline values={values} width={w} height={34} color={colors.onDark} markLast /> : null}
+    </View>
+  );
+}
+
 function Num({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.num}>
@@ -383,14 +429,20 @@ const styles = StyleSheet.create({
   section: { ...type.overline, color: colors.textTertiary, marginTop: space.sm },
   toggleRow: { flexDirection: "row", alignItems: "center", gap: space.md },
   toggleLabel: { ...type.bodySm, color: colors.textPrimary, flex: 1 },
-  warn: { flexDirection: "row", gap: space.sm, padding: space.md, borderRadius: radius.md, backgroundColor: colors.warnDim },
+  warn: { flexDirection: "row", gap: space.sm, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.warnDim },
   warnText: { ...type.caption, color: colors.textSecondary, flex: 1 },
   split: { flexDirection: "row", height: 10, borderRadius: radius.pill, overflow: "hidden", gap: 2 },
   splitPart: { height: 10 },
+  stageSpark: { height: 34 },
+  engage: { flexDirection: "row", alignItems: "center", gap: space.md },
+  engageCols: { flex: 1, flexDirection: "row", gap: space.xs },
+  engageCol: { flex: 1, alignItems: "center", gap: 1, paddingVertical: space.sm, borderRadius: radius.lg, backgroundColor: colors.surface2 },
+  engageValue: { ...type.scoreSm, color: colors.textPrimary },
+  engageKey: { ...type.nano, color: colors.brandAccent },
   game: {
     gap: space.sm,
     padding: space.md,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
     borderColor: colors.border,
@@ -400,8 +452,8 @@ const styles = StyleSheet.create({
   gameIcon: { width: 36, height: 36, borderRadius: radius.sm, backgroundColor: colors.brandDim, alignItems: "center", justifyContent: "center" },
   gameName: { ...type.h4, color: colors.textPrimary },
   nums: { flexDirection: "row", gap: space.sm },
-  num: { flex: 1, gap: 2 },
+  num: { flex: 1, gap: 2, padding: space.sm, borderRadius: radius.md, backgroundColor: colors.surface2 },
   numLabel: { ...type.micro, color: colors.textTertiary },
-  numValue: { ...type.numSmStrong, color: colors.textPrimary },
+  numValue: { ...type.scoreXs, color: colors.textPrimary },
   foot: { ...type.caption, color: colors.textTertiary, marginTop: space.md },
 });

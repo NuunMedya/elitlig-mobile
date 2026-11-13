@@ -13,8 +13,8 @@ import { useMutation } from "@tanstack/react-query";
 import React, { useMemo, useState } from "react";
 import { Share, StyleSheet, Text, View } from "react-native";
 
-import { FormSheet, SelectField, ToggleField, type FieldDef } from "@/components/admin";
-import { BottomSheet, Button, Input, useToast } from "@/components/ui";
+import { FormSheet, SelectField, type FieldDef } from "@/components/admin";
+import { Avatar, Badge, BottomSheet, Button, IconTile, Input, Toggle, useToast } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { ROLE_LABELS } from "@/lib/api/admin";
 import {
@@ -28,7 +28,7 @@ import {
   type ManagementRole,
   type StaffMember,
 } from "@/lib/api/admin/staff";
-import { colors, hairline, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
 
 interface Credential {
   fullName: string;
@@ -51,27 +51,49 @@ function validate(v: { username: string; password: string; role: string; city: s
   return "";
 }
 
-/** Açılan hesabın bilgileri: kopyala / paylaş. */
+/** Açılan hesabın bilgileri: kopyala / paylaş. Her hesap kendi satırında
+ *  (avatar · ad · kullanıcı adı / şifre hapları · rol), üstte nane onay şeridi. */
 export function CredentialsCard({ rows, roles }: { rows: Credential[]; roles: ManagementRole[] }) {
   const toast = useToast();
   const text = credentialsText(rows, roles);
   return (
     <View style={styles.creds}>
       <View style={styles.credsHead}>
-        <Ionicons name="checkmark-circle" size={18} color={colors.win} />
-        <Text style={styles.credsTitle} {...textScale.dense}>
-          {rows.length > 1 ? `${rows.length} hesap oluşturuldu` : "Hesap oluşturuldu"}
-        </Text>
+        <IconTile icon="checkmark-done" tone="mint" size={32} glow={false} />
+        <View style={styles.flex}>
+          <Text style={styles.credsTitle} {...textScale.dense}>
+            {rows.length > 1 ? `${rows.length} hesap oluşturuldu` : "Hesap oluşturuldu"}
+          </Text>
+          <Text style={styles.hint} {...textScale.long}>
+            Şifre yalnız şimdi görünür. Kişiye iletmek için kopyala ya da paylaş.
+          </Text>
+        </View>
       </View>
       {rows.map((r) => (
-        <Text key={r.username} style={styles.credsLine} selectable {...textScale.long}>
-          {rows.length > 1 ? `${r.fullName}: ` : ""}
-          {r.username} · {r.password} · {roleText(roles, r.role)}
-        </Text>
+        <View key={r.username} style={styles.credRow}>
+          <Avatar name={r.fullName} size={30} />
+          <View style={styles.flex}>
+            <Text style={styles.credName} numberOfLines={1} {...textScale.dense}>
+              {r.fullName}
+            </Text>
+            <View style={styles.credPills}>
+              <View style={styles.credPill}>
+                <Ionicons name="person-outline" size={11} color={colors.textTertiary} />
+                <Text style={styles.credValue} selectable {...textScale.badge}>
+                  {r.username}
+                </Text>
+              </View>
+              <View style={styles.credPill}>
+                <Ionicons name="key-outline" size={11} color={colors.textTertiary} />
+                <Text style={styles.credValue} selectable {...textScale.badge}>
+                  {r.password}
+                </Text>
+              </View>
+            </View>
+          </View>
+          <Badge label={roleText(roles, r.role)} tone="brand" size="xs" />
+        </View>
       ))}
-      <Text style={styles.hint} {...textScale.long}>
-        Şifre yalnız şimdi görünür. Kişiye iletmek için kopyala ya da paylaş.
-      </Text>
       <View style={styles.row}>
         <Button
           label="Kopyala"
@@ -242,6 +264,20 @@ export function StaffAccountsBulkSheet({
     >
       <View style={styles.bulk}>
         {done.length ? <CredentialsCard rows={done} roles={roles} /> : null}
+        <View style={styles.bulkIntro}>
+          <IconTile icon="key" tone="violet" size={40} />
+          <View style={styles.flex}>
+            <Text style={styles.bulkTitle} {...textScale.dense}>
+              {selected} / {rows.length} kişi seçili
+            </Text>
+            <Text style={styles.hint} {...textScale.long}>
+              Kullanıcı adları ad soyaddan önerildi, şifreler üretildi. Göndermeden önce değiştirebilirsin.
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.overline} {...textScale.badge}>
+          {upperTR("Ortak ayarlar")}
+        </Text>
         <SelectField<string>
           label="Rol (hepsi için)"
           value={role}
@@ -257,39 +293,68 @@ export function StaffAccountsBulkSheet({
             clearable
           />
         ) : null}
-        {rows.map((row) => (
-          <View key={row.id} style={styles.bulkRow}>
-            <ToggleField
-              label={row.fullName}
-              hint={row.state === "done" ? "Hesap açıldı" : row.state === "saving" ? "Oluşturuluyor" : row.error || undefined}
-              value={row.selected}
-              disabled={row.state === "done"}
-              onChange={(v) => setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, selected: v } : r)))}
-            />
-            {row.selected && row.state !== "done" ? (
-              <View style={styles.row}>
-                <Input
-                  containerStyle={styles.flex}
-                  size="sm"
-                  label="Kullanıcı adı"
-                  value={row.username}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  onChangeText={(t) => setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, username: t } : r)))}
-                />
-                <Input
-                  containerStyle={styles.flex}
-                  size="sm"
-                  label="Şifre"
-                  value={row.password}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  onChangeText={(t) => setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, password: t } : r)))}
+        <Text style={styles.overline} {...textScale.badge}>
+          {upperTR("Kişiler")}
+        </Text>
+        {rows.map((row) => {
+          const on = row.selected && row.state !== "done";
+          const state =
+            row.state === "done"
+              ? { label: "Hesap açıldı", tone: "win" as const, icon: "checkmark-circle" as const }
+              : row.state === "saving"
+                ? { label: "Oluşturuluyor", tone: "info" as const, icon: "sync" as const }
+                : row.state === "error"
+                  ? { label: "Hata", tone: "danger" as const, icon: "alert-circle" as const }
+                  : null;
+          return (
+            <View key={row.id} style={[styles.bulkRow, on ? styles.bulkRowOn : null]}>
+              <View style={styles.bulkHead}>
+                <Avatar name={row.fullName} size={36} />
+                <View style={styles.flex}>
+                  <Text style={styles.bulkName} numberOfLines={1} {...textScale.dense}>
+                    {row.fullName}
+                  </Text>
+                  {state ? <Badge label={state.label} tone={state.tone} icon={state.icon} size="xs" /> : null}
+                </View>
+                <Toggle
+                  value={row.selected}
+                  disabled={row.state === "done"}
+                  accessibilityLabel={`${row.fullName} için hesap aç`}
+                  onValueChange={(v) => setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, selected: v } : r)))}
                 />
               </View>
-            ) : null}
-          </View>
-        ))}
+              {row.error ? (
+                <Text style={styles.error} {...textScale.long}>
+                  {row.error}
+                </Text>
+              ) : null}
+              {on ? (
+                <View style={styles.row}>
+                  <Input
+                    containerStyle={styles.flex}
+                    size="sm"
+                    label="Kullanıcı adı"
+                    leadingIcon="person-outline"
+                    value={row.username}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    onChangeText={(t) => setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, username: t } : r)))}
+                  />
+                  <Input
+                    containerStyle={styles.flex}
+                    size="sm"
+                    label="Şifre"
+                    leadingIcon="key-outline"
+                    value={row.password}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    onChangeText={(t) => setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, password: t } : r)))}
+                  />
+                </View>
+              ) : null}
+            </View>
+          );
+        })}
       </View>
     </BottomSheet>
   );
@@ -297,19 +362,30 @@ export function StaffAccountsBulkSheet({
 
 const styles = StyleSheet.create({
   bulk: { gap: space.md },
-  bulkRow: { gap: space.sm, paddingBottom: space.md, borderBottomWidth: hairline, borderBottomColor: colors.separator },
+  bulkIntro: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.brandDim },
+  bulkTitle: { ...type.h3, color: colors.textPrimary },
+  overline: { ...type.overline, color: colors.textTertiary, marginTop: space.xs },
+  bulkRow: { gap: space.sm, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
+  bulkRowOn: { borderColor: colors.brand },
+  bulkHead: { flexDirection: "row", alignItems: "center", gap: space.md },
+  bulkName: { ...type.h4, color: colors.textPrimary },
+  error: { ...type.caption, color: colors.danger },
   row: { flexDirection: "row", gap: space.sm, alignItems: "flex-end" },
-  flex: { flex: 1 },
+  flex: { flex: 1, minWidth: 0, gap: 2 },
   creds: {
-    gap: space.sm,
+    gap: space.md,
     padding: space.md,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     backgroundColor: colors.winDim,
     borderWidth: hairline,
     borderColor: colors.border,
   },
-  credsHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  credsHead: { flexDirection: "row", alignItems: "center", gap: space.md },
   credsTitle: { ...type.h4, color: colors.textPrimary },
-  credsLine: { ...type.bodySm, color: colors.textPrimary },
+  credRow: { flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.sm, borderRadius: radius.lg, backgroundColor: colors.surface1 },
+  credName: { ...type.label, color: colors.textPrimary },
+  credPills: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: 2 },
+  credPill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: space.sm, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.surface3 },
+  credValue: { ...type.numSmStrong, color: colors.textPrimary },
   hint: { ...type.caption, color: colors.textSecondary },
 });

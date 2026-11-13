@@ -20,7 +20,10 @@ import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { ActionSheet, AdminScreen, Panel, RecordCard, confirmAction, useAdminMutation, type SheetAction } from "@/components/admin";
+import { LinearGradient } from "expo-linear-gradient";
+
+import { Lines, ToolStage } from "@/components/admin/tools/ToolKit";
+import { ActionSheet, AdminScreen, confirmAction, useAdminMutation, type SheetAction } from "@/components/admin";
 import { AccountingNav } from "@/components/admin/accounting/AccountingNav";
 import { ToolFab } from "@/components/admin/tools/ToolApp";
 import {
@@ -31,7 +34,7 @@ import {
   TransferSheet,
 } from "@/components/admin/accounting/financeSheets";
 import { Muted, Note } from "@/components/admin/accounting/parts";
-import { Chip, ChipGroup, EmptyState, FAB, MetricGrid, MetricTile, SkeletonCard } from "@/components/ui";
+import { Badge, Chip, ChipGroup, EmptyState, GradientBar, Reveal, SectionHeader, SkeletonCard, Touchable, withAlpha } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import {
   KIND_ICON,
@@ -42,6 +45,7 @@ import {
   accountLevel,
   canManageAccount,
   canPostAccount,
+  compactMoney,
   createAccount,
   createFinanceEntry,
   createTransfer,
@@ -61,9 +65,11 @@ import {
   type FinanceTransfer,
 } from "@/lib/api/admin/accounting";
 import { ApiError } from "@/lib/http";
-import { colors, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, touchSlop, type } from "@/theme";
 
 const KEY = ["admin", "finance"] as const;
+/** Sahne sayaçlarının kısa kapsam adları (dört sütuna sığsın). */
+const SHORT_SCOPE: Record<AccountScope, string> = { personal: "Kişisel", city: "İl", national: "Ülke", shared: "Ortak" };
 
 export default function AccountsScreen() {
   const router = useRouter();
@@ -174,12 +180,20 @@ export default function AccountsScreen() {
         <Note tone="danger" icon="alert-circle-outline" text={loadError} action={{ label: "Tekrar dene", onPress: refresh }} />
       ) : (
         <>
-          <MetricGrid columns={2}>
-            <MetricTile label="Toplam bakiye" value={money(data?.totals?.all || 0)} hint={`${accounts.length} hesap · yalnız görebildikleriniz`} tone="brand" icon="business-outline" />
-            {scopes.map((s) => (
-              <MetricTile key={s} label={`${SCOPE_LABEL[s]} hesaplar`} value={money(data?.totals?.[s] ?? totalOf(s))} hint={SCOPE_BOOK[s]} onPress={() => setScope(s)} />
-            ))}
-          </MetricGrid>
+          <Reveal index={0}>
+            <ToolStage
+              icon="business"
+              tone="violet"
+              overline="Toplam bakiye"
+              value={money(data?.totals?.all || 0)}
+              valueTone={(data?.totals?.all || 0) < 0 ? "danger" : undefined}
+              caption={`${accounts.length} hesap · yalnız görebildikleriniz`}
+              stats={scopes.slice(0, 4).map((s) => {
+                const total = data?.totals?.[s] ?? totalOf(s);
+                return { label: SHORT_SCOPE[s], value: compactMoney(total), tone: total < 0 ? "danger" : undefined, onPress: () => setScope(s) };
+              })}
+            />
+          </Reveal>
 
           <ChipGroup scrollable contentPadding={0}>
             <Chip label="Tümü" count={accounts.length} selected={scope === "all"} onPress={() => setScope("all")} size="sm" />
@@ -189,7 +203,11 @@ export default function AccountsScreen() {
           </ChipGroup>
 
           {shown.length ? (
-            shown.map((a) => <AccountCard key={a.id} a={a} meta={data!} onPress={() => openDetail(a)} onMenu={() => setMenu(a)} />)
+            shown.map((a, i) => (
+              <Reveal key={a.id} index={i}>
+                <AccountCard a={a} meta={data!} onPress={() => openDetail(a)} onMenu={() => setMenu(a)} />
+              </Reveal>
+            ))
           ) : (
             <EmptyState
               icon="business-outline"
@@ -200,17 +218,16 @@ export default function AccountsScreen() {
             />
           )}
 
-          <Panel title="Son virmanlar">
-            {transfers.data?.items?.length ? (
-              <View style={styles.list}>
-                {transfers.data.items.slice(0, 50).map((t) => (
-                  <TransferCard key={t.id} t={t} onPress={() => setTransferMenu(t)} />
-                ))}
-              </View>
-            ) : (
-              <Muted>Henüz virman yok.</Muted>
-            )}
-          </Panel>
+          <SectionHeader title="Son virmanlar" meta={transfers.data?.items?.length ? String(transfers.data.items.length) : undefined} inset="flush" />
+          {transfers.data?.items?.length ? (
+            <Lines>
+              {transfers.data.items.slice(0, 50).map((t) => (
+                <TransferCard key={t.id} t={t} onPress={() => setTransferMenu(t)} />
+              ))}
+            </Lines>
+          ) : (
+            <Muted>Henüz virman yok.</Muted>
+          )}
         </>
       )}
 
@@ -267,6 +284,8 @@ export default function AccountsScreen() {
   );
 }
 
+/** Hesap kartı: hesabın renginde degrade "banka kartı" başı, bakiye Archivo,
+    altında gelir / gider / virman kırılımı ve gelir-gider oran çubuğu. */
 function AccountCard({ a, meta, onPress, onMenu }: { a: FinanceAccount; meta: FinanceAccountsResponse; onPress: () => void; onMenu: () => void }) {
   const level = accountLevel(a);
   const pending = a.pending || { income: 0, expense: 0 };
@@ -274,42 +293,56 @@ function AccountCard({ a, meta, onPress, onMenu }: { a: FinanceAccount; meta: Fi
   const kindLabel = (meta.kinds || []).find((k) => k.key === a.kind)?.label || a.kind;
   const method = (meta.methods?.[a.scope] || []).find((m) => m.key === a.linked_method)?.label;
   const transfer = (a.transfersIn || 0) - (a.transfersOut || 0);
+  const income = a.income ?? Math.max(0, a.linked || 0);
+  const expense = a.expense ?? Math.max(0, -(a.linked || 0));
+  const tint = a.color || colors.brand;
   return (
-    <RecordCard
-      title={a.name}
-      subtitle={`${SCOPE_LABEL[a.scope]}${a.city_name ? ` · ${a.city_name}` : ""} · ${kindLabel}`}
-      icon={KIND_ICON[a.kind] || "wallet-outline"}
-      iconTone="brand"
-      accentColor={a.color || colors.brand}
-      value={money(a.balance)}
-      valueTone={a.balance < 0 ? "danger" : "neutral"}
-      onPress={onPress}
-      onLongPress={onMenu}
-      badges={[
-        restricted ? { label: "Kısıtlı", icon: "lock-closed-outline", tone: "warn" } : null,
-        a.shared_with ? { label: `Paylaşıldı (${a.shared_with})`, icon: "people-outline", tone: "info" } : null,
-        level !== "manage" ? { label: level === "post" ? "Kayıt girebilirsiniz" : "Yalnız görüntüleme", tone: "neutral" } : null,
-      ]}
-      trailing={
-        <Ionicons name="ellipsis-horizontal" size={20} color={colors.textTertiary} onPress={onMenu} accessibilityLabel={`${a.name} işlemleri`} />
-      }
-    >
-      <View style={styles.parts}>
-        <Part label="Gelir" value={money(a.income ?? Math.max(0, a.linked || 0))} color={colors.win} />
-        <Part label="Gider" value={money(a.expense ?? Math.max(0, -(a.linked || 0)))} color={colors.danger} />
-        <Part label="Virman" value={money(transfer, { signed: true })} />
-      </View>
-      {pending.income > 0 || pending.expense > 0 ? (
-        <Text style={styles.pending} {...textScale.dense}>
-          Bekleyen / tahmin: {pending.income > 0 ? `+${money(pending.income)} ` : ""}
-          {pending.expense > 0 ? `−${money(pending.expense)}` : ""}
+    <Touchable feedback="card" onPress={onPress} onLongPress={onMenu} style={styles.card} accessibilityRole="button" accessibilityLabel={`${a.name}, ${SCOPE_LABEL[a.scope]}, bakiye ${money(a.balance)}`}>
+      <LinearGradient colors={[withAlpha(tint, 0.42), withAlpha(tint, 0.08)]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cardHead}>
+        <View style={styles.cardTop}>
+          <View style={[styles.cardIcon, { backgroundColor: tint }]}>
+            <Ionicons name={KIND_ICON[a.kind] || "wallet-outline"} size={18} color={colors.onDark} />
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.cardName} numberOfLines={1} {...textScale.dense}>
+              {a.name}
+            </Text>
+            <Text style={styles.cardSub} numberOfLines={1} {...textScale.dense}>
+              {`${SCOPE_LABEL[a.scope]}${a.city_name ? ` · ${a.city_name}` : ""} · ${kindLabel}`}
+            </Text>
+          </View>
+          <Touchable feedback="icon" onPress={onMenu} hitSlop={touchSlop(32)} style={styles.cardMenu} accessibilityRole="button" accessibilityLabel={`${a.name} işlemleri`}>
+            <Ionicons name="ellipsis-horizontal" size={18} color={colors.textPrimary} />
+          </Touchable>
+        </View>
+        <Text style={[styles.cardBalance, a.balance < 0 ? { color: colors.danger } : null]} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
+          {money(a.balance)}
         </Text>
-      ) : null}
-      <Text style={styles.linked} {...textScale.dense}>
-        {a.linked_method ? `${method || a.linked_method} hareketleri bağlı` : "Açılış + virman + doğrudan hareketler"}
-        {` · ${LEVELS.find((l) => l.key === level)?.label}`}
-      </Text>
-    </RecordCard>
+        <View style={styles.badges}>
+          {restricted ? <Badge label="Kısıtlı" icon="lock-closed-outline" tone="warn" size="xs" /> : null}
+          {a.shared_with ? <Badge label={`Paylaşıldı (${a.shared_with})`} icon="people-outline" tone="info" size="xs" /> : null}
+          {level !== "manage" ? <Badge label={level === "post" ? "Kayıt girebilirsiniz" : "Yalnız görüntüleme"} tone="neutral" size="xs" /> : null}
+        </View>
+      </LinearGradient>
+      <View style={styles.cardBody}>
+        <View style={styles.parts}>
+          <Part label="Gelir" value={`+${compactMoney(income)}`} color={colors.win} />
+          <Part label="Gider" value={`−${compactMoney(expense)}`} color={colors.danger} />
+          <Part label="Virman" value={money(transfer, { signed: true })} />
+        </View>
+        {income || expense ? <GradientBar value={income / Math.max(1, income + expense)} height={6} gradient={[colors.tileTones.mint[1], colors.tileTones.mint[0]]} track={colors.dangerDim} /> : null}
+        {pending.income > 0 || pending.expense > 0 ? (
+          <Text style={styles.pending} {...textScale.dense}>
+            Bekleyen / tahmin: {pending.income > 0 ? `+${money(pending.income)} ` : ""}
+            {pending.expense > 0 ? `−${money(pending.expense)}` : ""}
+          </Text>
+        ) : null}
+        <Text style={styles.linked} {...textScale.dense}>
+          {a.linked_method ? `${method || a.linked_method} hareketleri bağlı` : "Açılış + virman + doğrudan hareketler"}
+          {` · ${LEVELS.find((l) => l.key === level)?.label}`}
+        </Text>
+      </View>
+    </Touchable>
   );
 }
 
@@ -327,11 +360,22 @@ function Part({ label, value, color }: { label: string; value: string; color?: s
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1, minWidth: 0 },
   list: { gap: space.sm },
-  parts: { flexDirection: "row", gap: space.md, marginTop: space.xs },
+  card: { borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.border, backgroundColor: colors.surface1, overflow: "hidden" },
+  cardHead: { padding: space.md, gap: space.sm },
+  cardTop: { flexDirection: "row", alignItems: "center", gap: space.md },
+  cardIcon: { width: 40, height: 40, borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
+  cardName: { ...type.h3, color: colors.textPrimary },
+  cardSub: { ...type.caption, color: colors.textSecondary },
+  cardMenu: { width: 34, height: 34, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.glass, borderWidth: hairline, borderColor: colors.glassLine },
+  cardBalance: { ...type.scoreLg, color: colors.textPrimary },
+  badges: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
+  cardBody: { padding: space.md, gap: space.sm, borderTopWidth: hairline, borderTopColor: colors.separator },
+  parts: { flexDirection: "row", gap: space.md },
   part: { flex: 1, gap: 2 },
   partLabel: { ...type.micro, color: colors.textTertiary },
-  partValue: { ...type.numSm, color: colors.textPrimary },
-  pending: { ...type.caption, color: colors.warn, marginTop: space.xs },
-  linked: { ...type.caption, color: colors.textTertiary, marginTop: 2 },
+  partValue: { ...type.tableNumStrong, color: colors.textPrimary },
+  pending: { ...type.caption, color: colors.warn },
+  linked: { ...type.caption, color: colors.textTertiary },
 });

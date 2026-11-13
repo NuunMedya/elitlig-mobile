@@ -13,21 +13,24 @@ import { useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { AdminScreen, DateField, Panel, RecordCard, StatRow, confirmAction, useAdminMutation } from "@/components/admin";
+import { AdminScreen, DateField, StatRow, confirmAction, useAdminMutation } from "@/components/admin";
+import { LineRow, Lines, StageChip, ToolStage, categoryVisual } from "@/components/admin/tools/ToolKit";
 import { FinanceEntryCard, FinanceEntrySheet } from "@/components/admin/accounting/financeSheets";
 import { Muted, Note } from "@/components/admin/accounting/parts";
 import { shareCsv } from "@/components/admin/accounting/share";
-import { Badge, Button, Chip, ChipGroup, EmptyState, SegmentedControl, SkeletonListRow } from "@/components/ui";
+import { Button, Chip, ChipGroup, EmptyState, Reveal, SectionHeader, SegmentedControl, SkeletonListRow } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { formatDate } from "@/lib/admin/format";
 import {
   ENTRY_STATUS,
+  KIND_ICON,
   LEVELS,
   SCOPE_LABEL,
   STATEMENT_SOURCE,
   accountLevel,
   accountStatement,
   canPostAccount,
+  compactMoney,
   createFinanceEntry,
   listAccounts,
   listFinanceEntries,
@@ -66,11 +69,29 @@ export default function AccountDetailScreen() {
         <EmptyState icon="business-outline" title="Hesap bulunamadı" body={accounts.error ? errorText(accounts.error) : "Hesap kaldırılmış ya da görme yetkiniz yok."} variant="inline" />
       ) : (
         <>
-          <View style={styles.pills}>
-            <Badge label={`Bakiye ${money(account.balance)}`} tone={account.balance < 0 ? "danger" : "brand"} />
-            <Badge label={LEVELS.find((l) => l.key === accountLevel(account))?.label || ""} tone="neutral" />
-            {account.archived ? <Badge label="Arşivde" tone="warn" /> : null}
-          </View>
+          <Reveal index={0}>
+            <ToolStage
+              icon={KIND_ICON[account.kind] ? (KIND_ICON[account.kind].replace("-outline", "") as "cash") : "wallet"}
+              tone="mint"
+              overline={`Bakiye · ${SCOPE_LABEL[account.scope]}`}
+              value={money(account.balance)}
+              valueTone={account.balance < 0 ? "danger" : undefined}
+              caption={account.note || (account.linked_method ? "Defterdeki ödenmiş kayıtlar bakiyeye kendiliğinden yansır" : "Açılış + virman + doğrudan hareketler")}
+              chips={
+                <>
+                  <StageChip icon="key-outline" label={LEVELS.find((l) => l.key === accountLevel(account))?.label || ""} />
+                  {account.archived ? <StageChip icon="archive-outline" tone="warn" label="Arşivde" /> : null}
+                  {account.pending?.income ? <StageChip icon="arrow-down" tone="win" label={`Bekleyen +${compactMoney(account.pending.income)}`} /> : null}
+                  {account.pending?.expense ? <StageChip icon="arrow-up" tone="danger" label={`Bekleyen −${compactMoney(account.pending.expense)}`} /> : null}
+                </>
+              }
+              stats={[
+                { label: "Gelir", value: compactMoney(account.income ?? 0), tone: "win" },
+                { label: "Gider", value: compactMoney(account.expense ?? 0), tone: "danger" },
+                { label: "Virman", value: compactMoney((account.transfersIn || 0) - (account.transfersOut || 0)) },
+              ]}
+            />
+          </Reveal>
           <SegmentedControl
             items={[
               { key: "entries", label: "Hareketler", icon: "list-outline" },
@@ -155,6 +176,7 @@ function EntriesTab({ accountId, accountName, canPost, postable }: { accountId: 
         <Note tone="danger" text={errorText(query.error)} action={{ label: "Tekrar dene", onPress: () => void query.refetch() }} />
       ) : query.data?.items.length ? (
         <View style={styles.list}>
+          <Lines>
           {query.data.items.map((e) => (
             <FinanceEntryCard
               key={e.id}
@@ -164,6 +186,7 @@ function EntriesTab({ accountId, accountName, canPost, postable }: { accountId: 
               onRemove={canPost ? ask : undefined}
             />
           ))}
+          </Lines>
           {canPost ? <Muted>Kaydı düzenlemek için dokunun, silmek için basılı tutun.</Muted> : null}
         </View>
       ) : (
@@ -224,26 +247,27 @@ function StatementTab({ accountId, accountName }: { accountId: number; accountNa
       ) : query.error ? (
         <Note tone="danger" text={errorText(query.error)} />
       ) : data?.items.length ? (
-        <Panel title="Ekstre" action={{ label: "CSV paylaş", onPress: exportCsv }}>
-          <View style={styles.list}>
-            {data.items.map((m, i) => (
-              <RecordCard
-                key={`${m.source}-${m.ref}-${i}`}
-                title={m.title}
-                subtitle={[m.party, m.note].filter(Boolean).join(" · ") || null}
-                meta={`${formatDate(m.date)} · ${STATEMENT_SOURCE[m.source] || m.source}`}
-                icon={m.source === "transfer" ? "swap-horizontal" : m.amount >= 0 ? "arrow-down" : "arrow-up"}
-                iconTone={m.amount >= 0 ? "win" : "danger"}
-                value={money(m.amount, { signed: true })}
-                valueTone={m.amount >= 0 ? "win" : "danger"}
-              >
-                <Text style={styles.balance} {...textScale.dense}>
-                  Bakiye {money(m.balance)}
-                </Text>
-              </RecordCard>
-            ))}
-          </View>
-        </Panel>
+        <View style={styles.list}>
+          <SectionHeader title="Ekstre" meta={`${data.items.length} hareket`} inset="flush" action={{ label: "CSV paylaş", onPress: exportCsv }} />
+          <Lines>
+            {data.items.map((m, i) => {
+              const visual = m.source === "transfer" ? { icon: "swap-horizontal" as const, tone: "violet" as const } : categoryVisual(m.title, m.amount >= 0 ? "income" : "expense");
+              return (
+                <LineRow
+                  key={`${m.source}-${m.ref}-${i}`}
+                  icon={visual.icon}
+                  tone={visual.tone}
+                  title={m.title}
+                  sub={[m.party, m.note].filter(Boolean).join(" · ") || null}
+                  meta={`${formatDate(m.date)} · ${STATEMENT_SOURCE[m.source] || m.source}`}
+                  value={money(m.amount, { signed: true })}
+                  valueTone={m.amount >= 0 ? "win" : "danger"}
+                  valueSub={`Bakiye ${money(m.balance)}`}
+                />
+              );
+            })}
+          </Lines>
+        </View>
       ) : (
         <EmptyState icon="document-text-outline" title="Bu aralıkta hareket yok" variant="inline" />
       )}

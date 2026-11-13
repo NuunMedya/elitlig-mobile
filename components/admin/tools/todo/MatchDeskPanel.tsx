@@ -54,11 +54,13 @@ export function StageList({ stages }: { stages: TodoStage[] }) {
           </Text>
           {group.items.map((stage) => (
             <View key={stage.key} style={styles.stage} accessibilityLabel={`${stage.done ? stage.label : stage.pendingLabel || stage.label}: ${stage.done ? "tamamlandı" : "bekliyor"}`}>
-              <Ionicons
-                name={stage.done ? "checkmark-circle" : stage.locked ? "lock-closed-outline" : "ellipse-outline"}
-                size={18}
-                color={stage.done ? colors.win : colors.textTertiary}
-              />
+              <View style={[styles.stageDot, stage.done ? styles.stageDotDone : null]}>
+                <Ionicons
+                  name={stage.done ? "checkmark" : stage.locked ? "lock-closed-outline" : "ellipse-outline"}
+                  size={stage.done ? 14 : 12}
+                  color={stage.done ? colors.onDark : colors.textTertiary}
+                />
+              </View>
               <Text style={[styles.stageText, stage.done ? null : styles.pending]} {...textScale.dense}>
                 {stage.done ? stage.label : stage.pendingLabel || stage.label}
               </Text>
@@ -381,17 +383,19 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   desk: { gap: space.md },
   deskHead: { flexDirection: "row", alignItems: "center", gap: space.md },
-  score: { ...type.tableNumStrong, color: colors.textPrimary },
+  score: { ...type.scoreSm, color: colors.textPrimary, paddingHorizontal: space.sm, paddingVertical: space.xxs, borderRadius: radius.md, backgroundColor: colors.surface3 },
   stages: { gap: space.md },
-  stageGroup: { gap: space.xs },
+  stageGroup: { gap: space.sm, padding: space.md, borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.border, backgroundColor: colors.surface1 },
   stage: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  stageDot: { width: 24, height: 24, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface3 },
+  stageDotDone: { backgroundColor: colors.win },
   stageText: { flex: 1, ...type.bodySm, color: colors.textPrimary },
   pending: { color: colors.textSecondary },
-  label: { ...type.label, color: colors.textSecondary },
-  lock: { flexDirection: "row", gap: space.sm, padding: space.md, borderRadius: radius.md, backgroundColor: colors.warnDim },
+  label: { ...type.overline, color: colors.textTertiary },
+  lock: { flexDirection: "row", gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.warnDim, borderWidth: hairline, borderColor: colors.warn },
   lockText: { ...type.bodySm, color: colors.textPrimary },
   links: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  team: { gap: space.xs, padding: space.md, borderRadius: radius.lg, borderWidth: hairline, borderColor: colors.border, backgroundColor: colors.surface2 },
+  team: { gap: space.xs, padding: space.md, borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.border, backgroundColor: colors.surface1 },
   teamName: { ...type.h3, color: colors.textPrimary, marginBottom: space.xs },
   contact: { gap: space.xs },
   body: { ...type.body, color: colors.textPrimary },

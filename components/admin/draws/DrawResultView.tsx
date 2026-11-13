@@ -13,6 +13,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 
+import { LinearGradient } from "expo-linear-gradient";
+
 import { Badge, Chip, ChipGroup, TeamLogo, useReduceMotion } from "@/components/ui";
 import type { DrawFixture, DrawResult, DrawTeam } from "@/lib/api/admin/draws";
 import { mediaUrl } from "@/lib/format";
@@ -24,10 +26,12 @@ function TeamLine({ team, highlight, position }: { team: DrawTeam; highlight?: b
   useEffect(() => {
     if (!highlight || reduce) return;
     fade.setValue(0);
-    Animated.timing(fade, { toValue: 1, duration: 420, useNativeDriver: true }).start();
+    /* Yaylı yerleşme: yuvaya hafif büyüyerek oturur (tek seferlik). */
+    Animated.spring(fade, { toValue: 1, friction: 6, tension: 90, useNativeDriver: true }).start();
   }, [highlight, reduce, fade]);
+  const scale = fade.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] });
   return (
-    <Animated.View style={[styles.line, highlight ? styles.lineNew : null, { opacity: fade }]}>
+    <Animated.View style={[styles.line, highlight ? styles.lineNew : null, { opacity: fade, transform: [{ scale }] }]}>
       {position != null ? (
         <Text style={styles.pos} {...textScale.badge}>
           {position}
@@ -97,7 +101,13 @@ export function DrawResultView({ result, revealedIds, lastTeamId }: { result: Dr
         return (
           <View key={g.index} style={styles.card}>
             <View style={styles.cardHead}>
-              <Text style={styles.cardTitle} {...textScale.dense}>
+              <View style={styles.letter}>
+                <LinearGradient colors={colors.gradientSignature} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, styles.letterFill]} />
+                <Text style={styles.letterText} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
+                  {g.name.replace(/\s*Grubu$/i, "").slice(0, 2)}
+                </Text>
+              </View>
+              <Text style={[styles.cardTitle, styles.grow]} {...textScale.dense}>
                 {g.name} Grubu
               </Text>
               <Text style={styles.count} {...textScale.dense}>
@@ -191,12 +201,16 @@ const styles = StyleSheet.create({
   card: {
     gap: space.xs,
     padding: space.md,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
-    borderColor: colors.border,
+    borderColor: colors.glassLine,
   },
-  cardHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingBottom: space.xs },
+  cardHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.sm, paddingBottom: space.xs },
+  grow: { flex: 1 },
+  letter: { width: 28, height: 28, borderRadius: radius.sm, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  letterFill: { borderRadius: radius.sm },
+  letterText: { ...type.numSmStrong, color: colors.onDark },
   cardTitle: { ...type.h4, color: colors.textPrimary },
   count: { ...type.caption, color: colors.textTertiary },
   line: {

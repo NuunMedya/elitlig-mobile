@@ -21,7 +21,7 @@ import { memo, useEffect, useRef } from "react";
 import { Animated, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { Touchable } from "@/components/chat/kit";
-import { useReduceMotion } from "@/components/ui";
+import { Aurora, useReduceMotion } from "@/components/ui";
 import { colors, elevate, wa } from "@/lib/chatPalette";
 import { duration, easing, fonts, layout, radius, space, textScale, type } from "@/theme";
 
@@ -77,6 +77,8 @@ export const InboxHeader = memo(function InboxHeader({ title, onBack, actions, s
 
   return (
     <View style={styles.header}>
+      {/* Gece teması: başlığın arkasında kayan mor ışık. */}
+      <Aurora fadeTo={wa.bg} style={{ top: -60 }} />
       <Animated.View style={[styles.titleRow, titleStyle]} pointerEvents={searching ? "none" : "auto"} accessibilityElementsHidden={searching} importantForAccessibility={searching ? "no-hide-descendants" : "auto"}>
         {onBack ? (
           <Touchable feedback="icon" haptic="light" onPress={onBack} hitSlop={6} accessibilityRole="button" accessibilityLabel="Geri" style={styles.back}>

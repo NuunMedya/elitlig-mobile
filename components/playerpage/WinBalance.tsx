@@ -6,12 +6,17 @@
  * eksende gösterir — "55'e 17" oranı göze doğrudan gelir. Büyük rakam yalnız
  * galibiyet oranıdır; çünkü sorulan soru odur.
  *
+ * İKİNCİ TUR: oran artık halkadır (ProgressRing, galibiyet tonu) ve üç pay
+ * renkli zeminli sayı karolarında Odometer ile döner; yığılmış çubuk altta
+ * payların oranını tek eksende verir.
+ *
  * Renk SONUÇTUR (Arena §1.1): win / draw / loss. Lejant metni mürekkeptir,
  * renk yalnız noktada — yeşil metin beyaz kartta AA'yı geçmez.
  */
 
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { Odometer, ProgressRing } from "@/components/ui";
 import { colors, radius, space, textScale, type } from "@/theme";
 import { surfaces } from "./shared";
 
@@ -34,29 +39,40 @@ export const WinBalance = React.memo(function WinBalance({
   const rate = Math.round((wins / total) * 100);
 
   const parts = [
-    { key: "W", label: "Galibiyet", value: wins, color: colors.win },
-    { key: "D", label: "Beraberlik", value: draws, color: colors.draw },
-    { key: "L", label: "Mağlubiyet", value: losses, color: colors.loss },
+    { key: "W", label: "Galibiyet", value: wins, color: colors.win, bg: colors.winDim },
+    { key: "D", label: "Beraberlik", value: draws, color: colors.draw, bg: colors.drawDim },
+    { key: "L", label: "Mağlubiyet", value: losses, color: colors.loss, bg: colors.lossDim },
   ];
 
   return (
     <View style={[surfaces.cardPadded, styles.card]}>
       <View style={styles.head}>
-        <View style={styles.headText}>
-          <Text style={styles.title} {...textScale.dense}>
-            {title}
-          </Text>
-          <Text style={styles.sub} {...textScale.dense}>
-            {total} sonuçlanmış maç
-          </Text>
+        <Text style={styles.title} {...textScale.dense}>
+          {title}
+        </Text>
+        <Text style={styles.sub} {...textScale.dense}>
+          {total} sonuçlanmış maç
+        </Text>
+      </View>
+
+      <View style={styles.main}>
+        <View accessible accessibilityLabel={`Galibiyet oranı yüzde ${rate}`}>
+          <ProgressRing value={wins / total} size={84} thickness={7} tone="win" label={`%${rate}`} sublabel="galibiyet" animate />
         </View>
-        <View style={styles.rate} accessible accessibilityLabel={`Galibiyet oranı yüzde ${rate}`}>
-          <Text style={styles.rateValue} {...textScale.dense}>
-            %{rate}
-          </Text>
-          <Text style={styles.rateLabel} {...textScale.badge}>
-            GALİBİYET
-          </Text>
+        <View style={styles.tiles}>
+          {parts.map((part) => (
+            <View
+              key={part.key}
+              style={[styles.tile, { backgroundColor: part.bg }]}
+              accessible
+              accessibilityLabel={`${part.value} ${part.label.toLocaleLowerCase("tr-TR")}`}
+            >
+              <Odometer value={part.value} style={[styles.tileValue, { color: part.color }]} />
+              <Text style={styles.tileLabel} numberOfLines={1} {...textScale.badge}>
+                {part.label.toLocaleUpperCase("tr-TR")}
+              </Text>
+            </View>
+          ))}
         </View>
       </View>
 
@@ -68,25 +84,6 @@ export const WinBalance = React.memo(function WinBalance({
             <View key={part.key} style={[styles.segment, { flex: part.value, backgroundColor: part.color }]} />
           ))}
       </View>
-
-      <View style={styles.legend}>
-        {parts.map((part) => (
-          <View
-            key={part.key}
-            style={styles.legendItem}
-            accessible
-            accessibilityLabel={`${part.value} ${part.label.toLocaleLowerCase("tr-TR")}`}
-          >
-            <View style={[styles.dot, { backgroundColor: part.color }]} />
-            <Text style={styles.legendValue} {...textScale.dense}>
-              {part.value}
-            </Text>
-            <Text style={styles.legendLabel} numberOfLines={1} {...textScale.dense}>
-              {part.label}
-            </Text>
-          </View>
-        ))}
-      </View>
     </View>
   );
 });
@@ -97,12 +94,9 @@ const styles = StyleSheet.create({
   },
   head: {
     flexDirection: "row",
-    alignItems: "flex-end",
-    gap: space.md,
-  },
-  headText: {
-    flex: 1,
-    gap: 2,
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: space.sm,
   },
   title: {
     ...type.h2,
@@ -112,50 +106,38 @@ const styles = StyleSheet.create({
     ...type.caption,
     color: colors.textTertiary,
   },
-  rate: {
-    alignItems: "flex-end",
+  main: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.lg,
   },
-  rateValue: {
-    ...type.scoreLg,
-    color: colors.textPrimary,
+  tiles: {
+    flex: 1,
+    gap: space.xs,
   },
-  rateLabel: {
+  tile: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
+    borderRadius: radius.md,
+  },
+  tileValue: {
+    ...type.scoreSm,
+  },
+  tileLabel: {
     ...type.overline,
-    color: colors.textTertiary,
+    color: colors.textSecondary,
   },
   bar: {
     flexDirection: "row",
-    height: 10,
     gap: 2,
+    height: 8,
     borderRadius: radius.pill,
     overflow: "hidden",
   },
   segment: {
-    height: 10,
-  },
-  legend: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: space.sm,
-  },
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.xs,
-    flexShrink: 1,
-  },
-  dot: {
-    width: 8,
     height: 8,
-    borderRadius: radius.pill,
-  },
-  legendValue: {
-    ...type.tableNumStrong,
-    color: colors.textPrimary,
-  },
-  legendLabel: {
-    ...type.caption,
-    color: colors.textSecondary,
-    flexShrink: 1,
   },
 });

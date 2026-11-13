@@ -53,6 +53,7 @@ import { useGoalClips, type LocalClip } from "@/components/live/useGoalClips";
 import { PHASE_LABEL, useLiveMatch, type ControlAction } from "@/components/live/useLiveMatch";
 import { unionBox, useOverlayBurn, type BurnBox } from "@/components/live/useOverlayBurn";
 import { useStudioSettings } from "@/components/live/useStudioSettings";
+import { coverWhen, useYoutubeCover } from "@/components/live/YoutubeCover";
 import { Touchable, useReduceMotion, useToast } from "@/components/ui";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { hasAnyPermission } from "@/lib/admin/access";
@@ -76,12 +77,15 @@ import { RIG, encoderMessageText, resolveEncoder } from "@/lib/live/rig";
 import { BUG, GFX, clockText, teamShortCode } from "@/lib/live/scorebug";
 import { getBroadcastDesk, sponsorLogo } from "@/lib/live/studioApi";
 import {
+  broadcastTitle,
   createMatchLiveStream,
   endMatchLiveStream,
   getLiveStreamConfig,
   getMatchLiveStream,
   ingestUrl,
   liveErrorText,
+  updateMatchYoutube,
+  uploadMatchThumbnail,
   type MatchLiveStream,
   type YoutubePrivacy,
 } from "@/lib/live/youtube";
@@ -503,8 +507,17 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
     if (busy || encoderOn) return;
     setBusy(true);
     try {
-      const open = ytStream && ytStream.active !== false && ingestUrl(ytStream) ? ytStream : await createMatchLiveStream(matchId, { privacy });
+      const reuse = ytStream && ytStream.active !== false && ingestUrl(ytStream) ? ytStream : null;
+      // Başlık otomatik (ELİTLİG {LİG} - {SEZON} | {EV} - {DEP}); kullanıcı Yayın sekmesinde düzenleyebilir.
+      const open = reuse ?? (await createMatchLiveStream(matchId, { privacy, title: ytTitle }));
       setYt(open);
+      if (!reuse && !open.reused) {
+        // Yeni YouTube yayını: masaüstü stüdyodaki gibi kapak görseli otomatik üretilip yüklenir.
+        void publishCover(true);
+      } else if (titleDraft != null) {
+        // Açık yayına devam: başlık elle değiştirildiyse YouTube'a yaz (en iyi çaba).
+        void updateMatchYoutube(matchId, { title: ytTitle }).catch(() => undefined);
+      }
       const url = ingestUrl(open);
       if (!url) throw new Error("YouTube yayın adresi alınamadı. Birkaç saniye sonra yeniden dene.");
       if (await begin(url, record)) {
@@ -629,6 +642,60 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
   const branding = brandingQuery.data ?? null;
   const palette = useMemo(() => bugPalette(branding?.scoreboard), [branding?.scoreboard]);
 
+  /* ───────── YouTube başlığı ve kapağı (otomatik) ───────── */
+  // Lig adı: yayın görünümünün marka yazısı (ayarlardan değişen), yoksa maçın ligi.
+  const autoTitle = useMemo(
+    () =>
+      broadcastTitle({
+        brandName: branding?.brandName,
+        league: match?.league_name,
+        season: match?.match_season,
+        home: match?.first_team_name,
+        away: match?.second_team_name,
+      }),
+    [branding?.brandName, match?.league_name, match?.match_season, match?.first_team_name, match?.second_team_name]
+  );
+  /** null → otomatik başlık; metin → kullanıcının düzenlediği başlık. */
+  const [titleDraft, setTitleDraft] = useState<string | null>(null);
+  const ytTitle = (titleDraft ?? autoTitle).trim() || autoTitle;
+  const cover = useYoutubeCover();
+  const [coverBusy, setCoverBusy] = useState(false);
+  const publishCover = async (auto: boolean) => {
+    if (coverBusy || !match) return;
+    setCoverBusy(true);
+    let file: string | null = null;
+    try {
+      // Kapak yazısı başlıkla aynı kaynaktan: "ELİTLİG {LİG}" + sezon.
+      const [headline, ...seasonParts] = autoTitle.split(" | ")[0].split(" - ");
+      file = await cover.make({
+        headline,
+        season: seasonParts.join(" - "),
+        homeName,
+        awayName,
+        homeLogo: mediaUrl(homeLogo),
+        awayLogo: mediaUrl(awayLogo),
+        when: coverWhen(match.date, match.time, match.match_field),
+        logoUrl: branding?.logoUrl ?? null,
+        palette,
+      });
+      await uploadMatchThumbnail(matchId, file);
+      toast.show({ message: auto ? "YouTube kapak görseli otomatik yüklendi." : "Kapak görseli YouTube'a yüklendi.", tone: "success" });
+    } catch (error) {
+      toast.show({ message: liveErrorText(error, "Kapak görseli yüklenemedi. Yayın sekmesinden yeniden dene."), tone: "danger" });
+    } finally {
+      if (file) cover.release(file);
+      setCoverBusy(false);
+    }
+  };
+  const applyTitle = async () => {
+    try {
+      await updateMatchYoutube(matchId, { title: ytTitle });
+      toast.show({ message: "Yayın başlığı YouTube'da güncellendi.", tone: "success" });
+    } catch (error) {
+      toast.show({ message: liveErrorText(error, "Başlık güncellenemedi. Yeniden dene."), tone: "danger" });
+    }
+  };
+
   // Sponsorlar ve web / masaüstü rejide yazılmış altyazı satırları.
   const deskQuery = useQuery({ queryKey: ["live", "broadcast-desk", matchId], queryFn: () => getBroadcastDesk(matchId), staleTime: 5 * 60_000, retry: false });
   const sponsors = deskQuery.data?.sponsors ?? [];
@@ -738,7 +805,7 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
     const ev = goalSource.event;
     const code = String(ev.olay_kodu).toUpperCase();
     const own = code === "GOAL_OWN";
-    const eventSide: Side = Number(ev.takim_id) === Number(live.homeTeamId) ? "home" : "away";
+    const eventSide: Side = live.sideOfEvent(ev);
     // Kendi kalesine gol rakibin hanesine yazılır.
     const scoringSide: Side = own ? (eventSide === "home" ? "away" : "home") : eventSide;
     return {
@@ -920,10 +987,38 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
       });
       return;
     }
+    if (!playerId) {
+      if (!isGoalCode(p.code)) {
+        toast.show({ message: "Kart için oyuncu seçmelisin; sunucu oyuncusuz kartı kabul etmiyor.", tone: "warn" });
+        return;
+      }
+      anonymousGoal(p.side, p.code, p.clipKey);
+      return;
+    }
     void save(async () => {
       const created = await live.addEvent({ side: p.side, code: p.code, playerId, clientId: p.clientId });
       if (p.clipKey) goalClips.attach(p.clipKey, Number(created?.id) || null, live.nameOf(playerId), p.side, p.code);
       toast.show({ message: `${eventLabel(p.code)} kaydedildi (${live.minute}').`, tone: "success" });
+    });
+  };
+
+  /**
+   * İSİMSİZ GOL — oyuncu seçmeden takıma gol (skorbord + maç skoru). Kadro
+   * girilmemiş maçta da çalışır. Sunucu oyuncusuz gol OLAYINI kabul etmediği
+   * için skor maç kaydına yazılır (bkz. useLiveMatch → addAnonymousGoal).
+   */
+  const anonymousGoal = (side: Side, code = "GOAL_RIGHT_FOOT", clipKey: string | null = null) => {
+    if (!requireLive()) return;
+    if (live.manual) {
+      toast.show({ message: "Skor elle / hükmen tescil edildi; gol skoru değiştirmez.", tone: "warn" });
+      return;
+    }
+    // Seçiciden gelmiyorsa (tek dokunuş) klip burada alınır.
+    const key = clipKey ?? (nativeReady && encoderOn ? goalClips.capture({ side, code, minute: live.minute }) : null);
+    void save(async () => {
+      const out = await live.addAnonymousGoal(side, code);
+      if (key) goalClips.attach(key, null, nameOfSide(out.side), out.side, code);
+      toast.show({ message: `${nameOfSide(out.side)} golü kaydedildi (oyuncu belirtilmeden) · ${out.score.home}-${out.score.away}.`, tone: "success" });
     });
   };
 
@@ -1122,6 +1217,8 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
 
   return (
     <View style={[styles.root, { paddingLeft: insets.left, paddingRight: insets.right, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      {/* YouTube kapağı yalnız çekim anında, arayüzün ARKASINDA çizilir */}
+      {cover.element}
       <StatusBar hidden />
       <View style={styles.row}>
         {/* ═════════ SAHNE ═════════ */}
@@ -1310,6 +1407,13 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
                     awayName={awayName}
                     saving={saving}
                     onAsk={ask}
+                    onAnonymousGoal={(side) => anonymousGoal(side)}
+                    onRemoveAnonymousGoal={(side) =>
+                      void live
+                        .removeAnonymousGoal(side)
+                        .then(() => toast.show({ message: "İsimsiz gol geri alındı.", tone: "success" }))
+                        .catch((e: unknown) => toast.show({ message: errorText(e, "Gol geri alınamadı. Bağlantını kontrol et."), tone: "danger" }))
+                    }
                     onSubstitution={askSubstitution}
                     onControl={(a) => void runControl(a)}
                     onFinish={askFinish}
@@ -1392,6 +1496,12 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
                     onStartManual={(url) => askStart({ kind: "manual", url })}
                     onStop={() => void stopEncoder().then(showSaved)}
                     onEndYoutube={endYoutube}
+                    title={titleDraft ?? autoTitle}
+                    titleEdited={titleDraft != null}
+                    onTitle={(next) => setTitleDraft(next != null && next !== autoTitle ? next : null)}
+                    onApplyTitle={() => void applyTitle()}
+                    coverBusy={coverBusy}
+                    onUploadCover={() => void publishCover(false)}
                     onToast={(m, tone) => toast.show({ message: m, tone: tone ?? "success" })}
                     health={nativeReady ? <HealthCard {...healthProps} /> : null}
                   />
@@ -1450,7 +1560,9 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
           busy={saving}
           onPick={onPick}
           onClose={cancelPicker}
-          skipLabel={picker.kind === "caption" || picker.kind === "interview" ? null : picker.kind === "event" ? "Oyuncusuz kaydet" : picker.kind === "subOut" ? "Çıkanı atla" : "Gireni atla"}
+          skipLabel={picker.kind === "caption" || picker.kind === "interview" || picker.kind === "event" ? null : picker.kind === "subOut" ? "Çıkanı atla" : "Gireni atla"}
+          anonymousLabel={picker.kind === "event" && isGoalCode(picker.code) ? `İsimsiz gol · ${nameOfSide(picker.code === "GOAL_OWN" ? (picker.side === "home" ? "away" : "home") : picker.side)}` : null}
+          anonymousHint="Oyuncu belirtmeden kaydet: skorborda ve maç sonucuna işlenir, golcü yerine takım adı görünür."
           starterLabel={picker.kind === "subOut" ? "SAHADA" : picker.kind === "subIn" ? "YEDEKLER" : "İLK 11"}
           otherLabel={picker.kind === "subOut" || picker.kind === "subIn" ? "DİĞER" : "YEDEKLER"}
           emptyText={
@@ -1458,7 +1570,11 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
               ? "Bu takımın maç kadrosu girilmemiş. Oyuncu adını Altyazı sekmesinden elle yazabilirsin."
               : picker.kind === "interview"
                 ? "Bu takımın maç kadrosu girilmemiş. Konuğun adını Röportaj sekmesinden elle yazabilirsin."
-              : "Bu takımın maç kadrosu girilmemiş. Olayı oyuncusuz kaydedebilirsin."
+              : picker.kind === "event" && isGoalCode(picker.code)
+                ? "Bu takımın maç kadrosu girilmemiş. Golü yukarıdaki İsimsiz gol düğmesiyle kaydet."
+                : picker.kind === "event"
+                  ? "Bu takımın maç kadrosu girilmemiş. Kart için önce kadroya oyuncu eklenmeli."
+                  : "Bu takımın maç kadrosu girilmemiş. Olayı oyuncusuz kaydedebilirsin."
           }
         />
       ) : null}

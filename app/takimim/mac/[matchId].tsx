@@ -612,7 +612,7 @@ export default function MacKadrosuScreen() {
       ) : (
         <ScrollView contentContainerStyle={[styles.content, styles.contentWithBar]} keyboardShouldPersistTaps="handled">
           {/* Diziliş */}
-          <SectionHeader title="Diziliş" style={styles.flushHeader} />
+          <SectionHeader title="Diziliş" icon="grid" iconTone="violet" subtitle="Sahadaki yuvaları belirler" style={styles.flushHeader} />
           <ChipGroup contentPadding={0}>
             {FORMATION_NAMES.map((name) => (
               <Chip
@@ -641,7 +641,16 @@ export default function MacKadrosuScreen() {
           </ChipGroup>
 
           {/* Forma rengi */}
-          <SectionHeader title="Forma rengi" style={styles.flushHeader} />
+          <SectionHeader title="Forma rengi" icon="shirt" iconTone="pink" subtitle="Reji ve canlı yayında takımın rengi" style={styles.flushHeader} />
+          <View style={styles.kitCard}>
+            {/* Önizleme: seçilen renkte forma; altında kısa kod. */}
+            <View style={styles.kitPreview}>
+              <View style={[styles.kitGlow, { backgroundColor: kit }]} />
+              <Ionicons name="shirt" size={40} color={kit} />
+              <Text style={styles.kitCode} {...textScale.badge}>
+                {kit.toUpperCase()}
+              </Text>
+            </View>
           <View style={styles.kitRow}>
             {KIT_COLORS.map((color) => (
               <Touchable
@@ -664,10 +673,13 @@ export default function MacKadrosuScreen() {
               </Touchable>
             ))}
           </View>
+          </View>
 
           {/* İlk kadro — sahada kurulur */}
           <SectionHeader
             title="İlk kadro"
+            icon="football"
+            iconTone="mint"
             meta={`${starters.length}/${Math.min(slots.length, MAX_STARTERS)}`}
             style={styles.flushHeader}
           />
@@ -707,7 +719,7 @@ export default function MacKadrosuScreen() {
             : null}
 
           {/* Yedekler */}
-          <SectionHeader title="Yedekler" meta={String(subs.length)} style={styles.flushHeader} />
+          <SectionHeader title="Yedekler" icon="swap-vertical" iconTone="neutral" meta={String(subs.length)} style={styles.flushHeader} />
           {subs.length ? (
             subs.map((entry) => (
               <SquadRow
@@ -732,7 +744,7 @@ export default function MacKadrosuScreen() {
           )}
 
           {/* Kadro dışı oyuncular */}
-          <SectionHeader title="Kadroya ekle" meta={String(available.length)} style={styles.flushHeader} />
+          <SectionHeader title="Kadroya ekle" icon="person-add" iconTone="cyan" meta={String(available.length)} style={styles.flushHeader} />
           {rosterQuery.isLoading ? (
             <SkeletonListRow />
           ) : rosterQuery.isError ? (
@@ -771,7 +783,7 @@ export default function MacKadrosuScreen() {
           />
 
           {/* Taktik notu */}
-          <SectionHeader title="Taktik notu" style={styles.flushHeader} />
+          <SectionHeader title="Taktik notu" icon="create" iconTone="gold" style={styles.flushHeader} />
           <Input
             value={tactics}
             onChangeText={setTactics}
@@ -1199,17 +1211,39 @@ const styles = StyleSheet.create({
   barMeta: { ...type.caption, color: colors.textTertiary },
   barWarn: { ...type.bodySm, color: colors.warn },
 
-  kitRow: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  kitCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.xl,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+    backgroundColor: colors.surface1,
+  },
+  kitPreview: {
+    width: 76,
+    height: 84,
+    borderRadius: radius.lg,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.xxs,
+    backgroundColor: colors.surface2,
+    overflow: "hidden",
+  },
+  kitGlow: { position: "absolute", width: 60, height: 60, borderRadius: radius.pill, opacity: 0.18 },
+  kitCode: { ...type.nano, color: colors.textTertiary },
+  kitRow: { flex: 1, flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   kitDot: {
-    width: 34,
-    height: 34,
+    width: 36,
+    height: 36,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
     borderColor: colors.border,
   },
-  kitDotActive: { borderColor: colors.textPrimary },
+  kitDotActive: { borderColor: colors.brandAccent, borderWidth: 3, transform: [{ scale: 1.08 }] },
 
   hint: { ...type.bodySm, color: colors.textSecondary, paddingVertical: space.xs },
   guestList: { maxHeight: 280 },
