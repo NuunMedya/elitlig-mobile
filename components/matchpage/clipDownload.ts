@@ -75,7 +75,8 @@ export function useClipDownloads(): ClipDownloads {
   /** İndirir ve paylaşır; başarıyı döndürür (toplu indirmede hata tek tek söylenmez). */
   const run = useCallback(
     async (clip: GoalClip, quiet: boolean): Promise<boolean> => {
-      if (busy.current.has(clip.id)) return false;
+      // Zaten iniyor: toplu indirmede hata sayılmaz (o indirme kendi sonucunu bildirir).
+      if (busy.current.has(clip.id)) return true;
       busy.current.add(clip.id);
       patch(clip.id, { status: "downloading", progress: 0 });
       try {
@@ -154,16 +155,24 @@ async function downloadToCache(clip: GoalClip, onProgress: (value: number) => vo
     return target;
   }
 
-  const task = FileSystem.createDownloadResumable(clip.url, target, {}, (event) => {
+  // Önce geçici `.part` dosyasına indirilir, BİTİNCE asıl ada taşınır: ağ
+  // kesilir ya da uygulama kapanırsa yarım dosya asıl adla kalmaz ve bir
+  // sonraki dokunuşta bozuk video "hazır" diye paylaşılmaz.
+  const part = `${target}.part`;
+  await FileSystem.deleteAsync(part, { idempotent: true }).catch(() => undefined);
+  const task = FileSystem.createDownloadResumable(clip.url, part, {}, (event) => {
     const total = event.totalBytesExpectedToWrite;
     onProgress(total > 0 ? event.totalBytesWritten / total : -1);
   });
-  const result = await task.downloadAsync();
-  if (!result || result.status >= 400) {
-    await FileSystem.deleteAsync(target, { idempotent: true }).catch(() => undefined);
+  try {
+    const result = await task.downloadAsync();
+    if (!result || result.status >= 400) throw new Error("http");
+    await FileSystem.moveAsync({ from: part, to: target });
+    return target;
+  } catch {
+    await FileSystem.deleteAsync(part, { idempotent: true }).catch(() => undefined);
     throw new Error("Video indirilemedi. Bağlantını kontrol edip yeniden dene.");
   }
-  return result.uri;
 }
 
 /* ─────────────────────────────── Web ─────────────────────────────── */
