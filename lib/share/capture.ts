@@ -10,9 +10,8 @@
  * Instagram vb. Ek izin gerekmez (expo-media-library kurulu değil, bilerek:
  * paylaşım sayfası hem indirme hem paylaşma işini görür).
  *
- * WEB'DE: view-shot html2canvas ile çalışır; sonuç PNG dosyası olarak
- * indirilir. Uzak görseller (CORS) tuvali kirletirse yakalama düşer ve
- * çağırana hata döner.
+ * WEB'DE: view-shot'ın web sürümü `findNodeHandle` çağırdığı için RN-web'de
+ * düşüyor; DOM düğümü doğrudan html2canvas'a verilir ve PNG indirilir.
  */
 
 import * as Sharing from "expo-sharing";
@@ -28,19 +27,7 @@ export async function captureAndShare(
   fileName: string,
 ): Promise<ShareOutcome> {
   const [width, height] = SHARE_FORMATS[format].px;
-  if (Platform.OS === "web") {
-    const dataUri = await captureRef(target, { format: "png", quality: 1, width, height, result: "data-uri" });
-    const doc = (globalThis as { document?: Document }).document;
-    if (!doc) return "unavailable";
-    const link = doc.createElement("a");
-    link.href = dataUri;
-    link.download = `${fileName}.png`;
-    doc.body.appendChild(link);
-    link.click();
-    link.remove();
-    return "downloaded";
-  }
-
+  if (Platform.OS === "web") return downloadOnWeb(target, width, height, fileName);
   const uri = await captureRef(target, {
     format: "png",
     quality: 1,
@@ -58,19 +45,30 @@ export async function captureAndShare(
   return "shared";
 }
 
-/** Dosya adı: "elitlig-mac-sonucu-11192-story" (Türkçe harfler sadeleşir). */
-export function shareFileName(...parts: (string | number | null | undefined)[]): string {
-  const fold: Record<string, string> = { ç: "c", ğ: "g", ı: "i", İ: "i", ö: "o", ş: "s", ü: "u" };
-  return ["elitlig", ...parts]
-    .filter((part) => part != null && String(part).trim() !== "")
-    .map((part) =>
-      String(part)
-        .toLocaleLowerCase("tr-TR")
-        .replace(/[çğıİöşü]/g, (ch) => fold[ch] ?? ch)
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, ""),
-    )
-    .filter(Boolean)
-    .join("-")
-    .slice(0, 80);
+async function downloadOnWeb(
+  target: React.RefObject<View | null>,
+  width: number,
+  height: number,
+  fileName: string,
+): Promise<ShareOutcome> {
+  const node = target.current as unknown as HTMLElement | null;
+  const doc = (globalThis as { document?: Document }).document;
+  if (!node || !doc) return "unavailable";
+  const { default: html2canvas } = await import("html2canvas");
+  // Tuval tam 1080 genişliğe çizilir: ölçek = hedef / düğümün CSS genişliği.
+  const scale = width / Math.max(1, node.getBoundingClientRect().width);
+  const canvas = await html2canvas(node, { scale, useCORS: true, backgroundColor: null, logging: false });
+  const out = doc.createElement("canvas");
+  out.width = width;
+  out.height = height;
+  out.getContext("2d")?.drawImage(canvas, 0, 0, width, height);
+  const link = doc.createElement("a");
+  link.href = out.toDataURL("image/png");
+  link.download = `${fileName}.png`;
+  doc.body.appendChild(link);
+  link.click();
+  link.remove();
+  return "downloaded";
 }
+
+export { shareFileName } from "./shareFileName";

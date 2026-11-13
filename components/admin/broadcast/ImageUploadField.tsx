@@ -74,7 +74,16 @@ export function ImageUploadField({
       <FieldLabel label={label} />
       <View style={styles.row}>
         <View style={[styles.preview, wide ? styles.previewWide : null]}>
-          {src ? <Image source={{ uri: src }} style={styles.img} resizeMode="contain" /> : <Ionicons name="image-outline" size={22} color={colors.textTertiary} />}
+          {src ? (
+            <Image source={{ uri: src }} style={styles.img} resizeMode="contain" />
+          ) : (
+            <>
+              <Ionicons name="cloud-upload-outline" size={20} color={colors.textTertiary} />
+              <Text style={styles.emptyText} {...textScale.badge}>
+                {hint || "Görsel yok"}
+              </Text>
+            </>
+          )}
         </View>
         <View style={styles.actions}>
           <Button label={value ? "Değiştir" : "Yükle"} icon="cloud-upload-outline" size="sm" variant="secondary" onPress={() => void pick()} loading={busy} disabled={disabled} />
@@ -101,15 +110,18 @@ const styles = StyleSheet.create({
   preview: {
     width: 64,
     height: 64,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface3,
-    borderWidth: hairline,
-    borderColor: colors.border,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: colors.borderStrong,
+    gap: 2,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
   },
-  previewWide: { width: 128 },
+  previewWide: { width: 140 },
+  emptyText: { ...type.nano, color: colors.textTertiary },
   img: { width: "100%", height: "100%" },
   actions: { flex: 1, flexDirection: "row", gap: space.sm, flexWrap: "wrap" },
   hint: { ...type.caption, color: colors.textTertiary },

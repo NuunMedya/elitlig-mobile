@@ -499,7 +499,7 @@ function ResultDetail({ f, d }: { f: ShareFrame; d: MatchShareData }) {
         <FillBox f={f} radius={22} tone="soft" style={{ marginTop: u(story ? 12 : 8), flexDirection: "row", alignItems: "center", gap: u(12), padding: u(story ? 14 : 10), borderWidth: Math.max(1, u(0.7)), borderColor: t.glassLine }}>
           <Portrait f={f} image={d.mvp.image} name={d.mvp.name} size={story ? 64 : 48} ring="gold" />
           <View style={{ flex: 1 }}>
-            <Overline f={f} color={t.gold[0]}>Maçın yıldızı</Overline>
+            <Overline f={f} color={t.goldText}>Maçın yıldızı</Overline>
             <FitName f={f} k="hero" text={d.mvp.name} room={16} lines={1} align="left" scale={story ? 0.8 : 0.68} min={0.6} style={{ marginTop: u(2) }} />
             <CText f={f} k="body" color={t.inkSoft} style={{ marginTop: u(3) }}>
               {[
@@ -637,9 +637,9 @@ function ResultStar({ f, d }: { f: ShareFrame; d: MatchShareData }) {
         <StatTile f={f} value={mvp.goals} label="Gol" scale={story ? 1 : 0.8} />
         <StatTile f={f} value={mvp.assists} label="Asist" scale={story ? 1 : 0.8} />
         {mvp.rating ? (
-          <StatTile f={f} value={mvp.rating.toFixed(1)} label="Puan" accent={t.gold[0]} scale={story ? 1 : 0.8} />
+          <StatTile f={f} value={mvp.rating.toFixed(1)} label="Puan" accent={t.goldText} scale={story ? 1 : 0.8} />
         ) : (
-          <StatTile f={f} value={mvp.goals + mvp.assists} label="Gol + Asist" accent={t.gold[0]} scale={story ? 1 : 0.8} />
+          <StatTile f={f} value={mvp.goals + mvp.assists} label="Gol + Asist" accent={t.goldText} scale={story ? 1 : 0.8} />
         )}
       </View>
       <Spacer f={f} />

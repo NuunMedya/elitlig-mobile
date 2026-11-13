@@ -118,7 +118,7 @@ function PlayersLeader({ f, d }: { f: ShareFrame; d: PlayersShareData }) {
   if (!lead) return null;
   const { first, last } = splitName(lead.name);
   const gold = lead.rank === 1;
-  const valueColor = gold ? t.gold[0] : t.accent;
+  const valueColor = gold ? t.goldText : t.accent;
   return (
     <Poster f={f} mood="top" title={d.league} meta={d.city} footer={d.footer} watermark={false}>
       <Title f={f} d={d} />
