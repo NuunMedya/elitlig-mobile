@@ -73,7 +73,7 @@ type Tab = "step" | "season" | "team" | "beauty" | "el" | "transfer" | "dev" | "
 type Scope = "all" | "city" | "team";
 
 const TABS: SegmentedItem<Tab>[] = [
-  { key: "step", label: "Basamak" },
+  { key: "step", label: "Lig" },
   { key: "season", label: "Sezon" },
   { key: "team", label: "Takımlar" },
   { key: "beauty", label: "Güzellik" },
@@ -85,7 +85,7 @@ const TABS: SegmentedItem<Tab>[] = [
 ];
 
 const SUBTITLE: Record<Tab, string> = {
-  step: "Kariyer merdiveninde basamak",
+  step: "Ligde yüksel",
   season: "Sezon puanı",
   team: "Takım tesisleri",
   beauty: "Şehrin güzellik puanı",
@@ -112,7 +112,7 @@ function boardRequest(tab: Tab, pv: PeriodValue) {
 /** Tablonun yalnız seçili döneme bağlı olmayan (dönem şeridi olmayan) sekmeleri. */
 const STATIC_TABS: ReadonlySet<Tab> = new Set(["step", "beauty", "dev", "season", "team"]);
 
-const UNIT: Record<CityBoardMetric, string> = { dev: "gelişim", stars: "yıldız", period_stars: "yıldız", step: "basamak", beauty: "güzellik", el: "EL", transfer: "EL", season: "puan", team: "puan" };
+const UNIT: Record<CityBoardMetric, string> = { dev: "gelişim", stars: "yıldız", period_stars: "yıldız", step: "lig", beauty: "güzellik", el: "EL", transfer: "EL", season: "puan", team: "puan" };
 
 function rowValue(row: CityLeaderRow, metric: CityBoardMetric): number {
   if (metric === "dev") return row.dev;
@@ -410,7 +410,7 @@ export default function ClubCityLeaderboardScreen() {
             ) : unsupported ? (
               <EmptyState
                 icon={tab === "season" ? "calendar-outline" : tab === "step" || tab === "beauty" ? "trending-up-outline" : tab === "el" ? "wallet-outline" : tab === "transfer" ? "swap-horizontal-outline" : "star-outline"}
-                title={tab === "season" ? "Sezon tablosu yakında" : tab === "step" ? "Basamak tablosu yakında" : tab === "beauty" ? "Güzellik tablosu yakında" : tab === "el" ? "Elit Lira tablosu yakında" : tab === "transfer" ? "Transfer tablosu yakında" : "Yıldız tablosu yakında"}
+                title={tab === "season" ? "Sezon tablosu yakında" : tab === "step" ? "Lig tablosu yakında" : tab === "beauty" ? "Güzellik tablosu yakında" : tab === "el" ? "Elit Lira tablosu yakında" : tab === "transfer" ? "Transfer tablosu yakında" : "Yıldız tablosu yakında"}
                 body={
                   tab === "step" || tab === "beauty" || tab === "el" || tab === "transfer" || tab === "season"
                     ? "Kulüp Şehri 2.0 sıralamaları sunucu güncellemesiyle açılacak. Şimdilik Gelişim tablosuna bakabilirsin."

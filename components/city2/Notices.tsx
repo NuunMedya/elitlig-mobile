@@ -60,12 +60,12 @@ export function MigrationNotice({ city2 }: { city2: City2State | undefined }) {
               ŞEHRİN TAŞINDI
             </Text>
             <Text style={styles.title} {...textScale.dense}>
-              {step.label}. basamak · {step.title}
+              Lig {step.label} · {step.title}
             </Text>
           </View>
         </View>
         <Text style={styles.lead} {...textScale.long}>
-          Eski binaların yeni binalara aktarıldı ve harcadığın yıldızların karşılığı korundu ({fmt(m.value)} gelişim puanı). Artık binaların iç kilitlerini açıp aşama yükseltir, merdivende basamak atlarsın.
+          Eski binaların yeni binalara aktarıldı ve harcadığın yıldızların karşılığı korundu ({fmt(m.value)} gelişim puanı). Artık binalarına ara adımlar ekleyip ana yükseltme yapar, ligde yükselirsin.
         </Text>
         {m.refund > 0 ? (
           <View style={styles.refund}>
@@ -98,7 +98,7 @@ export function StepCelebration({ result, city2, onClose }: { result: StepResult
   const marks = city2?.landmarks.catalogue.filter((c) => c.min_rung === rung && c.cost != null) ?? [];
   const slots = city2 && result ? city2.landmarks.grid.open_slots - result.slotsBefore : 0;
   return (
-    <BottomSheet visible={Boolean(result)} onClose={onClose} title="Yeni basamak!" footer={<Button label="Devam" onPress={onClose} fullWidth haptic="success" />}>
+    <BottomSheet visible={Boolean(result)} onClose={onClose} title="Yeni lig!" footer={<Button label="Devam" onPress={onClose} fullWidth haptic="success" />}>
       {result ? (
         <View style={styles.wrap}>
           <Reveal scaleFrom={0.85}>

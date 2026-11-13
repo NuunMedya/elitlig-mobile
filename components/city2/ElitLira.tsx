@@ -42,6 +42,7 @@ import {
   incomeOf,
   untilText,
   type City2Building,
+  type City2Care,
   type City2CollectResult,
   type City2El,
   type City2ElDay,
@@ -449,7 +450,7 @@ export function ElWallet({
       ) : (
         <Text style={styles.walletHint} {...textScale.dense}>
           {can && due > 0
-            ? `Toplarken ${fmtRate(el.expenses.due_hours)} saatlik maaş ve bakım düşülür: −${fmtEl(due)} EL`
+            ? `Toplarken ${fmtRate(el.expenses.due_hours)} saatlik maaş ve işletme gideri düşülür: −${fmtEl(due)} EL`
             : `Bugün ${signed(el.today.earned)} kazanıldı · −${fmtEl(el.today.expense)} gider`}
         </Text>
       )}
@@ -814,6 +815,40 @@ function UpgradeCard({
   );
 }
 
+/** Şehir 2.1: tesis bakımı satırı (durum çubuğu + "Bakım yap · N★"). */
+export function CareRow({ care, stars, busy, caring, onCare }: { care: City2Care; stars: number; busy: boolean; caring: boolean; onCare: () => void }) {
+  const short = care.cost > stars;
+  const tone = care.pct < care.floor + 15 ? colors.danger : care.low ? colors.warn : colors.win;
+  return (
+    <View style={styles.care}>
+      <View style={styles.careHead}>
+        <Ionicons name="build" size={15} color={tone} />
+        <Text style={styles.careTitle} {...textScale.dense}>
+          Tesis bakımı
+        </Text>
+        <Text style={[styles.carePct, { color: tone }]} {...textScale.badge}>
+          %{care.pct}
+        </Text>
+      </View>
+      <View style={styles.incTrack}>
+        <View style={[styles.careFill, { width: `${Math.max(2, Math.min(100, care.pct))}%` as const, backgroundColor: tone }]} />
+      </View>
+      <Text style={styles.incMeta} {...textScale.long}>
+        Gelir bakım yüzdesiyle çarpılır. Bakım günde %{care.decay_per_day} düşer, en çok %{care.floor}'e iner. Yıldız kazanmak için oyna, bakımı yıldızla yap.
+      </Text>
+      <Button
+        label={care.cost > 0 ? (short ? `Bakım · ${care.cost - stars} yıldız eksik` : `Bakım yap · ${care.cost} yıldız`) : "Tesis bakımlı"}
+        icon="construct-outline"
+        size="sm"
+        variant={care.cost > 0 && !short ? "primary" : "secondary"}
+        disabled={care.cost < 1 || short || busy}
+        loading={caring}
+        onPress={onCare}
+      />
+    </View>
+  );
+}
+
 export function IncomeSection({
   b,
   inc,
@@ -822,6 +857,9 @@ export function IncomeSection({
   collecting,
   onCollect,
   onUpgrade,
+  stars = 0,
+  caring = false,
+  onCare,
 }: {
   b: City2Building;
   inc: City2IncomeBuilding;
@@ -830,6 +868,10 @@ export function IncomeSection({
   collecting: boolean;
   onCollect: () => void;
   onUpgrade: (kind: City2UpgradeKind) => void;
+  /** Şehir 2.1: kullanılabilir yıldız ve bakım eylemi (eski sunucuda bakım yok). */
+  stars?: number;
+  caring?: boolean;
+  onCare?: () => void;
 }) {
   const producing = b.open && inc.per_hour > 0;
   const until = untilText(inc.full_at);
@@ -913,7 +955,9 @@ export function IncomeSection({
           />
           <Text style={styles.incMeta} {...textScale.dense}>
             Günde {fmtEl(inc.per_day)} EL · {breakdown}
+            {inc.care && inc.care.pct < 100 ? ` · bakım %${inc.care.pct}` : ""}
           </Text>
+          {inc.care && onCare ? <CareRow care={inc.care} stars={stars} busy={busy} caring={caring} onCare={onCare} /> : null}
         </View>
       ) : (
         <View style={styles.incCard}>
@@ -1079,7 +1123,7 @@ function rowTitle(i: City2LedgerItem): string {
   const d = i.data ?? {};
   if (i.kind === "production") return `${i.building_title ?? "Bina"} geliri`;
   if (i.kind === "expense")
-    return `Maaş ve bakım${d.hours ? ` · ${fmtRate(Number(d.hours))} saat` : ""}`;
+    return `Maaş ve işletme${d.hours ? ` · ${fmtRate(Number(d.hours))} saat` : ""}`;
   if (i.kind === "spend") {
     const up =
       d.upgrade === "depo"
@@ -1718,6 +1762,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   incFill: { height: 8, borderRadius: radius.pill, backgroundColor: EL_INK },
+  care: { gap: space.xs, paddingTop: space.sm, marginTop: space.xs, borderTopWidth: hairline, borderTopColor: colors.border },
+  careHead: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  careTitle: { ...type.labelSm, color: colors.textPrimary, flex: 1 },
+  carePct: { ...type.numSmStrong },
+  careFill: { height: 8, borderRadius: radius.pill },
   incFillFull: { backgroundColor: colors.warn },
   incText: { ...type.bodySm, color: colors.textSecondary },
   incMeta: { ...type.caption, color: colors.textTertiary },

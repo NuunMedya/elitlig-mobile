@@ -49,7 +49,7 @@ export function VisitCityRow({ c, onPress }: { c: City2VisitCard; onPress: () =>
   const framed = Boolean(c.frame);
   const frame = seasonTierStyle(c.frame);
   return (
-    <Touchable onPress={onPress} feedback="row" style={styles.row} accessibilityRole="button" accessibilityLabel={`${c.name}, ${c.city ?? ""}, ${c.step_label ?? c.rung}. basamak, ${c.beauty} güzellik`}>
+    <Touchable onPress={onPress} feedback="row" style={styles.row} accessibilityRole="button" accessibilityLabel={`${c.name}, ${c.city ?? ""}, lig ${c.step_label ?? c.rung}, ${c.beauty} güzellik`}>
       <View style={[styles.avatarRing, framed ? { borderColor: frame.colors[1] } : null]}>
         <Avatar name={c.name} size={40} />
       </View>
@@ -61,7 +61,7 @@ export function VisitCityRow({ c, onPress }: { c: City2VisitCard; onPress: () =>
           {c.prestige > 0 ? <PrestigeStars count={c.prestige} size={11} /> : null}
         </View>
         <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
-          {[c.step_label ? `${c.step_label}. basamak` : null, c.step_title, c.city].filter(Boolean).join(" · ")}
+          {[c.step_label ? `Lig ${c.step_label}` : null, c.step_title, c.city].filter(Boolean).join(" · ")}
         </Text>
       </View>
       <View style={styles.values}>

@@ -95,7 +95,7 @@ export function PrestigeTeaser({ prestige, crest }: { prestige: City2Prestige; c
           </Text>
           {prestige.level > 0 ? <PrestigeStars count={crest?.prestige_stars ?? prestige.level} size={12} /> : null}
           <Text style={styles.teaserTag} {...textScale.badge}>
-            SON BASAMAKTA AÇILIR
+            SON LİGDE AÇILIR
           </Text>
         </View>
         <Text style={styles.teaserText} {...textScale.long}>
@@ -236,7 +236,7 @@ export function PrestigeSheet({
             {p.keep.el_upgrades ? <Row text="Depo ve personel yükseltmeleri" /> : null}
             <Row text="Bütün sembol yapılar" value={fmt(p.keep.landmarks)} />
             <Row text="Akademi oyuncuları" value={fmt(p.keep.academy_players)} />
-            {p.keep.history ? <Row text="Basamak geçmişi ve sezon puanı" /> : null}
+            {p.keep.history ? <Row text="Lig geçmişi ve sezon puanı" /> : null}
           </Section>
 
           {p.reset.academy ? (

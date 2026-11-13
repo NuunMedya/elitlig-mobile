@@ -150,6 +150,8 @@ export interface City2Stage {
   desc: string | null;
   min_rung: number;
   cost: number;
+  /** Şehir 2.1: ana yükseltmenin Elit Lira bedeli (eski sunucuda yok). */
+  el?: number;
   value: number;
   state: City2StageState;
   locks: City2Lock[];
@@ -157,7 +159,7 @@ export interface City2Stage {
 
 export type City2Action =
   | { kind: "lock"; lock: string; title: string; cost: number; left: number }
-  | { kind: "stage"; stage: number; title: string; cost: number; blocked: { code: string; rung?: number } | null }
+  | { kind: "stage"; stage: number; title: string; cost: number; /** Şehir 2.1: ana yükseltmenin EL şartı. */ el?: number; blocked: { code: string; rung?: number } | null }
   | { kind: "maxed" }
   | { kind: "closed"; rung: number };
 
@@ -305,6 +307,21 @@ export interface City2Upgrade {
   next: { level: number; cost: number; min_stage: number; blocked: { code: string; stage?: number } | null } | null;
 }
 
+/** Şehir 2.1: tesis bakımı (eski sunucuda yok). */
+export interface City2Care {
+  /** Şu anki bakım durumu (%). */
+  pct: number;
+  /** En düşük durum: gelir bunun altına inmez. */
+  floor: number;
+  low: boolean;
+  decay_per_day: number;
+  /** %100'e getirmenin şu anki yıldız bedeli (0 = bakımlı). */
+  cost: number;
+  full_cost: number;
+  since: string | null;
+  floor_at: string | null;
+}
+
 export interface City2IncomeBuilding {
   has_income: true;
   streams: City2IncomeStream[];
@@ -315,8 +332,12 @@ export interface City2IncomeBuilding {
   prestige_pct?: number;
   team_pct?: number;
   multiplier: number;
+  /** Bakım durumu dahil şu anki gelir. */
   per_hour: number;
+  /** %100 bakımda gelir (Şehir 2.1). */
+  per_hour_full?: number;
   per_day: number;
+  care?: City2Care;
   stored: number;
   stored_exact: number;
   collectable: number;
@@ -390,8 +411,11 @@ export interface City2El {
   expense_total: number;
   admin_total: number;
   per_hour: number;
+  per_hour_full?: number;
   per_day: number;
   net_per_hour: number;
+  /** Şehir 2.1: tesis bakımı özeti (eski sunucuda yok). */
+  care?: { avg_pct: number; cost: number; low: number; floor: number; decay_per_day: number; stars_per_stage: number; text: string };
   stored: number;
   collectable: number;
   cap: number;
@@ -477,7 +501,7 @@ export const buyCity2Lock = (building: string, lock: string) =>
   );
 
 export const buildCity2Stage = (building: string) =>
-  post<{ building: string; stage: { index: number; key: string; title: string; cost: number }; cost: number; city2: City2State }>(
+  post<{ building: string; stage: { index: number; key: string; title: string; cost: number; el?: number }; cost: number; el_cost?: number; city2: City2State }>(
     "/api/puzzle/city2/stage",
     { building },
     { retry: false },
@@ -504,6 +528,10 @@ export const placeCity2Landmark = (body: { id?: string; key?: string; slot: stri
 /** Depodaki EL'i topla: tek bina ya da (building yoksa) hepsi. Toplanacak yoksa collected: 0. */
 export const collectCity2El = (building?: string | null) =>
   post<City2CollectResult>("/api/puzzle/city2/collect", building ? { building } : undefined, { retry: false });
+
+/** Tesis bakımı (Şehir 2.1): yıldızla %100'e getirir; building yoksa bakımı eksik bütün binalar. */
+export const careCity2 = (building?: string | null) =>
+  post<{ cost: number; by_building: Record<string, number>; city2: City2State }>("/api/puzzle/city2/care", building ? { building } : undefined, { retry: false });
 
 export const upgradeCity2El = (building: string, kind: City2UpgradeKind) =>
   post<{ building: string; upgrade: City2UpgradeKind; level: number; cost: number; balance: number; city2: City2State }>(
@@ -781,9 +809,20 @@ export function rungLabel(ladder: Pick<City2Ladder, "steps"> | null | undefined,
   return ladder?.steps.find((s) => s.rung === rung)?.label ?? String(rung);
 }
 
-/** "N. basamakta açılır" (16a/16b etiketleri de doğru okunur). */
+/** Lig adı: "4. Amatör" (basamağın başlığı; bulunamazsa "Lig N"). */
+export function rungTitle(ladder: Pick<City2Ladder, "steps"> | null | undefined, rung: number): string {
+  return ladder?.steps.find((s) => s.rung === rung)?.title ?? `Lig ${rungLabel(ladder, rung)}`;
+}
+
+/** "4. Amatör olunca açılır" — kilitli bina/aşama/yapı için lig şartı. */
 export function rungOpensText(ladder: Pick<City2Ladder, "steps"> | null | undefined, rung: number): string {
-  return `${rungLabel(ladder, rung)}. basamakta açılır`;
+  return `${rungTitle(ladder, rung)} olunca açılır`;
+}
+
+/** Sıradaki ligin bu binadan istediği aşama (yoksa null). */
+export function leagueNeedOf(ladder: City2Ladder | null | undefined, key: string): { need: number; title: string; ok: boolean } | null {
+  const s = ladder?.next?.stages.find((x) => x.building === key);
+  return s ? { need: s.need, title: s.need_title, ok: s.ok } : null;
 }
 
 export const slotId = (row: number, col: number) => `r${row}c${col}`;

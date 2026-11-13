@@ -146,7 +146,7 @@ export default function VisitCityScreen() {
                     {city.ladder.title}
                   </Text>
                   <Text style={styles.meta} {...textScale.dense}>
-                    {city.ladder.no}. basamak{city.prestige.level > 0 ? ` · ${city.prestige.level}. prestij` : ""}
+                    Lig {city.ladder.no}{city.prestige.level > 0 ? ` · ${city.prestige.level}. prestij` : ""}
                   </Text>
                 </View>
               </View>

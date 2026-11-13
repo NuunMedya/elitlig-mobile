@@ -265,7 +265,7 @@ function RungRow({
           <View style={styles.nextBox}>
             <NextRequirements next={ladder.next} buildings={city2.buildings} onBuilding={onBuilding} busy={busy} onPay={() => onAdvance(true)} />
             {ladder.next.can_advance ? (
-              <ChunkyButton label={busy ? "ÇIKILIYOR…" : `BASAMAK ATLA · ${s.label}`} icon="arrow-up-circle" tone="green" disabled={busy} onPress={() => onAdvance()} />
+              <ChunkyButton label={busy ? "ÇIKILIYOR…" : `LİGE YÜKSEL · ${s.label}`} icon="arrow-up-circle" tone="green" disabled={busy} onPress={() => onAdvance()} />
             ) : null}
           </View>
         ) : state === "locked" ? (
