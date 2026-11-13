@@ -552,7 +552,7 @@ const ScorerColumn = memo(function ScorerColumn({
           {home ? null : <EventIcon kind={group.ownGoal ? "ownGoal" : "goal"} size={11} onDark />}
           <Text style={[styles.scorer, home ? styles.alignRight : null]} numberOfLines={1} {...textScale.dense}>
             {group.name}
-            {group.ownGoal ? " (k.k.)" : ""}
+            {group.ownGoal && !group.anonymous ? " (k.k.)" : ""}
           </Text>
           <Text style={styles.scorerMinutes} numberOfLines={1} {...textScale.badge}>
             {minutesLabel(group)}

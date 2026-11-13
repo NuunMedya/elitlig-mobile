@@ -40,6 +40,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LeaguePicker } from "@/components/LeaguePicker";
+import { LeagueShare } from "@/components/share/LeagueShare";
 import { FixturesPane } from "@/components/league/FixturesPane";
 import { NewsPane } from "@/components/league/NewsPane";
 import { PlayersPane } from "@/components/league/PlayersPane";
@@ -227,6 +228,12 @@ export default function LeaguesScreen() {
     togglePinLeague({ cityId, cityLabel: cityLabel || "", leagueId, label: leagueLabel || "Lig" });
   }, [cityId, cityLabel, leagueId, leagueLabel, togglePinLeague]);
 
+  /* PAYLAŞ: Puan, Fikstür ve Oyuncular sekmelerinde başlıkta; açık sekmenin
+     görselini (puan tablosu, maç programı, gol krallığı…) paylaşım
+     stüdyosunda üretir. */
+  const [shareOpen, setShareOpen] = useState(false);
+  const shareTab = tab === "puan" || tab === "fikstur" || tab === "oyuncular" ? tab : null;
+
   const bell = useNotificationBell();
   const actions = useMemo(
     () =>
@@ -234,6 +241,16 @@ export default function LeaguesScreen() {
         ? bell ? [bell] : undefined
         : [
             ...(bell ? [bell] : []),
+            ...(shareTab
+              ? [
+                  {
+                    icon: "share-outline" as keyof typeof Ionicons.glyphMap,
+                    onPress: () => setShareOpen(true),
+                    accessibilityLabel:
+                      shareTab === "puan" ? "Puan durumunu paylaş" : shareTab === "fikstur" ? "Fikstürü paylaş" : "Sıralamayı paylaş",
+                  },
+                ]
+              : []),
             {
               icon: "search-outline" as keyof typeof Ionicons.glyphMap,
               onPress: () => router.push("/ara"),
@@ -252,7 +269,7 @@ export default function LeaguesScreen() {
               accessibilityLabel: leagueFollowed ? "Lig takibini bırak" : "Ligi takip et",
             },
           ],
-    [bell, leagueFollowed, leagueId, leaguePinned, router, toggleFollow, togglePin],
+    [bell, leagueFollowed, leagueId, leaguePinned, router, shareTab, toggleFollow, togglePin],
   );
 
   return (
@@ -280,6 +297,10 @@ export default function LeaguesScreen() {
       ) : (
         <NewsPane scrollProps={scrollProps} />
       )}
+
+      {shareTab ? (
+        <LeagueShare visible={shareOpen} onClose={() => setShareOpen(false)} tab={shareTab} initialSort={playerSort} />
+      ) : null}
     </SafeAreaView>
   );
 }

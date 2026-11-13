@@ -18,12 +18,14 @@
 import * as Clipboard from "expo-clipboard";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { StyleSheet, Text, View } from "react-native";
 
-import { AdminScreen, DateField, Panel } from "@/components/admin";
+import { AdminScreen, DateField } from "@/components/admin";
+import { SysGroup, SysStage } from "@/components/admin/system/SysKit";
 import { BarList, KpiGrid, KpiTile, TrendChart, WeekHourGrid } from "@/components/admin/system/charts";
 import { DataList } from "@/components/admin/system/DataList";
-import { Badge, Button, Chip, ChipGroup, ErrorState, Input, SkeletonCard, Tabs, useToast } from "@/components/ui";
+import { Badge, Button, Chip, ChipGroup, ErrorState, Input, LiveBadge, SkeletonCard, Tabs, useToast } from "@/components/ui";
 import { formatDateTime, formatTime } from "@/lib/admin/format";
 import {
   RANGE_PRESETS,
@@ -217,10 +219,23 @@ function Overview({ data }: { data: AnalyticsReport }) {
   const notes = insights(data);
   return (
     <>
+      <SysStage
+        eyebrow="Ziyaretçi nabzı"
+        title="Seçili dönemde site"
+        icon="globe"
+        tone="signature"
+        value={Number(c.visitors || 0)}
+        valueLabel="ziyaretçi"
+        stats={[
+          { label: "Oturum", value: Number(c.sessions || 0), icon: "pulse", tone: "info" },
+          { label: "Görüntüleme", value: Number(c.pageviews || 0), icon: "eye", tone: "win" },
+          { label: "Çıkma", value: fmtPct(c.bounceRate), icon: "exit", tone: "warn" },
+        ]}
+      />
       <KpiGrid>
-        <KpiTile label="Ziyaretçi" value={c.visitors} previous={p.visitors} />
-        <KpiTile label="Oturum" value={c.sessions} previous={p.sessions} />
-        <KpiTile label="Sayfa görüntüleme" value={c.pageviews} previous={p.pageviews} />
+        <KpiTile label="Ziyaretçi" value={c.visitors} previous={p.visitors} icon="people-outline" spark={points.map((pt) => Number(pt.visitors || 0))} />
+        <KpiTile label="Oturum" value={c.sessions} previous={p.sessions} icon="pulse-outline" spark={points.map((pt) => Number(pt.sessions || 0))} />
+        <KpiTile label="Sayfa görüntüleme" value={c.pageviews} previous={p.pageviews} icon="eye-outline" spark={points.map((pt) => Number(pt.pageviews || 0))} />
         <KpiTile label="Oturum başına sayfa" value={c.pagesPerSession} previous={p.pagesPerSession} format={(v) => v.toLocaleString("tr-TR")} />
         <KpiTile label="Ortalama oturum süresi" value={c.avgSessionMs} previous={p.avgSessionMs} format={fmtDuration} />
         <KpiTile label="Sayfada ortalama süre" value={c.avgTimeOnPageMs} previous={p.avgTimeOnPageMs} format={fmtDuration} />
@@ -230,7 +245,7 @@ function Overview({ data }: { data: AnalyticsReport }) {
         <KpiTile label="Geri dönen ziyaretçi" value={c.returningVisitors} previous={p.returningVisitors} />
         <KpiTile label="Giriş yapmış kullanıcı" value={c.loggedInUsers} previous={p.loggedInUsers} />
       </KpiGrid>
-      <Panel title={`Trafik · ${trend.granularity === "hour" ? "saatlik" : "günlük"}`}>
+      <SysGroup icon="trending-up" tone="violet" title={`Trafik · ${trend.granularity === "hour" ? "saatlik" : "günlük"}`}>
         <TrendChart
           labels={points.map((pt) => fmtBucket(pt.key, trend.granularity))}
           series={[
@@ -239,31 +254,34 @@ function Overview({ data }: { data: AnalyticsReport }) {
             { label: "Oturum", data: points.map((pt) => pt.sessions) },
           ]}
         />
-      </Panel>
+      </SysGroup>
       {notes.length ? (
-        <Panel title="Öne çıkanlar">
+        <SysGroup icon="bulb" tone="gold" title="Öne çıkanlar">
           {notes.map((t) => (
-            <Text key={t} style={styles.insight} {...textScale.long}>
-              • {t}
-            </Text>
+            <View key={t} style={styles.insightRow}>
+              <Ionicons name="sparkles" size={13} color={colors.adminAccent} />
+              <Text style={[styles.insight, styles.flex]} {...textScale.long}>
+                {t}
+              </Text>
+            </View>
           ))}
-        </Panel>
+        </SysGroup>
       ) : null}
-      <Panel title="Trafik kanalları">
+      <SysGroup icon="trending-up" tone="violet" title="Trafik kanalları">
         <BarList rows={bars(data.channels, (r) => channelLabel(r.key), "count")} />
-      </Panel>
-      <Panel title="Cihazlar">
+      </SysGroup>
+      <SysGroup icon="phone-portrait" tone="cyan" title="Cihazlar">
         <BarList rows={bars(data.devices, (r) => deviceLabel(r.key))} />
-      </Panel>
-      <Panel title="En çok görüntülenen sayfalar">
+      </SysGroup>
+      <SysGroup icon="document-text" tone="violet" title="En çok görüntülenen sayfalar">
         <BarList rows={bars(data.topPages, (r) => r.key, "count")} />
-      </Panel>
-      <Panel title="Sayfa türleri">
+      </SysGroup>
+      <SysGroup icon="layers" tone="violet" title="Sayfa türleri">
         <BarList rows={bars(data.pageTypes, (r) => r.key || "Diğer", "count")} />
-      </Panel>
-      <Panel title="En çok aranan sözcükler">
+      </SysGroup>
+      <SysGroup icon="search" tone="pink" title="En çok aranan sözcükler">
         <BarList rows={bars(data.topSearches, (r) => r.key, "count")} emptyText="Bu aralıkta site içinde arama yapılmadı." />
-      </Panel>
+      </SysGroup>
     </>
   );
 }
@@ -272,30 +290,27 @@ function Realtime({ data }: { data: AnalyticsReport }) {
   const perMinute: number[] = Array.isArray(data.perMinute) ? data.perMinute : [];
   return (
     <>
-      <Panel>
-        <View style={styles.live}>
-          <Badge label="Canlı" tone="live" dot />
-          <Text style={styles.liveValue} {...textScale.badge}>
-            {fmtNum(data.activeVisitors)}
-          </Text>
+      <SysStage eyebrow="Şu an" title="Sitede canlı" icon="radio" tone="pink" value={Number(data.activeVisitors || 0)} valueLabel="aktif ziyaretçi" stats={[{ label: "Açık ziyaret", value: Number(data.activeSessions || 0), icon: "pulse", tone: "live" }]}>
+        <View style={styles.liveRow}>
+          <LiveBadge />
           <Text style={styles.liveLabel} {...textScale.dense}>
-            şu an sitede · {fmtNum(data.activeSessions)} açık ziyaret · {formatTime(data.at)} itibarıyla, 15 sn'de bir yenilenir
+            {formatTime(data.at)} itibarıyla · 15 sn'de bir yenilenir
           </Text>
         </View>
-      </Panel>
-      <Panel title="Son 30 dakika · dakikalık görüntüleme">
+      </SysStage>
+      <SysGroup icon="pulse" tone="pink" title="Son 30 dakika · dakikalık görüntüleme">
         <TrendChart type="bar" labels={perMinute.map((_, i) => `${perMinute.length - i} dk önce`)} series={[{ label: "Görüntüleme", data: perMinute }]} height={120} />
-      </Panel>
-      <Panel title="Şu an açık sayfalar">
+      </SysGroup>
+      <SysGroup icon="document-text" tone="violet" title="Şu an açık sayfalar">
         <BarList rows={list(data.pages).map((p) => ({ key: p.path, label: p.path, value: p.visitors, note: p.pageType }))} emptyText="Şu an sitede kimse yok." />
-      </Panel>
-      <Panel title="Cihaz">
+      </SysGroup>
+      <SysGroup icon="phone-portrait" tone="cyan" title="Cihaz">
         <BarList rows={bars(data.devices, (r) => deviceLabel(r.key), "count")} emptyText="—" />
-      </Panel>
-      <Panel title="Kaynak">
+      </SysGroup>
+      <SysGroup icon="compass" tone="mint" title="Kaynak">
         <BarList rows={bars(data.sources, (r) => r.key || "Bilinmiyor", "count")} emptyText="—" />
-      </Panel>
-      <Panel title="Canlı akış">
+      </SysGroup>
+      <SysGroup icon="radio" tone="pink" title="Canlı akış">
         <DataList
           rows={list(data.feed)}
           primary={(r) => r.path}
@@ -309,7 +324,7 @@ function Realtime({ data }: { data: AnalyticsReport }) {
           ]}
           emptyText="Son 30 dakikada görüntüleme yok."
         />
-      </Panel>
+      </SysGroup>
     </>
   );
 }
@@ -329,7 +344,7 @@ function Pages({ data }: { data: AnalyticsReport }) {
   ];
   return (
     <>
-      <Panel title="Tüm sayfalar">
+      <SysGroup icon="document-text" tone="violet" title="Tüm sayfalar">
         <Input variant="search" leadingIcon="search" value={q} onChangeText={setQ} placeholder="Sayfa yolunda ara" autoCapitalize="none" autoCorrect={false} />
         <ChipGroup scrollable contentPadding={0}>
           <Chip label="Tüm türler" size="sm" selected={!pageType} onPress={() => setPageType("")} />
@@ -355,33 +370,33 @@ function Pages({ data }: { data: AnalyticsReport }) {
           ]}
           emptyText="Süzgece uyan sayfa yok."
         />
-      </Panel>
-      <Panel title="Sayfa türleri">
+      </SysGroup>
+      <SysGroup icon="layers" tone="violet" title="Sayfa türleri">
         <BarList
           rows={list(data.pageTypes).map((t) => ({ key: t.key || "none", label: t.key || "Diğer", value: t.count, note: `${fmtNum(t.unique)} ziyaretçi` }))}
           onSelect={(row) => setPageType(row.key === "none" ? "" : row.key)}
           limit={12}
         />
-      </Panel>
-      <Panel title="İller · il sayfalarının görüntülenmesi">
+      </SysGroup>
+      <SysGroup icon="document-text" tone="violet" title="İller · il sayfalarının görüntülenmesi">
         <BarList rows={list(data.cities).map((c) => ({ key: String(c.id), label: c.name, value: c.views, note: `${fmtNum(c.visitors)} ziyaretçi` }))} emptyText="İl sayfası görüntülenmedi." />
-      </Panel>
-      <Panel title="Giriş sayfaları">
+      </SysGroup>
+      <SysGroup icon="document-text" tone="violet" title="Giriş sayfaları">
         <DataList rows={list(data.entryPages)} primary={(r) => r.path} primaryLabel="Sayfa" csvTitle="Giriş sayfaları" columns={[{ key: "entries", label: "Giriş" }, { key: "bounceRate", label: "Hemen çıkma", render: (r) => fmtPct(r.bounceRate) }]} />
-      </Panel>
-      <Panel title="Çıkış sayfaları">
+      </SysGroup>
+      <SysGroup icon="document-text" tone="violet" title="Çıkış sayfaları">
         <DataList rows={list(data.exitPages)} primary={(r) => r.path} primaryLabel="Sayfa" csvTitle="Çıkış sayfaları" columns={[{ key: "exits", label: "Çıkış" }, { key: "exitRate", label: "Çıkış oranı", render: (r) => fmtPct(r.exitRate) }]} />
-      </Panel>
-      <Panel title="En çok bakılan oyuncular">
+      </SysGroup>
+      <SysGroup icon="person" tone="cyan" title="En çok bakılan oyuncular">
         <DataList rows={list(data.players)} primary={(r) => r.name} primaryLabel="Oyuncu" columns={entity} emptyText="Oyuncu profili görüntülenmedi." />
-      </Panel>
-      <Panel title="En çok bakılan takımlar">
+      </SysGroup>
+      <SysGroup icon="shield" tone="mint" title="En çok bakılan takımlar">
         <DataList rows={list(data.teams)} primary={(r) => r.name} primaryLabel="Takım" columns={entity} emptyText="Takım profili görüntülenmedi." />
-      </Panel>
-      <Panel title="En çok bakılan maçlar">
+      </SysGroup>
+      <SysGroup icon="football" tone="mint" title="En çok bakılan maçlar">
         <DataList rows={list(data.matches)} primary={(r) => r.name} primaryLabel="Maç" columns={entity} emptyText="Maç sayfası görüntülenmedi." />
-      </Panel>
-      <Panel title="Sayfa akışları">
+      </SysGroup>
+      <SysGroup icon="document-text" tone="violet" title="Sayfa akışları">
         <DataList
           rows={list(data.flows)}
           primary={(r) => `${r.from} → ${r.to}`}
@@ -389,7 +404,7 @@ function Pages({ data }: { data: AnalyticsReport }) {
           columns={[{ key: "count", label: "Geçiş" }]}
           emptyText="Birden fazla sayfa gezilen ziyaret yok."
         />
-      </Panel>
+      </SysGroup>
     </>
   );
 }
@@ -446,13 +461,13 @@ function Sources({ data }: { data: AnalyticsReport }) {
   const trend = data.channelTrend ?? { days: [], series: [] };
   return (
     <>
-      <Panel title="Kanallara göre günlük oturum">
+      <SysGroup icon="git-network" tone="cyan" title="Kanallara göre günlük oturum">
         {list(trend.series).length ? (
           <TrendChart labels={(trend.days ?? []).map((d: string) => fmtBucket(d))} series={list(trend.series).slice(0, 7).map((s) => ({ label: channelLabel(s.key), data: s.values }))} />
         ) : null}
         <DataList rows={list(data.channels)} primary={(r) => channelLabel(r.key)} primaryLabel="Kanal" csvTitle="Kanallar" columns={sessionCols} />
-      </Panel>
-      <Panel title="Kaynaklar">
+      </SysGroup>
+      <SysGroup icon="compass" tone="mint" title="Kaynaklar">
         <DataList
           rows={list(data.sources)}
           primary={(r) => `${r.source} · ${channelLabel(r.medium)}`}
@@ -460,14 +475,14 @@ function Sources({ data }: { data: AnalyticsReport }) {
           csvTitle="Kaynaklar"
           columns={sessionCols}
         />
-      </Panel>
-      <Panel title="Yönlendiren siteler">
+      </SysGroup>
+      <SysGroup icon="link" tone="cyan" title="Yönlendiren siteler">
         <DataList rows={list(data.referrers)} primary={(r) => r.key} primaryLabel="Site" columns={[{ key: "unique", label: "Oturum" }]} emptyText="Başka bir siteden gelen ziyaret yok." />
-      </Panel>
-      <Panel title="Yönlendiren sayfalar">
+      </SysGroup>
+      <SysGroup icon="document-text" tone="violet" title="Yönlendiren sayfalar">
         <DataList rows={list(data.referrerUrls)} primary={(r) => r.key} primaryLabel="Adres" columns={[{ key: "unique", label: "Oturum" }]} emptyText="Başka bir siteden gelen ziyaret yok." />
-      </Panel>
-      <Panel title="Kampanyalar">
+      </SysGroup>
+      <SysGroup icon="megaphone" tone="gold" title="Kampanyalar">
         <DataList
           rows={list(data.campaigns)}
           primary={(r) => [r.source, r.medium, r.campaign].filter(Boolean).join(" / ")}
@@ -475,16 +490,16 @@ function Sources({ data }: { data: AnalyticsReport }) {
           columns={[{ key: "sessions", label: "Oturum" }]}
           emptyText="Kampanya bağlantısıyla gelen ziyaret yok. Aşağıdaki oluşturucuyla bağlantı hazırlayabilirsin."
         />
-      </Panel>
-      <Panel title="Arama motorundan gelen sözcükler">
+      </SysGroup>
+      <SysGroup icon="search" tone="pink" title="Arama motorundan gelen sözcükler">
         <DataList rows={list(data.engineTerms)} primary={(r) => r.key} primaryLabel="Sözcük" columns={[{ key: "unique", label: "Oturum" }]} emptyText="Bu aralıkta sözcük bilgisi gelmedi." />
         <Text style={styles.hint} {...textScale.long}>
           Google aranan sözcükleri sitelere iletmez; burada yalnız Bing, Yandex gibi motorların ilettikleri görünür.
         </Text>
-      </Panel>
-      <Panel title="Kampanya bağlantısı oluşturucu">
+      </SysGroup>
+      <SysGroup icon="megaphone" tone="gold" title="Kampanya bağlantısı oluşturucu">
         <CampaignBuilder />
-      </Panel>
+      </SysGroup>
     </>
   );
 }
@@ -501,10 +516,10 @@ function Searches({ data }: { data: AnalyticsReport }) {
         <KpiTile label="Aramalı ziyaret payı" value={t.sessionShare} format={(v) => fmtPct(v)} />
         <KpiTile label="Ziyaret başına arama" value={t.perSearchSession} format={(v) => v.toLocaleString("tr-TR")} />
       </KpiGrid>
-      <Panel title="Günlük arama sayısı">
+      <SysGroup icon="search" tone="pink" title="Günlük arama sayısı">
         <TrendChart type="bar" labels={trend.map((p) => fmtBucket(p.key))} series={[{ label: "Arama", data: trend.map((p) => p.count) }]} height={140} />
-      </Panel>
-      <Panel title="En çok aranan sözcükler">
+      </SysGroup>
+      <SysGroup icon="search" tone="pink" title="En çok aranan sözcükler">
         <DataList
           rows={list(data.terms)}
           primary={(r) => r.term}
@@ -517,11 +532,11 @@ function Searches({ data }: { data: AnalyticsReport }) {
             { key: "lastAt", label: "Son", render: (r) => formatDateTime(r.lastAt) },
           ]}
         />
-      </Panel>
-      <Panel title="Aramadan sonra tıklamadan ayrılanlar">
+      </SysGroup>
+      <SysGroup icon="search" tone="pink" title="Aramadan sonra tıklamadan ayrılanlar">
         <DataList rows={list(data.noClickAfter)} primary={(r) => r.term} primaryLabel="Sözcük" columns={[{ key: "sessions", label: "Ziyaret" }]} emptyText="Yok." />
-      </Panel>
-      <Panel title="Arama yapılan sayfalar">
+      </SysGroup>
+      <SysGroup icon="document-text" tone="violet" title="Arama yapılan sayfalar">
         <DataList
           rows={list(data.byPage)}
           primary={(r) => r.path}
@@ -532,8 +547,8 @@ function Searches({ data }: { data: AnalyticsReport }) {
             { key: "terms", label: "Sözcük" },
           ]}
         />
-      </Panel>
-      <Panel title="Son aramalar">
+      </SysGroup>
+      <SysGroup icon="search" tone="pink" title="Son aramalar">
         <DataList
           rows={list(data.recent)}
           primary={(r) => r.term}
@@ -546,27 +561,27 @@ function Searches({ data }: { data: AnalyticsReport }) {
             { key: "audience", label: "Kim", render: (r) => audienceLabel(r.audience) },
           ]}
         />
-      </Panel>
+      </SysGroup>
     </>
   );
 }
 
 function Audience({ data }: { data: AnalyticsReport }) {
   const simple = (title: string, rows: unknown, label?: (r: Row) => string, field = "unique") => (
-    <Panel title={title}>
+    <SysGroup icon="stats-chart" tone="violet" title={title}>
       <BarList rows={bars(rows, label, field)} />
-    </Panel>
+    </SysGroup>
   );
   return (
     <>
-      <Panel title="Ziyaret yoğunluğu · gün ve saate göre görüntüleme">
+      <SysGroup icon="time" tone="cyan" title="Ziyaret yoğunluğu · gün ve saate göre görüntüleme">
         <WeekHourGrid grid={data.weekHour} />
-      </Panel>
+      </SysGroup>
       {simple("Cihaz", data.devices, (r) => deviceLabel(r.key))}
       {simple("Ziyaretçi türü", data.audiences, (r) => audienceLabel(r.key))}
-      <Panel title="Yeni / geri dönen">
+      <SysGroup icon="sparkles" tone="mint" title="Yeni / geri dönen">
         <BarList rows={list(data.newVsReturning).map((r) => ({ key: r.key, label: r.key, value: r.sessions, note: `${fmtNum(r.visitors)} ziyaretçi` }))} />
-      </Panel>
+      </SysGroup>
       {simple("Tarayıcı", data.browsers)}
       {simple("İşletim sistemi", data.oses)}
       {simple("Pencere genişliği", data.viewports)}
@@ -576,7 +591,7 @@ function Audience({ data }: { data: AnalyticsReport }) {
       {simple("Oturum derinliği", data.sessionDepth, (r) => r.key, "count")}
       {simple("Oturum süresi", data.sessionDuration, (r) => r.key, "count")}
       {simple("Ziyaret sıklığı", data.visitFrequency, (r) => r.key, "count")}
-      <Panel title="En aktif giriş yapmış kullanıcılar">
+      <SysGroup icon="stats-chart" tone="violet" title="En aktif giriş yapmış kullanıcılar">
         <DataList
           rows={list(data.topUsers)}
           primary={(r) => r.username}
@@ -590,7 +605,7 @@ function Audience({ data }: { data: AnalyticsReport }) {
           ]}
           emptyText="Bu aralıkta giriş yapmış kullanıcı ziyareti yok."
         />
-      </Panel>
+      </SysGroup>
     </>
   );
 }
@@ -602,13 +617,13 @@ function Interactions({ data }: { data: AnalyticsReport }) {
         <KpiTile label="Toplam tıklama" value={data.totals?.clicks} />
         <KpiTile label="Tıklama yapılan ziyaret" value={data.totals?.sessions} />
       </KpiGrid>
-      <Panel title="İletişim ve sosyal medya tıklamaları">
+      <SysGroup icon="finger-print" tone="violet" title="İletişim ve sosyal medya tıklamaları">
         <BarList
           rows={list(data.contact).map((r) => ({ key: r.key, label: r.key, value: r.count, note: `${fmtNum(r.visitors)} ziyaretçi` }))}
           emptyText="Bu aralıkta iletişim bağlantısına tıklanmadı."
         />
-      </Panel>
-      <Panel title="Sayfalara göre tıklama">
+      </SysGroup>
+      <SysGroup icon="document-text" tone="violet" title="Sayfalara göre tıklama">
         <DataList
           rows={list(data.byPage)}
           primary={(r) => r.path}
@@ -618,11 +633,11 @@ function Interactions({ data }: { data: AnalyticsReport }) {
             { key: "rate", label: "Görüntüleme başına", render: (r) => (r.views ? (r.clicks / r.views).toLocaleString("tr-TR", { maximumFractionDigits: 1 }) : "0") },
           ]}
         />
-      </Panel>
-      <Panel title="Dış bağlantılar">
+      </SysGroup>
+      <SysGroup icon="stats-chart" tone="violet" title="Dış bağlantılar">
         <DataList rows={list(data.outbound)} primary={(r) => r.href} primaryLabel="Bağlantı" csvTitle="Dış bağlantılar" columns={[{ key: "count", label: "Tıklama" }, { key: "visitors", label: "Ziyaretçi" }]} />
-      </Panel>
-      <Panel title="En çok tıklanan öğeler">
+      </SysGroup>
+      <SysGroup icon="stats-chart" tone="violet" title="En çok tıklanan öğeler">
         <DataList
           rows={list(data.elements)}
           primary={(r) => r.target}
@@ -634,7 +649,7 @@ function Interactions({ data }: { data: AnalyticsReport }) {
             { key: "visitors", label: "Ziyaretçi" },
           ]}
         />
-      </Panel>
+      </SysGroup>
     </>
   );
 }
@@ -644,7 +659,7 @@ function Performance({ data }: { data: AnalyticsReport }) {
   const vitals = list(data.vitals);
   return (
     <>
-      <Panel title="Sayfa hızı · gerçek ziyaretçiler (75. yüzdelik)">
+      <SysGroup icon="document-text" tone="violet" title="Sayfa hızı · gerçek ziyaretçiler (75. yüzdelik)">
         {vitals.length ? (
           vitals.map((v) => (
             <View key={v.name} style={styles.vital}>
@@ -669,14 +684,14 @@ function Performance({ data }: { data: AnalyticsReport }) {
             Bu aralıkta hız ölçümü gelmedi.
           </Text>
         )}
-      </Panel>
-      <Panel title="Sayfa türüne göre LCP">
+      </SysGroup>
+      <SysGroup icon="layers" tone="violet" title="Sayfa türüne göre LCP">
         <DataList rows={list(data.lcpByPageType)} primary={(r) => r.key} primaryLabel="Sayfa türü" columns={[{ key: "p75", label: "LCP", render: (r) => fmtVital("LCP", r.p75) }, { key: "count", label: "Ölçüm" }]} />
-      </Panel>
-      <Panel title="Cihaza göre LCP">
+      </SysGroup>
+      <SysGroup icon="phone-portrait" tone="cyan" title="Cihaza göre LCP">
         <DataList rows={list(data.lcpByDevice)} primary={(r) => deviceLabel(r.key)} primaryLabel="Cihaz" columns={[{ key: "p75", label: "LCP", render: (r) => fmtVital("LCP", r.p75) }, { key: "count", label: "Ölçüm" }]} />
-      </Panel>
-      <Panel title="Tarayıcı hataları">
+      </SysGroup>
+      <SysGroup icon="globe" tone="cyan" title="Tarayıcı hataları">
         {errTrend.length ? (
           <TrendChart type="bar" labels={errTrend.map((p) => fmtBucket(p.key))} series={[{ label: "Hata", data: errTrend.map((p) => p.count), color: colors.danger }]} height={110} />
         ) : null}
@@ -694,10 +709,10 @@ function Performance({ data }: { data: AnalyticsReport }) {
           ]}
           emptyText="Hata yok."
         />
-      </Panel>
-      <Panel title="Hataların tarayıcılara dağılımı">
+      </SysGroup>
+      <SysGroup icon="globe" tone="cyan" title="Hataların tarayıcılara dağılımı">
         <BarList rows={bars(data.errorBrowsers)} emptyText="Hata yok." />
-      </Panel>
+      </SysGroup>
     </>
   );
 }
@@ -713,9 +728,9 @@ const styles = StyleSheet.create({
   stackSm: { gap: space.sm },
   refreshing: { opacity: 0.6 },
   insight: { ...type.bodySm, color: colors.textSecondary },
-  live: { alignItems: "flex-start", gap: space.xs },
-  liveValue: { ...type.scoreMd, color: colors.textPrimary },
-  liveLabel: { ...type.caption, color: colors.textTertiary },
+  liveRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  liveLabel: { ...type.caption, color: colors.onDarkMuted },
+  insightRow: { flexDirection: "row", gap: space.sm, alignItems: "flex-start" },
   hint: { ...type.caption, color: colors.textTertiary },
   code: { ...type.caption, color: colors.textPrimary, backgroundColor: colors.surface3, padding: space.sm },
   vital: { flexDirection: "row", gap: space.md, alignItems: "center", paddingVertical: space.xs },

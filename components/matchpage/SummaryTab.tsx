@@ -70,6 +70,7 @@ import type { StatRow, TopPlayer } from "@/lib/matchStats";
 import type { ApiMatch, ApiMatchEvent, LiveSnapshot, MatchState, StandingRow } from "@/lib/types";
 import { InfoRow, PaperCard, partStyles } from "./parts";
 import {
+  anonymousGoalLabel,
   headlineOf,
   isTrivialTitle,
   statLabel,
@@ -173,12 +174,30 @@ export function SummaryTab({
     [clipByEvent],
   );
   const closeClip = useCallback(() => setOpenClipId(null), []);
-  const clipScorer = useCallback((clip: GoalClip) => nameOf(clip.player_id), [nameOf]);
+  /* Takım kimliği → ad (isimsiz gol: "Gol · TAKIM"). */
+  const teamNameOf = useCallback(
+    (teamId: number | null | undefined) =>
+      teamId == null
+        ? null
+        : Number(teamId) === Number(homeTeamId)
+          ? match.first_team_name ?? null
+          : Number(teamId) === Number(awayTeamId)
+            ? match.second_team_name ?? null
+            : null,
+    [homeTeamId, awayTeamId, match.first_team_name, match.second_team_name],
+  );
+  const clipScorer = useCallback(
+    (clip: GoalClip) =>
+      (clip.player_id != null ? nameOf(clip.player_id) : null) ??
+      (clip.player_id == null ? anonymousGoalLabel(Boolean(clip.own_goal), teamNameOf(clip.team_id)) : null),
+    [nameOf, teamNameOf],
+  );
   /* Üyenin KENDİ golleri: oturumdaki hesabın oyuncu kimliği golcüyle eşleşirse
      satır ve video "Senin golün" olarak vurgulanır; ızgarada "Gollerim". */
   const myPlayerId = Number(useAuth().user?.player_id) || null;
   const isMyClip = useCallback(
-    (clip: GoalClip) => myPlayerId != null && !clip.own_goal && Number(clip.player_id) === myPlayerId,
+    (clip: GoalClip) =>
+      myPlayerId != null && clip.player_id != null && !clip.own_goal && Number(clip.player_id) === myPlayerId,
     [myPlayerId],
   );
   /* İndirme durumu tek yerde: oynatıcı ve ızgara aynı ilerlemeyi gösterir. */
@@ -206,10 +225,16 @@ export function SummaryTab({
           onReact={onReact}
           hasClip={clipByEvent.has(Number(item.event.id))}
           onClip={openEventClip}
-          mine={myPlayerId != null && Number(item.event.oyuncu_id) === myPlayerId && eventKind(item.event) === "goal"}
+          mine={
+            myPlayerId != null &&
+            item.event.oyuncu_id != null &&
+            Number(item.event.oyuncu_id) === myPlayerId &&
+            eventKind(item.event) === "goal"
+          }
+          teamName={teamNameOf(item.event.takim_id)}
         />
       ),
-    [flashId, nameOf, openPlayer, total, reactionData, onReact, clipByEvent, openEventClip, myPlayerId],
+    [flashId, nameOf, openPlayer, total, reactionData, onReact, clipByEvent, openEventClip, myPlayerId, teamNameOf],
   );
 
   /* Medya / yayın: canlı yayın linki, özet, maçın anları, gol videoları, röportaj. */

@@ -47,7 +47,7 @@ import { colors, dark as darkPalette, fonts, glowStyle, hairline, layout, radius
 
 import { progressLabel, type ClipDownloads, type DownloadState } from "./clipDownload";
 import { partStyles } from "./parts";
-import type { NameOf } from "./shared";
+import { anonymousGoalLabel, type NameOf } from "./shared";
 
 const MOMENT_LABEL: Record<AwardMoment["key"], string> = { best_goal: "Maçın golü", best_save: "Maçın kurtarışı" };
 
@@ -444,7 +444,12 @@ const GoalClipGrid = memo(function GoalClipGrid({
             <ClipTile
               clip={clip}
               width={cardWidth}
-              title={nameOf(clip.player_id) ?? clipLabel(clip)}
+              title={
+                (clip.player_id != null ? nameOf(clip.player_id) : null) ??
+                (clip.player_id == null
+                  ? anonymousGoalLabel(Boolean(clip.own_goal), teamOf(clip.team_id)?.name)
+                  : clipLabel(clip))
+              }
               team={teamOf(clip.team_id)}
               onOpen={onOpen}
               mine={isMine?.(clip) ?? false}
@@ -564,7 +569,7 @@ const ClipTile = memo(function ClipTile({
         {team ? <TeamLogo name={team.name} logo={team.logo} size={20} /> : null}
         <Text style={styles.tileTitle} numberOfLines={1} {...textScale.dense}>
           {title}
-          {clip.own_goal ? " (k.k.)" : ""}
+          {clip.own_goal && clip.player_id != null ? " (k.k.)" : ""}
         </Text>
         {onDownload && download ? (
           <Touchable

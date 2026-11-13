@@ -50,7 +50,7 @@ import {
 } from "@/theme";
 import type { Reaction } from "@/lib/api/community";
 import type { ApiMatchEvent } from "@/lib/types";
-import { compactName, isGoalKind, type NameOf } from "./shared";
+import { anonymousGoalLabel, compactName, isGoalKind, type NameOf } from "./shared";
 
 /** Ortadaki ray sütununun genişliği — dakika hapı (34px) rahat sığar. */
 const RAIL_WIDTH = 52;
@@ -86,6 +86,7 @@ export const TimelineRow = memo(function TimelineRow({
   hasClip = false,
   onClip,
   mine = false,
+  teamName = null,
 }: {
   event: ApiMatchEvent;
   home: boolean;
@@ -105,13 +106,21 @@ export const TimelineRow = memo(function TimelineRow({
   onClip?: (eventId: number) => void;
   /** Oturumdaki üyenin golü — satır vurgulanır, "Senin golün" rozeti. */
   mine?: boolean;
+  /** Olayın takımının adı — oyuncusuz golde ad yerine "Gol · TAKIM". */
+  teamName?: string | null;
 }) {
   const kind = eventKind(event);
   const goal = isGoalKind(kind);
   const sub = kind === "substitution";
 
-  const playerName = nameOf(event.oyuncu_id);
-  const name = playerName ? compactName(playerName) : event.aciklama || EVENT_LABEL[kind] || "Olay";
+  const playerName = event.oyuncu_id != null ? nameOf(event.oyuncu_id) : null;
+  /* İsimsiz gol (oyuncu_id = null): ad yerine olay + takım. */
+  const anonymous = (kind === "goal" || kind === "ownGoal") && event.oyuncu_id == null;
+  const name = playerName
+    ? compactName(playerName)
+    : anonymous
+      ? anonymousGoalLabel(kind === "ownGoal", teamName)
+      : event.aciklama || EVENT_LABEL[kind] || "Olay";
   const inName = sub ? nameOf(event.oyuncu_giren_id) : null;
   const outName = sub ? nameOf(event.oyuncu_cikan_id) : null;
 
@@ -121,7 +130,7 @@ export const TimelineRow = memo(function TimelineRow({
   const detail =
     kind === "goal"
       ? goalDetail(event)
-      : kind === "ownGoal"
+      : kind === "ownGoal" && !anonymous
         ? "Kendi kalesine"
         : kind === "yellow" || kind === "red"
           ? EVENT_LABEL[kind]

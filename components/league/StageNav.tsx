@@ -260,7 +260,7 @@ export const StageFlow = memo(function StageFlow({
             Turnuva yolu
           </Text>
           <Text style={styles.contextMeta} numberOfLines={1} {...textScale.dense}>
-            {`${steps.length} aşama · bir adıma dokun, tablosu ya da eşleşmeleri açılır`}
+            {`${steps.length} aşama · adıma dokununca açılır`}
           </Text>
         </View>
       </View>

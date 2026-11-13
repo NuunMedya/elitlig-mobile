@@ -8,10 +8,11 @@
  *          ilerletilir. Devre 25 dakika (web ile aynı).
  *   SKOR   olaylardan hesaplanır, her olaydan sonra maç kaydına yazılır (elle /
  *          hükmen tescilde kayıttaki skor esas).
- *   İSİMSİZ GOL  oyuncu belirtilmeden yazılan gol. Sunucu olay ucu
- *          (POST /maclar/:id/olaylar) oyuncusuz golü REDDEDİYOR
- *          (OYUNCU_ID_REQUIRED); bu yüzden isimsiz gol olay olarak değil,
- *          doğrudan maç skoruna (PATCH /maclar/:id) +1 olarak yazılır.
+ *   İSİMSİZ GOL  oyuncu belirtilmeden yazılan gol. Önce GERÇEK OLAY olarak
+ *          gönderilir (oyuncu_id = null): güncel sunucu bunu kabul eder,
+ *          skor olaydan hesaplanır, maç sayfasının akışında görünür ve web
+ *          rejisi silmez. Eski sunucu reddederse (OYUNCU_ID_REQUIRED) yedek
+ *          yol: doğrudan maç skoruna (PATCH /maclar/:id) +1 yazılır.
  *          Kayıttaki skorun olaylardan fazlası "isimsiz gol" sayılır ve her
  *          eşitlemede korunur: skor = olay golleri + isimsiz goller. Sayfa
  *          yenilenince de aynı hesap kayıttaki skordan yeniden çıkar.
@@ -141,6 +142,8 @@ export function useLiveMatch(matchId: number, userId?: number | null) {
     ? { home: 0, away: 0 }
     : opAnon ?? { home: Math.max(0, recorded.home - eventScore.home), away: Math.max(0, recorded.away - eventScore.away) };
   const score = manual ? serverScore : { home: eventScore.home + anon.home, away: eventScore.away + anon.away };
+  /** Sunucu oyuncusuz gol olayını kabul ediyor mu (ilk denemede öğrenilir). */
+  const anonEventsSupported = useRef<boolean | null>(null);
   const anonRef = useRef(anon);
   anonRef.current = anon;
   const recordedRef = useRef(recorded);
@@ -370,6 +373,21 @@ export function useLiveMatch(matchId: number, userId?: number | null) {
       if (!match) throw new Error("Maç yüklenmedi.");
       const own = code.toUpperCase() === "GOAL_OWN";
       const scoring: "home" | "away" = own ? (side === "home" ? "away" : "home") : side;
+      /* 1) Gerçek olay (güncel sunucu oyuncusuz golü kabul eder). */
+      if (anonEventsSupported.current !== false) {
+        try {
+          await addEvent({ side, code, playerId: null });
+          anonEventsSupported.current = true;
+          const fresh = queryClient.getQueryData<MatchEvent[]>(eventsKey) ?? [];
+          const s2 = scoreFromEvents(fresh, homeTeamId, awayTeamId);
+          return { side: scoring, score: { home: s2.home + anonRef.current.home, away: s2.away + anonRef.current.away } };
+        } catch (err) {
+          const codeOf = (err as { code?: string } | null)?.code;
+          if (codeOf !== "OYUNCU_ID_REQUIRED" && codeOf !== "PLAYER_NOT_IN_ROSTER") throw err;
+          anonEventsSupported.current = false;
+        }
+      }
+      /* 2) Yedek: eski sunucu — skor doğrudan maç kaydına yazılır. */
       const cur = { home: eventScore.home + anonRef.current.home, away: eventScore.away + anonRef.current.away };
       const next = { ...cur, [scoring]: cur[scoring] + 1 };
       await writeScore(next);
@@ -389,13 +407,22 @@ export function useLiveMatch(matchId: number, userId?: number | null) {
       return { side: scoring, score: next };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [awayTeamId, eventScore.away, eventScore.home, homeTeamId, manual, match, matchId, minute, period, writeScore]
+    [addEvent, awayTeamId, eventScore.away, eventScore.home, homeTeamId, manual, match, matchId, minute, period, queryClient, writeScore]
   );
 
   /** Son isimsiz golü geri al (o takımda isimsiz gol yoksa hata). */
   const removeAnonymousGoal = useCallback(
     async (side: "home" | "away") => {
       if (manual) throw new Error("Skor elle / hükmen tescil edildi.");
+      /* Sunucuda oyuncusuz gol OLAYI varsa en yenisini sil. */
+      const teamId = side === "home" ? homeTeamId : awayTeamId;
+      const anonEvent = events
+        .filter((e) => isGoalCode(String(e.olay_kodu)) && !e.oyuncu_id && Number(e.takim_id) === Number(teamId) && String(e.olay_kodu).toUpperCase() !== "GOAL_OWN")
+        .reduce<MatchEvent | null>((best, e) => (!best || Number(e.id) > Number(best.id) ? e : best), null);
+      if (anonEvent && Number(anonEvent.id) > 0) {
+        await removeEvent(Number(anonEvent.id));
+        return;
+      }
       if (anonRef.current[side] <= 0) throw new Error("Bu takımın isimsiz golü yok.");
       const cur = { home: eventScore.home + anonRef.current.home, away: eventScore.away + anonRef.current.away };
       await writeScore({ ...cur, [side]: Math.max(0, cur[side] - 1) });
@@ -405,8 +432,20 @@ export function useLiveMatch(matchId: number, userId?: number | null) {
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [eventScore.away, eventScore.home, manual, writeScore]
+    [awayTeamId, eventScore.away, eventScore.home, events, homeTeamId, manual, removeEvent, writeScore]
   );
+
+  /** Sunucuda kayıtlı oyuncusuz gol olayları (kendi kalesine hariç) — "N isimsiz" sayacı. */
+  const anonEventCount = useMemo(() => {
+    const out = { home: 0, away: 0 };
+    for (const e of events) {
+      const code = String(e.olay_kodu).toUpperCase();
+      if (!isGoalCode(code) || code === "GOAL_OWN" || e.oyuncu_id) continue;
+      if (Number(e.takim_id) === Number(homeTeamId)) out.home += 1;
+      else if (Number(e.takim_id) === Number(awayTeamId)) out.away += 1;
+    }
+    return out;
+  }, [awayTeamId, events, homeTeamId]);
 
   /** Sahadaki oyuncular: ilk 11 + girenler − çıkanlar (değişiklik seçicisi için). */
   const onPitch = useMemo(() => {
@@ -443,7 +482,7 @@ export function useLiveMatch(matchId: number, userId?: number | null) {
     phase,
     score,
     /** Kayıttaki skorun olaylardan fazlası: oyuncu belirtilmeden yazılmış goller. */
-    anonGoals: anon,
+    anonGoals: { home: anon.home + anonEventCount.home, away: anon.away + anonEventCount.away },
     bannerEvent,
     /** Bandın ham olayı ve başladığı an (GOL bandı aşamaları için). */
     bannerSource,
