@@ -1,5 +1,20 @@
 /**
- * MESAJ BALONU — WhatsApp düzeni (web ve masaüstü Mesajlar ile aynı görünüm).
+ * MESAJ BALONU — WhatsApp işlevselliği, Gece dili (ikinci tur).
+ *
+ * GECE DİLİ:
+ *   · Giden balon mor tonlu degradedir (sağda `bubbleMine`, solda bir tık
+ *     maviye kayan `bubbleMineEdge`); gelen balon yüzey rengi + ışıklı ince
+ *     kenar. Köşeler 18 px; dizinin ilk balonunda kuyruk tarafındaki üst köşe
+ *     4 px'e iner ve küçük bir kuyruk çıkar.
+ *   · BUBBLE RISE: oda açıldıktan SONRA gelen ya da gönderilen mesaj, kendi
+ *     köşesinden (gidende sağ alt, gelende sol alt) küçükten büyüyüp yukarı
+ *     yaylanarak girer. Açılışta zaten var olan mesajlar ve kaydırınca yeniden
+ *     bağlanan satırlar oynamaz (kimlik kümesi).
+ *   · READ RECEIPTS: tik "okundu"ya döndüğünde camgöbeği çift tik zıplar.
+ *   · SWIPE TO REPLY: balon sağa çekilince solunda yanıt oku belirir; eşik
+ *     geçilip bırakılırsa mesaj yanıtlanır (uzun basma menüsündeki "Yanıtla").
+ *   · Alıntı kutusu, belge / konum / ses kartları, gün hapı ve okunmamış
+ *     ayracı aynı cam + degrade diliyle çizilir.
  *
  * Balon: kuyruk (dizinin ilk mesajında), grupta renkli gönderen adı, yanıt
  * alıntısı (dokununca o mesaja gider), iletildi etiketi, bağlantı ve @bahsetme
@@ -15,15 +30,21 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
-import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Image, Linking, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Animated, Image, Linking, PanResponder, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 
-import { Touchable } from "@/components/chat/kit";
+import { Touchable, fireHaptic } from "@/components/chat/kit";
+import { useReduceMotion } from "@/components/ui";
 import { formatDurationMs, type ChatMessage, type ChatParticipant } from "@/lib/api/chat";
 import { openMap } from "@/lib/chatMedia";
 import { chatPalette, colors, senderColor } from "@/lib/chatPalette";
 import { clockTime, emojiOnlyCount, formatBytes, isVideoFile, messageSummary, parseRich, tickStatus, waveform, type TickStatus } from "@/lib/chatUtils";
-import { fonts, radius, space, textScale, type } from "@/theme";
+import { fonts, glowStyle, hairline, palette, radius, space, spring, textScale, type } from "@/theme";
+
+/** Degrade yönü: sağdan sola (açık uç sağda). */
+const G_START = { x: 1, y: 0.5 } as const;
+const G_END = { x: 0, y: 0.5 } as const;
 
 export interface BubbleActions {
   onLongPress: (message: ChatMessage) => void;
@@ -33,6 +54,56 @@ export interface BubbleActions {
   onReactions: (message: ChatMessage) => void;
   onRetry: (message: ChatMessage) => void;
   onOpenError: () => void;
+  /** Kaydırarak yanıtla (verilmezse balon kaydırılmaz). */
+  onReply?: (message: ChatMessage) => void;
+}
+
+/* ---------- bubble rise: yeni mesajın girişi ---------- */
+
+/** Oda açılış anı: bundan sonra gelen mesajlar yükselerek girer. */
+let riseSince = Number.POSITIVE_INFINITY;
+/** Girişini oynatmış (ya da oynatmayacak) mesajlar — kaydırmada yeniden oynamaz. */
+const risen = new Set<string>();
+
+/** Sohbet odası açılınca çağrılır; açılıştaki mesajlar yükselmez. */
+export function beginRiseSession(): void {
+  riseSince = Date.now();
+}
+
+function riseKey(message: ChatMessage): string {
+  return message.client_id ?? String(message.id);
+}
+
+/** Bu mesaj ilk kez mi çiziliyor ve oda açıldıktan sonra mı geldi? */
+function shouldRise(message: ChatMessage): boolean {
+  const key = riseKey(message);
+  if (risen.has(key)) return false;
+  risen.add(key);
+  if (message.pending) return true;
+  const at = Date.parse(message.created_at);
+  return Number.isFinite(at) && at > riseSince - 1500;
+}
+
+function useRise(message: ChatMessage | undefined): { style: Animated.WithAnimatedObject<ViewStyle> | null } {
+  const reduceMotion = useReduceMotion();
+  const fresh = useRef(message ? shouldRise(message) && !reduceMotion : false).current;
+  const progress = useRef(new Animated.Value(fresh ? 0 : 1)).current;
+  useEffect(() => {
+    if (!fresh) return;
+    Animated.spring(progress, { toValue: 1, ...spring.pop }).start();
+  }, [fresh, progress]);
+  if (!fresh || !message) return { style: null };
+  const mine = message.sender.is_me;
+  return {
+    style: {
+      opacity: progress.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 1, 1], extrapolate: "clamp" }),
+      transformOrigin: mine ? "right bottom" : "left bottom",
+      transform: [
+        { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [22, 0] }) },
+        { scale: progress.interpolate({ inputRange: [0, 1], outputRange: [0.86, 1] }) },
+      ],
+    } as Animated.WithAnimatedObject<ViewStyle>,
+  };
 }
 
 const MEDIA_W = 248;
@@ -57,10 +128,25 @@ const TICK_LABEL: Record<TickStatus, string> = {
   read: "okundu",
 };
 
+/** READ RECEIPTS: tik "okundu"ya döndüğünde çift tik yaylanarak zıplar. */
 export const Ticks = memo(function Ticks({ status, size = 15, color }: { status: TickStatus | null; size?: number; color?: string }) {
+  const reduceMotion = useReduceMotion();
+  const pop = useRef(new Animated.Value(1)).current;
+  const previous = useRef(status);
+  useEffect(() => {
+    const was = previous.current;
+    previous.current = status;
+    if (reduceMotion || !was || was === status || (status !== "read" && status !== "delivered" && status !== "sent")) return;
+    pop.setValue(0.4);
+    Animated.spring(pop, { toValue: 1, ...spring.pop }).start();
+  }, [pop, reduceMotion, status]);
   if (!status) return null;
   const tint = status === "read" ? chatPalette.tickRead : status === "failed" ? colors.danger : color ?? chatPalette.tickSent;
-  return <Ionicons name={TICK_ICON[status]} size={size} color={tint} accessibilityLabel={TICK_LABEL[status]} />;
+  return (
+    <Animated.View style={{ transform: [{ scale: pop }] }}>
+      <Ionicons name={TICK_ICON[status]} size={size} color={tint} accessibilityLabel={TICK_LABEL[status]} />
+    </Animated.View>
+  );
 });
 
 /* ---------- balon altı bilgi satırı ---------- */
@@ -72,7 +158,7 @@ function MetaRow({ message, pinned, onMedia }: { message: ChatMessage; pinned: b
       {pinned ? <Ionicons name="pin" size={11} color={tint} /> : null}
       {message.starred ? <Ionicons name="star" size={11} color={tint} /> : null}
       {message.edited_at && !message.deleted ? <Text style={[styles.metaText, { color: tint }]} {...textScale.badge}>düzenlendi</Text> : null}
-      <Text style={[styles.metaText, { color: tint }]} {...textScale.badge}>{clockTime(message.created_at)}</Text>
+      <Text style={[styles.metaText, styles.metaClock, { color: tint }]} {...textScale.badge}>{clockTime(message.created_at)}</Text>
       <Ticks status={tickStatus(message)} color={tint} />
     </View>
   );
@@ -134,12 +220,18 @@ function Quote({ message, onJump, onLong }: { message: ChatMessage; onJump: (id:
       delayLongPress={260}
       accessibilityRole="button"
       accessibilityLabel={`Yanıtlanan mesaj: ${reply.sender_name ?? "Üye"}, ${summary.text}. Mesaja gitmek için dokun`}
-      style={[styles.quote, { borderLeftColor: tint, backgroundColor: message.sender.is_me ? chatPalette.quoteMine : chatPalette.quoteTheirs }]}
+      style={[styles.quote, { backgroundColor: message.sender.is_me ? chatPalette.quoteMine : chatPalette.quoteTheirs }]}
     >
-      <Text style={[styles.quoteName, { color: tint }]} numberOfLines={1} {...textScale.dense}>{reply.sender_name ?? "Üye"}</Text>
-      <View style={styles.quoteLine}>
-        {summary.icon ? <Ionicons name={summary.icon} size={12} color={chatPalette.bubbleMeta} /> : null}
-        <Text style={styles.quoteText} numberOfLines={2} {...textScale.dense}>{summary.text || "Mesaj"}</Text>
+      <View style={[styles.quoteBar, { backgroundColor: tint }]} />
+      <View style={styles.quoteBody}>
+        <View style={styles.quoteHead}>
+          <Ionicons name="arrow-undo" size={10} color={tint} />
+          <Text style={[styles.quoteName, { color: tint }]} numberOfLines={1} {...textScale.dense}>{reply.sender_name ?? "Üye"}</Text>
+        </View>
+        <View style={styles.quoteLine}>
+          {summary.icon ? <Ionicons name={summary.icon} size={12} color={chatPalette.bubbleMeta} /> : null}
+          <Text style={styles.quoteText} numberOfLines={2} {...textScale.dense}>{summary.text || "Mesaj"}</Text>
+        </View>
       </View>
     </Touchable>
   );
@@ -169,6 +261,10 @@ function Photo({ message, box, onPress, onLong, more, style }: { message: ChatMe
       accessibilityLabel={more ? `Fotoğraf ve ${more} fotoğraf daha. Görmek için dokun` : "Fotoğraf. Tam ekran görmek için dokun"}
       style={[styles.photo, box, style]}
     >
+      {/* Yüklenene kadar (ya da yüklenemezse) soluk fotoğraf simgesi görünür. */}
+      <View style={styles.photoPlaceholder} pointerEvents="none">
+        <Ionicons name="image-outline" size={28} color={chatPalette.bubbleMeta} />
+      </View>
       {uri ? <Image source={{ uri }} style={box} resizeMode="cover" /> : null}
       {message.pending ? (
         <View style={styles.photoBusy} pointerEvents="none">
@@ -211,6 +307,16 @@ function Album({ messages, onOpenImage, onLong }: { messages: ChatMessage[]; onO
 
 /* ---------- belge ---------- */
 
+/** Uzantıya göre belge karosunun degradesi (PDF kırmızı, tablo nane, sunum altın…). */
+function fileTone(ext: string, video: boolean): readonly [string, string] {
+  if (video) return colors.tileTones.pink;
+  if (ext === "PDF") return colors.tileTones.red;
+  if (["XLS", "XLSX", "CSV"].includes(ext)) return colors.tileTones.mint;
+  if (["PPT", "PPTX", "KEY"].includes(ext)) return colors.tileTones.gold;
+  if (["DOC", "DOCX", "TXT", "RTF"].includes(ext)) return colors.tileTones.cyan;
+  return colors.tileTones.violet;
+}
+
 function FileBody({ message, onOpenError, onLong }: { message: ChatMessage; onOpenError: () => void; onLong: () => void }) {
   const file = message.meta?.file;
   const video = isVideoFile(message);
@@ -230,8 +336,10 @@ function FileBody({ message, onOpenError, onLong }: { message: ChatMessage; onOp
       accessibilityLabel={`${file?.name ?? "Belge"}. Açmak için dokun`}
       style={[styles.file, { backgroundColor: message.sender.is_me ? chatPalette.quoteMine : chatPalette.quoteTheirs }]}
     >
-      <View style={styles.fileIcon}>
-        <Ionicons name={video ? "videocam" : "document-text"} size={20} color={colors.textOnBrand} />
+      <View style={[styles.fileIcon, glowStyle(fileTone(ext, video)[1], 1)]}>
+        <LinearGradient colors={fileTone(ext, video)} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, styles.fileIconFill]} />
+        <Ionicons name={video ? "videocam" : "document-text"} size={18} color={colors.onDark} />
+        {ext && !video ? <Text style={styles.fileExt} numberOfLines={1} {...textScale.badge}>{ext}</Text> : null}
       </View>
       <View style={styles.fileBody}>
         <Text style={styles.fileName} numberOfLines={2} {...textScale.dense}>{file?.name ?? "Belge"}</Text>
@@ -239,7 +347,9 @@ function FileBody({ message, onOpenError, onLong }: { message: ChatMessage; onOp
           {[message.pending ? "Yükleniyor…" : null, formatBytes(file?.size), ext].filter(Boolean).join(" · ")}
         </Text>
       </View>
-      <Ionicons name={message.pending ? "cloud-upload-outline" : "open-outline"} size={18} color={chatPalette.bubbleMeta} />
+      <View style={styles.fileAction}>
+        <Ionicons name={message.pending ? "cloud-upload-outline" : "arrow-down"} size={16} color={chatPalette.bubbleText} />
+      </View>
     </Touchable>
   );
 }
@@ -252,12 +362,19 @@ const SPEED_LABEL: Record<number, string> = { 1: "1×", 1.5: "1,5×", 2: "2×" }
 let pauseCurrent: (() => void) | null = null;
 
 function Wave({ bars, progress }: { bars: number[]; progress: number }) {
-  const active = chatPalette.waveActive;
   const cut = Math.round(progress * bars.length);
+  const half = bars.length / 2;
   return (
     <View style={styles.wave} pointerEvents="none">
       {bars.map((h, index) => (
-        <View key={index} style={[styles.waveBar, { height: Math.round(4 + h * 20), backgroundColor: index < cut ? active : chatPalette.waveIdle }]} />
+        <View
+          key={index}
+          style={[
+            styles.waveBar,
+            // Çalınan kısım imza degradesini taklit eder: ilk yarı mor, ikinci yarı camgöbeği.
+            { height: Math.round(4 + h * 20), backgroundColor: index < cut ? (index < half ? colors.gradientSignature[0] : colors.gradientSignature[1]) : chatPalette.waveIdle },
+          ]}
+        />
       ))}
     </View>
   );
@@ -297,9 +414,10 @@ function VoiceFrame({
         hitSlop={8}
         accessibilityRole="button"
         accessibilityLabel={playing ? "Sesli mesajı duraklat" : "Sesli mesajı oynat"}
-        style={styles.voicePlay}
+        style={[styles.voicePlay, disabled ? null : glowStyle(colors.glow, 1)]}
       >
-        <Ionicons name={disabled ? "cloud-upload-outline" : playing ? "pause" : "play"} size={disabled ? 24 : 30} color={mine ? chatPalette.voicePlayMine : chatPalette.voicePlayTheirs} />
+        <LinearGradient colors={colors.gradientBrand} start={G_START} end={G_END} style={[StyleSheet.absoluteFill, styles.voicePlayFill]} />
+        <Ionicons name={disabled ? "cloud-upload-outline" : playing ? "pause" : "play"} size={disabled ? 18 : 20} color={palette.textOnBrand} style={playing || disabled ? null : styles.playNudge} />
       </Touchable>
       <View style={styles.voiceBody}>
         <Wave bars={bars} progress={progress} />
@@ -310,7 +428,9 @@ function VoiceFrame({
           <Text style={styles.speedText} {...textScale.badge}>{SPEED_LABEL[speed ?? 1]}</Text>
         </Touchable>
       ) : null}
-      <Ionicons name="mic" size={18} color={played ? chatPalette.voiceMicPlayed : chatPalette.voiceMic} accessibilityLabel={played ? "Dinlendi" : "Sesli mesaj"} />
+      <View style={styles.voiceMic}>
+        <Ionicons name="mic" size={13} color={played ? chatPalette.voiceMicPlayed : chatPalette.voiceMic} accessibilityLabel={played ? "Dinlendi" : "Sesli mesaj"} />
+      </View>
     </View>
   );
 }
@@ -383,18 +503,38 @@ export const VoiceNote = memo(function VoiceNote({ url, durationMs, seed, mine, 
 
 /* ---------- konum ---------- */
 
+/** Harita önizlemesindeki "sokak" çizgileri (yüzde konumlar). */
+const MAP_LINES: ViewStyle[] = [
+  { top: "28%", left: 0, right: 0, height: 2 },
+  { top: "68%", left: 0, right: 0, height: 1 },
+  { left: "22%", top: 0, bottom: 0, width: 1 },
+  { left: "64%", top: 0, bottom: 0, width: 2 },
+  { left: "84%", top: 0, bottom: 0, width: 1 },
+];
+
 function LocationBody({ message, onLong }: { message: ChatMessage; onLong: () => void }) {
   const location = message.meta?.location;
   const title = location?.venue_name || location?.label || "Konum";
   return (
     <Touchable feedback="none" haptic="light" onPress={() => void openMap(location)} onLongPress={onLong} delayLongPress={260} accessibilityRole="link" accessibilityLabel={`${title}. Haritada açmak için dokun`} style={styles.location}>
+      {/* Harita önizlemesi: gece mürekkebi zemin, ızgara sokaklar, parıltılı iğne. */}
       <View style={styles.locationMap}>
-        <Ionicons name="location" size={30} color={colors.danger} />
+        <LinearGradient colors={colors.gradientInk} start={G_START} end={G_END} style={StyleSheet.absoluteFill} />
+        {MAP_LINES.map((line, index) => (
+          <View key={index} style={[styles.mapLine, line]} />
+        ))}
+        <View style={styles.pinHalo} />
+        <View style={[styles.pin, glowStyle(colors.live, 2)]}>
+          <Ionicons name="location" size={18} color={colors.onDark} />
+        </View>
       </View>
       <View style={styles.locationBody}>
         <Text style={styles.fileName} numberOfLines={2} {...textScale.dense}>{title}</Text>
         {location?.address ? <Text style={styles.fileMeta} numberOfLines={2} {...textScale.dense}>{location.address}</Text> : null}
-        <Text style={styles.locationLink} {...textScale.dense}>Haritada aç</Text>
+        <View style={styles.locationChip}>
+          <Ionicons name="navigate" size={12} color={chatPalette.link} />
+          <Text style={styles.locationLink} {...textScale.dense}>Haritada aç</Text>
+        </View>
       </View>
     </Touchable>
   );
@@ -443,33 +583,87 @@ export interface RowShellProps {
    * düğmelere ulaşabilsin; seçim kipinde satırın tamamı tek öğedir.
    */
   whole?: boolean;
+  /** Verilirse satır BUBBLE RISE girişini oynatır (oda açıldıktan sonra gelen mesaj). */
+  message?: ChatMessage;
+  /** Verilirse satır sağa çekilerek yanıtlanır. */
+  onSwipeReply?: () => void;
 }
 
+const REPLY_TRIGGER = 64;
+
 /** Hizalama, seçim işareti ve "mesaja git" vurgusu — balonlar ve kartlar ortak kullanır. */
-export function RowShell({ mine, selecting, selected, highlighted, last, onPress, onLongPress, center, children, accessibilityLabel, whole = false }: RowShellProps) {
+export function RowShell({ mine, selecting, selected, highlighted, last, onPress, onLongPress, center, children, accessibilityLabel, whole = false, message, onSwipeReply }: RowShellProps) {
+  const rise = useRise(message);
+  const dx = useRef(new Animated.Value(0)).current;
+  const armed = useRef(false);
+  const replyRef = useRef(onSwipeReply);
+  replyRef.current = onSwipeReply;
+  const swipeable = Boolean(onSwipeReply) && !selecting && !center;
+  const responder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_e, g) => g.dx > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderMove: (_e, g) => {
+          const x = Math.max(0, g.dx);
+          dx.setValue(x > REPLY_TRIGGER ? REPLY_TRIGGER + (x - REPLY_TRIGGER) * 0.3 : x);
+          const now = x > REPLY_TRIGGER;
+          if (now !== armed.current) {
+            armed.current = now;
+            if (now) fireHaptic("light");
+          }
+        },
+        onPanResponderRelease: () => {
+          if (armed.current) replyRef.current?.();
+          armed.current = false;
+          Animated.spring(dx, { toValue: 0, ...spring.slide }).start();
+        },
+        onPanResponderTerminate: () => {
+          armed.current = false;
+          Animated.spring(dx, { toValue: 0, ...spring.slide }).start();
+        },
+      }),
+    [dx],
+  );
+  const arrow = {
+    opacity: dx.interpolate({ inputRange: [0, 20, REPLY_TRIGGER], outputRange: [0, 0.3, 1], extrapolate: "clamp" }),
+    transform: [{ scale: dx.interpolate({ inputRange: [0, REPLY_TRIGGER, REPLY_TRIGGER + 20], outputRange: [0.4, 1, 1.15], extrapolate: "clamp" }) }],
+  };
+
+  // Kaydırma tutamağı satırın ATASINDADIR: basılı Touchable yanıtlayıcıyken
+  // hareket ancak bir ata tarafından devralınabilir (RN yanıtlayıcı kuralı).
   return (
-    <Touchable
-      feedback="none"
-      haptic="none"
-      onPress={onPress}
-      onLongPress={onLongPress}
-      delayLongPress={260}
-      accessible={selecting || whole}
-      accessibilityRole={selecting ? "checkbox" : "text"}
-      accessibilityLabel={accessibilityLabel}
-      accessibilityHint={selecting ? undefined : whole ? "Mesaj seçenekleri için basılı tut" : undefined}
-      accessibilityState={selecting ? { checked: selected } : undefined}
-      style={[styles.row, last ? styles.rowLast : null, selected || highlighted ? styles.rowMarked : null]}
-    >
-      {selecting ? (
-        <View style={styles.check}>
-          <Ionicons name={selected ? "checkmark-circle" : "ellipse-outline"} size={22} color={selected ? colors.brand : chatPalette.bubbleMeta} />
-        </View>
+    <View>
+      {swipeable ? (
+        <Animated.View pointerEvents="none" style={[styles.replyHint, arrow]}>
+          <Ionicons name="arrow-undo" size={16} color={colors.brandAccent} />
+        </Animated.View>
       ) : null}
-      <View style={[styles.rowBody, center ? styles.rowCenter : mine ? styles.rowMine : styles.rowTheirs]} pointerEvents={selecting ? "none" : "box-none"}>
-        {children}
-      </View>
-    </Touchable>
+      <Animated.View style={swipeable ? { transform: [{ translateX: dx }] } : null} {...(swipeable ? responder.panHandlers : null)}>
+        <Touchable
+          feedback="none"
+          haptic="none"
+          onPress={onPress}
+          onLongPress={onLongPress}
+          delayLongPress={260}
+          accessible={selecting || whole}
+          accessibilityRole={selecting ? "checkbox" : "text"}
+          accessibilityLabel={accessibilityLabel}
+          accessibilityHint={selecting ? undefined : whole ? "Mesaj seçenekleri için basılı tut" : undefined}
+          accessibilityState={selecting ? { checked: selected } : undefined}
+          style={[styles.row, last ? styles.rowLast : null, selected || highlighted ? styles.rowMarked : null]}
+        >
+          {selecting ? (
+            <View style={styles.check}>
+              <Ionicons name={selected ? "checkmark-circle" : "ellipse-outline"} size={22} color={selected ? colors.brand : chatPalette.bubbleMeta} />
+            </View>
+          ) : null}
+          <Animated.View style={[styles.rowBody, center ? styles.rowCenter : mine ? styles.rowMine : styles.rowTheirs, rise.style]} pointerEvents={selecting ? "none" : "box-none"}>
+            {children}
+          </Animated.View>
+        </Touchable>
+      </Animated.View>
+    </View>
   );
 }
 
@@ -517,9 +711,20 @@ export const MessageBubble = memo(function MessageBubble({ message, album, first
       onLongPress={onLong}
       whole={deleted || (kind === "text" && !message.reply_to)}
       accessibilityLabel={`${mine ? "Sen" : message.sender.name ?? "Üye"}: ${summary.text}, ${clockTime(message.created_at)}`}
+      message={album ? album[album.length - 1] : message}
+      onSwipeReply={actions.onReply && !deleted && message.id > 0 && !message.failed ? () => actions.onReply?.(message) : undefined}
     >
       <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs, first ? (mine ? styles.tailCornerMine : styles.tailCornerTheirs) : null, mediaOnly ? styles.bubbleMedia : null, message.pending ? styles.bubblePending : null]}>
         {first ? <View style={[styles.tail, mine ? styles.tailMine : styles.tailTheirs]} pointerEvents="none" /> : null}
+        {mine ? (
+          <LinearGradient
+            pointerEvents="none"
+            colors={[chatPalette.bubbleMine, chatPalette.bubbleMineEdge]}
+            start={G_START}
+            end={G_END}
+            style={[StyleSheet.absoluteFill, styles.bubbleFill, first ? styles.tailCornerMine : null]}
+          />
+        ) : null}
         {showName ? (
           <View style={[styles.nameRow, mediaOnly ? styles.padded : null]}>
             {message.sender.is_management ? <Ionicons name="shield-checkmark" size={12} color={nameTint} /> : null}
@@ -581,25 +786,36 @@ export const MessageBubble = memo(function MessageBubble({ message, album, first
 
 /* ---------- gün ayracı, okunmamış ayracı ---------- */
 
+/** Gün hapı: cam kapsül, büyük harf etiket, iki yanında sönen ince çizgi. */
 export const DayDivider = memo(function DayDivider({ label }: { label: string }) {
   return (
     <View style={styles.dayRow} accessibilityRole="header">
-      <View style={styles.dayPill}><Text style={styles.dayText} {...textScale.badge}>{label}</Text></View>
+      <View style={styles.dayLine} />
+      <View style={styles.dayPill}>
+        <Ionicons name="calendar-clear-outline" size={11} color={chatPalette.dayText} />
+        <Text style={styles.dayText} {...textScale.badge}>{label.toLocaleUpperCase("tr-TR")}</Text>
+      </View>
+      <View style={styles.dayLine} />
     </View>
   );
 });
 
+/** Okunmamış ayracı: imza degradesi çizgi + ortada mor kapsül. */
 export const UnreadDivider = memo(function UnreadDivider({ count }: { count: number }) {
   return (
     <View style={styles.unreadRow}>
-      <View style={styles.dayPill}>
-        <Text style={styles.dayText} {...textScale.badge}>{count > 0 ? `${count} okunmamış mesaj` : "Okunmamış mesajlar"}</Text>
+      <LinearGradient colors={colors.gradientSignature} start={G_START} end={G_END} style={styles.unreadLine} />
+      <View style={[styles.unreadPill, glowStyle(colors.glow, 1)]}>
+        <LinearGradient colors={colors.gradientBrand} start={G_START} end={G_END} style={[StyleSheet.absoluteFill, styles.unreadPillFill]} />
+        <Ionicons name="arrow-down" size={11} color={palette.textOnBrand} />
+        <Text style={styles.unreadText} {...textScale.badge}>{count > 0 ? `${count} okunmamış mesaj` : "Okunmamış mesajlar"}</Text>
       </View>
     </View>
   );
 });
 
-const TAIL = 8;
+const TAIL = 7;
+const BUBBLE_R = 18;
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", paddingHorizontal: space.md, paddingVertical: space.px },
@@ -613,15 +829,17 @@ const styles = StyleSheet.create({
 
   /* WhatsApp balonu: 8 px köşe, altta 1 px gölge çizgisi. Genişlik satırın en çok
      %84'ü: 360 pt ekranda seçim kipinde (30 pt işaret sütunu) 248 pt medya sığsın. */
-  bubble: { maxWidth: "84%", minWidth: 76, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingTop: space.s, paddingBottom: space.s, borderBottomWidth: 1, borderBottomColor: chatPalette.bubbleShade },
-  bubbleMine: { backgroundColor: chatPalette.bubbleMine },
-  bubbleTheirs: { backgroundColor: chatPalette.bubbleTheirs },
-  bubbleMedia: { paddingHorizontal: space.xxs + 1, paddingTop: space.xxs + 1, paddingBottom: space.xxs + 1 },
+  bubble: { maxWidth: "84%", minWidth: 76, borderRadius: BUBBLE_R, paddingHorizontal: space.md, paddingTop: space.sm, paddingBottom: space.sm },
+  /* Giden: degrade katmanı `bubbleFill` çizer; zemin rengi kuyruk ve yedek içindir. */
+  bubbleMine: { backgroundColor: chatPalette.bubbleMine, ...glowStyle(colors.glow, 1), shadowOpacity: 0.18 },
+  bubbleTheirs: { backgroundColor: chatPalette.bubbleTheirs, borderWidth: hairline, borderColor: chatPalette.bubbleLine },
+  bubbleFill: { borderRadius: BUBBLE_R },
+  bubbleMedia: { paddingHorizontal: space.xs, paddingTop: space.xs, paddingBottom: space.xs },
   bubblePending: { opacity: 0.86 },
-  tailCornerMine: { borderTopRightRadius: 0 },
-  tailCornerTheirs: { borderTopLeftRadius: 0 },
+  tailCornerMine: { borderTopRightRadius: radius.xs - 3 },
+  tailCornerTheirs: { borderTopLeftRadius: radius.xs - 3 },
   tail: { position: "absolute", top: 0, width: 0, height: 0, borderTopWidth: TAIL, borderBottomWidth: 0, borderBottomColor: "transparent" },
-  tailMine: { right: -TAIL, borderTopColor: chatPalette.bubbleMine, borderRightWidth: TAIL, borderRightColor: "transparent" },
+  tailMine: { right: -TAIL + 1, borderTopColor: chatPalette.bubbleMine, borderRightWidth: TAIL, borderRightColor: "transparent" },
   tailTheirs: { left: -TAIL, borderTopColor: chatPalette.bubbleTheirs, borderLeftWidth: TAIL, borderLeftColor: "transparent" },
   padded: { paddingHorizontal: space.s, paddingTop: space.xxs },
 
@@ -642,43 +860,58 @@ const styles = StyleSheet.create({
 
   meta: { flexDirection: "row", alignItems: "center", gap: space.xs },
   metaText: { ...type.meta },
+  metaClock: { ...type.numSm, fontSize: type.meta.fontSize, lineHeight: type.meta.lineHeight },
   metaFloat: { position: "absolute", right: space.sm, bottom: space.xs },
   metaFlow: { alignSelf: "flex-end", marginTop: space.xxs },
   metaOnMedia: { position: "absolute", right: space.sm, bottom: space.sm, paddingHorizontal: space.s, paddingVertical: space.xxs, borderRadius: radius.pill, backgroundColor: chatPalette.viewerChrome },
 
-  quote: { borderLeftWidth: 3, borderRadius: radius.xs, paddingHorizontal: space.sm, paddingVertical: space.xs, marginBottom: space.xs, gap: space.px, minWidth: 140 },
+  quote: { flexDirection: "row", borderRadius: radius.md, overflow: "hidden", marginBottom: space.s, minWidth: 160, borderWidth: hairline, borderColor: chatPalette.bubbleLine },
+  quoteBar: { width: 3 },
+  quoteBody: { flexShrink: 1, paddingHorizontal: space.sm, paddingVertical: space.s, gap: space.px },
+  quoteHead: { flexDirection: "row", alignItems: "center", gap: space.xs },
   quoteName: { ...type.labelXs },
   quoteLine: { flexDirection: "row", alignItems: "center", gap: space.xs },
   quoteText: { ...type.bodySm, color: chatPalette.bubbleMeta, flexShrink: 1 },
 
-  photo: { borderRadius: radius.sm, overflow: "hidden", backgroundColor: chatPalette.quoteTheirs },
+  photo: { borderRadius: radius.md, overflow: "hidden", backgroundColor: chatPalette.quoteTheirs },
   photoCaptioned: { marginBottom: space.xs },
+  photoPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
   photoBusy: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", backgroundColor: chatPalette.viewerChrome },
   photoMore: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", backgroundColor: chatPalette.viewerChrome },
   photoMoreText: { ...type.scoreMd, color: chatPalette.viewerText },
   album: { width: MEDIA_W, flexDirection: "row", flexWrap: "wrap", gap: space.xxs },
 
-  file: { width: MEDIA_W, flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.sm, borderRadius: radius.sm },
-  fileIcon: { width: 38, height: 38, borderRadius: radius.sm, alignItems: "center", justifyContent: "center", backgroundColor: colors.brand },
+  file: { width: MEDIA_W, flexDirection: "row", alignItems: "center", gap: space.md, padding: space.sm, borderRadius: radius.md, borderWidth: hairline, borderColor: chatPalette.bubbleLine },
+  fileIcon: { width: 42, height: 48, borderRadius: radius.sm, alignItems: "center", justifyContent: "center", gap: space.px },
+  fileIconFill: { borderRadius: radius.sm },
+  fileExt: { ...type.nano, color: colors.onDark },
+  fileAction: { width: 30, height: 30, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: chatPalette.bubbleInset },
   fileBody: { flex: 1, minWidth: 0, gap: space.px },
   fileName: { ...type.label, color: chatPalette.bubbleText },
   fileMeta: { ...type.caption, color: chatPalette.bubbleMeta },
 
   voice: { width: MEDIA_W, flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.xxs },
-  voicePlay: { width: 36, height: 38, alignItems: "center", justifyContent: "center" },
+  voicePlay: { width: 40, height: 40, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  voicePlayFill: { borderRadius: radius.pill },
+  playNudge: { marginLeft: 2 },
+  voiceMic: { width: 22, height: 22, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: chatPalette.bubbleInset },
   voiceBody: { flex: 1, gap: space.xxs },
   wave: { height: 26, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   waveBar: { width: 3, borderRadius: 2 },
   voiceTime: { ...type.numSm, color: chatPalette.bubbleMeta },
-  speed: { minWidth: 40, height: 26, paddingHorizontal: space.sm, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: chatPalette.quoteMine },
+  speed: { minWidth: 40, height: 24, paddingHorizontal: space.sm, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: chatPalette.bubbleInset },
   speedText: { ...type.labelXs, color: chatPalette.bubbleText },
 
-  location: { width: MEDIA_W, borderRadius: radius.sm, overflow: "hidden" },
-  locationMap: { height: 92, alignItems: "center", justifyContent: "center", backgroundColor: chatPalette.quoteTheirs, borderRadius: radius.sm },
-  locationBody: { paddingTop: space.s, gap: space.px },
-  locationLink: { ...type.labelSm, color: chatPalette.link, marginTop: space.xxs },
+  location: { width: MEDIA_W, borderRadius: radius.md, overflow: "hidden" },
+  locationMap: { height: 110, alignItems: "center", justifyContent: "center", borderRadius: radius.md, overflow: "hidden" },
+  mapLine: { position: "absolute", backgroundColor: colors.glassLine },
+  pinHalo: { position: "absolute", width: 56, height: 56, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.live, opacity: 0.35 },
+  pin: { width: 32, height: 32, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.live },
+  locationBody: { paddingTop: space.sm, paddingHorizontal: space.xxs, gap: space.px },
+  locationChip: { flexDirection: "row", alignItems: "center", gap: space.xs, marginTop: space.xs, alignSelf: "flex-start" },
+  locationLink: { ...type.labelSm, color: chatPalette.link },
 
-  reactions: { flexDirection: "row", alignItems: "center", gap: space.xs, marginTop: -space.s, marginHorizontal: space.sm, paddingHorizontal: space.sm, height: 24, borderRadius: radius.pill, backgroundColor: chatPalette.bubbleTheirs, borderWidth: 1, borderColor: chatPalette.wall },
+  reactions: { flexDirection: "row", alignItems: "center", gap: space.xs, marginTop: -space.s, marginHorizontal: space.md, paddingHorizontal: space.sm, height: 24, borderRadius: radius.pill, backgroundColor: chatPalette.bubbleTheirs, borderWidth: 1.5, borderColor: chatPalette.wall },
   reactionsMine: { backgroundColor: colors.brandDim },
   reactionEmoji: { ...type.label, color: chatPalette.bubbleText },
   reactionCount: { ...type.numSmStrong, color: chatPalette.bubbleMeta },
@@ -686,8 +919,14 @@ const styles = StyleSheet.create({
   failed: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingVertical: space.xs },
   failedText: { ...type.labelXs, color: colors.danger },
 
-  dayRow: { alignItems: "center", paddingVertical: space.sm },
-  unreadRow: { alignItems: "center", paddingVertical: space.s, marginVertical: space.xs, backgroundColor: chatPalette.highlight },
-  dayPill: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.sm, backgroundColor: chatPalette.dayPill, borderBottomWidth: 1, borderBottomColor: chatPalette.bubbleShade },
-  dayText: { ...type.labelXs, color: chatPalette.dayText },
+  dayRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.xl, paddingVertical: space.md },
+  dayLine: { flex: 1, height: hairline, backgroundColor: chatPalette.bubbleLine },
+  dayPill: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: space.md, height: 24, borderRadius: radius.pill, backgroundColor: chatPalette.dayPill, borderWidth: hairline, borderColor: colors.glassLine },
+  dayText: { ...type.overline, color: chatPalette.dayText },
+  unreadRow: { alignItems: "center", justifyContent: "center", paddingVertical: space.md, marginVertical: space.xs },
+  unreadLine: { position: "absolute", left: space.xl, right: space.xl, height: 1.5, borderRadius: radius.pill, opacity: 0.7 },
+  unreadPill: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: space.md, height: 24, borderRadius: radius.pill },
+  unreadPillFill: { borderRadius: radius.pill },
+  unreadText: { ...type.labelXs, color: palette.textOnBrand },
+  replyHint: { position: "absolute", left: space.md, top: "50%", marginTop: -15, width: 30, height: 30, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandDim },
 });

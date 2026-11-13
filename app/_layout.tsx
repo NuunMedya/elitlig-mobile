@@ -16,7 +16,7 @@ import { CallProvider } from "@/providers/CallProvider";
 import { startAnalytics, trackScreen } from "@/lib/analytics";
 import { ApiError } from "@/lib/http";
 import { AdminModeProvider } from "@/providers/AdminModeProvider";
-import { AuthProvider } from "@/providers/AuthProvider";
+import { AuthGate, AuthProvider } from "@/providers/AuthProvider";
 import { FavoriteProvider } from "@/providers/FavoriteProvider";
 import { FollowFlowProvider } from "@/providers/FollowFlowProvider";
 import { ScopeProvider } from "@/providers/ScopeProvider";
@@ -137,6 +137,7 @@ export default function RootLayout() {
                     components/ui/ScreenHeader.tsx), tema ne olursa olsun
                     durum çubuğu simgeleri o bloğun üstünde duruyor. */}
                 <StatusBar style="light" />
+                <AuthGate>
                 <Stack
                   initialRouteName="hosgeldin"
                   screenOptions={{
@@ -222,6 +223,7 @@ export default function RootLayout() {
                   <Stack.Screen name="kayit" options={{ presentation: "modal", animation: "slide_from_bottom", gestureEnabled: false }} />
                   <Stack.Screen name="sifremi-unuttum" options={{ presentation: "modal", animation: "slide_from_bottom", gestureEnabled: false }} />
                 </Stack>
+                </AuthGate>
 
                 {/* Kapsam seçici — uygulamada TEK örnek. */}
                 <ScopeSheet />

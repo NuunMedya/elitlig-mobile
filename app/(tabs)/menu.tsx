@@ -25,7 +25,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Constants from "expo-constants";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
-import { Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Platform, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   IconTile,
@@ -432,6 +432,16 @@ export default function MenuTabScreen() {
 
   /* Oturumu kapat — onaylı; Ayarlar'daki çıkışla aynı akış. */
   const confirmSignOut = useCallback(() => {
+    const doSignOut = () =>
+      void auth.signOut().then(() => {
+        toast.show({ message: "Oturum kapatıldı.", tone: "neutral" });
+      });
+    // react-native-web'de Alert.alert görünmez: tarayıcı onayı.
+    if (Platform.OS === "web") {
+      const ask = (globalThis as { confirm?: (text: string) => boolean }).confirm;
+      if (!ask || ask("Bu cihazdaki oturumu kapatmak istediğine emin misin?")) doSignOut();
+      return;
+    }
     Alert.alert("Oturumu kapat", "Bu cihazdaki oturumu kapatmak istediğine emin misin?", [
       { text: "Vazgeç", style: "cancel" },
       {

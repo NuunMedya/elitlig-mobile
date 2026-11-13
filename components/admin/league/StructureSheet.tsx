@@ -9,11 +9,13 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { FieldLabel, SegmentField, ToggleField, confirmAction } from "@/components/admin";
-import { BottomSheet, Button, Chip, ChipGroup, Stepper } from "@/components/ui";
+import { Badge, BottomSheet, Button, Chip, ChipGroup, Odometer, Skeleton } from "@/components/ui";
+import { BumpButtons, NumberedSection } from "@/components/admin/matches/opsKit";
 import { errorText } from "@/lib/admin/errors";
 import { buildStructure, previewStructure, type StructureTemplate } from "@/lib/api/admin/leagues";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
@@ -154,64 +156,63 @@ export function StructureSheet({
       }
     >
       <View style={styles.stack}>
-        <Text style={styles.section} {...textScale.dense}>
-          1 · GRUP AŞAMASI
-        </Text>
-        <ToggleField label="Sezon gruplara bölünsün" value={shape.useGroups} onChange={(v) => set({ useGroups: v })} />
-        {shape.useGroups ? (
-          <>
-            <Stepper label="Grup sayısı" value={shape.groupCount} min={1} max={16} onChange={(v) => set({ groupCount: v })} />
-            <Stepper
-              label="Grupta takım"
-              value={shape.groupSize}
-              min={2}
-              max={32}
-              onChange={(v) => set({ groupSize: v, perGroup: Math.min(shape.perGroup, v) })}
-            />
-            <SegmentField
-              label="Maç düzeni"
-              value={shape.format}
-              onChange={(v) => set({ format: v })}
-              options={[
-                { key: "fikstur", label: "Fikstürlü" },
-                { key: "serbest", label: "Serbest" },
-              ]}
-            />
-            <ToggleField label="Grup maçları rövanşlı" value={shape.groupDouble} onChange={(v) => set({ groupDouble: v })} />
-          </>
-        ) : null}
+        <NumberedSection index={1} title="Grup aşaması" right={shape.useGroups ? <Badge label={`${shape.groupCount}×${shape.groupSize}`} tone="brand" size="xs" /> : null}>
+          <ToggleField label="Sezon gruplara bölünsün" value={shape.useGroups} onChange={(v) => set({ useGroups: v })} />
+          {shape.useGroups ? (
+            <>
+              <View style={styles.counterRow}>
+                <CountCell label="Grup" value={shape.groupCount} min={1} max={16} onChange={(v) => set({ groupCount: v })} />
+                <CountCell
+                  label="Grupta takım"
+                  value={shape.groupSize}
+                  min={2}
+                  max={32}
+                  onChange={(v) => set({ groupSize: v, perGroup: Math.min(shape.perGroup, v) })}
+                />
+              </View>
+              <SegmentField
+                label="Maç düzeni"
+                value={shape.format}
+                onChange={(v) => set({ format: v })}
+                options={[
+                  { key: "fikstur", label: "Fikstürlü" },
+                  { key: "serbest", label: "Serbest" },
+                ]}
+              />
+              <ToggleField label="Grup maçları rövanşlı" value={shape.groupDouble} onChange={(v) => set({ groupDouble: v })} />
+            </>
+          ) : null}
+        </NumberedSection>
 
-        <Text style={styles.section} {...textScale.dense}>
-          2 · ELEME TURUNA ÇIKANLAR
-        </Text>
-        <SegmentField<Advance>
-          value={advance}
-          onChange={(v) => set({ advance: v })}
-          options={[
-            ...(shape.useGroups ? [{ key: "groups" as Advance, label: "Gruplardan" }] : []),
-            { key: "overall", label: "Genel tablodan" },
-            { key: "none", label: "Eleme yok" },
-          ]}
-        />
-        {advance === "groups" ? (
-          <Stepper label="Her gruptan ilk" value={shape.perGroup} min={1} max={shape.groupSize} onChange={(v) => set({ perGroup: v })} />
-        ) : null}
-        {advance === "overall" ? (
-          <View style={styles.field}>
-            <FieldLabel label="Genel tablonun ilk" />
-            <ChipGroup>
-              {QUALIFIER_OPTIONS.map((n) => (
-                <Chip key={n} label={String(n)} size="sm" selected={shape.qualifiers === n} onPress={() => set({ qualifiers: n })} />
-              ))}
-            </ChipGroup>
-          </View>
-        ) : null}
+        <NumberedSection index={2} title="Eleme turuna çıkanlar" right={advance !== "none" ? <Badge label={`${qualifierCount} takım`} tone="info" size="xs" /> : null}>
+          <SegmentField<Advance>
+            value={advance}
+            onChange={(v) => set({ advance: v })}
+            options={[
+              ...(shape.useGroups ? [{ key: "groups" as Advance, label: "Gruplardan" }] : []),
+              { key: "overall", label: "Genel tablodan" },
+              { key: "none", label: "Eleme yok" },
+            ]}
+          />
+          {advance === "groups" ? (
+            <View style={styles.counterRow}>
+              <CountCell label="Her gruptan ilk" value={shape.perGroup} min={1} max={shape.groupSize} onChange={(v) => set({ perGroup: v })} />
+            </View>
+          ) : null}
+          {advance === "overall" ? (
+            <View style={styles.field}>
+              <FieldLabel label="Genel tablonun ilk" />
+              <ChipGroup contentPadding={0}>
+                {QUALIFIER_OPTIONS.map((n) => (
+                  <Chip key={n} label={String(n)} size="sm" selected={shape.qualifiers === n} onPress={() => set({ qualifiers: n })} />
+                ))}
+              </ChipGroup>
+            </View>
+          ) : null}
+        </NumberedSection>
 
         {advance !== "none" ? (
-          <>
-            <Text style={styles.section} {...textScale.dense}>
-              3 · ELEME TURLARI · {qualifierCount} TAKIM
-            </Text>
+          <NumberedSection index={3} title="Eleme turları">
             <ToggleField label="Eleme maçları rövanşlı" hint="Toplam skorla tur atlanır." value={shape.koDouble} onChange={(v) => set({ koDouble: v })} />
             <ToggleField label="Final rövanşlı" value={shape.finalDouble} onChange={(v) => set({ finalDouble: v })} />
             {qualifierCount >= 4 ? (
@@ -228,55 +229,69 @@ export function StructureSheet({
                 ]}
               />
             ) : null}
-          </>
+          </NumberedSection>
         ) : null}
 
-        <Text style={styles.section} {...textScale.dense}>
-          ŞÖYLE KURULACAK
-        </Text>
-        {preview.isError ? (
-          <Text style={styles.error} {...textScale.long}>
-            {errorText(preview.error, "Önizleme alınamadı.")}
-          </Text>
-        ) : !preview.data ? (
-          <Text style={styles.muted}>Hazırlanıyor…</Text>
-        ) : (
-          <View style={styles.plan}>
-            {groupsPlan.length ? (
-              <View style={styles.planCol}>
-                <Text style={styles.planLabel} {...textScale.dense}>
-                  Grup aşaması
-                </Text>
-                {groupsPlan.map((g) => (
-                  <View key={g.name} style={styles.planCard}>
-                    <Text style={styles.planTitle} {...textScale.dense}>
-                      {g.name}
-                    </Text>
-                    <Text style={styles.muted} {...textScale.dense}>
-                      {g.slots.length} takım · {g.format === "fikstur" ? "fikstürlü" : "serbest"}
-                      {g.double_round ? " · rövanşlı" : ""}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            ) : null}
-            {stagesPlan.map((g) => (
-              <View key={g.name} style={styles.planCol}>
-                <Text style={styles.planLabel} {...textScale.dense}>
-                  {g.name}
-                  {g.double_round ? " · rövanşlı" : ""}
-                </Text>
-                {Array.from({ length: Math.ceil(g.slots.length / 2) }, (_, i) => (
-                  <View key={i} style={styles.planCard}>
-                    <Text style={styles.muted} numberOfLines={2} {...textScale.dense}>
-                      {g.slots[i * 2]} – {g.slots[i * 2 + 1] ?? "?"}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            ))}
+        <View style={styles.previewBox}>
+          <View style={styles.previewHead}>
+            <Ionicons name="eye-outline" size={14} color={colors.brandAccent} />
+            <Text style={styles.previewTitle} {...textScale.dense}>
+              ŞÖYLE KURULACAK
+            </Text>
           </View>
-        )}
+          {preview.isError ? (
+            <Text style={styles.error} {...textScale.long}>
+              {errorText(preview.error, "Önizleme alınamadı.")}
+            </Text>
+          ) : !preview.data ? (
+            <View style={styles.planSkeleton}>
+              <Skeleton height={56} width={120} radius="md" />
+              <Skeleton height={56} width={120} radius="md" />
+            </View>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.plan}>
+              {groupsPlan.length ? (
+                <View style={styles.planCol}>
+                  <Text style={styles.planLabel} numberOfLines={1} {...textScale.dense}>
+                    GRUP AŞAMASI
+                  </Text>
+                  {groupsPlan.map((g) => (
+                    <View key={g.name} style={[styles.planCard, styles.planCardPool]}>
+                      <Text style={styles.planTitle} numberOfLines={1} {...textScale.dense}>
+                        {g.name}
+                      </Text>
+                      <Text style={styles.muted} numberOfLines={1} {...textScale.dense}>
+                        {g.slots.length} takım · {g.format === "fikstur" ? "fikstürlü" : "serbest"}
+                        {g.double_round ? " · rövanş" : ""}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+              {stagesPlan.map((g, gi) => (
+                <View key={g.name} style={styles.planStep}>
+                  {groupsPlan.length || gi > 0 ? <Ionicons name="chevron-forward" size={16} color={colors.brandAccent} /> : null}
+                  <View style={styles.planCol}>
+                    <Text style={styles.planLabel} numberOfLines={1} {...textScale.dense}>
+                      {g.name.toLocaleUpperCase("tr-TR")}
+                      {g.double_round ? " · R" : ""}
+                    </Text>
+                    {Array.from({ length: Math.ceil(g.slots.length / 2) }, (_, i) => (
+                      <View key={i} style={styles.planCard}>
+                        <Text style={styles.planSlot} numberOfLines={1} {...textScale.dense}>
+                          {g.slots[i * 2]}
+                        </Text>
+                        <Text style={styles.planSlot} numberOfLines={1} {...textScale.dense}>
+                          {g.slots[i * 2 + 1] ?? "?"}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </View>
         {error ? (
           <Text style={styles.error} {...textScale.long}>
             {error}
@@ -287,22 +302,65 @@ export function StructureSheet({
   );
 }
 
+/** Büyük rakamlı sayaç hücresi (Archivo) + altında ± düğmeleri. */
+function CountCell({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (v: number) => void }) {
+  return (
+    <View style={styles.cell}>
+      <Text style={styles.cellLabel} numberOfLines={1} {...textScale.badge}>
+        {label.toLocaleUpperCase("tr-TR")}
+      </Text>
+      <Odometer value={value} style={styles.cellValue} />
+      <View style={styles.cellStepper}>
+        <BumpButtons value={value} min={min} max={max} onChange={onChange} label={label} />
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   stack: { gap: space.md },
   field: { gap: space.xs },
-  section: { ...type.overline, color: colors.textTertiary, marginTop: space.sm },
   muted: { ...type.caption, color: colors.textTertiary },
   error: { ...type.bodySm, color: colors.danger },
-  plan: { gap: space.md },
+  counterRow: { flexDirection: "row", gap: space.sm },
+  cell: {
+    flex: 1,
+    alignItems: "center",
+    gap: space.xxs,
+    paddingVertical: space.m,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  cellLabel: { ...type.overline, color: colors.textTertiary },
+  cellValue: { ...type.scoreLg, color: colors.textPrimary },
+  cellStepper: { marginTop: space.xs },
+  previewBox: {
+    gap: space.m,
+    paddingVertical: space.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+  },
+  previewHead: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: space.lg },
+  previewTitle: { ...type.overline, color: colors.brandAccent },
+  planSkeleton: { flexDirection: "row", gap: space.sm, paddingHorizontal: space.lg },
+  plan: { paddingHorizontal: space.lg, gap: space.xs, alignItems: "center" },
+  planStep: { flexDirection: "row", alignItems: "center", gap: space.xs },
   planCol: { gap: space.xs },
-  planLabel: { ...type.label, color: colors.textSecondary },
+  planLabel: { ...type.overline, color: colors.textSecondary },
   planCard: {
+    width: 132,
     padding: space.sm,
     borderRadius: radius.md,
     borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface2,
+    borderColor: colors.glassLine,
+    backgroundColor: colors.surface1,
     gap: space.xxs,
   },
-  planTitle: { ...type.bodySm, color: colors.textPrimary },
+  planCardPool: { borderColor: colors.brandBorder },
+  planTitle: { ...type.labelSm, color: colors.textPrimary },
+  planSlot: { ...type.caption, color: colors.textSecondary },
 });

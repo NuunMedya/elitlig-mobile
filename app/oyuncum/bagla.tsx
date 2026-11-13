@@ -223,7 +223,7 @@ export default function ProfileLinkScreen() {
   const resultsQuery = useQuery({
     queryKey: ["link-candidates", kind, debounced],
     queryFn: async (): Promise<(PlayerCandidate | TeamCandidate)[]> =>
-      kind === "team" ? (await getTeamCandidates(debounced)).candidates : (await getPlayerCandidates(debounced)).candidates,
+      (kind === "team" ? (await getTeamCandidates(debounced))?.candidates : (await getPlayerCandidates(debounced))?.candidates) ?? [],
     enabled: Boolean(user) && ready && !pending,
   });
   const results = useMemo(() => resultsQuery.data ?? [], [resultsQuery.data]);

@@ -7,21 +7,26 @@
  * döndürür (services/teamFinance getTeamFinanceDetail). Kayıt eklemek/silmek
  * yönetici yetkisidir; başkan yalnızca izler.
  *
- * ÖZET: dört eşit kutu (gelir, gider, bakiye, değer) yerine TEK bakiye kartı.
- * Başkanın ilk sorusu "kasada ne var?" — bakiye büyük rakamla, altında gelir
- * ve gider yan yana ve ikisinin oranını gösteren çift renkli çubuk. Kadro
- * değeri ayrı bir satırdır; bakiyeyle aynı ağırlıkta durunca "kasada 712
- * bin var" diye yanlış okunuyordu (değer nakit değildir).
+ * BAKİYE SAHNESİ: koyu mor sahne (gradientInk + Aurora) üstünde bakiye
+ * dönen sayıyla (Odometer); altında gelir/gider oran çubuğu ve cam şerit
+ * (▲ gelir · ▼ gider · kadro değeri). Kadro değeri şeritte ayrı hücredir;
+ * bakiyeyle aynı ağırlıkta durunca "kasada 712 bin var" diye yanlış
+ * okunuyordu (değer nakit değildir).
+ *
+ * HAREKETLER: ay ay gruplanır (versal ay etiketi + o ayın neti); satır
+ * anatomisi: yön IconTile'ı (nane gelir / kırmızı gider), karşı taraf ya da
+ * açıklama başlıkta, kayıt türü · tarih meta satırında, işaretli tutar sonda.
+ * KADRO DEĞERİ: ilk üç RankBadge, her satırda en değerli oyuncuya oranlı
+ * degrade çubuk.
  *
  * NEDEN İKİ SEKME (başlıkta, Arena: sekme sayfayı değiştirir): yanıtın `squad[]` alanı (oyuncu bazlı piyasa değeri ve
  * ülke geneli sıra) eski sürümde HİÇ çizilmiyordu — yalnız toplamı
  * görünüyordu. Kadro değeri kulübün en büyük varlığı olduğu için kendi
  * segmentini hak ediyor. Seçim `?tab=` ile URL'de taşınır.
  *
- * FFP BANDI: durum rengi doğrudan hex ile değil, rozet ton sözlüğünden
- * (`toneColors`) alınır — böylece açık/koyu temada aynı anlam korunur.
- * Her sınır için doluluk çubuğu çizilir; sınır aşıldığında çubuk tavana
- * dayanır ve yüzde metni gerçek değeri söyler.
+ * FFP KARTI: durum IconTile + rozet; her sınır için durum tonlu degrade
+ * çubuk (GradientBar). Sınır aşıldığında çubuk tavana dayanır ve yüzde
+ * metni gerçek değeri söyler.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -30,21 +35,26 @@ import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useMemo } from "react";
 import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { InkStage, StagePill, StageStats, SplitBar, TILE_TONE, shortMoney } from "@/components/team/ClubKit";
 import {
   Avatar,
   Badge,
   EmptyState,
   ErrorState,
+  GradientBar,
+  IconTile,
+  Odometer,
+  RankBadge,
+  Reveal,
   ScreenHeader,
   SectionHeader,
-  SkeletonCard,
+  Skeleton,
   SkeletonListRow,
   Tabs,
   refreshControlProps,
   toneColors,
   useHeaderScroll,
   useRefresh,
-  withAlpha,
   type TabItem,
   type Tone,
 } from "@/components/ui";
@@ -61,17 +71,7 @@ import {
 import { formatDateShort, formatMoney, mediaUrl } from "@/lib/format";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
-import {
-  colors,
-  elevate,
-  fonts,
-  hairline,
-  layout,
-  radius,
-  space,
-  textScale,
-  type,
-} from "@/theme";
+import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 /* ══════════════════════════════════════════════════════════════════════════
    Sabitler ve saf yardımcılar
@@ -86,10 +86,10 @@ const TAB_ITEMS: TabItem<FinanceTab>[] = [
 
 /** FFP durumu → rozet tonu + başlık + ikon. Renk `toneColors` sözlüğünden. */
 const FFP_META: Record<FfpStatus, { tone: Tone; label: string; icon: keyof typeof Ionicons.glyphMap }> = {
-  COMPLIANT: { tone: "win", label: "FFP: Uyumlu", icon: "checkmark-circle" },
-  WARNING: { tone: "warn", label: "FFP: Sınırda", icon: "alert-circle" },
-  BREACH: { tone: "danger", label: "FFP: İhlal", icon: "close-circle" },
-  DISABLED: { tone: "neutral", label: "FFP: Kapalı", icon: "remove-circle" },
+  COMPLIANT: { tone: "win", label: "Uyumlu", icon: "shield-checkmark" },
+  WARNING: { tone: "warn", label: "Sınırda", icon: "alert-circle" },
+  BREACH: { tone: "danger", label: "İhlal", icon: "close-circle" },
+  DISABLED: { tone: "neutral", label: "Kapalı", icon: "remove-circle" },
 };
 
 /** `services/teamFinance` içindeki kontrol anahtarlarının Türkçe adları. */
@@ -120,12 +120,56 @@ function usageLabel(check: FfpCheck): string {
   return `%${Math.round(check.usagePct)}`;
 }
 
-function rowPosition(index: number, total: number): "single" | "first" | "middle" | "last" {
+type RowPosition = "single" | "first" | "middle" | "last";
+
+function rowPosition(index: number, total: number): RowPosition {
   if (total <= 1) return "single";
   if (index === 0) return "first";
   if (index === total - 1) return "last";
   return "middle";
 }
+
+const MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+
+/** Defter satırları ay ay: başlık öğesi + o ayın kayıtları (sıra korunur). */
+type LedgerItem =
+  | { kind: "month"; key: string; label: string; net: number }
+  | { kind: "entry"; key: string; entry: FinanceLedgerEntry; position: RowPosition };
+
+const isIncome = (entry: FinanceLedgerEntry) => FINANCE_INCOME_TYPES.includes(entry.entryType);
+
+function groupLedger(entries: FinanceLedgerEntry[]): LedgerItem[] {
+  const groups: { key: string; label: string; rows: FinanceLedgerEntry[] }[] = [];
+  for (const entry of entries) {
+    const date = new Date(entry.createdAt);
+    const valid = !Number.isNaN(date.getTime());
+    const key = valid ? `${date.getFullYear()}-${date.getMonth()}` : "?";
+    const label = valid ? `${MONTHS[date.getMonth()]} ${date.getFullYear()}` : "Tarihsiz";
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) last.rows.push(entry);
+    else groups.push({ key, label, rows: [entry] });
+  }
+  const items: LedgerItem[] = [];
+  for (const group of groups) {
+    const net = group.rows.reduce((sum, row) => sum + (isIncome(row) ? 1 : -1) * (Number(row.amount) || 0), 0);
+    items.push({ kind: "month", key: `m-${group.key}`, label: group.label, net });
+    group.rows.forEach((entry, index) =>
+      items.push({ kind: "entry", key: `e-${entry.id}`, entry, position: rowPosition(index, group.rows.length) }),
+    );
+  }
+  return items;
+}
+
+/** Satır meta'sındaki kısa kayıt türü — uzun ad başlığa sığmıyordu. */
+const ENTRY_SHORT: Record<string, string> = {
+  TRANSFER_IN: "Oyuncu alımı",
+  TRANSFER_OUT: "Oyuncu satışı",
+  ADJUSTMENT_INCOME: "Düzeltme",
+  ADJUSTMENT_EXPENSE: "Düzeltme",
+};
+
+/** Tam tutar, birimsiz: "22.000" — sahnedeki dönen sayı için. */
+const plainAmount = (value: number) => `${value < 0 ? "−" : ""}${Math.abs(Math.round(value)).toLocaleString("tr-TR")}`;
 
 function resolveTab(raw: string | string[] | undefined): FinanceTab {
   const value = Array.isArray(raw) ? raw[0] : raw;
@@ -175,6 +219,9 @@ export default function ClubFinanceScreen() {
       ),
     [data?.squad]
   );
+  const topValue = Number(squad[0]?.marketValue) || 0;
+
+  const ledger = useMemo(() => groupLedger(data?.entries ?? []), [data?.entries]);
 
   const listHeader = useMemo(() => {
     if (!data) return null;
@@ -184,33 +231,30 @@ export default function ClubFinanceScreen() {
           <ErrorState error={query.error} onRetry={query.refetch} variant="banner" />
         ) : null}
 
-        <BalanceCard income={data.totals.income} expense={data.totals.expense} />
+        <Reveal index={0} scaleFrom={0.97}>
+          <BalanceStage
+            income={data.totals.income}
+            expense={data.totals.expense}
+            squadValue={data.squadValue}
+            playerCount={data.playerCount}
+            season={data.team.season}
+            onSquadValue={() => changeTab("kadro")}
+          />
+        </Reveal>
 
-        <View style={styles.valueRow}>
-          <View style={styles.valueTexts}>
-            <Text style={styles.summaryLabel} {...textScale.badge}>
-              KADRO DEĞERİ
-            </Text>
-            <Text style={styles.valueMeta} numberOfLines={1} {...textScale.dense}>
-              {data.playerCount} oyuncunun piyasa değeri · nakit değildir
-            </Text>
-          </View>
-          <Text style={styles.valueAmount} numberOfLines={1} {...textScale.dense}>
-            {formatMoney(data.squadValue)}
-          </Text>
-        </View>
-
-        {/* FFP bandı */}
-        <FfpBanner
-          status={data.ffp.status}
-          enabled={data.ffp.enabled}
-          netSpend={data.ffp.netSpend}
-          checks={data.ffp.checks}
-        />
+        <Reveal index={1}>
+          <FfpCard
+            status={data.ffp.status}
+            enabled={data.ffp.enabled}
+            netSpend={data.ffp.netSpend}
+            checks={data.ffp.checks}
+          />
+        </Reveal>
 
         <SectionHeader
           title={tab === "defter" ? "Hareketler" : "Oyuncu bazlı değer"}
-          style={styles.flushHeader}
+          inset="flush"
+          style={styles.sectionHead}
           meta={
             tab === "defter"
               ? `${data.entries.length} kayıt`
@@ -219,23 +263,29 @@ export default function ClubFinanceScreen() {
         />
       </View>
     );
-  }, [data, query.error, query.isError, query.refetch, squad.length, tab]);
+  }, [changeTab, data, query.error, query.isError, query.refetch, squad.length, tab]);
 
-  const renderEntry = useCallback(
-    ({ item, index }: { item: FinanceLedgerEntry; index: number }) => (
-      <LedgerRow
-        entry={item}
-        position={rowPosition(index, data?.entries.length ?? 0)}
-      />
-    ),
-    [data?.entries.length]
-  );
+  const renderLedger = useCallback(({ item, index }: { item: LedgerItem; index: number }) => {
+    if (item.kind === "month") return <MonthHeader label={item.label} net={item.net} first={index === 0} />;
+    return (
+      <Reveal index={index} limit={10} distance={6}>
+        <LedgerRow entry={item.entry} position={item.position} />
+      </Reveal>
+    );
+  }, []);
 
   const renderSquad = useCallback(
     ({ item, index }: { item: FinanceSquadPlayer; index: number }) => (
-      <SquadValueRow player={item} rank={index + 1} position={rowPosition(index, squad.length)} />
+      <Reveal index={index} limit={8} distance={6}>
+        <SquadValueRow
+          player={item}
+          rank={index + 1}
+          share={topValue > 0 ? (Number(item.marketValue) || 0) / topValue : 0}
+          position={rowPosition(index, squad.length)}
+        />
+      </Reveal>
     ),
-    [squad.length]
+    [squad.length, topValue]
   );
 
   if (!auth.user) {
@@ -260,8 +310,9 @@ export default function ClubFinanceScreen() {
       <SafeAreaView style={styles.screen} edges={["top"]}>
         {header}
         <View style={styles.loading}>
-          <SkeletonCard lines={2} />
-          <SkeletonListRow count={6} />
+          <Skeleton height={232} radius="xxl" />
+          <Skeleton height={120} radius="xl" />
+          <SkeletonListRow count={5} />
         </View>
       </SafeAreaView>
     );
@@ -296,9 +347,9 @@ export default function ClubFinanceScreen() {
       {tab === "defter" ? (
         <FlatList
           {...scrollProps}
-          data={data.entries}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={renderEntry}
+          data={ledger}
+          keyExtractor={(item) => item.key}
+          renderItem={renderLedger}
           ListHeaderComponent={listHeader}
           ListEmptyComponent={
             <EmptyState
@@ -310,7 +361,7 @@ export default function ClubFinanceScreen() {
           }
           contentContainerStyle={styles.content}
           refreshControl={refreshControl}
-          initialNumToRender={12}
+          initialNumToRender={14}
         />
       ) : (
         <FlatList
@@ -341,64 +392,69 @@ export default function ClubFinanceScreen() {
    ══════════════════════════════════════════════════════════════════════════ */
 
 /**
- * Bakiye kartı — büyük bakiye, altında gelir/gider ve oran çubuğu.
- * Çubuk iki renklidir (gelir yeşil, gider kırmızı); toplam sıfırsa ray boş.
+ * Bakiye sahnesi — koyu mor sahnede dönen bakiye, gelir/gider oran çubuğu
+ * ve cam şerit (▲ gelir · ▼ gider · kadro değeri).
  */
-const BalanceCard = React.memo(function BalanceCard({
+const BalanceStage = React.memo(function BalanceStage({
   income,
   expense,
+  squadValue,
+  playerCount,
+  season,
+  onSquadValue,
 }: {
   income: number;
   expense: number;
+  squadValue: number;
+  playerCount: number;
+  season: string | null;
+  onSquadValue: () => void;
 }) {
   const balance = income - expense;
-  const total = income + expense;
   return (
-    <View style={styles.balance}>
-      <Text style={styles.summaryLabel} {...textScale.badge}>
-        BAKİYE
-      </Text>
-      <Text
-        style={[styles.balanceValue, { color: balance < 0 ? colors.danger : colors.textPrimary }]}
-        numberOfLines={1}
-        {...textScale.dense}
-      >
-        {signedMoney(balance)}
-      </Text>
-      <View style={styles.flowTrack}>
-        {total > 0 ? (
-          <>
-            <View style={[styles.flowFill, { flex: income, backgroundColor: colors.win }]} />
-            <View style={[styles.flowFill, { flex: expense, backgroundColor: colors.danger }]} />
-          </>
-        ) : null}
+    <InkStage>
+      <View style={styles.stagePills}>
+        <StagePill label="Kulüp kasası" icon="wallet" />
+        {season ? <StagePill label={season} tone="muted" /> : null}
       </View>
-      <View style={styles.flowRow}>
-        <View style={styles.flowItem}>
-          <View style={[styles.flowDot, { backgroundColor: colors.win }]} />
-          <Text style={styles.flowLabel} {...textScale.dense}>
-            Gelir
-          </Text>
-          <Text style={styles.flowValue} numberOfLines={1} {...textScale.dense}>
-            {signedMoney(income)}
-          </Text>
-        </View>
-        <View style={styles.flowItem}>
-          <View style={[styles.flowDot, { backgroundColor: colors.danger }]} />
-          <Text style={styles.flowLabel} {...textScale.dense}>
-            Gider
-          </Text>
-          <Text style={styles.flowValue} numberOfLines={1} {...textScale.dense}>
-            {signedMoney(expense)}
+      <View>
+        <Text style={styles.stageLabel} {...textScale.badge}>
+          BAKİYE
+        </Text>
+        <View style={styles.balanceRow} accessible accessibilityLabel={`Bakiye ${signedMoney(balance)}`}>
+          <Odometer value={plainAmount(balance)} style={[styles.balanceValue, balance < 0 && { color: colors.liveOnDark }]} />
+          <Text style={styles.balanceUnit} {...textScale.badge}>
+            ₺
           </Text>
         </View>
       </View>
-    </View>
+      <SplitBar
+        height={8}
+        track={colors.inkTile}
+        parts={[
+          { key: "in", value: income, color: colors.win },
+          { key: "out", value: expense, color: colors.liveOnDark },
+        ]}
+      />
+      <StageStats
+        items={[
+          { key: "in", label: "▲ Gelir", value: shortMoney(income).replace(" ₺", ""), suffix: "₺", color: colors.win },
+          { key: "out", label: "▼ Gider", value: shortMoney(expense).replace(" ₺", ""), suffix: "₺", color: colors.liveOnDark },
+          {
+            key: "value",
+            label: `Kadro · ${playerCount}`,
+            value: shortMoney(squadValue).replace(" ₺", ""),
+            suffix: "₺",
+            onPress: onSquadValue,
+          },
+        ]}
+      />
+    </InkStage>
   );
 });
 
-/** FFP durum bandı — renk kodlu başlık + her sınır için doluluk çubuğu. */
-const FfpBanner = React.memo(function FfpBanner({
+/** Mali fair play kartı — durum başlığı + her sınır için degrade çubuk. */
+const FfpCard = React.memo(function FfpCard({
   status,
   enabled,
   netSpend,
@@ -410,18 +466,20 @@ const FfpBanner = React.memo(function FfpBanner({
   checks: FfpCheck[];
 }) {
   const meta = FFP_META[status] ?? FFP_META.DISABLED;
-  const palette = toneColors(meta.tone);
 
   return (
-    <View style={[styles.ffp, { backgroundColor: palette.dim, borderColor: withAlpha(palette.fg, 0.35) }]}>
+    <View style={styles.card}>
       <View style={styles.ffpHead}>
-        <Ionicons name={meta.icon} size={16} color={palette.fg} />
-        <Text style={[styles.ffpTitle, { color: palette.fg }]} {...textScale.dense}>
-          {meta.label}
-        </Text>
-        <Text style={styles.ffpNet} numberOfLines={1} {...textScale.dense}>
-          Net harcama {signedMoney(netSpend)}
-        </Text>
+        <IconTile icon={meta.icon} tone={TILE_TONE[meta.tone]} size={38} glow={false} />
+        <View style={styles.flex}>
+          <Text style={styles.cardTitle} {...textScale.dense}>
+            Mali fair play
+          </Text>
+          <Text style={styles.cardMeta} numberOfLines={1} {...textScale.dense}>
+            Net transfer harcaması {signedMoney(netSpend)}
+          </Text>
+        </View>
+        <Badge label={meta.label} tone={meta.tone} size="sm" />
       </View>
 
       {!enabled ? (
@@ -439,9 +497,9 @@ const FfpBanner = React.memo(function FfpBanner({
   );
 });
 
-/** Tek bir FFP sınırı: etiket, kullanım/limit ve doluluk çubuğu. */
+/** Tek bir FFP sınırı: etiket, yüzde, kullanım/limit ve degrade çubuk. */
 const FfpCheckRow = React.memo(function FfpCheckRow({ check }: { check: FfpCheck }) {
-  const palette = toneColors(FFP_META[check.status]?.tone ?? "neutral");
+  const tone = FFP_META[check.status]?.tone ?? "neutral";
   const ratio = usageRatio(check);
 
   return (
@@ -450,342 +508,177 @@ const FfpCheckRow = React.memo(function FfpCheckRow({ check }: { check: FfpCheck
         <Text style={styles.checkLabel} numberOfLines={1} {...textScale.dense}>
           {FFP_CHECK_LABELS[check.key] ?? check.key}
         </Text>
-        <Text style={styles.checkValue} numberOfLines={1} {...textScale.dense}>
-          {signedMoney(check.value)} / {signedMoney(check.limit)} · {usageLabel(check)}
+        <Text style={[styles.checkPct, { color: toneColors(tone).fg }]} {...textScale.badge}>
+          {usageLabel(check)}
         </Text>
       </View>
-      <View style={styles.checkTrack}>
-        <View
-          style={[
-            styles.checkFill,
-            { width: `${Math.round(ratio * 100)}%`, backgroundColor: palette.fg },
-          ]}
-        />
-      </View>
+      <GradientBar value={ratio} height={8} gradient={colors.tileTones[TILE_TONE[tone]]} />
+      <Text style={styles.checkValue} numberOfLines={1} {...textScale.dense}>
+        {signedMoney(check.value)} <Text style={styles.checkLimit}>/ {signedMoney(check.limit)} sınır</Text>
+      </Text>
     </View>
   );
 });
 
-/** Kasa defteri satırı: yön ikonu, tür, tarih/karşı taraf, işaretli tutar. */
+/** Ay başlığı — versal ay adı ve o ayın net akışı. */
+function MonthHeader({ label, net, first }: { label: string; net: number; first: boolean }) {
+  return (
+    <View style={[styles.month, !first && styles.monthGap]}>
+      <Text style={styles.monthLabel} {...textScale.badge}>
+        {upperTR(label)}
+      </Text>
+      <Text style={[styles.monthNet, { color: net > 0 ? colors.win : net < 0 ? colors.loss : colors.textTertiary }]} {...textScale.badge}>
+        {`${net > 0 ? "▲ +" : net < 0 ? "▼ " : ""}${signedMoney(net)}`}
+      </Text>
+    </View>
+  );
+}
+
+/** Kasa defteri satırı: yön kutusu, karşı taraf, tür · tarih, işaretli tutar. */
 const LedgerRow = React.memo(function LedgerRow({
   entry,
   position,
 }: {
   entry: FinanceLedgerEntry;
-  position: "single" | "first" | "middle" | "last";
+  position: RowPosition;
 }) {
-  const income = FINANCE_INCOME_TYPES.includes(entry.entryType);
-  const palette = toneColors(income ? "win" : "danger");
-  const who = entry.playerName ?? entry.counterpartyTeamName ?? entry.description ?? "";
+  const income = isIncome(entry);
+  const who = entry.playerName ?? entry.description ?? entry.counterpartyTeamName ?? FINANCE_ENTRY_LABELS[entry.entryType];
+  const counterpart = entry.playerName && entry.counterpartyTeamName ? `${income ? "→" : "←"} ${entry.counterpartyTeamName}` : null;
 
   return (
-    <View
-      style={[
-        styles.row,
-        position === "single" ? styles.rowSingle : null,
-        position === "first" ? styles.rowFirst : null,
-        position === "last" ? styles.rowLast : null,
-      ]}
-    >
-      <View style={[styles.rowIcon, { backgroundColor: palette.dim }]}>
-        <Ionicons
-          name={income ? "arrow-down" : "arrow-up"}
-          size={14}
-          color={palette.fg}
-        />
-      </View>
+    <View style={[styles.row, positionStyle(position)]}>
+      <IconTile icon={income ? "arrow-down" : "arrow-up"} tone={income ? "mint" : "red"} size={36} glow={false} />
 
-      <View style={styles.rowTexts}>
-        <Text style={styles.rowTitle} numberOfLines={1} {...textScale.dense}>
-          {FINANCE_ENTRY_LABELS[entry.entryType] ?? entry.entryType}
-        </Text>
-        <Text style={styles.rowMeta} numberOfLines={1} {...textScale.dense}>
-          {formatDateShort(entry.createdAt)}
-          {who ? ` · ${who}` : ""}
+      <View style={[styles.rowBody, (position === "first" || position === "middle") && styles.rowDivider]}>
+        <View style={styles.rowTexts}>
+          <Text style={styles.rowTitle} numberOfLines={1} {...textScale.dense}>
+            {who}
+          </Text>
+          <Text style={styles.rowMeta} numberOfLines={1} {...textScale.dense}>
+            {[formatDateShort(entry.createdAt), ENTRY_SHORT[entry.entryType] ?? entry.entryType, counterpart].filter(Boolean).join(" · ")}
+          </Text>
+        </View>
+        <Text style={[styles.amount, { color: income ? colors.win : colors.loss }]} numberOfLines={1} {...textScale.dense}>
+          {income ? "+" : "−"}
+          {formatMoney(entry.amount, entry.currency)}
         </Text>
       </View>
-
-      <Text style={[styles.amount, { color: palette.fg }]} numberOfLines={1} {...textScale.dense}>
-        {income ? "+" : "−"}
-        {formatMoney(entry.amount, entry.currency)}
-      </Text>
-
-      {position === "first" || position === "middle" ? (
-        <View pointerEvents="none" style={styles.rowDivider} />
-      ) : null}
     </View>
   );
 });
 
-/** Kadro değeri satırı: avatar, ad/mevki, piyasa değeri ve genel sıra rozeti. */
+/** Kadro değeri satırı: sıra/madalya, avatar, ad/mevki, oranlı çubuk ve değer. */
 const SquadValueRow = React.memo(function SquadValueRow({
   player,
   rank,
+  share,
   position,
 }: {
   player: FinanceSquadPlayer;
   /** Kulüp içi değer sırası — liste değere göre sıralıdır. */
   rank: number;
-  position: "single" | "first" | "middle" | "last";
+  /** En değerli oyuncuya oran (0–1). */
+  share: number;
+  position: RowPosition;
 }) {
   return (
-    <View
-      style={[
-        styles.row,
-        position === "single" ? styles.rowSingle : null,
-        position === "first" ? styles.rowFirst : null,
-        position === "last" ? styles.rowLast : null,
-      ]}
-    >
-      <Text style={styles.rank} {...textScale.badge}>
-        {rank}
-      </Text>
-      <Avatar name={player.playerName} image={mediaUrl(player.image)} size={32} />
+    <View style={[styles.row, positionStyle(position)]}>
+      <RankBadge rank={rank} size={22} />
+      <Avatar name={player.playerName} image={mediaUrl(player.image)} size={36} />
 
-      <View style={styles.rowTexts}>
-        <Text style={styles.rowTitle} numberOfLines={1} {...textScale.dense}>
-          {player.playerName}
-        </Text>
-        <Text style={styles.rowMeta} numberOfLines={1} {...textScale.dense}>
-          {positionLabel(player.position) || "Mevki belirtilmedi"}
-        </Text>
+      <View style={[styles.rowBody, (position === "first" || position === "middle") && styles.rowDivider]}>
+        <View style={styles.rowTexts}>
+          <View style={styles.nameRow}>
+            <Text style={[styles.rowTitle, styles.flexShrink]} numberOfLines={1} {...textScale.dense}>
+              {player.playerName}
+            </Text>
+            <Text style={styles.amount} numberOfLines={1} {...textScale.dense}>
+              {formatMoney(player.marketValue)}
+            </Text>
+          </View>
+          <GradientBar value={share} height={4} />
+          <Text style={styles.rowMeta} numberOfLines={1} {...textScale.dense}>
+            {[positionLabel(player.position) || "Mevki belirtilmedi", player.globalRank != null ? `Türkiye #${player.globalRank}` : null]
+              .filter(Boolean)
+              .join(" · ")}
+          </Text>
+        </View>
       </View>
-
-      {player.globalRank != null ? (
-        <Badge label={`Türkiye #${player.globalRank}`} tone="neutral" size="xs" />
-      ) : null}
-
-      <Text style={styles.amount} numberOfLines={1} {...textScale.dense}>
-        {formatMoney(player.marketValue)}
-      </Text>
-
-      {position === "first" || position === "middle" ? (
-        <View pointerEvents="none" style={styles.rowDivider} />
-      ) : null}
     </View>
   );
 });
+
+function positionStyle(position: RowPosition) {
+  return position === "single" ? styles.rowSingle : position === "first" ? styles.rowFirst : position === "last" ? styles.rowLast : null;
+}
 
 /* ══════════════════════════════════════════════════════════════════════════
    Stiller
    ══════════════════════════════════════════════════════════════════════════ */
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
-  content: {
-    paddingHorizontal: layout.screenPadding,
-    paddingBottom: space.xxxl,
-  },
-  loading: {
-    paddingHorizontal: layout.screenPadding,
-    gap: space.sm,
-  },
-  header: {
-    paddingTop: space.md,
-    gap: space.sm,
-  },
+  screen: { flex: 1, backgroundColor: colors.bg },
+  flex: { flex: 1, minWidth: 0 },
+  flexShrink: { flexShrink: 1 },
+  content: { paddingHorizontal: layout.screenPadding, paddingBottom: space.xxxl },
+  loading: { paddingHorizontal: layout.screenPadding, paddingTop: space.md, gap: space.md },
+  header: { paddingTop: space.md, gap: space.md },
+  sectionHead: { marginTop: space.sm },
 
-  flushHeader: {
-    paddingHorizontal: 0,
-  },
+  /* Bakiye sahnesi */
+  stagePills: { flexDirection: "row", alignItems: "center", gap: space.s },
+  stageLabel: { ...type.overline, color: colors.onDarkMuted },
+  balanceRow: { flexDirection: "row", alignItems: "flex-end", gap: space.xs },
+  balanceValue: { ...type.scoreHero, color: colors.onDark },
+  balanceUnit: { ...type.h1, color: colors.brandOnDark, marginBottom: space.xs },
 
-  /* Bakiye kartı */
-  balance: {
-    ...elevate(1),
-    gap: space.s,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface1,
-    padding: space.lg,
-  },
-  summaryLabel: {
-    ...type.overline,
-    color: colors.textTertiary,
-  },
-  balanceValue: {
-    ...type.scoreLg,
-  },
-  flowTrack: {
-    flexDirection: "row",
-    gap: 2,
-    height: 6,
-    marginTop: space.xs,
-    borderRadius: radius.pill,
-    overflow: "hidden",
-    backgroundColor: colors.slateSoft,
-  },
-  flowFill: {
-    height: "100%",
-  },
-  flowRow: {
-    flexDirection: "row",
-    gap: space.lg,
-  },
-  flowItem: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.s,
-  },
-  flowDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  flowLabel: {
-    ...type.bodySm,
-    color: colors.textTertiary,
-  },
-  flowValue: {
-    ...type.tableNumStrong,
-    color: colors.textPrimary,
-    flex: 1,
-    textAlign: "right",
-  },
-  valueRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  /* FFP kartı */
+  card: {
     gap: space.md,
-    borderRadius: radius.lg,
+    padding: space.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
     borderWidth: hairline,
     borderColor: colors.border,
-    backgroundColor: colors.surface1,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md,
   },
-  valueTexts: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  valueMeta: {
-    ...type.caption,
-    color: colors.textTertiary,
-  },
-  valueAmount: {
-    ...type.metricSm,
-    color: colors.accentText,
-  },
-  rank: {
-    ...type.tableNumStrong,
-    color: colors.textTertiary,
-    width: 20,
-    textAlign: "center",
-  },
+  ffpHead: { flexDirection: "row", alignItems: "center", gap: space.md },
+  cardTitle: { ...type.h3, color: colors.textPrimary },
+  cardMeta: { ...type.caption, color: colors.textTertiary },
+  ffpNote: { ...type.bodySm, color: colors.textSecondary },
+  check: { gap: space.xs },
+  checkTop: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space.sm },
+  checkLabel: { ...type.label, color: colors.textPrimary, flexShrink: 1 },
+  checkPct: { ...type.scoreXs },
+  checkValue: { ...type.numSmStrong, color: colors.textSecondary },
+  checkLimit: { ...type.numSm, color: colors.textTertiary },
 
-  /* FFP */
-  ffp: {
-    gap: space.sm,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    padding: space.md,
-  },
-  ffpHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-  },
-  ffpTitle: {
-    ...type.label,
-    fontFamily: fonts.bold,
-  },
-  ffpNet: {
-    ...type.caption,
-    color: colors.textSecondary,
-    flex: 1,
-    textAlign: "right",
-  },
-  ffpNote: {
-    ...type.caption,
-    color: colors.textSecondary,
-  },
-  check: {
-    gap: space.xs,
-  },
-  checkTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-  },
-  checkLabel: {
-    ...type.caption,
-    color: colors.textSecondary,
-    flexShrink: 1,
-  },
-  checkValue: {
-    ...type.caption,
-    color: colors.textPrimary,
-    flex: 1,
-    textAlign: "right",
-    fontVariant: ["tabular-nums"],
-  },
-  checkTrack: {
-    height: 4,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surface3,
-    overflow: "hidden",
-  },
-  checkFill: {
-    height: "100%",
-    borderRadius: radius.pill,
-  },
+  /* Ay başlığı */
+  month: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space.xs, paddingBottom: space.s },
+  monthGap: { paddingTop: space.lg },
+  monthLabel: { ...type.overline, color: colors.textTertiary },
+  monthNet: { ...type.numSmStrong },
 
-  /* Liste satırları — ListRow ölçüleriyle birebir. */
+  /* Satırlar */
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.m,
-    minHeight: layout.listRowHeightTwoLine,
-    paddingHorizontal: layout.rowPaddingH,
+    gap: space.md,
+    minHeight: 62,
+    paddingLeft: space.md,
     backgroundColor: colors.surface1,
-  },
-  rowSingle: {
-    borderRadius: radius.lg,
-    borderWidth: hairline,
+    borderLeftWidth: hairline,
+    borderRightWidth: hairline,
     borderColor: colors.border,
   },
-  rowFirst: {
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-  },
-  rowLast: {
-    borderBottomLeftRadius: radius.lg,
-    borderBottomRightRadius: radius.lg,
-  },
-  rowDivider: {
-    position: "absolute",
-    left: layout.rowPaddingH + 32 + space.m,
-    right: 0,
-    bottom: 0,
-    height: hairline,
-    backgroundColor: colors.separator,
-  },
-  rowIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rowTexts: {
-    flex: 1,
-    gap: 2,
-  },
-  rowTitle: {
-    ...type.bodySm,
-    fontFamily: fonts.bold,
-    color: colors.textPrimary,
-  },
-  rowMeta: {
-    ...type.caption,
-    color: colors.textSecondary,
-  },
-  amount: {
-    ...type.tableNumStrong,
-    color: colors.textPrimary,
-  },
+  rowSingle: { borderRadius: radius.xl, borderWidth: hairline },
+  rowFirst: { borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, borderTopWidth: hairline },
+  rowLast: { borderBottomLeftRadius: radius.xl, borderBottomRightRadius: radius.xl, borderBottomWidth: hairline },
+  rowBody: { flex: 1, alignSelf: "stretch", flexDirection: "row", alignItems: "center", gap: space.sm, paddingRight: space.md, paddingVertical: space.sm },
+  rowDivider: { borderBottomWidth: hairline, borderBottomColor: colors.separator },
+  rowTexts: { flex: 1, minWidth: 0, gap: space.xs },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: space.sm, justifyContent: "space-between" },
+  rowTitle: { ...type.h4, color: colors.textPrimary },
+  rowMeta: { ...type.caption, color: colors.textTertiary },
+  amount: { ...type.tableNumStrong, color: colors.textPrimary },
 });

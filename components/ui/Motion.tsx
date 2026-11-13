@@ -83,7 +83,14 @@ export const Reveal = memo(function Reveal({
      görünmez kalmaz. */
   const progress = useRef(new Animated.Value(skip ? 1 : 0)).current;
 
+  /* Sıra (index) ve gecikme yalnız İLK girişte kullanılır. Bağımlılık olsalardı,
+     canlı yoklama/süzgeç yüzünden liste sırası kayınca ya da sanal liste satırı
+     yeniden kullanınca satırlar yeniden görünmez olup belirirdi (titreşim). */
+  const skipRef = useRef(skip);
+  skipRef.current = skip;
+  const delayRef = useRef(delay + Math.min(index, STAGGER_CAP) * STAGGER_MS);
   useEffect(() => {
+    const skip = skipRef.current;
     if (skip || reduceMotion) {
       progress.setValue(1);
       return undefined;
@@ -92,14 +99,14 @@ export const Reveal = memo(function Reveal({
     const run = Animated.timing(progress, {
       toValue: 1,
       duration: duration.slow,
-      delay: delay + Math.min(index, STAGGER_CAP) * STAGGER_MS,
+      delay: delayRef.current,
       easing: easing.decelerate,
       useNativeDriver: true,
     });
     run.start();
     return () => run.stop();
     // replayKey bilinçli bağımlılık: değişince giriş yeniden oynar.
-  }, [skip, reduceMotion, progress, delay, index, replayKey]);
+  }, [reduceMotion, progress, replayKey]);
 
   const animated = useMemo(() => {
     const transform: Animated.WithAnimatedArray<

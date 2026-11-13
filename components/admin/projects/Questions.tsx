@@ -14,7 +14,7 @@ import { ChipsField, DateField, SelectField, confirmAction } from "@/components/
 import { Badge, Button, Chip, ChipGroup, EmptyState, Input, SegmentedControl, Touchable, withAlpha } from "@/components/ui";
 import { PRIORITIES, PRIORITY_META, QUESTION_STATUS_META, dueLabel, matches, timeAgo, todayIso } from "@/lib/admin/projectUtils";
 import type { Priority, Question, QuestionStatus } from "@/lib/api/admin/projects";
-import { colors, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 import { useProject } from "./ProjectContext";
 import { Pill } from "./ui";
@@ -115,13 +115,23 @@ export function QuestionItem({ q, compact = false, highlight = false }: { q: Que
 
   return (
     <View style={[styles.item, highlight ? { borderColor: st.color, backgroundColor: withAlpha(st.color, 0.06) } : null]}>
+      <View style={[styles.stripe, { backgroundColor: overdue ? colors.danger : st.color }]} />
+      <View style={styles.qRow}>
+        <View style={[styles.qMark, { backgroundColor: withAlpha(st.color, 0.16) }]}>
+          <Text style={[styles.qMarkText, { color: st.color }]} {...textScale.badge}>
+            S
+          </Text>
+        </View>
+        <Text style={[styles.text, styles.flex]} {...textScale.long}>
+          {q.question}
+        </Text>
+      </View>
       <View style={styles.head}>
         <Pill label={st.label} color={st.color} />
         {q.category ? <Badge label={q.category} tone="neutral" size="xs" /> : null}
         {q.priority !== "normal" ? <Badge label={PRIORITY_META[q.priority]?.label} tone={q.priority === "low" ? "neutral" : "danger"} icon="flag-outline" size="xs" /> : null}
         {q.due_date ? <Badge label={dueLabel(q.due_date)} tone={overdue ? "danger" : "neutral"} icon="calendar-outline" size="xs" /> : null}
       </View>
-      <Text style={styles.text} {...textScale.long}>{q.question}</Text>
       {!compact && (step || lead) ? (
         <ChipGroup contentPadding={0}>
           {step ? <Chip label={step.title} icon="git-branch-outline" size="sm" onPress={() => nav.openStep(step.id)} /> : null}
@@ -138,7 +148,11 @@ export function QuestionItem({ q, compact = false, highlight = false }: { q: Que
         </View>
       ) : q.answer ? (
         <Touchable onPress={canEdit ? () => setEditing(true) : undefined} disabled={!canEdit} style={styles.answer} accessibilityLabel="Cevap">
-          <Ionicons name="return-down-forward" size={16} color={colors.win} />
+          <View style={styles.aMark}>
+            <Text style={styles.aMarkText} {...textScale.badge}>
+              C
+            </Text>
+          </View>
           <View style={styles.flex}>
             <Text style={styles.answerText} {...textScale.long}>{q.answer}</Text>
             <Text style={styles.small} {...textScale.dense}>
@@ -235,15 +249,38 @@ export function Questions({ stepId = null }: { stepId?: number | null }) {
 const styles = StyleSheet.create({
   wrap: { gap: space.md },
   flex: { flex: 1 },
-  card: { padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1 },
+  card: { padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.brandBorder },
   form: { gap: space.sm },
   formBar: { flexDirection: "row", justifyContent: "flex-end", gap: space.sm },
   moreBtn: { flexDirection: "row", alignItems: "center", gap: space.xs },
   moreText: { ...type.labelSm, color: colors.brandAccent },
-  item: { gap: space.sm, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: 1, borderColor: "transparent" },
-  head: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs },
-  text: { ...type.body, color: colors.textPrimary },
-  answer: { flexDirection: "row", gap: space.sm, padding: space.sm, borderRadius: radius.md, backgroundColor: colors.winDim },
+  item: {
+    gap: space.sm,
+    padding: space.md,
+    paddingLeft: space.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+    overflow: "hidden",
+  },
+  stripe: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3 },
+  qRow: { flexDirection: "row", alignItems: "flex-start", gap: space.m },
+  qMark: { width: 28, height: 28, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
+  qMarkText: { ...type.scoreXs },
+  head: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs, paddingLeft: 28 + space.m },
+  text: { ...type.h4, color: colors.textPrimary },
+  answer: {
+    flexDirection: "row",
+    gap: space.m,
+    padding: space.m,
+    marginLeft: 28 + space.m,
+    borderRadius: radius.lg,
+    borderTopLeftRadius: radius.xs,
+    backgroundColor: colors.winDim,
+  },
+  aMark: { width: 22, height: 22, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.win },
+  aMarkText: { ...type.numSmStrong, color: colors.textOnStatus },
   answerText: { ...type.bodySm, color: colors.textPrimary },
   small: { ...type.caption, color: colors.textTertiary, marginTop: space.xxs },
   tools: { flexDirection: "row", alignItems: "center", gap: space.s },

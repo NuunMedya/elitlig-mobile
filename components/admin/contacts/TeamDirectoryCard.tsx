@@ -10,7 +10,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { Badge, TeamLogo, Touchable } from "@/components/ui";
+import { Avatar, Badge, TeamLogo, Touchable } from "@/components/ui";
 import type { DirectoryTeam, TeamRecord } from "@/lib/api/admin/contacts";
 import { mediaUrl } from "@/lib/format";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
@@ -39,35 +39,71 @@ export const TeamDirectoryCard = React.memo(function TeamDirectoryCard({
 }) {
   const lead = team.captains[0];
   const meta = [team.city, team.league, team.season].filter(Boolean).join(" · ");
+  const r = team.record || { wins: 0, draws: 0, losses: 0 };
+  const played = (r.wins || 0) + (r.draws || 0) + (r.losses || 0);
+  const points = (r.wins || 0) * 3 + (r.draws || 0);
+  const accountRatio = team.roster_count ? team.player_accounts / team.roster_count : 0;
   return (
-    <Touchable onPress={onPress} style={styles.card} feedback="card" accessibilityLabel={`${team.team_name} takım kartı`}>
+    <Touchable onPress={onPress} style={[styles.card, !team.active ? styles.cardMuted : null]} feedback="card" accessibilityLabel={`${team.team_name} takım kartı`}>
       <View style={styles.top}>
         <TeamLogo name={team.team_name} logo={mediaUrl(team.logo)} size={48} />
         <View style={styles.main}>
-          <Text style={styles.name} numberOfLines={2} {...textScale.dense}>
-            {team.team_name}
-          </Text>
+          <View style={styles.nameRow}>
+            <Text style={[styles.name, styles.flex]} numberOfLines={2} {...textScale.dense}>
+              {team.team_name}
+            </Text>
+            {!team.active ? <Badge label="Pasif" tone="neutral" size="xs" /> : null}
+          </View>
           {meta ? (
             <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
               {meta}
             </Text>
           ) : null}
-          <View style={styles.stats}>
-            <RecordPills record={team.record} />
-            <Stat icon="football-outline" value={team.total_matches} label="maç" />
-            <Stat icon="person-circle-outline" value={`${team.player_accounts}/${team.roster_count}`} label="hesaplı oyuncu" />
-            <Stat icon="call-outline" value={team.contact_count} label="telefonu olan kişi" />
-            {!team.active ? <Badge label="Pasif" tone="neutral" size="xs" /> : null}
-          </View>
         </View>
+        {played ? (
+          <View style={styles.points} accessibilityLabel={`${points} puan`}>
+            <Text style={styles.pointsValue} {...textScale.badge}>
+              {points}
+            </Text>
+            <Text style={styles.pointsLabel} {...textScale.badge}>
+              PUAN
+            </Text>
+          </View>
+        ) : null}
       </View>
+
+      {/* G-B-M oranı: tek şeritte üç renk; altında rakamlar. */}
+      <View style={styles.recordWrap}>
+        <View style={styles.recordBar}>
+          {played ? (
+            <>
+              <View style={[styles.seg, { flex: r.wins || 0, backgroundColor: colors.win }]} />
+              <View style={[styles.seg, { flex: r.draws || 0, backgroundColor: colors.draw }]} />
+              <View style={[styles.seg, { flex: r.losses || 0, backgroundColor: colors.loss }]} />
+            </>
+          ) : null}
+        </View>
+        <RecordPills record={r} />
+      </View>
+
+      <View style={styles.cells}>
+        <Cell icon="football-outline" value={String(team.total_matches)} label="Maç" />
+        <Cell icon="person-circle-outline" value={`${team.player_accounts}/${team.roster_count}`} label="Hesaplı" ratio={accountRatio} />
+        <Cell icon="call-outline" value={String(team.contact_count)} label="Telefonlu" warn={!team.contact_count} />
+      </View>
+
       {lead ? (
         <View style={styles.captain}>
-          <Ionicons name="shield-half-outline" size={14} color={colors.brandAccent} />
-          <Text style={styles.captainName} numberOfLines={1} {...textScale.dense}>
-            {lead.name}
-            {team.captains.length > 1 ? ` +${team.captains.length - 1}` : ""}
-          </Text>
+          <Avatar name={lead.name} size={30} />
+          <View style={styles.flex}>
+            <Text style={styles.captainName} numberOfLines={1} {...textScale.dense}>
+              {lead.name}
+              {team.captains.length > 1 ? ` +${team.captains.length - 1}` : ""}
+            </Text>
+            <Text style={styles.captainRole} {...textScale.dense}>
+              Takım başkanı
+            </Text>
+          </View>
           <ContactButtons
             name={lead.name}
             phone={lead.phone}
@@ -78,21 +114,34 @@ export const TeamDirectoryCard = React.memo(function TeamDirectoryCard({
           />
         </View>
       ) : (
-        <Text style={styles.noCaptain} {...textScale.dense}>
-          Başkan hesabı yok
-        </Text>
+        <View style={styles.captain}>
+          <Ionicons name="alert-circle-outline" size={16} color={colors.warn} />
+          <Text style={styles.noCaptain} {...textScale.dense}>
+            Başkan hesabı yok
+          </Text>
+        </View>
       )}
     </Touchable>
   );
 });
 
-function Stat({ icon, value, label }: { icon: keyof typeof Ionicons.glyphMap; value: string | number; label: string }) {
+function Cell({ icon, value, label, ratio, warn }: { icon: keyof typeof Ionicons.glyphMap; value: string; label: string; ratio?: number; warn?: boolean }) {
   return (
-    <View style={styles.stat} accessibilityLabel={`${value} ${label}`}>
-      <Ionicons name={icon} size={12} color={colors.textTertiary} />
-      <Text style={styles.statText} {...textScale.badge}>
+    <View style={styles.cell} accessible accessibilityLabel={`${label}: ${value}`}>
+      <View style={styles.cellHead}>
+        <Ionicons name={icon} size={11} color={warn ? colors.warn : colors.textTertiary} />
+        <Text style={styles.cellLabel} numberOfLines={1} {...textScale.badge}>
+          {label.toLocaleUpperCase("tr-TR")}
+        </Text>
+      </View>
+      <Text style={[styles.cellValue, warn ? { color: colors.warn } : null]} {...textScale.badge}>
         {value}
       </Text>
+      {ratio != null ? (
+        <View style={styles.cellBar}>
+          <View style={[styles.cellBarFill, { width: `${Math.round(Math.min(1, ratio) * 100)}%` }]} />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -100,19 +149,39 @@ function Stat({ icon, value, label }: { icon: keyof typeof Ionicons.glyphMap; va
 const styles = StyleSheet.create({
   card: {
     padding: space.md,
-    gap: space.sm,
-    borderRadius: radius.lg,
+    gap: space.m,
+    borderRadius: radius.xl,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
-    borderColor: colors.border,
+    borderColor: colors.glassLine,
   },
-  top: { flexDirection: "row", gap: space.md, alignItems: "flex-start" },
-  main: { flex: 1, gap: space.xxs },
+  cardMuted: { opacity: 0.75 },
+  flex: { flex: 1, minWidth: 0 },
+  top: { flexDirection: "row", gap: space.md, alignItems: "center" },
+  main: { flex: 1, gap: space.xxs, minWidth: 0 },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: space.s },
   name: { ...type.h2, color: colors.textPrimary },
+  points: {
+    alignItems: "center",
+    minWidth: 48,
+    paddingVertical: space.xs,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.brandDim,
+  },
+  pointsValue: { ...type.scoreMd, color: colors.brandAccent },
+  pointsLabel: { ...type.nano, color: colors.textTertiary },
+  recordWrap: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  recordBar: { flex: 1, height: 6, borderRadius: 3, flexDirection: "row", overflow: "hidden", backgroundColor: colors.surface3, gap: 2 },
+  seg: { height: 6 },
+  cells: { flexDirection: "row", gap: space.xs },
+  cell: { flex: 1, gap: space.xxs, padding: space.sm, borderRadius: radius.md, backgroundColor: colors.surface2 },
+  cellHead: { flexDirection: "row", alignItems: "center", gap: space.xxs },
+  cellLabel: { ...type.nano, color: colors.textTertiary },
+  cellValue: { ...type.tableNumStrong, color: colors.textPrimary },
+  cellBar: { height: 3, borderRadius: 2, backgroundColor: colors.surface3, overflow: "hidden" },
+  cellBarFill: { height: 3, borderRadius: 2, backgroundColor: colors.brandAccent },
   meta: { ...type.bodySm, color: colors.textSecondary },
-  stats: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.sm, marginTop: space.xxs },
-  stat: { flexDirection: "row", alignItems: "center", gap: space.xxs },
-  statText: { ...type.numSm, color: colors.textSecondary },
   record: { flexDirection: "row", gap: space.xxs },
   pill: { ...type.numSmStrong, paddingHorizontal: space.xs, borderRadius: radius.xs, overflow: "hidden" },
   win: { color: colors.win, backgroundColor: colors.winDim },
@@ -126,6 +195,7 @@ const styles = StyleSheet.create({
     borderTopWidth: hairline,
     borderTopColor: colors.separator,
   },
-  captainName: { ...type.label, color: colors.textPrimary, flex: 1 },
-  noCaptain: { ...type.caption, color: colors.textTertiary, paddingTop: space.xs },
+  captainName: { ...type.h4, color: colors.textPrimary },
+  captainRole: { ...type.caption, color: colors.textTertiary },
+  noCaptain: { ...type.caption, color: colors.warn, flex: 1 },
 });

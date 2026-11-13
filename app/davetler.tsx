@@ -47,15 +47,22 @@ import {
   EmptyState,
   ErrorState,
   FAB,
+  IconTile,
   Input,
   ListRow,
+  MetricGrid,
+  MetricTile,
+  Reveal,
   ScreenHeader,
   SectionHeader,
   SegmentedControl,
+  Skeleton,
+  SkeletonCard,
   SkeletonListRow,
   Surface,
   TeamLogo,
   Touchable,
+  toneColors,
   useFabAutoHide,
   useHeaderScroll,
   useRefresh,
@@ -85,9 +92,12 @@ import { queryKeys } from "@/lib/queryKeys";
 import type { ApiTeam } from "@/lib/types";
 import { useTeamAccess } from "@/components/club/team/useTeamAccess";
 import { useAuth } from "@/providers/AuthProvider";
+import { SignatureStripe } from "@/components/league/kit";
 import {
   colors,
+  elevate,
   fonts,
+  hairline,
   layout,
   radius,
   space,
@@ -108,6 +118,11 @@ const statusMeta = (status: string): { label: string; tone: Tone } =>
   STATUS_META[status] ?? { label: status, tone: "neutral" };
 
 type InviteTab = "gelen" | "gonderilen";
+
+/** Listenin öğeleri: bölüm başlığı ya da talep kartı. */
+type ListEntry =
+  | { kind: "head"; key: string; title: string; count: number; tone: "warn" | "neutral" }
+  | { kind: "item"; key: string; request: JoinRequest; order: number };
 
 const TAB_KEYS: InviteTab[] = ["gelen", "gonderilen"];
 
@@ -364,6 +379,9 @@ export default function InvitesScreen() {
 
   /* -------------------------------- ÇİZİM -------------------------------- */
 
+  const busyAny =
+    acceptMutation.isPending || rejectMutation.isPending || cancelMutation.isPending;
+
   const { onScroll: onHeaderScroll, scrollEventThrottle } = scrollProps;
   const { onScroll: onFabScroll } = fab;
   const handleScroll = useCallback(
@@ -374,77 +392,176 @@ export default function InvitesScreen() {
     [onFabScroll, onHeaderScroll],
   );
 
+  /**
+   * LİSTE KURGUSU: tek düz liste yerine iki bölüm — "Yanıt bekleyen" en üstte
+   * (kararın verileceği yer), altında "Sonuçlananlar" arşivi. Satırlar
+   * FlatList'e başlık + kart karışık öğeler olarak verilir; böylece sanal
+   * liste korunur, bölüm başlıkları da kaydırmayla birlikte akar.
+   */
+  const rows = useMemo<ListEntry[]>(() => {
+    const pending = data.filter((item) => item.status === "pending");
+    const settled = data.filter((item) => item.status !== "pending");
+    const out: ListEntry[] = [];
+    if (pending.length) {
+      out.push({ kind: "head", key: "h-pending", title: "Yanıt bekleyen", count: pending.length, tone: "warn" });
+      pending.forEach((request, index) => out.push({ kind: "item", key: `p-${request.id}`, request, order: index }));
+    }
+    if (settled.length) {
+      out.push({ kind: "head", key: "h-settled", title: "Sonuçlananlar", count: settled.length, tone: "neutral" });
+      settled.forEach((request, index) =>
+        out.push({ kind: "item", key: `s-${request.id}`, request, order: pending.length + index }),
+      );
+    }
+    return out;
+  }, [data]);
+
   const renderItem = useCallback(
-    ({ item, index }: { item: JoinRequest; index: number }) => (
-      <RequestRow
-        request={item}
-        inbox={tab === "gelen"}
-        position={rowPosition(index, data.length)}
-        onPress={openRequest}
-      />
-    ),
-    [data.length, openRequest, tab],
+    ({ item }: { item: ListEntry }) =>
+      item.kind === "head" ? (
+        <SectionHeader
+          title={item.title}
+          meta={String(item.count)}
+          icon={item.tone === "warn" ? "hourglass-outline" : "archive-outline"}
+          iconTone={item.tone === "warn" ? "gold" : "neutral"}
+          inset="flush"
+          style={styles.groupHead}
+        />
+      ) : (
+        <Reveal index={item.order} limit={7}>
+          <RequestCard
+            request={item.request}
+            inbox={tab === "gelen"}
+            busy={busyAny}
+            onPress={openRequest}
+            onAccept={confirmAccept}
+            onReject={confirmReject}
+            onCancel={confirmCancel}
+          />
+        </Reveal>
+      ),
+    [busyAny, confirmAccept, confirmCancel, confirmReject, openRequest, tab],
+  );
+
+  /** Özet: üç kutu — yanıt bekleyen, senin bekleyen talebin, kabul edilen. */
+  const acceptedCount = useMemo(
+    () => [...inbox, ...outbox].filter((item) => item.status === "accepted").length,
+    [inbox, outbox],
   );
 
   const listHeader = useMemo(
     () => (
       <View style={styles.headerBlock}>
+        <Reveal>
+          <MetricGrid columns={3}>
+            <MetricTile
+              label="Gelen"
+              value={String(pendingIn)}
+              hint="yanıt bekliyor"
+              tone={pendingIn > 0 ? "warn" : "neutral"}
+              icon="mail-unread-outline"
+              onPress={tab === "gelen" ? undefined : () => changeTab("gelen")}
+            />
+            <MetricTile
+              label="Giden"
+              value={String(pendingOut)}
+              hint="sonuç bekliyor"
+              tone="brand"
+              icon="paper-plane-outline"
+              onPress={tab === "gonderilen" ? undefined : () => changeTab("gonderilen")}
+            />
+            <MetricTile
+              label="Kabul"
+              value={String(acceptedCount)}
+              hint="toplam"
+              tone="win"
+              icon="checkmark-done-outline"
+            />
+          </MetricGrid>
+        </Reveal>
+
         {/* Başkan: tek açık "Oyuncu Arıyoruz" ilanının özeti. */}
         {isPresident && !myRecruitmentQuery.isLoading && !myRecruitmentQuery.isError ? (
-          <Surface level={1} radius="lg" style={styles.adBox}>
-            <View style={styles.adBoxHead}>
-              <Ionicons name="megaphone" size={16} color={colors.brandAccent} />
-              <Text style={styles.adBoxTitle} {...textScale.dense}>
-                Oyuncu Arıyoruz ilanım
-              </Text>
-              <Badge
-                label={openRecruitment ? "YAYINDA" : "YOK"}
-                tone={openRecruitment ? "win" : "neutral"}
-                size="xs"
-              />
-            </View>
-            <Text style={styles.adBoxBody} {...textScale.long}>
-              {openRecruitment
-                ? `Aranan mevkiler: ${
-                    openRecruitment.positions.length
-                      ? openRecruitment.positions.map(positionLabel).join(", ")
-                      : "tüm mevkiler"
-                  }.`
-                : "İlan açtığında serbest oyuncular seni panelde görür ve doğrudan başvurabilir."}
-            </Text>
-            <Button
-              label={openRecruitment ? "İlanı yönet" : "İlan aç"}
-              variant={openRecruitment ? "secondary" : "primary"}
-              size="sm"
+          <Reveal index={1}>
+            <Touchable
+              feedback="card"
+              haptic="selection"
               onPress={() => setAdOpen(true)}
-            />
-          </Surface>
+              accessibilityRole="button"
+              accessibilityLabel={openRecruitment ? "Oyuncu Arıyoruz ilanını yönet" : "Oyuncu Arıyoruz ilanı aç"}
+              style={[styles.adBox, openRecruitment ? styles.adBoxLive : null]}
+            >
+              {openRecruitment ? <SignatureStripe /> : null}
+              <IconTile icon="megaphone" tone={openRecruitment ? "signature" : "neutral"} size={40} glow={Boolean(openRecruitment)} />
+              <View style={styles.adBoxText}>
+                <View style={styles.adBoxHead}>
+                  <Text style={styles.adBoxTitle} numberOfLines={1} {...textScale.dense}>
+                    Oyuncu Arıyoruz
+                  </Text>
+                  <Badge
+                    label={openRecruitment ? "Yayında" : "Kapalı"}
+                    tone={openRecruitment ? "win" : "neutral"}
+                    dot={Boolean(openRecruitment)}
+                    size="xs"
+                  />
+                </View>
+                {openRecruitment ? (
+                  <View style={styles.adChips}>
+                    {(openRecruitment.positions.length ? openRecruitment.positions : ["Tüm mevkiler"]).slice(0, 4).map((code) => (
+                      <Badge key={code} label={code} tone="brand" size="xs" />
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.adBoxBody} numberOfLines={2} {...textScale.long}>
+                    İlan aç; serbest oyuncular seni görüp doğrudan başvursun.
+                  </Text>
+                )}
+              </View>
+              <View style={styles.adBoxCta}>
+                <Text style={styles.adBoxCtaText} {...textScale.dense}>
+                  {openRecruitment ? "Yönet" : "İlan aç"}
+                </Text>
+                <Ionicons name="chevron-forward" size={14} color={colors.brandAccent} />
+              </View>
+            </Touchable>
+          </Reveal>
         ) : null}
 
         {/* Oyuncu: ilan vitrini. */}
         {isPlayer && recruitments.length > 0 ? (
           <View>
-            <SectionHeader style={styles.flushHeader} title="Oyuncu arayan takımlar" meta={String(recruitments.length)} />
+            <SectionHeader
+              title="Oyuncu arayan takımlar"
+              meta={String(recruitments.length)}
+              icon="megaphone-outline"
+              iconTone="cyan"
+              inset="flush"
+            />
             <FlatList
               horizontal
               data={recruitments}
               keyExtractor={(item) => String(item.id)}
               showsHorizontalScrollIndicator={false}
+              style={styles.adRail}
               contentContainerStyle={styles.adRow}
-              renderItem={({ item }) => (
-                <RecruitmentAd item={item} onPress={applyToRecruitment} />
+              renderItem={({ item, index }) => (
+                <Reveal index={index} limit={4} axis="x">
+                  <RecruitmentAd item={item} onPress={applyToRecruitment} />
+                </Reveal>
               )}
             />
           </View>
         ) : null}
 
-        <Text style={styles.hint} {...textScale.long}>
-          {tab === "gelen"
-            ? isPresident
-              ? "Takımına gelen katılım başvuruları burada. Kabul edersen oyuncu sözleşmesiz olarak kadroya girer."
-              : "Takımların sana gönderdiği kadro davetleri burada. Karar vermek için satıra dokun."
-            : "Senin başlattığın davet ve başvurular. Bekleyenleri geri çekebilirsin."}
-        </Text>
+        <View style={styles.hintRow}>
+          <Ionicons name="information-circle-outline" size={14} color={colors.textTertiary} />
+          <Text style={styles.hint} {...textScale.long}>
+            {tab === "gelen"
+              ? isPresident
+                ? "Kabul ettiğin oyuncu sözleşmesiz olarak kadrona girer."
+                : "Takımların kadro davetleri. Kartın altından tek dokunuşla karar ver."
+              : "Senin başlattığın davet ve başvurular. Bekleyenleri geri çekebilirsin."}
+          </Text>
+        </View>
 
         {requestsQuery.isError && data.length > 0 ? (
           <ErrorState
@@ -456,13 +573,17 @@ export default function InvitesScreen() {
       </View>
     ),
     [
+      acceptedCount,
       applyToRecruitment,
+      changeTab,
       data.length,
       isPlayer,
       isPresident,
       myRecruitmentQuery.isError,
       myRecruitmentQuery.isLoading,
       openRecruitment,
+      pendingIn,
+      pendingOut,
       recruitments,
       requestsQuery.error,
       requestsQuery.isError,
@@ -475,8 +596,7 @@ export default function InvitesScreen() {
     return <Redirect href="/giris" />;
   }
 
-  const busy =
-    acceptMutation.isPending || rejectMutation.isPending || cancelMutation.isPending;
+  const busy = busyAny;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -494,14 +614,20 @@ export default function InvitesScreen() {
 
       {requestsQuery.isLoading ? (
         <View style={styles.loading}>
-          <SkeletonListRow count={5} />
+          <MetricGrid columns={3}>
+            <Skeleton height={92} radius="xl" />
+            <Skeleton height={92} radius="xl" />
+            <Skeleton height={92} radius="xl" />
+          </MetricGrid>
+          <SkeletonCard lines={3} />
+          <SkeletonCard lines={3} />
         </View>
       ) : requestsQuery.isError && inbox.length === 0 && outbox.length === 0 ? (
         <ErrorState error={requestsQuery.error} onRetry={requestsQuery.refetch} />
       ) : (
         <FlatList
-          data={data}
-          keyExtractor={(item) => `${tab}-${item.id}`}
+          data={rows}
+          keyExtractor={(item) => `${tab}-${item.key}`}
           renderItem={renderItem}
           onScroll={handleScroll}
           scrollEventThrottle={scrollEventThrottle}
@@ -625,64 +751,150 @@ export default function InvitesScreen() {
 /* ============================== ALT BİLEŞENLER ============================= */
 
 /**
- * Talep satırı.
+ * Talep kartı — davet/başvurunun TAMAMI tek kartta okunur.
  *
  * Gelen kutusunda DAVET takımı, BAŞVURU oyuncuyu gösterir; giden kutusunda
  * tersi geçerlidir (kendi gönderdiğin daveti oyuncu adıyla, başvurunu takım
  * adıyla ararsın).
+ *
+ * ANATOMİ: arma/avatar · ad + tür · durum hapı; altında mesaj alıntısı ve
+ * zaman çizgisi (gönderildi → yanıtlandı). Bekleyen talepte kartın dibinde
+ * KARAR ŞERİDİ durur: gelen kutusunda Reddet / Kabul et, giden kutusunda
+ * Geri çek. Eskiden karar için önce satıra dokunup alt sayfayı açmak
+ * gerekiyordu; kararlar aynı onay pencerelerinden geçer.
  */
-const RequestRow = React.memo(function RequestRow({
+const RequestCard = React.memo(function RequestCard({
   request,
   inbox,
-  position,
+  busy,
   onPress,
+  onAccept,
+  onReject,
+  onCancel,
 }: {
   request: JoinRequest;
   inbox: boolean;
-  position: "single" | "first" | "middle" | "last";
+  busy: boolean;
   onPress: (request: JoinRequest) => void;
+  onAccept: (request: JoinRequest) => void;
+  onReject: (request: JoinRequest) => void;
+  onCancel: (request: JoinRequest) => void;
 }) {
   const handlePress = useCallback(() => onPress(request), [onPress, request]);
 
   const showTeam = inbox ? request.type === "invite" : request.type === "application";
   const meta = statusMeta(request.status);
-
-  const leading = useMemo(
-    () =>
-      showTeam ? (
-        <TeamLogo
-          name={request.team.name}
-          logo={mediaUrl(request.team.logo ?? null)}
-          size={layout.crestLg}
-        />
-      ) : (
-        <Avatar
-          name={request.player.name}
-          image={mediaUrl(request.player.image ?? null)}
-          size={layout.crestLg}
-        />
-      ),
-    [request.player.image, request.player.name, request.team.logo, request.team.name, showTeam],
-  );
+  const pending = request.status === "pending";
+  const title = (showTeam ? request.team.name : request.player.name) ?? "—";
+  const kindLabel = request.type === "invite" ? "Kadro daveti" : "Katılım başvurusu";
+  const direction = inbox ? "Gelen" : "Giden";
 
   const subtitle = [
-    request.type === "invite" ? "Kadro daveti" : "Katılım başvurusu",
+    kindLabel,
     !showTeam && request.player.position ? positionLabel(request.player.position) : null,
-    request.created_at ? formatDateShort(request.created_at) : null,
   ]
     .filter(Boolean)
     .join(" · ");
 
   return (
-    <ListRow
-      leading={leading}
-      title={(showTeam ? request.team.name : request.player.name) ?? "—"}
-      subtitle={subtitle}
-      badge={<Badge label={meta.label} tone={meta.tone} size="xs" />}
-      highlighted={request.status === "pending"}
-      position={position}
-      onPress={handlePress}
-    />
+    <View style={[styles.reqCard, pending ? styles.reqCardPending : null]}>
+      {pending ? <SignatureStripe /> : null}
+      <Touchable
+        feedback="row"
+        haptic="selection"
+        onPress={handlePress}
+        accessibilityRole="button"
+        accessibilityLabel={`${title}, ${kindLabel}, ${meta.label}. Ayrıntılar`}
+        style={styles.reqMain}
+      >
+        <View style={styles.reqHead}>
+          {showTeam ? (
+            <TeamLogo name={request.team.name} logo={mediaUrl(request.team.logo ?? null)} size={40} />
+          ) : (
+            <Avatar name={request.player.name} image={mediaUrl(request.player.image ?? null)} size={40} />
+          )}
+          <View style={styles.reqText}>
+            <Text style={styles.reqTitle} numberOfLines={1} {...textScale.dense}>
+              {title}
+            </Text>
+            <View style={styles.reqMetaRow}>
+              <Ionicons
+                name={request.type === "invite" ? "mail-outline" : "paper-plane-outline"}
+                size={12}
+                color={colors.textTertiary}
+              />
+              <Text style={styles.reqMeta} numberOfLines={1} {...textScale.dense}>
+                {subtitle}
+              </Text>
+            </View>
+          </View>
+          <Badge label={meta.label} tone={meta.tone} dot={pending} size="xs" />
+        </View>
+
+        {request.message ? (
+          <View style={styles.reqQuote}>
+            <Text style={styles.reqQuoteText} numberOfLines={2} {...textScale.long}>
+              “{request.message}”
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Zaman çizgisi: gönderildi → yanıt. Bekleyende ikinci durak boş halka. */}
+        <View style={styles.timeline}>
+          <View style={[styles.tlDot, styles.tlDotOn]} />
+          <Text style={styles.tlText} numberOfLines={1} {...textScale.dense}>
+            {direction} · {request.created_at ? formatDateShort(request.created_at) : "—"}
+          </Text>
+          <View style={styles.tlLine} />
+          <View
+            style={[
+              styles.tlDot,
+              pending ? null : { backgroundColor: toneColors(meta.tone).fg, borderColor: toneColors(meta.tone).fg },
+            ]}
+          />
+          <Text style={[styles.tlText, pending ? styles.tlTextWait : null]} numberOfLines={1} {...textScale.dense}>
+            {pending ? "Yanıt bekleniyor" : request.responded_at ? formatDateShort(request.responded_at) : meta.label}
+          </Text>
+        </View>
+      </Touchable>
+
+      {pending ? (
+        <View style={styles.reqActions}>
+          {inbox ? (
+            <>
+              <Button
+                label="Reddet"
+                variant="secondary"
+                size="sm"
+                icon="close"
+                onPress={() => onReject(request)}
+                disabled={busy}
+                style={styles.reqButton}
+              />
+              <Button
+                label="Kabul et"
+                variant="primary"
+                size="sm"
+                icon="checkmark"
+                onPress={() => onAccept(request)}
+                disabled={busy}
+                style={styles.reqButton}
+              />
+            </>
+          ) : (
+            <Button
+              label="Talebi geri çek"
+              variant="ghost"
+              size="sm"
+              icon="arrow-undo-outline"
+              onPress={() => onCancel(request)}
+              disabled={busy}
+              style={styles.reqButton}
+            />
+          )}
+        </View>
+      ) : null}
+    </View>
   );
 });
 
@@ -742,7 +954,10 @@ const RequestDetail = React.memo(function RequestDetail({
   );
 });
 
-/** Oyuncu arayan takım ilanı — yatay vitrin kartı. */
+/**
+ * Oyuncu arayan takım ilanı — yatay vitrin kartı. Üstte arma + takım,
+ * ortada aranan mevki pulları, dipte not ve "Başvur" eylem satırı.
+ */
 const RecruitmentAd = React.memo(function RecruitmentAd({
   item,
   onPress,
@@ -762,38 +977,35 @@ const RecruitmentAd = React.memo(function RecruitmentAd({
       style={styles.ad}
     >
       <View style={styles.adHead}>
-        <TeamLogo
-          name={item.team?.name}
-          logo={mediaUrl(item.team?.logo ?? null)}
-          size={layout.crestMd}
-        />
+        <TeamLogo name={item.team?.name} logo={mediaUrl(item.team?.logo ?? null)} size={36} />
         <View style={styles.adBody}>
           <Text style={styles.adTeam} numberOfLines={1} {...textScale.dense}>
             {item.team?.name ?? "Takım"}
           </Text>
           <Text style={styles.adMeta} numberOfLines={1} {...textScale.dense}>
-            {[item.team?.city, item.team?.league].filter(Boolean).join(" · ")}
+            {[item.team?.city, item.team?.league].filter(Boolean).join(" · ") || "Serbest oyuncu arıyor"}
           </Text>
         </View>
       </View>
 
-      {item.positions.length > 0 ? (
-        <View style={styles.adChips}>
-          {item.positions.slice(0, 4).map((code) => (
-            <Badge key={code} label={code} tone="brand" size="xs" />
-          ))}
-        </View>
-      ) : null}
+      <View style={styles.adChips}>
+        {item.positions.length > 0 ? (
+          item.positions.slice(0, 4).map((code) => <Badge key={code} label={code} tone="brand" size="xs" />)
+        ) : (
+          <Badge label="Tüm mevkiler" tone="neutral" size="xs" />
+        )}
+      </View>
 
-      {item.note ? (
-        <Text style={styles.adNote} numberOfLines={2} {...textScale.long}>
-          {item.note}
-        </Text>
-      ) : null}
-
-      <Text style={styles.adCta} {...textScale.badge}>
-        Başvur →
+      <Text style={styles.adNote} numberOfLines={2} {...textScale.long}>
+        {item.note || "Kadroya katılacak oyuncu arıyor."}
       </Text>
+
+      <View style={styles.adCtaRow}>
+        <Text style={styles.adCta} {...textScale.dense}>
+          Başvur
+        </Text>
+        <Ionicons name="arrow-forward" size={14} color={colors.brandAccent} />
+      </View>
     </Touchable>
   );
 });
@@ -1116,21 +1328,52 @@ const styles = StyleSheet.create({
   loading: {
     paddingHorizontal: layout.screenPadding,
     paddingTop: space.md,
+    gap: space.md,
   },
   headerBlock: {
-    gap: space.sm,
-    paddingBottom: space.md,
+    gap: space.md,
+    paddingTop: space.md,
+    paddingBottom: space.xs,
+  },
+  groupHead: {
+    marginTop: space.lg,
+    marginBottom: space.sm,
+  },
+  hintRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space.s,
+    paddingHorizontal: space.xxs,
   },
   hint: {
     ...type.caption,
-    color: colors.textSecondary,
+    color: colors.textTertiary,
     letterSpacing: 0,
     lineHeight: 16,
+    flex: 1,
   },
+
+  /* — Başkanın ilan kartı — */
   adBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
     padding: space.md,
-    gap: space.sm,
-    marginTop: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    overflow: "hidden",
+    ...elevate(1),
+  },
+  adBoxLive: {
+    backgroundColor: colors.brandDim,
+    borderColor: colors.brandBorder,
+  },
+  adBoxText: {
+    flex: 1,
+    minWidth: 0,
+    gap: space.xs,
   },
   adBoxHead: {
     flexDirection: "row",
@@ -1140,26 +1383,40 @@ const styles = StyleSheet.create({
   adBoxTitle: {
     ...type.h3,
     color: colors.textPrimary,
-    flex: 1,
+    flexShrink: 1,
   },
   adBoxBody: {
-    ...type.caption,
+    ...type.bodySm,
     color: colors.textSecondary,
-    letterSpacing: 0,
-    lineHeight: 16,
+  },
+  adBoxCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xxs,
+  },
+  adBoxCtaText: {
+    ...type.label,
+    color: colors.brandAccent,
+  },
+
+  /* — İlan vitrini — */
+  adRail: {
+    marginHorizontal: -layout.screenPadding,
   },
   adRow: {
     gap: space.sm,
-    paddingVertical: space.xs,
+    paddingHorizontal: layout.screenPadding,
+    paddingVertical: space.sm,
   },
   ad: {
-    width: 210,
+    width: 232,
     padding: space.md,
     gap: space.sm,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     backgroundColor: colors.surface1,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: hairline,
     borderColor: colors.border,
+    ...elevate(1),
   },
   adHead: {
     flexDirection: "row",
@@ -1168,16 +1425,15 @@ const styles = StyleSheet.create({
   },
   adBody: {
     flex: 1,
+    minWidth: 0,
   },
   adTeam: {
-    ...type.bodySm,
+    ...type.h4,
     color: colors.textPrimary,
-    fontFamily: fonts.bold,
   },
   adMeta: {
     ...type.caption,
-    color: colors.textSecondary,
-    letterSpacing: 0,
+    color: colors.textTertiary,
   },
   adChips: {
     flexDirection: "row",
@@ -1185,14 +1441,115 @@ const styles = StyleSheet.create({
     gap: space.xs,
   },
   adNote: {
-    ...type.caption,
+    ...type.bodySm,
     color: colors.textSecondary,
-    letterSpacing: 0,
-    lineHeight: 15,
+    minHeight: 34,
+  },
+  adCtaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    paddingTop: space.sm,
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
   },
   adCta: {
-    ...type.micro,
+    ...type.label,
     color: colors.brandAccent,
+  },
+
+  /* — Talep kartı — */
+  reqCard: {
+    marginBottom: space.sm,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    overflow: "hidden",
+    ...elevate(1),
+  },
+  reqCardPending: {
+    borderColor: colors.brandBorder,
+  },
+  reqMain: {
+    paddingHorizontal: space.md,
+    paddingTop: space.md,
+    paddingBottom: space.m,
+    gap: space.m,
+  },
+  reqHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+  },
+  reqText: {
+    flex: 1,
+    minWidth: 0,
+    gap: space.xxs,
+  },
+  reqTitle: {
+    ...type.h3,
+    color: colors.textPrimary,
+  },
+  reqMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+  },
+  reqMeta: {
+    ...type.caption,
+    color: colors.textTertiary,
+    flexShrink: 1,
+  },
+  reqQuote: {
+    borderLeftWidth: 2,
+    borderLeftColor: colors.brandBorder,
+    paddingLeft: space.m,
+    marginLeft: space.xxs,
+  },
+  reqQuoteText: {
+    ...type.bodySm,
+    color: colors.textSecondary,
+    fontFamily: fonts.medium,
+  },
+  timeline: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+  },
+  tlDot: {
+    width: 8,
+    height: 8,
+    borderRadius: radius.pill,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+  },
+  tlDotOn: {
+    backgroundColor: colors.brand,
+    borderColor: colors.brand,
+  },
+  tlLine: {
+    flex: 1,
+    height: hairline,
+    backgroundColor: colors.separator,
+  },
+  tlText: {
+    ...type.caption,
+    color: colors.textSecondary,
+  },
+  tlTextWait: {
+    color: colors.warn,
+  },
+  reqActions: {
+    flexDirection: "row",
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.m,
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+  },
+  reqButton: {
+    flex: 1,
   },
   sheetBody: {
     gap: space.md,

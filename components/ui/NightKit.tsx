@@ -50,7 +50,7 @@ export const Odometer = memo(function Odometer({ value, style, digitHeight }: Od
           <OdometerDigit key={`${chars.length - i}`} digit={Number(ch)} height={h} style={style} />
         ) : (
           <Text key={`s${chars.length - i}`} style={[style, { lineHeight: h }]} {...textScale.badge}>
-            {ch}
+            {ch === " " ? "\u00A0" : ch}
           </Text>
         ),
       )}

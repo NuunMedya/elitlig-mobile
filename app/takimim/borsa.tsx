@@ -8,6 +8,12 @@
  * İlana teklif, normal transfer teklifi akışıyla verilir (/takimim/teklif-ver);
  * düğme satırın sağındadır (OfferCta), alt sayfada da tekrarlanır.
  * Oyuncu başına tek açık ilan olur; oyuncu takımdan ayrılınca ilan kapanır.
+ *
+ * TASARIM (gece teması): üstte piyasa özeti (açık ilan · satılık · kiralık),
+ * arama ve tür seçici (SegmentedControl). Her ilan bir PİYASA KARTI: oyuncu
+ * kimliği + tür hapı, takım satırı, değer şeridi (piyasa değeri · istenen
+ * bedel · ▲▼ fark yüzdesi), ilan notu ve eylem. İstenen bedel piyasa
+ * değerinin altındaysa ▼ yeşil ("fırsat"), üstündeyse ▲ kırmızı.
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -24,14 +30,18 @@ import {
   BottomSheet,
   Button,
   Chip,
-  ChipGroup,
   EmptyState,
   ErrorState,
   Input,
-  ListRow,
+  MetricGrid,
+  MetricTile,
+  Reveal,
   ScreenHeader,
   SegmentedControl,
+  Skeleton,
   SkeletonListRow,
+  TeamLogo,
+  Touchable,
   useHeaderScroll,
   useRefresh,
   useToast,
@@ -50,14 +60,60 @@ import {
 import { mediaUrl } from "@/lib/format";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, space, textScale, type } from "@/theme";
+import { colors, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 type Segment = "borsa" | "ilanlarim";
 type TypeFilter = "all" | TransferType;
 
 const fold = (value: string) => value.toLocaleLowerCase("tr-TR").trim();
-const positionOf = (index: number, length: number) =>
-  length === 1 ? "single" : index === 0 ? "first" : index === length - 1 ? "last" : "middle";
+
+const TYPE_ITEMS: SegmentedItem<TypeFilter>[] = [
+  { key: "all", label: "Tümü" },
+  { key: "sale", label: "Satılık" },
+  { key: "loan", label: "Kiralık" },
+];
+
+function ageOf(birth?: string | null): number | null {
+  if (!birth) return null;
+  const date = new Date(birth);
+  if (Number.isNaN(date.getTime())) return null;
+  const now = new Date();
+  let age = now.getFullYear() - date.getFullYear();
+  if (now.getMonth() < date.getMonth() || (now.getMonth() === date.getMonth() && now.getDate() < date.getDate())) age -= 1;
+  return age > 0 && age < 80 ? age : null;
+}
+
+function ago(value?: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const days = Math.floor((Date.now() - date.getTime()) / 86_400_000);
+  if (days <= 0) return "Bugün";
+  if (days === 1) return "Dün";
+  if (days < 30) return `${days} gün önce`;
+  return `${Math.floor(days / 30)} ay önce`;
+}
+
+/** Kısa tutar: 142.000 → "142 B ₺". */
+function shortFee(value: number | null | undefined): string | null {
+  if (value == null || !Number.isFinite(Number(value))) return null;
+  const n = Number(value);
+  if (n >= 1_000_000) return `${(n / 1_000_000).toLocaleString("tr-TR", { maximumFractionDigits: 1 })} Mn ₺`;
+  if (n >= 1_000) return `${(n / 1_000).toLocaleString("tr-TR", { maximumFractionDigits: 1 })} B ₺`;
+  return `${Math.round(n)} ₺`;
+}
+
+function MarketSkeleton() {
+  return (
+    <View style={styles.loading}>
+      <Skeleton height={76} radius="xl" />
+      <Skeleton height={44} radius="lg" />
+      {[0, 1, 2].map((index) => (
+        <Skeleton key={index} height={196} radius="xl" />
+      ))}
+    </View>
+  );
+}
 
 export default function TransferMarketScreen() {
   const params = useLocalSearchParams<{ bolum?: string }>();
@@ -121,8 +177,12 @@ function Market({ scrollProps, canOffer, ownTeamId }: { scrollProps: ScrollProps
     );
   }, [filter, query.data, term]);
 
-  if (query.isLoading) return <View style={styles.loading}><SkeletonListRow count={6} /></View>;
+  if (query.isLoading) return <MarketSkeleton />;
   if (query.isError && !query.data) return <ErrorState error={query.error} onRetry={query.refetch} />;
+
+  const all = query.data?.items ?? [];
+  const saleCount = all.filter((item) => item.listing_type === "sale").length;
+  const loanCount = all.filter((item) => item.listing_type === "loan").length;
 
   const own = picked ? picked.is_mine || (ownTeamId != null && picked.team.id === ownTeamId) : false;
 
@@ -135,39 +195,52 @@ function Market({ scrollProps, canOffer, ownTeamId }: { scrollProps: ScrollProps
         refreshControl={refresh.control}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
+        ItemSeparatorComponent={Gap}
         ListHeaderComponent={
           <View style={styles.header}>
-            <Input variant="search" size="sm" value={term} onChangeText={setTerm} placeholder="Oyuncu ya da takım ara" autoCorrect={false} />
-            <ChipGroup contentPadding={0}>
-              <Chip size="sm" label="Tümü" selected={filter === "all"} onPress={() => setFilter("all")} />
-              <Chip size="sm" label="Satılık" selected={filter === "sale"} onPress={() => setFilter("sale")} />
-              <Chip size="sm" label="Kiralık" selected={filter === "loan"} onPress={() => setFilter("loan")} />
-            </ChipGroup>
+            <MetricGrid columns={3}>
+              <MetricTile label="İlan" value={String(all.length)} icon="storefront" tone="brand" />
+              <MetricTile label="Satılık" value={String(saleCount)} icon="pricetag" tone="warn" onPress={() => setFilter(filter === "sale" ? "all" : "sale")} />
+              <MetricTile label="Kiralık" value={String(loanCount)} icon="repeat" tone="accent" onPress={() => setFilter(filter === "loan" ? "all" : "loan")} />
+            </MetricGrid>
+            <Input variant="search" leadingIcon="search" size="sm" value={term} onChangeText={setTerm} placeholder="Oyuncu ya da takım ara" autoCorrect={false} />
+            <SegmentedControl items={TYPE_ITEMS} value={filter} onChange={setFilter} />
+            <Text style={styles.resultText} {...textScale.dense}>
+              {`${items.length} ilan${filter !== "all" || term ? " · süzgeçli" : ""}`}
+            </Text>
           </View>
         }
         ListEmptyComponent={
-          <EmptyState icon="storefront-outline" title="İlan yok" body="Şu an bu süzgece uyan açık ilan bulunmuyor." variant="inline" />
+          <EmptyState
+            icon="storefront-outline"
+            title="İlan yok"
+            body="Şu an bu süzgece uyan açık ilan bulunmuyor."
+            variant="inline"
+            action={filter !== "all" || term ? { label: "Süzgeci temizle", onPress: () => { setFilter("all"); setTerm(""); } } : undefined}
+          />
         }
         renderItem={({ item, index }) => {
-          /* Teklif düğmesi SATIRDA: eskiden yalnız ilana dokununca açılan alt
+          /* Teklif düğmesi KARTTA: eskiden yalnız ilana dokununca açılan alt
              sayfadaydı; başkan teklif verebildiğini görmüyordu. */
           const mine = item.is_mine || (ownTeamId != null && item.team.id === ownTeamId);
           return (
-            <ListingRow
-              listing={item}
-              position={positionOf(index, items.length)}
-              onPress={() => setPicked(item)}
-              trailing={
-                canOffer && !mine ? (
-                  <OfferCta
-                    layout="compact"
-                    playerId={item.player.id}
-                    playerName={item.player.name ?? "Oyuncu"}
-                    playerTeamId={item.team.id}
-                  />
-                ) : undefined
-              }
-            />
+            <Reveal index={index} limit={6} distance={8}>
+              <ListingCard
+                listing={item}
+                mine={mine}
+                onPress={() => setPicked(item)}
+                action={
+                  canOffer && !mine ? (
+                    <OfferCta
+                      layout="compact"
+                      playerId={item.player.id}
+                      playerName={item.player.name ?? "Oyuncu"}
+                      playerTeamId={item.team.id}
+                    />
+                  ) : undefined
+                }
+              />
+            </Reveal>
           );
         }}
       />
@@ -207,42 +280,121 @@ function Market({ scrollProps, canOffer, ownTeamId }: { scrollProps: ScrollProps
   );
 }
 
-const ListingRow = React.memo(function ListingRow({
+function Gap() {
+  return <View style={styles.gap} />;
+}
+
+/**
+ * PİYASA KARTI — oyuncu kimliği, takım, değer şeridi (▲▼ fark), not, eylem.
+ * Kart basılınca ayrıntı alt sayfası açılır; eylem alanı kendi dokunuşunu taşır.
+ */
+const ListingCard = React.memo(function ListingCard({
   listing,
-  position,
+  mine,
   onPress,
-  trailing,
+  action,
+  footer,
 }: {
   listing: Listing;
-  position: "single" | "first" | "middle" | "last";
+  mine?: boolean;
   onPress?: () => void;
-  trailing?: React.ReactNode;
+  action?: React.ReactNode;
+  /** İlanlarım: durum + kapat düğmesi. */
+  footer?: React.ReactNode;
 }) {
-  const subtitle = [
-    // Sağ taraf düğmeye ayrıldığında ilan türü rozet yerine satırda yazar.
-    trailing ? listing.type_label : null,
-    listing.player.position,
-    listing.team.name,
-    listing.asking_fee != null ? formatMoney(listing.asking_fee) : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const open = listing.status === "open";
+  const loan = listing.listing_type === "loan";
+  const market = listing.player.market_value != null ? Number(listing.player.market_value) : null;
+  const asking = listing.asking_fee != null ? Number(listing.asking_fee) : null;
+  const diff = market && asking != null && market > 0 ? Math.round(((asking - market) / market) * 100) : null;
+  const age = ageOf(listing.player.birth_date);
+  const facts = [listing.player.position, age ? `${age} yaş` : null].filter(Boolean).join(" · ");
+  const when = ago(listing.created_at);
+
   return (
-    <ListRow
-      leading={<Avatar name={listing.player.name ?? "?"} image={mediaUrl(listing.player.image ?? null)} size={layout.crestLg} />}
-      title={listing.player.name ?? "Oyuncu"}
-      subtitle={subtitle || undefined}
-      badge={
-        <Badge
-          label={listing.status === "open" ? listing.type_label : "Kapalı"}
-          tone={listing.status !== "open" ? "neutral" : listing.listing_type === "loan" ? "info" : "warn"}
-          size="xs"
-        />
-      }
-      position={position}
+    <Touchable
       onPress={onPress}
-      trailing={trailing}
-    />
+      disabled={!onPress}
+      feedback="card"
+      accessibilityRole="button"
+      accessibilityLabel={[listing.player.name, listing.type_label, listing.team.name, asking != null ? `istenen ${formatMoney(asking)}` : null].filter(Boolean).join(", ")}
+      style={[styles.card, mine && styles.cardMine, !open && styles.cardClosed]}
+    >
+      {mine ? <View style={styles.mineStripe} /> : null}
+      <View style={styles.cardTop}>
+        <Avatar name={listing.player.name ?? "?"} image={mediaUrl(listing.player.image ?? null)} size={46} />
+        <View style={styles.cardIdentity}>
+          <Text style={styles.cardName} numberOfLines={1} {...textScale.dense}>
+            {listing.player.name ?? "Oyuncu"}
+          </Text>
+          {facts ? (
+            <Text style={styles.cardFacts} numberOfLines={1} {...textScale.dense}>
+              {facts}
+            </Text>
+          ) : null}
+        </View>
+        <Badge
+          label={open ? listing.type_label : "Kapalı"}
+          tone={!open ? "neutral" : loan ? "info" : "warn"}
+          icon={!open ? "lock-closed" : loan ? "repeat" : "pricetag"}
+          size="sm"
+        />
+      </View>
+
+      <View style={styles.teamRow}>
+        <TeamLogo name={listing.team.name ?? "?"} logo={mediaUrl(listing.team.logo ?? null)} size={20} />
+        <Text style={styles.teamName} numberOfLines={1} {...textScale.dense}>
+          {listing.team.name ?? "Takım"}
+        </Text>
+        {mine ? <Badge label="Senin ilanın" tone="brand" size="xs" /> : null}
+        <View style={styles.flex} />
+        {when ? (
+          <Text style={styles.when} {...textScale.badge}>
+            {when}
+          </Text>
+        ) : null}
+      </View>
+
+      <View style={styles.valueStrip}>
+        <View style={styles.valueCell}>
+          <Text style={styles.valueLabel} {...textScale.badge}>
+            PİYASA DEĞERİ
+          </Text>
+          <Text style={styles.valueNum} numberOfLines={1} {...textScale.badge}>
+            {shortFee(market) ?? "—"}
+          </Text>
+        </View>
+        <View style={styles.valueDivider} />
+        <View style={styles.valueCell}>
+          <Text style={styles.valueLabel} {...textScale.badge}>
+            {loan ? "KİRALAMA BEDELİ" : "İSTENEN BEDEL"}
+          </Text>
+          <Text style={[styles.valueNum, styles.valueAsk]} numberOfLines={1} {...textScale.badge}>
+            {asking != null ? shortFee(asking) : loan ? "Bedelsiz" : "Pazarlıkla"}
+          </Text>
+        </View>
+        {diff != null ? (
+          <View style={[styles.diff, { backgroundColor: diff <= 0 ? colors.winDim : colors.lossDim }]}>
+            <Text style={[styles.diffText, { color: diff <= 0 ? colors.win : colors.loss }]} {...textScale.badge}>
+              {`${diff <= 0 ? "▼" : "▲"} %${Math.abs(diff)}`}
+            </Text>
+            <Text style={[styles.diffHint, { color: diff <= 0 ? colors.win : colors.loss }]} {...textScale.badge}>
+              {diff <= 0 ? "değerin altı" : "değerin üstü"}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
+      {listing.note ? (
+        <View style={styles.note}>
+          <Text style={styles.noteText} numberOfLines={2} {...textScale.long}>
+            {listing.note}
+          </Text>
+        </View>
+      ) : null}
+
+      {action || footer ? <View style={styles.cardFooter}>{footer ?? action}</View> : null}
+    </Touchable>
   );
 });
 
@@ -272,8 +424,10 @@ function MyListings({ scrollProps }: { scrollProps: ScrollProps }) {
     onError: (error) => toast.show({ message: error instanceof ApiError ? error.userMessage : "İlan kapatılamadı.", tone: "danger" }),
   });
 
-  if (query.isLoading) return <View style={styles.loading}><SkeletonListRow count={4} /></View>;
+  if (query.isLoading) return <MarketSkeleton />;
   if (query.isError && !query.data) return <ErrorState error={query.error} onRetry={query.refetch} />;
+
+  const openCount = items.filter((item) => item.status === "open").length;
 
   return (
     <>
@@ -283,9 +437,14 @@ function MyListings({ scrollProps }: { scrollProps: ScrollProps }) {
         keyExtractor={(item) => item.public_id}
         refreshControl={refresh.control}
         contentContainerStyle={styles.content}
+        ItemSeparatorComponent={Gap}
         ListHeaderComponent={
           <View style={styles.header}>
-            <Button label="Yeni ilan ver" icon="add" onPress={() => setCreateOpen(true)} fullWidth />
+            <MetricGrid columns={2}>
+              <MetricTile label="Yayında" value={String(openCount)} icon="radio" tone="win" />
+              <MetricTile label="Kapanan" value={String(items.length - openCount)} icon="archive" />
+            </MetricGrid>
+            <Button label="Yeni ilan ver" icon="add" size="lg" onPress={() => setCreateOpen(true)} fullWidth />
           </View>
         }
         ListEmptyComponent={
@@ -297,11 +456,29 @@ function MyListings({ scrollProps }: { scrollProps: ScrollProps }) {
           />
         }
         renderItem={({ item, index }) => (
-          <ListingRow
-            listing={item}
-            position={positionOf(index, items.length)}
-            onPress={item.status === "open" ? () => setClosing(item) : undefined}
-          />
+          <Reveal index={index} limit={6} distance={8}>
+            <ListingCard
+              listing={item}
+              footer={
+                item.status === "open" ? (
+                  <View style={styles.mineFooter}>
+                    <Badge label="Yayında" tone="win" icon="radio" size="sm" />
+                    <View style={styles.flex} />
+                    <Button label="İlanı kapat" variant="ghost" size="sm" icon="close-circle-outline" onPress={() => setClosing(item)} />
+                  </View>
+                ) : (
+                  <View style={styles.mineFooter}>
+                    <Badge label="Kapandı" tone="neutral" icon="lock-closed" size="sm" />
+                    {item.closed_at ? (
+                      <Text style={styles.when} {...textScale.badge}>
+                        {ago(item.closed_at)}
+                      </Text>
+                    ) : null}
+                  </View>
+                )
+              }
+            />
+          </Reveal>
         )}
       />
       <CreateListingSheet
@@ -435,9 +612,54 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
   segment: { paddingHorizontal: layout.screenPadding, paddingTop: space.md },
-  loading: { paddingHorizontal: layout.screenPadding, paddingTop: space.md },
+  loading: { paddingHorizontal: layout.screenPadding, paddingTop: space.md, gap: space.md },
   content: { paddingHorizontal: layout.screenPadding, paddingBottom: space.giant },
-  header: { gap: space.sm, paddingVertical: space.md },
+  header: { gap: space.md, paddingVertical: space.md },
+  resultText: { ...type.caption, color: colors.textTertiary },
+  gap: { height: space.md },
+
+  /* Piyasa kartı */
+  card: {
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+    overflow: "hidden",
+  },
+  cardMine: { backgroundColor: colors.brandDim, borderColor: colors.brandBorder },
+  cardClosed: { opacity: 0.72 },
+  mineStripe: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3, backgroundColor: colors.brand },
+  cardTop: { flexDirection: "row", alignItems: "center", gap: space.md },
+  cardIdentity: { flex: 1, minWidth: 0, gap: space.xxs },
+  cardName: { ...type.h3, color: colors.textPrimary },
+  cardFacts: { ...type.caption, color: colors.textTertiary },
+  teamRow: { flexDirection: "row", alignItems: "center", gap: space.s },
+  teamName: { ...type.labelSm, color: colors.textSecondary, flexShrink: 1 },
+  when: { ...type.meta, color: colors.textTertiary },
+  valueStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    padding: space.sm,
+    paddingHorizontal: space.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface2,
+  },
+  valueCell: { flex: 1, minWidth: 0, gap: space.xxs },
+  valueDivider: { width: hairline, alignSelf: "stretch", backgroundColor: colors.separator },
+  valueLabel: { ...type.nano, color: colors.textTertiary },
+  valueNum: { ...type.scoreXs, color: colors.textPrimary },
+  valueAsk: { color: colors.accentText },
+  diff: { alignItems: "center", paddingHorizontal: space.sm, paddingVertical: space.xs, borderRadius: radius.md },
+  diffText: { ...type.numSmStrong, fontFamily: fonts.bold },
+  diffHint: { ...type.nano },
+  note: { borderLeftWidth: 2, borderLeftColor: colors.brandBorder, paddingLeft: space.sm },
+  noteText: { ...type.bodySm, color: colors.textSecondary },
+  cardFooter: { borderTopWidth: hairline, borderTopColor: colors.separator, paddingTop: space.sm, alignItems: "flex-start" },
+  mineFooter: { flexDirection: "row", alignItems: "center", gap: space.sm, alignSelf: "stretch" },
+
   sheet: { gap: space.md },
   sheetText: { ...type.body, color: colors.textSecondary },
   label: { ...type.label, color: colors.textSecondary },

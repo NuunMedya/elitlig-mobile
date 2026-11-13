@@ -12,13 +12,14 @@
  *   · `saveAndNew` formu kapatmadan kaydedip sıfırlar.
  */
 
+import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { FormFields, validateFields, type FieldDef, type FormValues } from "@/components/admin";
 import { BottomSheet, Button } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
-import { colors, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 export interface EditorSheetProps {
   visible: boolean;
@@ -107,22 +108,28 @@ export function EditorSheet({
           {saveAndNew ? (
             <Button label={saveAndNew.label ?? "Kaydet ve yeni"} variant="secondary" onPress={() => submit(true)} disabled={busy} />
           ) : null}
-          <Button label={submitLabel} onPress={() => submit(false)} loading={busy} style={styles.submit} haptic="success" />
+          <Button label={submitLabel} icon="checkmark" size="lg" onPress={() => submit(false)} loading={busy} style={styles.submit} haptic="success" />
         </View>
       }
     >
       {intro ? (
-        <Text style={styles.intro} {...textScale.long}>
-          {intro}
-        </Text>
+        <View style={styles.introBox}>
+          <Ionicons name="information-circle-outline" size={16} color={colors.info} />
+          <Text style={styles.intro} {...textScale.long}>
+            {intro}
+          </Text>
+        </View>
       ) : null}
       {header ? <View style={styles.block}>{header(values, set)}</View> : null}
       <FormFields fields={list} values={values} onChange={setValues} errors={errors} />
       {extra ? <View style={styles.extra}>{extra(values, set)}</View> : null}
       {failure ? (
-        <Text style={styles.failure} {...textScale.long}>
-          {failure}
-        </Text>
+        <View style={styles.failureBox} accessibilityLiveRegion="polite">
+          <Ionicons name="alert-circle" size={16} color={colors.danger} />
+          <Text style={styles.failure} {...textScale.long}>
+            {failure}
+          </Text>
+        </View>
       ) : null}
     </BottomSheet>
   );
@@ -131,8 +138,26 @@ export function EditorSheet({
 const styles = StyleSheet.create({
   footer: { flexDirection: "row", gap: space.sm, flexWrap: "wrap" },
   submit: { flex: 1 },
-  intro: { ...type.bodySm, color: colors.textSecondary, marginBottom: space.md },
+  introBox: {
+    flexDirection: "row",
+    gap: space.sm,
+    padding: space.md,
+    marginBottom: space.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.infoDim,
+  },
+  intro: { ...type.bodySm, color: colors.textSecondary, flex: 1 },
   block: { marginBottom: space.md, gap: space.sm },
   extra: { marginTop: space.md, gap: space.sm },
-  failure: { ...type.bodySm, color: colors.danger, marginTop: space.md },
+  failureBox: {
+    flexDirection: "row",
+    gap: space.sm,
+    padding: space.md,
+    marginTop: space.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.dangerDim,
+    borderWidth: hairline,
+    borderColor: colors.danger,
+  },
+  failure: { ...type.bodySm, color: colors.danger, flex: 1 },
 });

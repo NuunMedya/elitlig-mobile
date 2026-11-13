@@ -16,10 +16,10 @@ import { useCallback, useState } from "react";
 import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { BottomSheet, Button, Input, ListRow, Touchable, errorMessage } from "@/components/chat/kit";
-import { useToast } from "@/components/ui";
 import { getVenues, type ChatConversation, type ChatLocationMeta, type ChatVenue } from "@/lib/api/chat";
 import { MAX_FILE_BYTES, getCurrentLocation, type PickedFile } from "@/lib/chatMedia";
 import { attachTones, colors } from "@/lib/chatPalette";
+import { IconTile, Reveal, useToast, type IconTileTone } from "@/components/ui";
 import { layout, radius, space, textScale, type } from "@/theme";
 
 export type AttachMode = "menu" | "location" | "poll" | null;
@@ -55,14 +55,26 @@ const CONTENT_TILES: Record<ContentKey, { label: string; icon: keyof typeof Ioni
   award: { label: "Haftanın Enleri", icon: "trophy", tone: attachTones.award },
 };
 
+/** Gece dili: ek menüsü karoları degrade ikon karosudur (WhatsApp'ın düz renkli daireleri yerine). */
+const TILE_TONE: Record<string, IconTileTone> = {
+  images: "violet",
+  camera: "pink",
+  video: "cyan",
+  location: "mint",
+  poll: "signature",
+  matches: "cyan",
+  signup: "mint",
+  award: "gold",
+};
+
 function TileGrid({ tiles }: { tiles: Tile[] }) {
   return (
     <View style={styles.grid}>
-      {tiles.map((tile) => (
+      {tiles.map((tile, index) => (
         <Touchable key={tile.key} feedback="chip" haptic="selection" onPress={tile.onPress} accessibilityRole="button" accessibilityLabel={tile.label} style={styles.tile}>
-          <View style={[styles.tileIcon, { backgroundColor: tile.tone }]}>
-            <Ionicons name={tile.icon} size={24} color={attachTones.onTone} />
-          </View>
+          <Reveal index={index} distance={12} scaleFrom={0.8}>
+            <IconTile icon={tile.icon} tone={TILE_TONE[tile.key] ?? "violet"} size={54} />
+          </Reveal>
           <Text style={styles.tileLabel} numberOfLines={2} {...textScale.dense}>{tile.label}</Text>
         </Touchable>
       ))}

@@ -131,6 +131,12 @@ export function QuickCapture() {
 
   return (
     <View style={styles.box}>
+      <View style={styles.head}>
+        <Ionicons name="flash" size={13} color={app.accent} />
+        <Text style={styles.headText} {...textScale.badge}>
+          HIZLI KAYIT
+        </Text>
+      </View>
       <View style={styles.kinds} accessibilityRole="tablist">
         {KINDS.map((item) => {
           const selected = item.key === kind;
@@ -154,7 +160,7 @@ export function QuickCapture() {
           );
         })}
       </View>
-      <View style={styles.line}>
+      <View style={[styles.line, { borderColor: text.trim() ? app.accent : colors.glassLine }]}>
         <TextInput
           value={text}
           onChangeText={setText}
@@ -180,21 +186,37 @@ export function QuickCapture() {
           <Ionicons name="arrow-up" size={18} color={app.onAccent} />
         </Touchable>
       </View>
-      <Text style={styles.hint} numberOfLines={2} accessibilityLiveRegion="polite" {...textScale.dense}>
-        {hint}
-      </Text>
+      <View style={styles.hintRow}>
+        <Ionicons name={text.trim() ? "eye-outline" : "bulb-outline"} size={12} color={colors.textTertiary} />
+        <Text style={styles.hint} numberOfLines={2} accessibilityLiveRegion="polite" {...textScale.dense}>
+          {hint}
+        </Text>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  box: { gap: space.sm, padding: space.md, borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.border, backgroundColor: colors.surface1 },
+  box: { gap: space.sm, padding: space.md, borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.glassLine, backgroundColor: colors.surface1 },
+  head: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  headText: { ...type.overline, color: colors.textSecondary },
   kinds: { flexDirection: "row", gap: space.xs },
   kind: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.xxs, minHeight: 34, borderRadius: radius.pill, paddingHorizontal: space.xs },
   kindLabel: { ...type.labelSm },
-  line: { flexDirection: "row", alignItems: "flex-end", gap: space.sm },
+  line: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: space.sm,
+    paddingLeft: space.md,
+    paddingRight: space.xs,
+    paddingVertical: space.xxs,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    backgroundColor: colors.surface2,
+  },
   input: { flex: 1, ...type.body, color: colors.textPrimary, paddingVertical: space.sm, maxHeight: 120 },
-  send: { width: 34, height: 34, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", marginBottom: space.xxs },
+  send: { width: 36, height: 36, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", marginBottom: space.xxs },
   off: { opacity: 0.4 },
-  hint: { ...type.caption, color: colors.textTertiary },
+  hintRow: { flexDirection: "row", alignItems: "flex-start", gap: space.xs },
+  hint: { ...type.caption, color: colors.textTertiary, flex: 1 },
 });

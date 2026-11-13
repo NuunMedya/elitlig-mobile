@@ -15,7 +15,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { Touchable } from "@/components/ui";
 import { fmtNum } from "@/lib/api/admin/system";
-import { colors, hairline, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 import { ShareCsvButton } from "./charts";
 
@@ -66,18 +66,27 @@ export function DataList<T extends Record<string, unknown>>({
       {shown.map((row, index) => {
         const body = (
           <>
-            <Text style={styles.primary} numberOfLines={2} {...textScale.dense}>
-              {primary(row)}
-            </Text>
-            <Text style={styles.cols} {...textScale.dense}>
-              {columns.map((col, i) => (
-                <Text key={col.key}>
-                  {i ? "   " : ""}
-                  <Text style={styles.colLabel}>{col.label} </Text>
-                  <Text style={styles.colValue}>{show(row, col)}</Text>
-                </Text>
+            <View style={styles.head}>
+              <Text style={[styles.rank, index < 3 ? styles.rankTop : null]} {...textScale.badge}>
+                {index + 1}
+              </Text>
+              <Text style={styles.primary} numberOfLines={2} {...textScale.dense}>
+                {primary(row)}
+              </Text>
+            </View>
+            {/* Sütunlar küçük cam haplar: etiket soluk, değer Archivo. */}
+            <View style={styles.cols}>
+              {columns.map((col) => (
+                <View key={col.key} style={styles.col}>
+                  <Text style={styles.colLabel} numberOfLines={1} {...textScale.badge}>
+                    {col.label}
+                  </Text>
+                  <Text style={styles.colValue} numberOfLines={1} {...textScale.badge}>
+                    {show(row, col)}
+                  </Text>
+                </View>
               ))}
-            </Text>
+            </View>
           </>
         );
         const style = [styles.row, index ? styles.rowBorder : null];
@@ -115,12 +124,16 @@ export function DataList<T extends Record<string, unknown>>({
 
 const styles = StyleSheet.create({
   empty: { ...type.bodySm, color: colors.textTertiary, paddingVertical: space.sm },
-  row: { paddingVertical: space.sm, gap: space.xxs },
+  row: { paddingVertical: space.sm, gap: space.xs },
   rowBorder: { borderTopWidth: hairline, borderTopColor: colors.separator },
-  primary: { ...type.bodySm, color: colors.textPrimary },
-  cols: { ...type.caption, color: colors.textSecondary },
-  colLabel: { color: colors.textTertiary },
-  colValue: { color: colors.textPrimary },
+  head: { flexDirection: "row", alignItems: "flex-start", gap: space.sm },
+  rank: { ...type.numSmStrong, color: colors.textTertiary, width: 18, textAlign: "center", paddingTop: 1 },
+  rankTop: { color: colors.brandAccent },
+  primary: { ...type.label, color: colors.textPrimary, flex: 1 },
+  cols: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, paddingLeft: 26 },
+  col: { flexDirection: "row", alignItems: "baseline", gap: 4, paddingHorizontal: space.sm, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.surface2 },
+  colLabel: { ...type.micro, color: colors.textTertiary },
+  colValue: { ...type.numSmStrong, color: colors.textPrimary },
   foot: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: space.xs },
   link: { ...type.label, color: colors.brandAccent },
 });

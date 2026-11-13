@@ -60,6 +60,8 @@ export interface ShareTheme {
   silver: readonly [string, string];
   bronze: readonly [string, string];
   medalInk: string;
+  /** Altın METİN (madalya dolgusu değil): açık zeminde koyulaşır. */
+  goldText: string;
   /** Parlak rozet (form harfi) üstündeki mürekkep. */
   chipInk: string;
   /** Arma karosu ve yedek baş harf mürekkebi. */
@@ -131,6 +133,7 @@ const gece: ShareTheme = {
   silver: dark.medalSilver,
   bronze: dark.medalBronze,
   medalInk: dark.medalInk,
+  goldText: dark.medalGold[0],
   chipInk: NIGHT_BOTTOM,
   crestTile: alpha(dark.onDark, 0.94),
   crestInk: light.inverse,
@@ -186,6 +189,7 @@ const gunduz: ShareTheme = {
   silver: light.medalSilver,
   bronze: light.medalBronze,
   medalInk: light.medalInk,
+  goldText: light.draw,
   chipInk: light.textOnBrand,
   crestTile: light.surface1,
   crestInk: light.inverse,

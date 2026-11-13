@@ -41,14 +41,23 @@ export async function saveToken(token: string): Promise<void> {
     return;
   }
   memoryFallback = token;
-  webSession()?.setItem(TOKEN_KEY, token);
+  try {
+    webSession()?.setItem(TOKEN_KEY, token);
+  } catch {
+    // Kota dolu / depolama engelli tarayıcı: oturum yalnız bellekte kalır.
+  }
 }
 
 export async function loadToken(): Promise<string | null> {
   if (await available()) {
     return SecureStore.getItemAsync(TOKEN_KEY);
   }
-  return memoryFallback ?? webSession()?.getItem(TOKEN_KEY) ?? null;
+  if (memoryFallback) return memoryFallback;
+  try {
+    return webSession()?.getItem(TOKEN_KEY) ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function clearToken(): Promise<void> {
@@ -57,7 +66,11 @@ export async function clearToken(): Promise<void> {
     return;
   }
   memoryFallback = null;
-  webSession()?.removeItem(TOKEN_KEY);
+  try {
+    webSession()?.removeItem(TOKEN_KEY);
+  } catch {
+    // Engelli depolama: bellekteki kopya zaten silindi.
+  }
 }
 
 /* ───────────── KALICI OTURUM YARDIMCILARI ─────────────

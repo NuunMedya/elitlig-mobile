@@ -6,6 +6,9 @@
  * eylemleri (geri çek, revize et) sunucunun `actions` alanına göre çıkar.
  * Oyuncu revizyon istediyse satır vurgulanır: sıradaki hamle takımdadır.
  * Serbest kalma izni bekleyen teklif ayrıca etiketlenir.
+ *
+ * TASARIM: üstte açık/tümü seçici ve durum dağılımı (parçalı çubuk +
+ * lejant); teklifler OfferCard ile (durum hapı, süreç adımları, notlar).
  */
 
 import { useQuery } from "@tanstack/react-query";
@@ -14,34 +17,21 @@ import React, { useCallback, useMemo, useState } from "react";
 import { FlatList, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { LegendItem, SplitBar } from "@/components/team/ClubKit";
+import { OfferCard } from "@/components/team/OfferCard";
 import {
-  Avatar,
-  Badge,
-  Chip,
-  ChipGroup,
   EmptyState,
   ErrorState,
-  ListRow,
+  Reveal,
   ScreenHeader,
-  SkeletonListRow,
+  SegmentedControl,
+  Skeleton,
   useHeaderScroll,
   useRefresh,
-  type Tone,
 } from "@/components/ui";
-import { getOfferOutbox, type OutboxOffer } from "@/lib/api/transfers";
-import { formatDateShort, mediaUrl } from "@/lib/format";
+import { getOfferOutbox } from "@/lib/api/transfers";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, space } from "@/theme";
-
-const STATUS: Record<string, { label: string; tone: Tone }> = {
-  SENT: { label: "Cevap bekliyor", tone: "warn" },
-  REVISION_REQUESTED: { label: "Revizyon istendi", tone: "info" },
-  ACCEPTED: { label: "Kabul edildi", tone: "win" },
-  REJECTED: { label: "Reddedildi", tone: "danger" },
-  WITHDRAWN: { label: "Geri çekildi", tone: "neutral" },
-  EXPIRED: { label: "Süresi doldu", tone: "neutral" },
-  CANCELLED: { label: "İptal edildi", tone: "neutral" },
-};
+import { colors, hairline, layout, radius, space } from "@/theme";
 
 type Filter = "acik" | "tumu";
 const OPEN = new Set(["SENT", "REVISION_REQUESTED"]);
@@ -62,6 +52,8 @@ export default function OutboxScreen() {
 
   const items = useMemo(() => query.data?.items ?? [], [query.data]);
   const openCount = items.filter((item) => OPEN.has(item.status)).length;
+  const accepted = items.filter((item) => item.status === "ACCEPTED").length;
+  const rejected = items.filter((item) => item.status === "REJECTED").length;
   const visible = filter === "acik" ? items.filter((item) => OPEN.has(item.status)) : items;
 
   const open = useCallback((publicId: string) => router.push(`/teklif/${publicId}`), [router]);
@@ -82,7 +74,9 @@ export default function OutboxScreen() {
       />
       {query.isLoading ? (
         <View style={styles.loading}>
-          <SkeletonListRow count={6} />
+          <Skeleton height={44} radius="lg" />
+          <Skeleton height={140} radius="xl" />
+          <Skeleton height={140} radius="xl" />
         </View>
       ) : query.isError && !items.length ? (
         <ErrorState error={query.error} onRetry={query.refetch} />
@@ -93,12 +87,35 @@ export default function OutboxScreen() {
           keyExtractor={(item) => item.public_id}
           refreshControl={refresh.control}
           contentContainerStyle={styles.content}
+          ItemSeparatorComponent={Gap}
           ListHeaderComponent={
             <View style={styles.header}>
-              <ChipGroup contentPadding={0}>
-                <Chip size="sm" label="Açık" count={openCount} selected={filter === "acik"} onPress={() => setFilter("acik")} />
-                <Chip size="sm" label="Tümü" count={items.length} selected={filter === "tumu"} onPress={() => setFilter("tumu")} />
-              </ChipGroup>
+              <SegmentedControl
+                items={[
+                  { key: "acik", label: `Açık (${openCount})` },
+                  { key: "tumu", label: `Tümü (${items.length})` },
+                ]}
+                value={filter}
+                onChange={setFilter}
+              />
+              {items.length ? (
+                <View style={styles.dist}>
+                  <SplitBar
+                    height={8}
+                    parts={[
+                      { key: "open", value: openCount, color: colors.warn },
+                      { key: "ok", value: accepted, color: colors.win },
+                      { key: "no", value: rejected, color: colors.loss },
+                      { key: "rest", value: items.length - openCount - accepted - rejected, color: colors.slateSoft },
+                    ]}
+                  />
+                  <View style={styles.legend}>
+                    <LegendItem color={colors.warn} label="Süreçte" value={openCount} />
+                    <LegendItem color={colors.win} label="Kabul" value={accepted} />
+                    <LegendItem color={colors.loss} label="Ret" value={rejected} />
+                  </View>
+                </View>
+              ) : null}
             </View>
           }
           ListEmptyComponent={
@@ -112,11 +129,9 @@ export default function OutboxScreen() {
             />
           }
           renderItem={({ item, index }) => (
-            <OutboxRow
-              offer={item}
-              position={visible.length === 1 ? "single" : index === 0 ? "first" : index === visible.length - 1 ? "last" : "middle"}
-              onPress={open}
-            />
+            <Reveal index={index} limit={6} distance={8}>
+              <OfferCard offer={item} onPress={open} />
+            </Reveal>
           )}
         />
       )}
@@ -124,41 +139,23 @@ export default function OutboxScreen() {
   );
 }
 
-const OutboxRow = React.memo(function OutboxRow({
-  offer,
-  position,
-  onPress,
-}: {
-  offer: OutboxOffer;
-  position: "single" | "first" | "middle" | "last";
-  onPress: (publicId: string) => void;
-}) {
-  const meta = STATUS[offer.status] ?? { label: offer.status, tone: "neutral" as Tone };
-  const subtitle = [
-    offer.sent_at ? `Gönderildi ${formatDateShort(offer.sent_at)}` : null,
-    offer.release_status === "PENDING" ? "Takımının izni bekleniyor" : null,
-    offer.release_status === "REJECTED" ? "Takımı izin vermedi" : null,
-    offer.awaiting_admin_approval ? "Yönetici onayı bekliyor" : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  return (
-    <ListRow
-      leading={<Avatar name={offer.player?.player_name ?? "?"} image={mediaUrl(offer.player?.player_img ?? null)} size={layout.crestLg} />}
-      title={offer.player?.player_name ?? "Oyuncu"}
-      subtitle={subtitle || undefined}
-      badge={<Badge label={meta.label} tone={meta.tone} size="xs" />}
-      highlighted={offer.status === "REVISION_REQUESTED"}
-      position={position}
-      onPress={() => onPress(offer.public_id)}
-    />
-  );
-});
+function Gap() {
+  return <View style={styles.gap} />;
+}
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  loading: { paddingHorizontal: layout.screenPadding, paddingTop: space.md },
+  loading: { paddingHorizontal: layout.screenPadding, paddingTop: space.md, gap: space.md },
   content: { paddingHorizontal: layout.screenPadding, paddingBottom: space.giant },
-  header: { paddingVertical: space.md },
+  header: { paddingVertical: space.md, gap: space.md },
+  dist: {
+    gap: space.sm,
+    padding: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  legend: { flexDirection: "row", justifyContent: "space-between", gap: space.sm },
+  gap: { height: space.md },
 });
-

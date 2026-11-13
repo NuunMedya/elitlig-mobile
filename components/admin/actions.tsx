@@ -15,7 +15,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import React from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, Platform, StyleSheet, Text, View } from "react-native";
 
 import { BottomSheet, Touchable, useToast } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
@@ -34,6 +34,11 @@ export function confirmAction({
   cancelLabel?: string;
   destructive?: boolean;
 }): Promise<boolean> {
+  // react-native-web'de Alert.alert hiçbir şey göstermez: tarayıcı onayı.
+  if (Platform.OS === "web") {
+    const ask = (globalThis as { confirm?: (text: string) => boolean }).confirm;
+    return Promise.resolve(ask ? ask(message ? `${title}\n\n${message}` : title) : true);
+  }
   return new Promise((resolve) => {
     Alert.alert(title, message, [
       { text: cancelLabel, style: "cancel", onPress: () => resolve(false) },

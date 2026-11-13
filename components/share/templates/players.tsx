@@ -94,7 +94,7 @@ function PlayerLine({ f, row, focus, h, bar, max }: { f: ShareFrame; row: Ranked
           <View style={{ height: u(3), marginTop: u(4), borderRadius: u(2), backgroundColor: t.glass }}>
             <FillBox f={f} radius={1.5} style={{ height: u(3), width: `${Math.max(4, (row.amount / max) * 100)}%` }} />
           </View>
-        ) : row.teamName ? (
+        ) : row.teamName && !dense ? (
           <FitName f={f} k="body" text={row.teamName} room={story ? 30 : 36} lines={1} align="left" scale={dense ? 0.72 : story ? 0.88 : 0.78} color={t.inkMuted} />
         ) : null}
       </View>
@@ -118,7 +118,7 @@ function PlayersLeader({ f, d }: { f: ShareFrame; d: PlayersShareData }) {
   if (!lead) return null;
   const { first, last } = splitName(lead.name);
   const gold = lead.rank === 1;
-  const valueColor = gold ? t.gold[0] : t.accent;
+  const valueColor = gold ? t.goldText : t.accent;
   return (
     <Poster f={f} mood="top" title={d.league} meta={d.city} footer={d.footer} watermark={false}>
       <Title f={f} d={d} />

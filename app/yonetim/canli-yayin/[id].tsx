@@ -437,7 +437,7 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
   const streamKey = ["live-stream", "match", matchId] as const;
   const streamQuery = useQuery({
     queryKey: streamKey,
-    queryFn: async () => (await getMatchLiveStream(matchId)).live_stream,
+    queryFn: async () => (await getMatchLiveStream(matchId))?.live_stream ?? null,
     enabled: Boolean(config.data?.configured),
     // YouTube kotası (her sorgu ≈2 birim): açılışta bir kez, sonra yalnız
     // telefon görüntü gönderirken 30 sn'de bir.
@@ -1004,8 +1004,8 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
 
   /**
    * İSİMSİZ GOL — oyuncu seçmeden takıma gol (skorbord + maç skoru). Kadro
-   * girilmemiş maçta da çalışır. Sunucu oyuncusuz gol OLAYINI kabul etmediği
-   * için skor maç kaydına yazılır (bkz. useLiveMatch → addAnonymousGoal).
+   * girilmemiş maçta da çalışır. Güncel sunucuda oyuncusuz gol OLAYI olarak
+   * yazılır; eski sunucuda skor maç kaydına yazılır (bkz. useLiveMatch).
    */
   const anonymousGoal = (side: Side, code = "GOAL_RIGHT_FOOT", clipKey: string | null = null) => {
     if (!requireLive()) return;
@@ -1408,12 +1408,23 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
                     saving={saving}
                     onAsk={ask}
                     onAnonymousGoal={(side) => anonymousGoal(side)}
-                    onRemoveAnonymousGoal={(side) =>
-                      void live
-                        .removeAnonymousGoal(side)
-                        .then(() => toast.show({ message: "İsimsiz gol geri alındı.", tone: "success" }))
-                        .catch((e: unknown) => toast.show({ message: errorText(e, "Gol geri alınamadı. Bağlantını kontrol et."), tone: "danger" }))
-                    }
+                    onRemoveAnonymousGoal={(side) => {
+                      // Resmî skordan gol düşürür: onay ister ve kayıt sürerken
+                      // (`saving`) ikinci dokunuş yok sayılır.
+                      if (saving) return;
+                      Alert.alert("İsimsiz golü geri al", `${nameOfSide(side)} hanesinden son isimsiz gol silinsin mi?`, [
+                        { text: "Vazgeç", style: "cancel" },
+                        {
+                          text: "Geri al",
+                          style: "destructive",
+                          onPress: () =>
+                            void save(async () => {
+                              await live.removeAnonymousGoal(side);
+                              toast.show({ message: "İsimsiz gol geri alındı.", tone: "success" });
+                            }),
+                        },
+                      ]);
+                    }}
                     onSubstitution={askSubstitution}
                     onControl={(a) => void runControl(a)}
                     onFinish={askFinish}

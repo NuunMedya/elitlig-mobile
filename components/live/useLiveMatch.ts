@@ -138,12 +138,27 @@ export function useLiveMatch(matchId: number, userId?: number | null) {
   const recorded = holdWritten && written ? { home: written.home, away: written.away } : serverScore;
   /** İşlem sürerken isimsiz gol sayısı sabit tutulur (olay önbelleği skordan önce güncellenir). */
   const [opAnon, setOpAnon] = useState<{ home: number; away: number } | null>(null);
-  const anon = manual
-    ? { home: 0, away: 0 }
-    : opAnon ?? { home: Math.max(0, recorded.home - eventScore.home), away: Math.max(0, recorded.away - eventScore.away) };
-  const score = manual ? serverScore : { home: eventScore.home + anon.home, away: eventScore.away + anon.away };
   /** Sunucu oyuncusuz gol olayını kabul ediyor mu (ilk denemede öğrenilir). */
   const anonEventsSupported = useRef<boolean | null>(null);
+  /*
+   * SKORDAN TÜRETİLEN "isimsiz gol" (kayıttaki skor − olay golleri) YALNIZ eski
+   * sunucu yedek yolunda ve olay listesi TAZE iken sayılır. Aksi hâlde olaylar
+   * henüz gelmemişken (events = []) ya da başka bir rejinin yazdığı skor
+   * olaylardan önce geldiğinde kayıttaki skorun fazlası "hayalet gol" sayılıp
+   * bir sonraki yazımda skora İKİNCİ KEZ ekleniyordu (2-1'de gol → 5-2).
+   * Güncel sunucuda isimsiz gol gerçek olaydır; skor yalnız olaylardan gelir.
+   */
+  const derivedAnonAllowed =
+    anonEventsSupported.current === false && eventsQuery.isSuccess && !eventsQuery.isFetching;
+  const anon =
+    manual || !derivedAnonAllowed
+      ? { home: 0, away: 0 }
+      : opAnon ?? { home: Math.max(0, recorded.home - eventScore.home), away: Math.max(0, recorded.away - eventScore.away) };
+  const score = manual
+    ? serverScore
+    : eventsQuery.isSuccess
+      ? { home: eventScore.home + anon.home, away: eventScore.away + anon.away }
+      : serverScore;
   const anonRef = useRef(anon);
   anonRef.current = anon;
   const recordedRef = useRef(recorded);
@@ -166,7 +181,8 @@ export function useLiveMatch(matchId: number, userId?: number | null) {
     async (base?: { home: number; away: number }) => {
       const fresh = await queryClient.fetchQuery({ queryKey: eventsKey, queryFn: () => getEvents(matchId), staleTime: 0 });
       if (manual || !match) return;
-      const extra = base ?? anonRef.current;
+      // Skordan türetilen isimsiz gol yalnız eski sunucu yedek yolunda eklenir.
+      const extra = anonEventsSupported.current === false ? base ?? anonRef.current : { home: 0, away: 0 };
       const fromEvents = scoreFromEvents(fresh, homeTeamId, awayTeamId);
       await writeScore({ home: fromEvents.home + extra.home, away: fromEvents.away + extra.away });
     },
@@ -416,8 +432,14 @@ export function useLiveMatch(matchId: number, userId?: number | null) {
       if (manual) throw new Error("Skor elle / hükmen tescil edildi.");
       /* Sunucuda oyuncusuz gol OLAYI varsa en yenisini sil. */
       const teamId = side === "home" ? homeTeamId : awayTeamId;
+      const otherId = side === "home" ? awayTeamId : homeTeamId;
+      // Bu tarafa puan yazan oyuncusuz goller: kendi golleri + rakibin kendi kalesine.
       const anonEvent = events
-        .filter((e) => isGoalCode(String(e.olay_kodu)) && !e.oyuncu_id && Number(e.takim_id) === Number(teamId) && String(e.olay_kodu).toUpperCase() !== "GOAL_OWN")
+        .filter((e) => {
+          const code = String(e.olay_kodu).toUpperCase();
+          if (!isGoalCode(code) || e.oyuncu_id) return false;
+          return code === "GOAL_OWN" ? Number(e.takim_id) === Number(otherId) : Number(e.takim_id) === Number(teamId);
+        })
         .reduce<MatchEvent | null>((best, e) => (!best || Number(e.id) > Number(best.id) ? e : best), null);
       if (anonEvent && Number(anonEvent.id) > 0) {
         await removeEvent(Number(anonEvent.id));
@@ -440,9 +462,14 @@ export function useLiveMatch(matchId: number, userId?: number | null) {
     const out = { home: 0, away: 0 };
     for (const e of events) {
       const code = String(e.olay_kodu).toUpperCase();
-      if (!isGoalCode(code) || code === "GOAL_OWN" || e.oyuncu_id) continue;
-      if (Number(e.takim_id) === Number(homeTeamId)) out.home += 1;
-      else if (Number(e.takim_id) === Number(awayTeamId)) out.away += 1;
+      if (!isGoalCode(code) || e.oyuncu_id) continue;
+      // Sayaç, golün PUANI hangi tarafa yazdıysa onu sayar: kendi kalesine
+      // golde olayın takımı golü atan oyuncunun takımıdır, puan rakibe gider.
+      const own = code === "GOAL_OWN";
+      const isHome = Number(e.takim_id) === Number(homeTeamId);
+      const isAway = Number(e.takim_id) === Number(awayTeamId);
+      if ((isHome && !own) || (isAway && own)) out.home += 1;
+      else if ((isAway && !own) || (isHome && own)) out.away += 1;
     }
     return out;
   }, [awayTeamId, events, homeTeamId]);

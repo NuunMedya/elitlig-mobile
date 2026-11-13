@@ -47,7 +47,7 @@ export function RoleSettingsSheet({
     ];
     const sources = roles.filter((r) => r.isManagement && r.key !== "admin");
     return [
-      { key: "label", label: "Rol adı", kind: "text", required: true, maxLength: 80, placeholder: "Örn. Saha Sorumlusu" },
+      { key: "label", label: "Rol adı", kind: "text", required: true, maxLength: 80, placeholder: "Örn. Saha Sorumlusu", group: "Kimlik" },
       {
         key: "description",
         label: "Açıklama",
@@ -59,6 +59,7 @@ export function RoleSettingsSheet({
         ? [
             {
               key: "scope",
+              group: "Kapsam",
               label: "Kapsam",
               kind: "segment",
               disabled: scopeLocked,
@@ -81,7 +82,7 @@ export function RoleSettingsSheet({
             } as FieldDef,
           ]
         : []),
-      { key: "color", label: "Renk", kind: "color", palette: ROLE_COLORS },
+      { key: "color", label: "Renk", kind: "color", palette: ROLE_COLORS, group: "Görünüm" },
       ...(isManagement
         ? [
             {
@@ -97,6 +98,7 @@ export function RoleSettingsSheet({
         ? [
             {
               key: "copyFrom",
+              group: "Başlangıç yetkileri",
               label: "Başlangıç yetkileri",
               kind: "select",
               placeholder: "Boş başla (hiçbir yetki açık değil)",

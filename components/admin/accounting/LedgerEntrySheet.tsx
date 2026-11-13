@@ -8,7 +8,9 @@
  * kategori, yöntem ve hesabı korur.
  */
 
+import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
+import { StyleSheet, Text, View } from "react-native";
 
 import { type FieldDef, type FormValues } from "@/components/admin";
 import {
@@ -28,9 +30,11 @@ import {
   type LedgerStatus,
 } from "@/lib/api/admin/accounting";
 
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
+
 import { EditorSheet } from "./EditorSheet";
 import { accountOptions } from "./financeSheets";
-import { Muted, SuggestChips } from "./parts";
+import { SuggestChips } from "./parts";
 
 export const blankLedger = (type: EntryType = "expense"): FormValues => ({
   type,
@@ -102,20 +106,21 @@ export function LedgerEntrySheet({
         key: "type",
         label: "Kayıt türü",
         kind: "segment",
+        group: "Tutar",
         options: [{ value: "income", label: "Gelir" }, { value: "expense", label: "Gider" }],
         onChange: () => ({ category: "" }),
       },
       { key: "amount", label: "Tutar (KDV dahil, ₺)", kind: "money", required: true, placeholder: "0,00" },
       { key: "vat_rate", label: "KDV", kind: "segment", options: VAT_RATES.map((r) => ({ value: String(r), label: `%${r}` })) },
-      { key: "description", label: "Açıklama", kind: "text", maxLength: 255, placeholder: type === "income" ? "Ör. Ekim ayı saha kirası tahsilatı" : "Ör. 12. hafta hakem ödemesi" },
+      { key: "description", label: "Açıklama", kind: "text", group: "Tanım", maxLength: 255, placeholder: type === "income" ? "Ör. Ekim ayı saha kirası tahsilatı" : "Ör. 12. hafta hakem ödemesi" },
       { key: "category", label: "Kategori", kind: "text", maxLength: 60, placeholder: "Aşağıdan seçin ya da yazın" },
       { key: "party", label: "Cari (kişi / firma)", kind: "text", maxLength: 120, placeholder: "Ör. Yıldız FK" },
-      { key: "entry_date", label: "İşlem tarihi", kind: "date", required: true },
+      { key: "entry_date", label: "İşlem tarihi", kind: "date", required: true, group: "Ödeme" },
       { key: "method", label: "Ödeme yöntemi", kind: "select", options: LEDGER_METHODS.map((m) => ({ value: m.key, label: m.label })) },
       { key: "account_id", label: "Hesap (kasa / banka)", kind: "select", clearable: true, hint: "Seçilmezse ödeme yöntemine bağlı hesaba işlenir.", options },
       { key: "status", label: "Durum", kind: "segment", options: [{ value: "paid", label: labels.paid }, { value: "pending", label: labels.pending }] },
       { key: "due_date", label: "Vade tarihi", kind: "date", clearable: true, hidden: (x) => x.status !== "pending" },
-      { key: "document_no", label: "Belge / fatura no", kind: "text", maxLength: 60 },
+      { key: "document_no", label: "Belge / fatura no", kind: "text", maxLength: 60, group: "Belge ve not" },
       { key: "note", label: "Not", kind: "multiline" },
     ];
   };
@@ -134,9 +139,34 @@ export function LedgerEntrySheet({
         return (
           <>
             {Number(v.vat_rate) > 0 && vat.gross > 0 ? (
-              <Muted>
-                Matrah {money(vat.net)} + KDV {money(vat.vat)}
-              </Muted>
+              <View style={styles.vat} accessible accessibilityLabel={`Matrah ${money(vat.net)}, KDV ${money(vat.vat)}`}>
+                <View style={styles.vatCell}>
+                  <Text style={styles.vatLabel} {...textScale.badge}>
+                    MATRAH
+                  </Text>
+                  <Text style={styles.vatValue} {...textScale.badge}>
+                    {money(vat.net)}
+                  </Text>
+                </View>
+                <Ionicons name="add" size={14} color={colors.textTertiary} />
+                <View style={styles.vatCell}>
+                  <Text style={styles.vatLabel} {...textScale.badge}>
+                    KDV %{Number(v.vat_rate)}
+                  </Text>
+                  <Text style={styles.vatValue} {...textScale.badge}>
+                    {money(vat.vat)}
+                  </Text>
+                </View>
+                <Ionicons name="pause" size={12} color={colors.textTertiary} style={styles.eq} />
+                <View style={styles.vatCell}>
+                  <Text style={styles.vatLabel} {...textScale.badge}>
+                    TOPLAM
+                  </Text>
+                  <Text style={[styles.vatValue, { color: type === "income" ? colors.win : colors.danger }]} {...textScale.badge}>
+                    {money(vat.gross)}
+                  </Text>
+                </View>
+              </View>
             ) : null}
             <SuggestChips label="Kategori önerileri" items={cats} value={s(v.category)} onPick={(c) => set({ category: c })} />
             <SuggestChips label="Cari önerileri" items={parties.slice(0, 30)} value={s(v.party)} onPick={(p) => set({ party: p })} />
@@ -177,3 +207,20 @@ export function LedgerEntrySheet({
     />
   );
 }
+
+const styles = StyleSheet.create({
+  vat: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    padding: space.m,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  vatCell: { flex: 1, alignItems: "center", gap: space.xxs },
+  vatLabel: { ...type.overline, color: colors.textTertiary },
+  vatValue: { ...type.tableNumStrong, color: colors.textPrimary },
+  eq: { transform: [{ rotate: "90deg" }] },
+});

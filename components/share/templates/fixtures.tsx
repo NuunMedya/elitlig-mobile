@@ -164,7 +164,7 @@ function FixturesCards({ f, d }: { f: ShareFrame; d: FixturesShareData }) {
       <Spacer f={f} grow={0.4} min={story ? 14 : 8} />
       <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: u(story ? 8 : 6) }}>
         {shown.map((m) => (
-          <FixtureCard key={m.id} f={f} m={m} wide={story && shown.length <= 5} />
+          <FixtureCard key={m.id} f={f} m={m} wide={story && shown.length <= 3} />
         ))}
       </View>
       {rest > 0 ? (
