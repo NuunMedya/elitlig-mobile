@@ -360,6 +360,7 @@ export function KpiTile({
   spark?: number[];
 }) {
   const [w, setW] = useState(0);
+  const shown = value == null ? "—" : format(Number(value));
   const change = previous === undefined ? null : deltaPct(value, previous);
   const good = change == null || Math.abs(change) < 0.5 ? null : lowerIsBetter ? change < 0 : change > 0;
   return (
@@ -370,8 +371,8 @@ export function KpiTile({
           {label.toLocaleUpperCase("tr-TR")}
         </Text>
       </View>
-      <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
-        {value == null ? "—" : format(Number(value))}
+      <Text style={[styles.kpiValue, shown.length > 8 ? styles.kpiValueLong : null]} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
+        {shown}
       </Text>
       {spark && spark.length > 1 ? (
         <View onLayout={(e) => setW(Math.round(e.nativeEvent.layout.width))} style={styles.kpiSpark}>
@@ -481,6 +482,7 @@ const styles = StyleSheet.create({
   kpiDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.brandAccent },
   kpiLabel: { ...type.nano, color: colors.textTertiary, flexShrink: 1 },
   kpiValue: { ...type.metric, color: colors.textPrimary },
+  kpiValueLong: { ...type.metricSm },
   kpiSpark: { height: 22 },
   kpiDelta: { flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start", paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.pill },
   kpiDeltaText: { ...type.micro },
