@@ -94,7 +94,7 @@ function PlayerLine({ f, row, focus, h, bar, max }: { f: ShareFrame; row: Ranked
           <View style={{ height: u(3), marginTop: u(4), borderRadius: u(2), backgroundColor: t.glass }}>
             <FillBox f={f} radius={1.5} style={{ height: u(3), width: `${Math.max(4, (row.amount / max) * 100)}%` }} />
           </View>
-        ) : row.teamName ? (
+        ) : row.teamName && !dense ? (
           <FitName f={f} k="body" text={row.teamName} room={story ? 30 : 36} lines={1} align="left" scale={dense ? 0.72 : story ? 0.88 : 0.78} color={t.inkMuted} />
         ) : null}
       </View>
