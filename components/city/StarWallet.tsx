@@ -31,6 +31,7 @@ export type WalletStars = Pick<CityState["stars"], "puzzle" | "arena" | "arena_t
   /** Şehir 2.1: Kulüp Arenası haftalık ödülü ve jeton takası (yalnız kazanılmışsa). */
   club?: number;
   coin?: number;
+  el?: number;
 };
 
 export function StarWallet({
@@ -78,6 +79,7 @@ export function StarWallet({
         {s.daily != null ? <Source icon="calendar" label="Giriş" value={s.daily} /> : null}
         {s.club ? <Source icon="shield-half" label="Kulüp Arenası" value={s.club} /> : null}
         {s.coin ? <Source icon="disc" label="Jeton takası" value={s.coin} /> : null}
+        {s.el ? <Source icon="cash" label="EL takası" value={s.el} /> : null}
         <Source icon="flash" label="XP yıldızı" value={s.xp} />
         {s.refund ? <Source icon="return-down-back" label="İade" value={s.refund} /> : null}
       </View>

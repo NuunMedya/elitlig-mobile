@@ -438,6 +438,33 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
                 ) : null}
               </View>
             ) : null}
+            {city2.el.star_trade ? (
+              <View style={styles.careCard}>
+                <View style={styles.careHead}>
+                  <Ionicons name="star" size={18} color={colors.yellowCard} />
+                  <Text style={styles.careTitle} {...textScale.dense}>
+                    Yıldıza çevir · bu hafta {city2.el.star_trade.used}/{city2.el.star_trade.per_week}
+                  </Text>
+                </View>
+                <Text style={styles.sheetLead} {...textScale.long}>
+                  Fazla Elit Lira'nı yıldıza çevir: {fmt(city2.el.star_trade.el)} EL = {city2.el.star_trade.stars} yıldız. Haftada en çok {city2.el.star_trade.per_week} kez; Pazartesi yenilenir.
+                </Text>
+                <Button
+                  label={
+                    city2.el.star_trade.left < 1
+                      ? "Bu haftanın hakkı bitti"
+                      : city2.el.balance < city2.el.star_trade.el
+                        ? `${fmt(city2.el.star_trade.el - city2.el.balance)} EL eksik`
+                        : `${fmt(city2.el.star_trade.el)} EL → ${city2.el.star_trade.stars} yıldız`
+                  }
+                  icon="swap-horizontal"
+                  variant={city2.el.star_trade.left > 0 && city2.el.balance >= city2.el.star_trade.el ? "primary" : "secondary"}
+                  disabled={city2.el.star_trade.left < 1 || city2.el.balance < city2.el.star_trade.el || actions.busy}
+                  loading={actions.elStars.isPending}
+                  onPress={() => actions.elStars.mutate(undefined)}
+                />
+              </View>
+            ) : null}
             <FormCard form={city2.el.form} />
           </View>
         ) : null}

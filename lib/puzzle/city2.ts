@@ -414,6 +414,8 @@ export interface City2El {
   per_hour_full?: number;
   per_day: number;
   net_per_hour: number;
+  /** Şehir 2.1: EL → yıldız takası (haftada sınırlı; eski sunucuda yok). */
+  star_trade?: { week: string; used: number; left: number; per_week: number; el: number; stars: number; total_stars: number };
   /** Şehir 2.1: tesis bakımı özeti (eski sunucuda yok). */
   care?: { avg_pct: number; cost: number; low: number; floor: number; decay_per_day: number; stars_per_stage: number; text: string };
   stored: number;
@@ -532,6 +534,9 @@ export const collectCity2El = (building?: string | null) =>
 /** Tesis bakımı (Şehir 2.1): yıldızla %100'e getirir; building yoksa bakımı eksik bütün binalar. */
 export const careCity2 = (building?: string | null) =>
   post<{ cost: number; by_building: Record<string, number>; city2: City2State }>("/api/puzzle/city2/care", building ? { building } : undefined, { retry: false });
+
+/** Şehir 2.1: Elit Lira'yı yıldıza çevir (pahalı, haftada sınırlı). */
+export const tradeCity2ElForStars = () => post<{ stars: number; cost: number; city2: City2State }>("/api/puzzle/city2/el/stars", undefined, { retry: false });
 
 export const upgradeCity2El = (building: string, kind: City2UpgradeKind) =>
   post<{ building: string; upgrade: City2UpgradeKind; level: number; cost: number; balance: number; city2: City2State }>(

@@ -40,6 +40,7 @@ import {
   buyCity2Lock,
   careCity2,
   city2Keys,
+  tradeCity2ElForStars,
   collectCity2El,
   fmtEl,
   getCity2,
@@ -154,8 +155,13 @@ export function useCity2Actions(callbacks: {
     success: (res) => `Bakım yapıldı · −${res.cost} yıldız`,
     onSuccess: (res) => write(res.city2),
   });
-  const busy = lock.isPending || stage.isPending || step.isPending || landmark.isPending || place.isPending || collect.isPending || upgrade.isPending || care.isPending;
-  return { lock, stage, step, landmark, place, collect, upgrade, care, busy };
+  /** Şehir 2.1: EL → yıldız takası. */
+  const elStars = useAdminMutation(() => tradeCity2ElForStars(), {
+    success: (res) => `+${res.stars} yıldız · −${fmtEl(res.cost)} EL`,
+    onSuccess: (res) => write(res.city2),
+  });
+  const busy = lock.isPending || stage.isPending || step.isPending || landmark.isPending || place.isPending || collect.isPending || upgrade.isPending || care.isPending || elStars.isPending;
+  return { lock, stage, step, landmark, place, collect, upgrade, care, elStars, busy };
 }
 
 /** EL defteri (yeniden eskiye, sayfalı: before = next_before). */
