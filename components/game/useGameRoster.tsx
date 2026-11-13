@@ -1,7 +1,7 @@
 /**
  * OYUN KADROSU — Arena oyunlarının gerçek lig içeriği (Penaltı, Slalom).
  *
- * Kadroyu sunucudan alır, oyuncunun seçimini cihazda hatırlar, giriş kartı
+ * Kadroyu sunucudan alır, oyuncunun seçimini hesabın oyun kaydında hatırlar, giriş kartı
  * için kurulum düğümünü (RosterSetup) ve oyuna gönderilecek kadroyu üretir:
  *   Penaltı  { shooter, keepers, takers }   (bkz. games/penalti.js; takers: rakip
  *            kulüplerin atıcıları — ligin golcü listesinin tamamı)
@@ -14,12 +14,12 @@
  * Kadro gelmezse oyun kendi varsayılan kadrosuyla oynanır (roster null).
  */
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, type ReactNode } from "react";
 
 import { RosterSetup } from "@/components/game/RosterSetup";
 import { getPenaltyRoster, getSlalomRoster } from "@/lib/api/arena";
+import { useGameSave } from "@/lib/puzzle/saves";
 import type { WebGameKey } from "@/lib/game/web/games.generated";
 
 export interface GameRoster {
@@ -31,13 +31,8 @@ export interface GameRoster {
   changeLabel: string | null;
 }
 
-const KEYS: Partial<Record<WebGameKey, string>> = {
-  penalti: "elitlig.penalti.shooter.v1",
-  slalom: "elitlig.slalom.runner.v1",
-  sektir: "elitlig.sektir.juggler.v1",
-  savunma: "elitlig.savunma.captain.v1",
-  kadro: "elitlig.kadro.captain.v1",
-};
+/** Seçim hatırlanan oyunlar (hesaba bağlı oyun kaydı `roster`: { oyun: oyuncu id }). */
+const PICKABLE = new Set<WebGameKey>(["penalti", "slalom", "sektir", "savunma", "kadro"]);
 
 /** Slalom'un kadro ucunu (oyuncular + takım merdiveni) kullanan oyunlar. */
 const SLALOM_FED = new Set<WebGameKey>(["slalom", "sektir", "savunma", "kadro"]);
@@ -56,21 +51,16 @@ export function useGameRoster(game: WebGameKey, cityId: number | null, playerId:
     retry: 1,
   });
 
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  useEffect(() => {
-    const key = KEYS[game];
-    if (!key) return;
-    AsyncStorage.getItem(key).then((value) => {
-      if (value) setSelectedId((current) => current ?? Number(value));
-    });
-  }, [game]);
+  // Seçilen oyuncu hesaba bağlıdır (lib/puzzle/saves): başka telefonda da aynı.
+  const picks = useGameSave("roster");
+  const selectedId = PICKABLE.has(game) ? (picks.data?.[game] ?? null) : null;
+  const updatePicks = picks.update;
   const choose = useCallback(
     (id: number) => {
-      setSelectedId(id);
-      const key = KEYS[game];
-      if (key) void AsyncStorage.setItem(key, String(id));
+      // Kayıt oyun oyun birleşir: yalnız bu oyunun seçimi yazılır.
+      if (PICKABLE.has(game)) updatePicks({ [game]: id });
     },
-    [game],
+    [game, updatePicks],
   );
 
   return useMemo<GameRoster>(() => {

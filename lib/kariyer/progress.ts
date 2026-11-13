@@ -1,5 +1,5 @@
 /**
- * KARİYER YOLU — cihazda saklanan gelişim ve oyuncu kimliği.
+ * KARİYER YOLU — hesaba bağlı gelişim ve oyuncu kimliği.
  *
  * KİMLİK: üyenin gerçek oyuncu profili bağlıysa kariyer ONUNLA başlar (adı,
  * mevkisi ve hattına göre başlangıç özellikleri); bağlı değilse herkes aynı
@@ -7,11 +7,11 @@
  *
  * GELİŞİM: kazanılan her yıldız bir antrenman puanıdır. Yıldızlar sunucudadır
  * (/api/puzzle → games.kariyer.total_stars) ve hile yapılamaz; puanların HANGİ
- * özelliğe harcandığı cihazda durur. Cihaz değişirse harcama kaydı yoktur:
- * puanlar yeniden dağıtılır, hiçbir şey kaybolmaz.
+ * özelliğe harcandığı hesabın oyun kaydında durur (lib/puzzle/saves, anahtar
+ * `kariyer`: cihaz önbelleği + sunucu). Telefon değişse de dağılım korunur;
+ * iki cihazda farklı dağılım varsa daha çok puan harcanmış olan kalır.
+ * Eski cihaz anahtarı (`elitlig.kariyer.v1.<üye>`) ilk açılışta taşınır.
  */
-
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { ATTR_KEYS, applyGains, lineOfPosition, startingAttrs, type Attrs, type Line } from "./levels";
 
@@ -34,27 +34,12 @@ export interface KariyerSave {
 const EMPTY_GAINS: Attrs = { sut: 0, pas: 0, teknik: 0, hiz: 0 };
 export const emptySave = (): KariyerSave => ({ spent: 0, gains: { ...EMPTY_GAINS } });
 
-const keyOf = (userId: number | string) => `elitlig.kariyer.v1.${userId}`;
-
-export async function loadSave(userId: number | string): Promise<KariyerSave> {
-  try {
-    const raw = await AsyncStorage.getItem(keyOf(userId));
-    if (!raw) return emptySave();
-    const parsed = JSON.parse(raw) as Partial<KariyerSave>;
-    const gains = { ...EMPTY_GAINS };
-    for (const key of ATTR_KEYS) gains[key] = Math.max(0, Math.floor(Number(parsed.gains?.[key]) || 0));
-    return { spent: Math.max(0, Math.floor(Number(parsed.spent) || 0)), gains };
-  } catch {
-    return emptySave();
-  }
-}
-
-export async function storeSave(userId: number | string, save: KariyerSave): Promise<void> {
-  try {
-    await AsyncStorage.setItem(keyOf(userId), JSON.stringify(save));
-  } catch {
-    /* depolama dolu / kapalı: gelişim bu oturumda geçerli kalır */
-  }
+/** Kayıttan gelen ham veriyi güvenli biçime çevirir (yoksa boş kayıt). */
+export function normalizeSave(raw: Partial<KariyerSave> | null | undefined): KariyerSave {
+  if (!raw) return emptySave();
+  const gains = { ...EMPTY_GAINS };
+  for (const key of ATTR_KEYS) gains[key] = Math.max(0, Math.floor(Number(raw.gains?.[key]) || 0));
+  return { spent: Math.max(0, Math.floor(Number(raw.spent) || 0)), gains };
 }
 
 export function identityOf(

@@ -29,7 +29,6 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
@@ -53,7 +52,8 @@ import { WebGame, type WebGameHandle } from "@/components/game/WebGame";
 import { BottomSheet, Button, ErrorState, SkeletonCard, Touchable, refreshControlProps, useRefresh, useToast } from "@/components/ui";
 import { collectCityStars } from "@/lib/puzzle/api";
 import { buildingMark, incomeOf, type City2CollectResult, type City2OwnedLandmark, type City2State } from "@/lib/puzzle/city2";
-import { CITY_KIT_KEY, CITY_SKY, CLUB_KITS, type ClubKit } from "@/lib/puzzle/cityPalette";
+import { CITY_SKY, CLUB_KITS, type ClubKit } from "@/lib/puzzle/cityPalette";
+import { useClubKit } from "@/lib/puzzle/saves";
 import { useCity2, useCity2Actions } from "@/lib/puzzle/useCity2";
 import { useDailyStatus } from "@/lib/puzzle/useDaily";
 import { useAuth } from "@/providers/AuthProvider";
@@ -80,7 +80,8 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
   const scroll = useRef<ScrollView>(null);
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
-  const [kit, setKit] = useState<ClubKit>(CLUB_KITS[0]);
+  // Forma rengi hesaba bağlıdır (lib/puzzle/saves): başka telefonda da aynı.
+  const [kit, setKit] = useClubKit();
   const [kitSheet, setKitSheet] = useState(false);
   const [howSheet, setHowSheet] = useState(false);
   const [matchSheet, setMatchSheet] = useState(false);
@@ -104,15 +105,6 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
   useEffect(() => {
     if (typeof params.bina === "string" && params.bina) setOpen(params.bina);
   }, [params.bina]);
-
-  useEffect(() => {
-    AsyncStorage.getItem(CITY_KIT_KEY)
-      .then((value) => {
-        const found = CLUB_KITS.find((k) => k.key === value);
-        if (found) setKit(found);
-      })
-      .catch(() => undefined);
-  }, []);
 
   const actions = useCity2Actions({
     onLock: (key) => scene.current?.send({ type: "focus", key }),
@@ -211,7 +203,6 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
 
   const chooseKit = (next: ClubKit) => {
     setKit(next);
-    void AsyncStorage.setItem(CITY_KIT_KEY, next.key).catch(() => undefined);
     setKitSheet(false);
   };
 
