@@ -169,8 +169,8 @@ function Lineup({ scope, onRules }: { scope: Scope; onRules: () => void }) {
   const selectedIds = selected.map((player) => player.id);
 
   // Eski sunucu bütün haftayı kilitler; yenisi yalnız maçı başlamış takımları.
-  const weekLocked = Boolean(me?.week.locked);
-  const lockedTeams = useMemo(() => new Set(me?.week.lockedTeamIds ?? []), [me?.week.lockedTeamIds]);
+  const weekLocked = Boolean(me?.week?.locked);
+  const lockedTeams = useMemo(() => new Set(me?.week?.lockedTeamIds ?? []), [me?.week?.lockedTeamIds]);
   const savedIds = me?.lineup?.playerIds ?? [];
   const isLocked = (player: FantasyPlayer) => lockedTeams.has(player.teamId);
   const frozen = (player: FantasyPlayer) => weekLocked || (isLocked(player) && savedIds.includes(player.id));
@@ -182,7 +182,7 @@ function Lineup({ scope, onRules }: { scope: Scope; onRules: () => void }) {
     const p = vice != null ? byId.get(vice) : undefined;
     return Boolean(p && isLocked(p) && me?.lineup?.viceCaptainId === vice);
   })();
-  const nextWeek = me?.week.mode === "next";
+  const nextWeek = me?.week?.mode === "next";
   const sameSet = (a: number[], b: number[]) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
   const saved = Boolean(
     me?.lineup && sameSet(me.lineup.playerIds, selectedIds) && me.lineup.captainId === captain && (!rules.viceCaptain || (me.lineup.viceCaptainId ?? null) === vice),
@@ -209,8 +209,8 @@ function Lineup({ scope, onRules }: { scope: Scope; onRules: () => void }) {
     return <EmptyState icon="people-outline" title="Oyuncu havuzu boş" body="Bu ligde henüz fikstürü olan takım yok." variant="inline" />;
   }
 
-  const deadline = me?.week.deadline
-    ? `${formatDateShort(me.week.deadline)} ${new Date(me.week.deadline).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul" })}`
+  const deadline = me?.week?.deadline
+    ? `${formatDateShort(me.week!.deadline)} ${new Date(me.week!.deadline).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul" })}`
     : "";
   const remove = (id: number) => {
     setPicks((current) => (current ?? []).filter((item) => item !== id));
@@ -265,7 +265,7 @@ function Lineup({ scope, onRules }: { scope: Scope; onRules: () => void }) {
     <>
       <WeekHero
         overline={`FANTEZİ ELİTLİG · ${nextWeek ? "GELECEK HAFTA" : "BU HAFTA"}`}
-        title={`Hafta ${weekNo(me?.week.key)}`}
+        title={`Hafta ${weekNo(me?.week?.key)}`}
         status={status}
         points={weekPoints}
         celebrate={weekPoints != null && weekPoints >= GOOD_WEEK}

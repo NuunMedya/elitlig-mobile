@@ -153,88 +153,90 @@ export const Input = React.memo(
           </Text>
         ) : null}
 
-        <View
-          style={[
-            styles.field,
-            variant === "search" ? styles.fieldSearch : null,
-            multiline ? styles.fieldMultiline : { height },
-            float ? styles.fieldFloat : null,
-            focused && !error ? styles.fieldFocused : null,
-            error ? styles.fieldError : null,
-            rest.editable === false ? styles.fieldDisabled : null,
-          ]}
-        >
-          {/* Işıklı kenar: alanın 1.5px dışında imza degradesi + parıltı. */}
+        <View style={styles.fieldWrap}>
+          {/* Işıklı kenar: alanın ARKASINDA, 2px dışına taşan imza degradesi + parıltı.
+              Alanın içinde olsaydı (web'de konumlu katman sonra boyanır) yazıyı ve ikonu örtüyordu. */}
           {!error ? (
-            <Animated.View pointerEvents="none" style={[styles.glowRing, { opacity: focusAnim }]}>
+            <Animated.View pointerEvents="none" style={[styles.glowRing, variant === "search" ? styles.fieldSearch : null, { opacity: focusAnim }]}>
               <LinearGradient
                 colors={[colors.gradientSignature[0], colors.gradientSignature[1], colors.live]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={[StyleSheet.absoluteFill, styles.glowGradient]}
+                style={[StyleSheet.absoluteFill, styles.glowGradient, variant === "search" ? styles.fieldSearch : null]}
               />
-              <View style={[styles.glowInner, variant === "search" ? styles.fieldSearch : null]} />
             </Animated.View>
           ) : null}
-          {float && label ? (
-            <Animated.Text
-              pointerEvents="none"
-              numberOfLines={1}
-              style={[
-                styles.floatLabel,
-                icon ? styles.floatLabelWithIcon : null,
-                {
-                  color: error ? colors.danger : focused ? colors.accentText : colors.textTertiary,
-                  transform: [
-                    { translateY: labelAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -11] }) },
-                    { scale: labelAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.76] }) },
-                  ],
-                },
-              ]}
-              {...textScale.dense}
-            >
-              {label}
-            </Animated.Text>
-          ) : null}
-          {icon ? (
-            <Ionicons
-              name={icon}
-              size={16}
-              color={error ? colors.danger : focused ? colors.brandAccent : colors.textTertiary}
+          <View
+            style={[
+              styles.field,
+              variant === "search" ? styles.fieldSearch : null,
+              multiline ? styles.fieldMultiline : { height },
+              float ? styles.fieldFloat : null,
+              focused && !error ? styles.fieldFocused : null,
+              error ? styles.fieldError : null,
+              rest.editable === false ? styles.fieldDisabled : null,
+            ]}
+          >
+            {float && label ? (
+              <Animated.Text
+                pointerEvents="none"
+                numberOfLines={1}
+                style={[
+                  styles.floatLabel,
+                  icon ? styles.floatLabelWithIcon : null,
+                  {
+                    color: error ? colors.danger : focused ? colors.accentText : colors.textTertiary,
+                    transform: [
+                      { translateY: labelAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -11] }) },
+                      { scale: labelAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.76] }) },
+                    ],
+                  },
+                ]}
+                {...textScale.dense}
+              >
+                {label}
+              </Animated.Text>
+            ) : null}
+            {icon ? (
+              <Ionicons
+                name={icon}
+                size={16}
+                color={error ? colors.danger : focused ? colors.brandAccent : colors.textTertiary}
+              />
+            ) : null}
+
+            <TextInput
+              {...rest}
+              ref={ref}
+              onChangeText={onChangeText}
+              multiline={multiline}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
+              style={[styles.input, multiline ? styles.inputMultiline : null, float ? styles.inputFloat : null]}
+              placeholder={float && !focused ? undefined : rest.placeholder}
+              placeholderTextColor={colors.textTertiary}
+              selectionColor={colors.brandAccent}
+              cursorColor={colors.brandAccent}
+              accessibilityLabel={rest.accessibilityLabel ?? label}
+              allowFontScaling
+              maxFontSizeMultiplier={1.3}
             />
-          ) : null}
 
-          <TextInput
-            {...rest}
-            ref={ref}
-            onChangeText={onChangeText}
-            multiline={multiline}
-            onFocus={handleFocus}
-            onBlur={handleBlur}
-            style={[styles.input, multiline ? styles.inputMultiline : null, float ? styles.inputFloat : null]}
-            placeholder={float && !focused ? undefined : rest.placeholder}
-            placeholderTextColor={colors.textTertiary}
-            selectionColor={colors.brandAccent}
-            cursorColor={colors.brandAccent}
-            accessibilityLabel={rest.accessibilityLabel ?? label}
-            allowFontScaling
-            maxFontSizeMultiplier={1.3}
-          />
+            {variant === "search" && hasValue ? (
+              <Touchable
+                feedback="icon"
+                haptic="none"
+                onPress={handleClear}
+                hitSlop={touchSlop(18)}
+                accessibilityRole="button"
+                accessibilityLabel="Aramayı temizle"
+              >
+                <Ionicons name="close-circle" size={18} color={colors.textTertiary} />
+              </Touchable>
+            ) : null}
 
-          {variant === "search" && hasValue ? (
-            <Touchable
-              feedback="icon"
-              haptic="none"
-              onPress={handleClear}
-              hitSlop={touchSlop(18)}
-              accessibilityRole="button"
-              accessibilityLabel="Aramayı temizle"
-            >
-              <Ionicons name="close-circle" size={18} color={colors.textTertiary} />
-            </Touchable>
-          ) : null}
-
-          {trailing}
+            {trailing}
+          </View>
         </View>
 
         {error ? (
@@ -258,6 +260,9 @@ const styles = StyleSheet.create({
   label: {
     ...type.h4,
     color: colors.textSecondary,
+  },
+  fieldWrap: {
+    position: "relative",
   },
   field: {
     flexDirection: "row",
@@ -287,11 +292,6 @@ const styles = StyleSheet.create({
   },
   glowGradient: {
     borderRadius: radius.md + 2,
-  },
-  glowInner: {
-    flex: 1,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface1,
   },
   floatLabel: {
     position: "absolute",
