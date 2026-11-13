@@ -92,3 +92,69 @@ export const CITY_UI = {
   lockBg: "#C9CDD6",
   done: "#22C55E",
 } as const;
+
+/* ───────────────────────── KULÜP ŞEHRİ 2.0 ───────────────────────── */
+
+/** 2.0 binalarının ikon karoları (açık → koyu). Sunucu `icon` yollar; renk yalnız burada. */
+export const CITY2_UNIT_COLORS: Record<string, [string, string]> = {
+  halisaha: ["#4ADE80", "#16A34A"],
+  kulup: ["#2DD4BF", "#0F9488"],
+  stadyum: ["#FB7185", "#E11D48"],
+  restoran: ["#FDBA74", "#EA580C"],
+  magaza: ["#C4B5FD", "#7C3AED"],
+  akademi: ["#93C5FD", "#2563EB"],
+  ulasim: ["#7DD3FC", "#0284C7"],
+  saglik: ["#FCA5A5", "#DC2626"],
+  tv: ["#FDE047", "#CA8A04"],
+  universite: ["#A5B4FC", "#4F46E5"],
+  otel: ["#FDBA8C", "#C2410C"],
+  scout: ["#67E8F9", "#0891B2"],
+};
+
+/** Sembol yapı kademeleri: ikon ve renk (sahne kendi sprite'ını çizer; bu RN listesi içindir). */
+export const LANDMARK_TIER_STYLE: Record<string, { icon: string; colors: [string, string] }> = {
+  sus: { icon: "flower", colors: ["#86EFAC", "#22C55E"] },
+  meydan: { icon: "water", colors: ["#7DD3FC", "#0EA5E9"] },
+  heykel: { icon: "body", colors: ["#CBD5E1", "#64748B"] },
+  simge: { icon: "business", colors: ["#C4B5FD", "#7C3AED"] },
+  kupa: { icon: "trophy", colors: ["#FDE68A", "#D97706"] },
+  seri: { icon: "flame", colors: ["#FDBA74", "#EA580C"] },
+};
+
+/** Tek tek sembol yapıların ikonları (yoksa kademe ikonu). */
+export const LANDMARK_ICONS: Record<string, string> = {
+  bank: "reorder-four",
+  sokak_lambasi: "bulb",
+  agac_sirasi: "leaf",
+  bayrak: "flag",
+  cicek_bahcesi: "flower",
+  cesme: "water",
+  taraftar_duvari: "megaphone",
+  arma_meydani: "shield",
+  efsane_oyuncu_heykeli: "body",
+  teknik_direktor_heykeli: "clipboard",
+  kendi_heykelin: "person",
+  saat_kulesi: "time",
+  dev_forma: "shirt",
+  sampiyonluk_kemeri: "medal",
+  isik_gosterisi: "sparkles",
+  super_lig_kupasi: "trophy",
+  avrupa_ligi_kupasi: "trophy",
+  sampiyonlar_ligi_kupasi: "trophy",
+  seri_cesmesi: "water",
+  sadik_baskan_heykeli: "ribbon",
+  altin_kupa_aniti: "trophy",
+};
+
+/**
+ * Şehir 2.0 ekranının sakin koyu tabanı ve tek vurgusu ("canlı ama temiz"):
+ * lacivert panel, beyaz metin, yeşil = ilerle, altın = yıldız.
+ */
+export const CITY2_UI = {
+  panel: ["#232B5C", "#141A3D"] as [string, string],
+  panelEdge: "rgba(255, 255, 255, 0.10)",
+  panelChip: "rgba(255, 255, 255, 0.08)",
+  panelMuted: "rgba(255, 255, 255, 0.72)",
+  star: "#FFC233",
+  go: "#15803D",
+} as const;

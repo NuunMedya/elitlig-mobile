@@ -355,11 +355,21 @@ export interface CityLeaderRow {
   /** Yeni sunucu: [from, to] penceresinde kazanılan yıldız. */
   stars_period?: number | null;
   levels: Record<string, number>;
+  /** Kulüp Şehri 2.0 alanları — yalnız metric=step|beauty yanıtlarında. */
+  step?: number | null;
+  step_label?: string | null;
+  step_title?: string | null;
+  rung?: number | null;
+  beauty?: number | null;
+  dev2?: number | null;
   me: boolean;
 }
 
-/** dev = gelişim puanı · stars = toplam yıldız · period_stars = aralıkta kazanılan yıldız. */
-export type CityBoardMetric = "dev" | "stars" | "period_stars";
+/**
+ * dev = gelişim puanı · stars = toplam yıldız · period_stars = aralıkta kazanılan yıldız ·
+ * step = Şehir 2.0 merdiven basamağı (eşitlikte 2.0 gelişim) · beauty = güzellik puanı.
+ */
+export type CityBoardMetric = "dev" | "stars" | "period_stars" | "step" | "beauty";
 
 export interface CityBoardOptions {
   metric?: CityBoardMetric;
@@ -381,7 +391,18 @@ export interface CityLeaderboard {
   limit?: number | null;
   offset?: number | null;
   items: CityLeaderRow[];
-  me?: { rank: number | null; dev?: number | null; stars_total?: number | null; stars_period?: number | null } | null;
+  me?: {
+    rank: number | null;
+    dev?: number | null;
+    stars_total?: number | null;
+    stars_period?: number | null;
+    step?: number | null;
+    step_label?: string | null;
+    step_title?: string | null;
+    rung?: number | null;
+    beauty?: number | null;
+    dev2?: number | null;
+  } | null;
 }
 
 export const cityKeys = {

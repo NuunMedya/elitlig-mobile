@@ -1,225 +1,430 @@
 /**
- * KULÜP ŞEHRİ — /kulup-sehri
+ * KULÜP ŞEHRİ 2.0 — /kulup-sehri
  *
- * Bütün oyunlardan gelen yıldızlarla kurulan futbol şehri. Okulun beton
- * bahçesinde başlarsın; yıldızlarını sahaya, tribüne, soyunma odasına,
- * kafeteryaya, kulüp mağazasına, kamp oteline… harcayarak amatör bir okul
- * takımından Avrupa devine yükselirsin.
+ * Bütün oyunlardan, gerçek maçlardan, görevlerden ve günlük girişten gelen
+ * yıldızlarla kurulan futbol şehri. Mahalle arası toptan Şampiyonlar Ligi
+ * şampiyonluğuna 18 basamaklı bir KARİYER MERDİVENİ (16. basamak iki alt
+ * adım: 19 kademe).
  *
  * EKRAN:
- *   · Üstte canlı 3B şehir (games/sehir.js, WebView): birime dokununca kamera
- *     uçar ve birimin kartı açılır; geliştirince inşaat oynar.
- *   · Yıldız cüzdanı: harcanabilir yıldız, kaynakları (Lig Yolu · Oyunlar ·
- *     Tahmin+Fantezi · Saha+Görev XP) ve "Yıldızları topla". Oyunlar ve lig
- *     yarışmaları YILDIZI doğrudan verir (XP vermez); XP yalnız sahadan ve
- *     görevlerden gelir ve burada yıldıza çevrilir (10 XP = 1 yıldız).
- *     Ekonomi A: maç yıldızı (haftalık özet + döküm penceresi), günlük giriş
- *     yıldızı, XP'nin 3 günlük kovaları (yanmaya kalan süre, "yarın X XP
- *     yanacak") ve tek seferlik geçmiş XP aktarımı bildirimi.
- *   · Günlük ödül + seri kartı (components/city/DailyReward).
- *   · Kulüp statüsü ve gelişim puanı.
- *   · Birim kartları: şimdiki hâl, sıradaki basamak, maliyet ya da kilit.
+ *   · Üstte canlı şehir (games/sehir.js, WebView; `type:"city2"` mesajı):
+ *     binaya dokununca binanın penceresi açılır; sembol yapı yerleştirirken
+ *     sahne boş yuvaları vurgular, dokunulan yuva sunucuya yazılır.
+ *   · Merdiven kartı: şu anki basamak, sıradakinin koşulları (gelişim puanı,
+ *     bina aşamaları, gerçek hayat kilidi) ve koşullar tamamsa "Basamak atla".
+ *   · Binalar: her binanın aşaması ve sıradaki eylemi (iç kilit / aşama).
+ *   · Sembol yapılar: güzellik puanı, mağaza, depo ve yerleşim.
+ *   · Günlük ödül ve yıldız cüzdanı (Ekonomi A).
  *
- * Kurallar ve maliyetler sunucudadır (elitlig-server services/puzzle/city.js).
+ * Kurallar, adlar ve maliyetler sunucudadır (elitlig-server services/city2).
+ * Sunucu /city2'yi tanımıyorsa (404) eski şehir ekranı (components/city/CityV1)
+ * açılır.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Redirect, useRouter } from "expo-router";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LinearGradient } from "expo-linear-gradient";
-import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { useAdminMutation } from "@/components/admin";
-import { ChunkyButton } from "@/components/city/ChunkyButton";
+import { ActionSheet, useAdminMutation } from "@/components/admin";
+import { CityV1Screen } from "@/components/city/CityV1";
 import { DailyRewardEntry } from "@/components/city/DailyReward";
-import { MatchStarsChip, MatchStarsSheet } from "@/components/city/MatchStars";
-import { XpBuckets } from "@/components/city/XpBuckets";
+import { MatchStarsSheet } from "@/components/city/MatchStars";
+import { HowSheet, StarWallet, type WalletStars } from "@/components/city/StarWallet";
 import { XpTransferBanner } from "@/components/city/XpTransferBanner";
+import { BuildingRow, BuildingSheet } from "@/components/city2/Building";
+import { LandmarkSheet, type LandmarkTab, type Placing } from "@/components/city2/Landmarks";
+import { MigrationNotice, StepCelebration, type StepResult } from "@/components/city2/Notices";
+import { BuildingIcon, LandmarkIcon, SectionTitle, cardStyle, fmt } from "@/components/city2/shared";
+import { StepCard } from "@/components/city2/StepCard";
 import { WebGame, type WebGameHandle } from "@/components/game/WebGame";
-import { BottomSheet, Button, ErrorState, ScreenHeader, SkeletonCard, Touchable, useToast } from "@/components/ui";
-import { cityKeys, collectCityStars, getCity, puzzleKeys, upgradeCity, type CityBuilding, type CityState } from "@/lib/puzzle/api";
-import { ARENA_TITLES, CITY_ICONS, CITY_KIT_KEY, CITY_SKY, CITY_UI, CITY_UNIT_COLORS, CLUB_KITS, type ClubKit } from "@/lib/puzzle/cityPalette";
+import { BottomSheet, Button, ErrorState, ScreenHeader, SkeletonCard, Touchable, refreshControlProps, useRefresh, useToast } from "@/components/ui";
+import { collectCityStars } from "@/lib/puzzle/api";
+import { buildingMark, rungLabel, type City2OwnedLandmark, type City2State } from "@/lib/puzzle/city2";
+import { CITY_KIT_KEY, CITY_SKY, CLUB_KITS, type ClubKit } from "@/lib/puzzle/cityPalette";
+import { useCity2, useCity2Actions } from "@/lib/puzzle/useCity2";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
 
-const fmt = (n: number) => n.toLocaleString("tr-TR");
-const TOP = { x: 0.5, y: 0 } as const;
-const BOTTOM = { x: 0.5, y: 1 } as const;
-const unitColors = (key: string) => CITY_UNIT_COLORS[key] ?? CITY_UNIT_COLORS.saha;
-
 export default function ClubCityScreen() {
   const auth = useAuth();
+  const { query, city2, legacy } = useCity2();
+  if (!auth.user) return <Redirect href="/giris" />;
+  if (legacy) return <CityV1Screen />;
+  return <City2Screen query={query} city2={city2} />;
+}
+
+function walletStars(c: City2State): WalletStars {
+  const s = c.stars.sources;
+  return { ...s, available: c.stars.available, total: c.stars.earned, refund: c.stars.refund };
+}
+
+function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["query"]; city2: City2State | undefined }) {
   const router = useRouter();
   const toast = useToast();
-  const queryClient = useQueryClient();
   const { height } = useWindowDimensions();
   const scene = useRef<WebGameHandle>(null);
+  const scroll = useRef<ScrollView>(null);
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [kit, setKit] = useState<ClubKit>(CLUB_KITS[0]);
   const [kitSheet, setKitSheet] = useState(false);
   const [howSheet, setHowSheet] = useState(false);
   const [matchSheet, setMatchSheet] = useState(false);
+  const [marksSheet, setMarksSheet] = useState(false);
+  const [marksTab, setMarksTab] = useState<LandmarkTab>("shop");
+  const [placing, setPlacing] = useState<Placing | null>(null);
+  const [picked, setPicked] = useState<City2OwnedLandmark | null>(null);
+  const [stepResult, setStepResult] = useState<StepResult | null>(null);
+  const slotsBefore = useRef(0);
+  const params = useLocalSearchParams<{ bina?: string }>();
 
-  const query = useQuery({ queryKey: cityKeys.me(), queryFn: getCity, enabled: Boolean(auth.user), staleTime: 20_000, retry: false });
-  const city = query.data?.city;
+  /* Merdivenden gelen "bu binayı aç" isteği (?bina=halisaha). */
+  useEffect(() => {
+    if (typeof params.bina === "string" && params.bina) setOpen(params.bina);
+  }, [params.bina]);
 
   useEffect(() => {
-    AsyncStorage.getItem(CITY_KIT_KEY).then((value) => {
-      const found = CLUB_KITS.find((k) => k.key === value);
-      if (found) setKit(found);
-    });
+    AsyncStorage.getItem(CITY_KIT_KEY)
+      .then((value) => {
+        const found = CLUB_KITS.find((k) => k.key === value);
+        if (found) setKit(found);
+      })
+      .catch(() => undefined);
   }, []);
 
-  const write = useCallback(
-    (next: CityState) => {
-      queryClient.setQueryData(cityKeys.me(), (current: { city: CityState; tiers: unknown[] } | undefined) => (current ? { ...current, city: next } : current));
-      void queryClient.invalidateQueries({ queryKey: puzzleKeys.me() });
-      void queryClient.invalidateQueries({ queryKey: cityKeys.leaderboard("all").slice(0, 3) });
+  const actions = useCity2Actions({
+    onLock: (key) => scene.current?.send({ type: "focus", key }),
+    onStage: (key) => {
+      scene.current?.send({ type: "focus", key });
+      scene.current?.send({ type: "build", key });
     },
-    [queryClient],
-  );
-
-  /* Sahneye şehrin durumu: seviyeler, renkler, etiket rozetleri. */
-  const marks = useMemo(() => {
-    const out: Record<string, string> = {};
-    for (const b of city?.buildings ?? []) {
-      if (!b.next) out[b.key] = "max";
-      else if (b.locked) out[b.key] = "lock";
-      else if (city && city.stars.available >= b.next.cost) out[b.key] = "up";
-    }
-    return out;
-  }, [city]);
-
-  const pushCity = useCallback(
-    (focus?: string | null) => {
-      if (!city || !ready) return;
-      scene.current?.send({
-        type: "city",
-        levels: city.levels,
-        kit: { primary: kit.primary, secondary: kit.secondary },
-        marks,
-        tier: city.tier.title,
-        ...(focus !== undefined ? { focus } : {}),
-      });
+    onStep: (res) => {
+      scene.current?.send({ type: "celebrate" });
+      setStepResult({ step: res.step, via: res.via, slotsBefore: slotsBefore.current });
     },
-    [city, kit, marks, ready],
-  );
-  useEffect(() => {
-    pushCity();
-  }, [pushCity]);
-
-  const upgrade = useAdminMutation((key: string) => upgradeCity(key), {
-    success: (res) => `${res.step.title} hazır!`,
-    onSuccess: (res) => {
-      write(res.city);
-      scene.current?.send({ type: "focus", key: res.building });
-      if (res.tier_up) {
-        scene.current?.send({ type: "celebrate" });
-        toast.show({ message: `Yeni statü: ${res.tier_up.title}!`, tone: "success" });
-      }
+    onLandmark: (res) => {
+      // Yeni alınan yapı doğrudan yerleştirmeye hazır: depo sekmesine geç.
+      setMarksTab("depot");
+      void res;
+    },
+    onPlace: () => {
+      setPlacing(null);
     },
   });
   const collect = useAdminMutation(() => collectCityStars(), {
     success: (res) => `${fmt(res.stars)} yıldız havuzuna eklendi (${fmt(res.xp)} XP)`,
-    onSuccess: (res) => write(res.city),
+    onSuccess: () => void query.refetch(),
   });
+
+  /* Sahneye şehrin durumu. */
+  const message = useMemo(() => {
+    if (!city2) return null;
+    const tierOf = new Map(city2.landmarks.catalogue.map((c) => [c.key, c.tier]));
+    const marks: Record<string, string> = {};
+    for (const b of city2.buildings) {
+      const m = buildingMark(b, city2.stars.available);
+      if (m) marks[b.key] = m;
+    }
+    return {
+      type: "city2" as const,
+      buildings: Object.fromEntries(city2.buildings.map((b) => [b.key, b.stage])),
+      rung: city2.ladder.rung,
+      kit: { primary: kit.primary, secondary: kit.secondary },
+      marks,
+      landmarks: city2.landmarks.owned
+        .filter((l): l is City2OwnedLandmark & { slot: string } => Boolean(l.slot))
+        .map((l) => ({ id: l.id, key: l.key, slot: l.slot, tier: tierOf.get(l.key) ?? "sus" })),
+      grid: { cols: city2.landmarks.grid.cols, rows: city2.landmarks.grid.rows, open_rows: city2.landmarks.grid.open_rows },
+      place: placing ? { key: placing.key } : null,
+    };
+  }, [city2, kit, placing]);
+  useEffect(() => {
+    if (ready && message) scene.current?.send(message);
+  }, [ready, message]);
+
+  const placeAt = useCallback(
+    (slot: string, id: string | null) => {
+      if (!city2) return;
+      if (placing) {
+        if (id && id !== placing.id) {
+          toast.show({ message: "Bu yuva dolu; boş bir yuva seç.", tone: "warn" });
+          return;
+        }
+        if (id && id === placing.id) {
+          setPlacing(null);
+          return;
+        }
+        actions.place.mutate(placing.id ? { id: placing.id, slot } : { key: placing.key, slot }, {
+          onSuccess: () => setMarksSheet(false),
+        });
+        return;
+      }
+      if (id) {
+        const l = city2.landmarks.owned.find((x) => x.id === id);
+        if (l) setPicked(l);
+      }
+    },
+    [actions.place, city2, placing, toast],
+  );
+
+  const onEvent = useCallback(
+    (msg: Record<string, unknown>) => {
+      if (msg.type === "tap" && typeof msg.key === "string") {
+        if (!placing) setOpen(msg.key);
+      } else if (msg.type === "slot" && typeof msg.slot === "string") {
+        placeAt(msg.slot, typeof msg.id === "string" ? msg.id : null);
+      }
+    },
+    [placeAt, placing],
+  );
+
+  const startPlacing = (l: City2OwnedLandmark) => {
+    setPlacing({ id: l.id, key: l.key, title: l.title });
+    setMarksSheet(false);
+    scroll.current?.scrollTo({ y: 0, animated: true });
+  };
 
   const chooseKit = (next: ClubKit) => {
     setKit(next);
-    void AsyncStorage.setItem(CITY_KIT_KEY, next.key);
+    void AsyncStorage.setItem(CITY_KIT_KEY, next.key).catch(() => undefined);
     setKitSheet(false);
   };
 
-  const onEvent = useCallback((message: Record<string, unknown>) => {
-    if (message.type === "tap" && typeof message.key === "string") setOpen(message.key);
-  }, []);
-
-  if (!auth.user) return <Redirect href="/giris" />;
-
-  const selected = city?.buildings.find((b) => b.key === open) ?? null;
-  const sceneHeight = Math.max(260, Math.min(460, height * 0.46));
+  const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching });
+  const selected = city2?.buildings.find((b) => b.key === open) ?? null;
+  const sceneHeight = Math.max(260, Math.min(440, height * 0.44));
+  const ladder = city2?.ladder ?? null;
+  const openBuildings = city2?.buildings.filter((b) => b.open) ?? [];
+  const closedBuildings = city2?.buildings.filter((b) => !b.open) ?? [];
+  const unplaced = city2?.landmarks.owned.filter((l) => !l.slot) ?? [];
+  const placedCount = (city2?.landmarks.owned.length ?? 0) - unplaced.length;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
         title="Kulüp Şehrin"
-        subtitle={city ? `${city.tier.title} · ${fmt(city.dev)} gelişim puanı` : "Yıldızlarınla futbol şehrini kur"}
+        subtitle={ladder ? `${ladder.current.label}. basamak · ${ladder.current.title}` : "Yıldızlarınla futbol şehrini kur"}
         back
         actions={[
           { icon: "color-palette-outline", onPress: () => setKitSheet(true), accessibilityLabel: "Kulüp renkleri" },
-          { icon: "podium-outline", onPress: () => router.push("/kulup-sehri-siralama"), accessibilityLabel: "Gelişim sıralaması" },
+          { icon: "trending-up-outline", onPress: () => router.push("/kulup-sehri-merdiven"), accessibilityLabel: "Kariyer merdiveni" },
+          { icon: "podium-outline", onPress: () => router.push("/kulup-sehri-siralama"), accessibilityLabel: "Şehir sıralaması" },
         ]}
       />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        ref={scroll}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />}
+      >
         <View style={[styles.scene, { height: sceneHeight }]}>
-          <WebGame
-            ref={scene}
-            game="sehir"
-            background={CITY_SKY}
-            accessibilityLabel="Kulüp şehri"
-            onReady={() => setReady(true)}
-            onEvent={onEvent}
-          />
-          {city ? (
-            <View style={styles.sceneBadge} pointerEvents="none">
-              <Ionicons name="star" size={14} color={colors.yellowCard} />
-              <Text style={styles.sceneBadgeText} {...textScale.badge}>
-                {fmt(city.stars.available)}
-              </Text>
+          <WebGame ref={scene} game="sehir" background={CITY_SKY} accessibilityLabel="Kulüp şehri" onReady={() => setReady(true)} onEvent={onEvent} />
+          {city2 ? (
+            <View style={styles.sceneBadges} pointerEvents="none">
+              <View style={styles.sceneBadge}>
+                <Ionicons name="star" size={13} color={colors.yellowCard} />
+                <Text style={styles.sceneBadgeText} {...textScale.badge}>
+                  {fmt(city2.stars.available)}
+                </Text>
+              </View>
+              <View style={styles.sceneBadge}>
+                <Ionicons name="sparkles" size={13} color={colors.onDark} />
+                <Text style={styles.sceneBadgeText} {...textScale.badge}>
+                  {fmt(city2.beauty)}
+                </Text>
+              </View>
             </View>
           ) : null}
           <Touchable onPress={() => scene.current?.send({ type: "focus", key: null })} style={styles.sceneHome} accessibilityRole="button" accessibilityLabel="Bütün şehri göster">
             <Ionicons name="scan-outline" size={18} color={colors.onDark} />
           </Touchable>
+          {placing ? (
+            <View style={styles.placeBar}>
+              <Ionicons name="location" size={16} color={colors.onDark} />
+              <Text style={styles.placeText} numberOfLines={2} {...textScale.dense}>
+                {placing.title}: meydanda boş bir yuvaya dokun
+              </Text>
+              <Touchable
+                feedback="chip"
+                onPress={() => {
+                  setMarksTab("grid");
+                  setMarksSheet(true);
+                }}
+                style={styles.placeBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Izgaradan yuva seç"
+              >
+                <Ionicons name="grid-outline" size={14} color={colors.onDark} />
+                <Text style={styles.placeBtnText} {...textScale.badge}>
+                  Izgara
+                </Text>
+              </Touchable>
+              <Touchable feedback="icon" onPress={() => setPlacing(null)} hitSlop={8} style={styles.placeClose} accessibilityRole="button" accessibilityLabel="Yerleştirmeyi bırak">
+                <Ionicons name="close" size={18} color={colors.onDark} />
+              </Touchable>
+            </View>
+          ) : null}
         </View>
 
         {query.isLoading ? (
           <SkeletonCard lines={5} />
-        ) : query.isError || !city ? (
+        ) : query.isError || !city2 || !ladder ? (
           <ErrorState error={query.error} onRetry={() => query.refetch()} />
         ) : (
           <>
-            <XpTransferBanner transfer={city.xp.transfer} perStar={city.xp.per_star} />
+            <XpTransferBanner transfer={city2.stars.xp.transfer} perStar={city2.stars.xp.per_star} />
+            <StepCard
+              ladder={ladder}
+              buildings={city2.buildings}
+              busy={actions.step.isPending}
+              onAdvance={(pay) => {
+                slotsBefore.current = city2.landmarks.grid.open_slots;
+                actions.step.mutate(pay);
+              }}
+              onLadder={() => router.push("/kulup-sehri-merdiven")}
+              onBuilding={(key) => {
+                setOpen(key);
+                scene.current?.send({ type: "focus", key });
+              }}
+            />
             <DailyRewardEntry />
-            <Wallet
-              city={city}
+
+            <SectionTitle title="Binalar" meta={`${fmt(city2.stages_built)} aşama · ${fmt(city2.dev)} gelişim puanı`} />
+            {openBuildings.map((b) => (
+              <BuildingRow
+                key={b.key}
+                b={b}
+                ladder={ladder}
+                available={city2.stars.available}
+                onPress={() => {
+                  setOpen(b.key);
+                  scene.current?.send({ type: "focus", key: b.key });
+                }}
+              />
+            ))}
+            {closedBuildings.length ? (
+              <View style={styles.closed}>
+                <Text style={styles.closedTitle} {...textScale.badge}>
+                  MERDİVENDE AÇILACAKLAR
+                </Text>
+                {closedBuildings.map((b) => (
+                  <Touchable key={b.key} onPress={() => setOpen(b.key)} feedback="row" style={styles.closedRow} accessibilityRole="button" accessibilityLabel={`${b.title}, ${rungLabel(ladder, b.opens)}. basamakta açılır`}>
+                    <BuildingIcon buildingKey={b.key} icon={b.icon} size={30} off />
+                    <Text style={styles.closedName} numberOfLines={1} {...textScale.dense}>
+                      {b.title}
+                    </Text>
+                    <Ionicons name="lock-closed" size={12} color={colors.textTertiary} />
+                    <Text style={styles.closedRung} {...textScale.badge}>
+                      {rungLabel(ladder, b.opens)}. basamak
+                    </Text>
+                  </Touchable>
+                ))}
+              </View>
+            ) : null}
+
+            <SectionTitle title="Sembol yapılar" meta={`${fmt(city2.beauty)} güzellik puanı`} />
+            <View style={styles.marks}>
+              <View style={styles.marksRow}>
+                {(city2.landmarks.owned.length ? city2.landmarks.owned.slice(0, 5) : city2.landmarks.catalogue.filter((c) => c.buyable).slice(0, 5)).map((l) => (
+                  <LandmarkIcon
+                    key={"id" in l ? l.id : l.key}
+                    landmarkKey={l.key}
+                    tier={city2.landmarks.catalogue.find((c) => c.key === l.key)?.tier ?? "sus"}
+                    size={36}
+                  />
+                ))}
+                <View style={styles.marksTexts}>
+                  <Text style={styles.marksLine} {...textScale.dense}>
+                    {placedCount} şehirde · {unplaced.length} depoda
+                  </Text>
+                  <Text style={styles.marksSub} {...textScale.dense}>
+                    {city2.landmarks.grid.open_slots - Object.keys(city2.landmarks.grid.taken).length} boş yuva
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.marksButtons}>
+                <Button
+                  label="Mağaza"
+                  icon="storefront-outline"
+                  variant="secondary"
+                  size="sm"
+                  onPress={() => {
+                    setMarksTab("shop");
+                    setMarksSheet(true);
+                  }}
+                  style={styles.flex}
+                />
+                <Button
+                  label={unplaced.length ? `Yerleştir · ${unplaced.length}` : "Yerleşim"}
+                  icon="location-outline"
+                  variant={unplaced.length ? "primary" : "secondary"}
+                  size="sm"
+                  onPress={() => {
+                    setMarksTab(unplaced.length ? "depot" : "grid");
+                    setMarksSheet(true);
+                  }}
+                  style={styles.flex}
+                />
+              </View>
+            </View>
+
+            <SectionTitle title="Yıldızların" />
+            <StarWallet
+              stars={walletStars(city2)}
+              xp={city2.stars.xp}
               collecting={collect.isPending}
               onCollect={() => collect.mutate(undefined)}
               onHow={() => setHowSheet(true)}
               onMatch={() => setMatchSheet(true)}
             />
-            <TierCard city={city} />
-            <Text style={styles.sectionTitle} {...textScale.dense}>
-              Birimler · {city.progress.built}/{city.progress.total} basamak
-            </Text>
-            {city.buildings.map((b) => (
-              <BuildingCard
-                key={b.key}
-                b={b}
-                available={city.stars.available}
-                busy={upgrade.isPending}
-                onOpen={() => {
-                  setOpen(b.key);
-                  scene.current?.send({ type: "focus", key: b.key });
-                }}
-                onUpgrade={() => upgrade.mutate(b.key)}
-              />
-            ))}
           </>
         )}
       </ScrollView>
 
       <BuildingSheet
         b={selected}
-        available={city?.stars.available ?? 0}
-        busy={upgrade.isPending}
+        ladder={ladder}
+        available={city2?.stars.available ?? 0}
+        busy={actions.busy}
         onClose={() => setOpen(null)}
-        onUpgrade={(key) => upgrade.mutate(key)}
+        onLock={(building, lock) => actions.lock.mutate({ building, lock })}
+        onStage={(building) => actions.stage.mutate(building)}
       />
+      <LandmarkSheet
+        visible={marksSheet}
+        onClose={() => setMarksSheet(false)}
+        tab={marksTab}
+        onTab={setMarksTab}
+        landmarks={city2?.landmarks ?? null}
+        ladder={ladder}
+        beauty={city2?.beauty ?? 0}
+        available={city2?.stars.available ?? 0}
+        busy={actions.busy}
+        placing={placing}
+        onBuy={(key) => actions.landmark.mutate(key)}
+        onPlace={startPlacing}
+        onStore={(l) => actions.place.mutate({ id: l.id, slot: null })}
+        onSlot={placeAt}
+        onCancelPlacing={() => setPlacing(null)}
+      />
+      <ActionSheet
+        visible={Boolean(picked)}
+        onClose={() => setPicked(null)}
+        title={picked?.title}
+        actions={
+          picked
+            ? [
+                { label: "Taşı", hint: "Başka bir boş yuvaya koy", icon: "move", onPress: () => startPlacing(picked) },
+                { label: "Depoya kaldır", hint: "Güzellik puanından düşer; istediğinde yeniden yerleştir", icon: "archive-outline", onPress: () => actions.place.mutate({ id: picked.id, slot: null }) },
+              ]
+            : []
+        }
+      />
+      <MigrationNotice city2={city2} />
+      <StepCelebration result={stepResult} city2={city2} onClose={() => setStepResult(null)} />
       <BottomSheet visible={kitSheet} onClose={() => setKitSheet(false)} title="Kulüp renkleri" snap="half">
         <Text style={styles.sheetLead} {...textScale.long}>
           Formalar, çatılar, bayraklar ve tabelalar bu renklerle boyanır.
@@ -238,348 +443,26 @@ export default function ClubCityScreen() {
           ))}
         </View>
       </BottomSheet>
-      <MatchStarsSheet visible={matchSheet} onClose={() => setMatchSheet(false)} detail={city?.stars.match_detail} total={city?.stars.match ?? 0} />
-      <HowSheet visible={howSheet} onClose={() => setHowSheet(false)} city={city} onGames={() => router.push("/(tabs)/oyunlar")} onQuests={() => router.push("/gorevler")} />
+      <MatchStarsSheet visible={matchSheet} onClose={() => setMatchSheet(false)} detail={city2?.stars.sources.match_detail} total={city2?.stars.sources.match ?? 0} />
+      <HowSheet
+        visible={howSheet}
+        onClose={() => setHowSheet(false)}
+        stars={city2 ? walletStars(city2) : undefined}
+        xp={city2?.stars.xp}
+        onGames={() => router.push("/(tabs)/oyunlar")}
+        onQuests={() => router.push("/gorevler")}
+      />
     </SafeAreaView>
   );
 }
 
-/* ═════════════════════════ YILDIZ CÜZDANI ═════════════════════════ */
-
-function Wallet({ city, collecting, onCollect, onHow, onMatch }: { city: CityState; collecting: boolean; onCollect: () => void; onHow: () => void; onMatch: () => void }) {
-  const s = city.stars;
-  const claim = city.xp.claimable_stars;
-  const v2 = Boolean(city.xp.buckets?.length);
-  return (
-    <View style={styles.wallet}>
-      <LinearGradient colors={CITY_UI.panel} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
-      <View style={styles.walletTop}>
-        <LinearGradient colors={CITY_UI.gold} start={TOP} end={BOTTOM} style={styles.walletStar}>
-          <Ionicons name="star" size={32} color={CITY_UI.white} />
-        </LinearGradient>
-        <View style={styles.walletTexts}>
-          <Text style={styles.walletBig} {...textScale.dense}>
-            {fmt(s.available)}
-          </Text>
-          <Text style={styles.walletSub} {...textScale.dense}>
-            harcanabilir yıldız · {fmt(s.total)} kazanıldı
-          </Text>
-        </View>
-        <Touchable onPress={onHow} style={styles.walletHow} accessibilityRole="button" accessibilityLabel="Yıldız nasıl kazanılır">
-          <Ionicons name="help-circle" size={26} color={CITY_UI.muted} />
-        </Touchable>
-      </View>
-      <View style={styles.sources}>
-        <Source icon="extension-puzzle" label="Lig Yolu" value={s.puzzle} tint={CITY_UI.sources[0]} />
-        <Source icon="game-controller" label="Oyunlar" value={s.arena} extra={s.arena_today ? `bugün +${s.arena_today}` : null} tint={CITY_UI.sources[1]} />
-        {s.match != null ? <Source icon="football" label="Maç" value={s.match} tint={CITY_UI.sources[4]} /> : null}
-        {s.tribun != null ? <Source icon="podium" label="Lig oyunları" value={s.tribun} tint={CITY_UI.sources[3]} /> : null}
-        {s.daily != null ? <Source icon="calendar" label="Giriş" value={s.daily} tint={CITY_UI.sources[5]} /> : null}
-        <Source icon="flash" label="XP yıldızı" value={s.xp} tint={CITY_UI.sources[2]} />
-      </View>
-      {s.match_detail ? <MatchStarsChip detail={s.match_detail} onPress={onMatch} /> : null}
-      <XpBuckets xp={city.xp} />
-      <ChunkyButton
-        label={collecting ? "TOPLANIYOR…" : claim > 0 ? `YILDIZLARI TOPLA · +${fmt(claim)}` : "TOPLANACAK YILDIZ YOK"}
-        icon="sparkles"
-        tone="green"
-        disabled={claim < 1 || collecting}
-        onPress={onCollect}
-        accessibilityLabel={claim > 0 ? `Haftalık görev ve maç XP'sinden ${claim} yıldız topla` : "Toplanacak yıldız yok"}
-      />
-      <Text style={styles.walletHint} {...textScale.dense}>
-        {claim > 0
-          ? `${fmt(city.xp.pending)} XP bekliyor = ${fmt(claim)} yıldız · ${city.xp.per_star} XP = 1 yıldız`
-          : city.xp.pending > 0
-            ? `${fmt(city.xp.pending)} XP birikti · ${city.xp.per_star} XP'de bir yıldız`
-            : v2
-              ? "XP sahadan ve haftalık görevlerden gelir; 3 gün içinde burada yıldıza çevir."
-              : "XP sahadan ve haftalık görevlerden gelir; burada yıldıza çevir."}
-      </Text>
-    </View>
-  );
-}
-
-function Source({ icon, label, value, extra, tint }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: number; extra?: string | null; tint: string }) {
-  return (
-    <View style={styles.source}>
-      <View style={[styles.sourceIcon, { backgroundColor: tint }]}>
-        <Ionicons name={icon} size={15} color={CITY_UI.white} />
-      </View>
-      <Text style={styles.sourceValue} {...textScale.dense}>
-        {fmt(value)}
-      </Text>
-      <Text style={styles.sourceLabel} numberOfLines={1} {...textScale.badge}>
-        {label}
-      </Text>
-      {extra ? (
-        <Text style={styles.sourceExtra} numberOfLines={1} {...textScale.badge}>
-          {extra}
-        </Text>
-      ) : null}
-    </View>
-  );
-}
-
-/* ═════════════════════════ STATÜ ═════════════════════════ */
-
-function TierCard({ city }: { city: CityState }) {
-  const next = city.next_tier;
-  const span = next ? next.min - city.tier.min : 1;
-  const prog = next ? Math.max(0, Math.min(1, (city.dev - city.tier.min) / span)) : 1;
-  return (
-    <View style={styles.tier}>
-      <View style={styles.tierHead}>
-        <LinearGradient colors={CITY_UI.gold} start={TOP} end={BOTTOM} style={styles.tierBadge}>
-          <Ionicons name="trophy" size={20} color={CITY_UI.white} />
-        </LinearGradient>
-        <Text style={styles.tierTitle} {...textScale.dense}>
-          {city.tier.title}
-        </Text>
-        <Text style={styles.tierStep} {...textScale.badge}>
-          {city.tier.index + 1}/10
-        </Text>
-      </View>
-      <View style={styles.track}>
-        <LinearGradient colors={CITY_UI.green} start={TOP} end={BOTTOM} style={[styles.fill, { width: `${prog * 100}%` }]} />
-      </View>
-      <Text style={styles.tierSub} {...textScale.dense}>
-        {next ? `${next.title} için ${fmt(next.min - city.dev)} gelişim puanı daha` : "Zirvedesin: Avrupa devi!"}
-      </Text>
-    </View>
-  );
-}
-
-/* ═════════════════════════ BİRİM ═════════════════════════ */
-
-function Steps({ b }: { b: CityBuilding }) {
-  const first = b.steps[0]?.cost === 0 && b.key !== "saha" ? 1 : 0;
-  const [, deep] = unitColors(b.key);
-  return (
-    <View style={styles.steps}>
-      {b.steps.slice(first).map((s) => (
-        <View
-          key={s.level}
-          style={[styles.step, s.done ? { backgroundColor: deep } : null, s.level === b.level + 1 ? [styles.stepNext, { borderColor: deep }] : null]}
-        />
-      ))}
-    </View>
-  );
-}
-
-function BuildingCard({ b, available, busy, onOpen, onUpgrade }: { b: CityBuilding; available: number; busy: boolean; onOpen: () => void; onUpgrade: () => void }) {
-  const icon = (b.icon || CITY_ICONS[b.key] || "cube") as keyof typeof Ionicons.glyphMap;
-  const affordable = Boolean(b.next && available >= b.next.cost);
-  return (
-    <Touchable onPress={onOpen} style={styles.card} haptic="selection" accessibilityRole="button" accessibilityLabel={`${b.title}, ${b.current?.title ?? "henüz yok"}`}>
-      {b.level > 0 || b.key === "saha" ? (
-        <LinearGradient colors={unitColors(b.key)} start={TOP} end={BOTTOM} style={styles.cardIcon}>
-          <Ionicons name={icon} size={28} color={CITY_UI.white} />
-          <View style={styles.levelBadge}>
-            <Text style={styles.levelBadgeText} {...textScale.badge}>{b.level}</Text>
-          </View>
-        </LinearGradient>
-      ) : (
-        <View style={[styles.cardIcon, styles.cardIconOff]}>
-          <Ionicons name={icon} size={28} color={CITY_UI.white} />
-        </View>
-      )}
-      <View style={styles.cardTexts}>
-        <Text style={styles.cardTitle} numberOfLines={1} {...textScale.dense}>
-          {b.title}
-        </Text>
-        <Text style={styles.cardSub} numberOfLines={1} {...textScale.dense}>
-          {b.current ? b.current.title : "Henüz yok"}
-        </Text>
-        <Steps b={b} />
-        {b.next ? (
-          <Text style={[styles.cardNext, b.locked ? styles.cardLocked : null]} numberOfLines={1} {...textScale.dense}>
-            {b.locked ? b.locked.text : `Sıradaki: ${b.next.title}`}
-          </Text>
-        ) : (
-          <Text style={styles.cardMax} {...textScale.dense}>
-            Son basamak · profesyonel seviye
-          </Text>
-        )}
-      </View>
-      {b.next && !b.locked ? (
-        <ChunkyButton
-          label={fmt(b.next.cost)}
-          icon="star"
-          small
-          disabled={!affordable || busy}
-          onPress={onUpgrade}
-          accessibilityLabel={`${b.next.title}, ${b.next.cost} yıldız`}
-        />
-      ) : b.next ? (
-        <Ionicons name="lock-closed" size={18} color={colors.textTertiary} />
-      ) : (
-        <Ionicons name="checkmark-circle" size={28} color={CITY_UI.done} />
-      )}
-    </Touchable>
-  );
-}
-
-function BuildingSheet({ b, available, busy, onClose, onUpgrade }: { b: CityBuilding | null; available: number; busy: boolean; onClose: () => void; onUpgrade: (key: string) => void }) {
-  const affordable = Boolean(b?.next && available >= b.next.cost);
-  return (
-    <BottomSheet
-      visible={Boolean(b)}
-      onClose={onClose}
-      title={b?.title}
-      snap="half"
-      footer={
-        b?.next && !b.locked ? (
-          <Button
-            label={affordable ? `${b.next.title} · ${fmt(b.next.cost)} yıldız` : `${fmt(b.next.cost - available)} yıldız eksik`}
-            icon={affordable ? "hammer" : "star-outline"}
-            disabled={!affordable || busy}
-            loading={busy}
-            onPress={() => onUpgrade(b.key)}
-            fullWidth
-            haptic="success"
-          />
-        ) : undefined
-      }
-    >
-      {b ? (
-        <View style={styles.ladder}>
-          {b.current?.desc ? (
-            <Text style={styles.sheetLead} {...textScale.long}>
-              {b.current.desc}
-            </Text>
-          ) : null}
-          {b.locked ? (
-            <View style={styles.lockRow}>
-              <Ionicons name="lock-closed" size={16} color={colors.textSecondary} />
-              <Text style={styles.lockText} {...textScale.dense}>
-                {b.locked.text}
-              </Text>
-            </View>
-          ) : null}
-          {b.steps.map((s) => {
-            if (s.level === 0 && b.key !== "saha") return null;
-            const isNext = b.next?.level === s.level;
-            return (
-              <View key={s.level} style={[styles.ladderRow, isNext ? styles.ladderNext : null]}>
-                <Ionicons
-                  name={s.done ? "checkmark-circle" : isNext ? "hammer" : "ellipse-outline"}
-                  size={18}
-                  color={s.done ? colors.win : isNext ? colors.brandAccent : colors.textTertiary}
-                />
-                <Text style={[styles.ladderTitle, s.done ? styles.ladderDone : null]} {...textScale.dense}>
-                  {s.title}
-                </Text>
-                {s.cost ? (
-                  <View style={styles.ladderCost}>
-                    <Ionicons name="star" size={12} color={s.done ? colors.textTertiary : colors.yellowCard} />
-                    <Text style={styles.ladderCostText} {...textScale.badge}>
-                      {fmt(s.cost)}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-            );
-          })}
-          {b.next?.desc ? (
-            <Text style={styles.nextDesc} {...textScale.long}>
-              Sıradaki: {b.next.desc}
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
-    </BottomSheet>
-  );
-}
-
-/* ═════════════════════════ NASIL KAZANILIR ═════════════════════════ */
-
-function HowSheet({ visible, onClose, city, onGames, onQuests }: { visible: boolean; onClose: () => void; city?: CityState; onGames: () => void; onQuests: () => void }) {
-  const byGame = Object.entries(city?.stars.arena_by_game ?? {}).sort((a, b) => b[1] - a[1]);
-  return (
-    <BottomSheet visible={visible} onClose={onClose} title="Yıldız nasıl kazanılır?" snap="full">
-      <View style={styles.how}>
-        <HowRow icon="extension-puzzle" title="Lig Yolu" text="Elit Üçlü, Üçle Kazan, Soyunma Odası, Kantin ve Kariyer Yolu: her seviye 1–3 yıldız." />
-        <HowRow
-          icon="game-controller"
-          title="Oyunlar"
-          text="Bölümlü oyunlarda (Penaltı, Savunma Hattı, Kadro Koşusu) geçtiğin her bölüm yaklaşık bir yıldız; puanlı oyunlarda (Slalom, Top Sektir, yarışmalar) puan eşikleri giderek uzar. Bir oyundan günde en çok 15, bütün oyunlardan 30 yıldız."
-        />
-        <HowRow
-          icon="football"
-          title="Maç: gerçek maçlarda oyna"
-          text={`Yayınlanan her maçın ${city?.stars.match_detail?.rules.base ?? 25} yıldız + performans bonusu (gol, asist, reyting, galibiyet, gol yemeden, maçın oyuncusu; en çok +${city?.stars.match_detail?.rules.bonus_cap ?? 50}). Haftada en çok ${city?.stars.match_detail?.rules.week_matches ?? 2} maç sayılır.`}
-        />
-        <HowRow
-          icon="calendar"
-          title="Günlük giriş ve seri"
-          text="Her gün gir, günlük ödülünü al: 5'ten 25 yıldıza 7 günlük döngü, jeton, joker ve haftanın sandığı. 14, 30, 60 ve 100 günlük serilerde şehrine sembol yapılar açılır."
-        />
-        <HowRow
-          icon="podium"
-          title="Tahmin Ligi ve Fantezi"
-          text="Tutan tahminlerinin puanı ve biten Fantezi haftalarının puanı yıldız olarak gelir (haftalık tavanla). Bunlar XP vermez."
-        />
-        <HowRow
-          icon="flash"
-          title="XP: saha ve görevler"
-          text={`Oyunlar XP vermez. XP gerçek maçlardaki performansından ve haftalık görevlerden gelir: ${city?.xp.per_star ?? 10} XP = 1 yıldız. "Yıldızları topla" ile havuza aktar.${city?.xp.buckets?.length ? " Toplanmayan XP en çok 3 gün bekler; sonra yanar (yıldıza dönmez, XP sıralamasında sayılır)." : ""}`}
-        />
-        {byGame.length ? (
-          <View style={styles.byGame}>
-            <Text style={styles.byGameTitle} {...textScale.dense}>
-              Oyunlardan gelen yıldızların
-            </Text>
-            {byGame.map(([game, value]) => (
-              <View key={game} style={styles.byGameRow}>
-                <Text style={styles.byGameName} {...textScale.dense}>
-                  {ARENA_TITLES[game] ?? game}
-                </Text>
-                <Ionicons name="star" size={12} color={colors.yellowCard} />
-                <Text style={styles.byGameValue} {...textScale.badge}>
-                  {fmt(value)}
-                </Text>
-              </View>
-            ))}
-          </View>
-        ) : null}
-        <View style={styles.howButtons}>
-          <Button label="Oyunlara git" icon="game-controller" variant="secondary" onPress={onGames} fullWidth />
-          <Button label="Haftalık görevler" icon="list" variant="secondary" onPress={onQuests} fullWidth />
-        </View>
-      </View>
-    </BottomSheet>
-  );
-}
-
-function HowRow({ icon, title, text }: { icon: keyof typeof Ionicons.glyphMap; title: string; text: string }) {
-  return (
-    <View style={styles.howRow}>
-      <View style={styles.howIcon}>
-        <Ionicons name={icon} size={18} color={colors.brandAccent} />
-      </View>
-      <View style={styles.howTexts}>
-        <Text style={styles.howTitle} {...textScale.dense}>
-          {title}
-        </Text>
-        <Text style={styles.howText} {...textScale.long}>
-          {text}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-/* ═════════════════════════ STİLLER ═════════════════════════ */
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { paddingHorizontal: layout.screenPadding, paddingBottom: space.giant * 2, gap: space.md, paddingTop: space.xs },
+  flex: { flex: 1 },
   scene: { borderRadius: radius.xl, overflow: "hidden", backgroundColor: colors.inkBlock, borderWidth: hairline, borderColor: colors.inkTileBorder },
+  sceneBadges: { position: "absolute", top: space.sm, left: space.sm, flexDirection: "row", gap: space.xs },
   sceneBadge: {
-    position: "absolute",
-    top: space.sm,
-    left: space.sm,
     flexDirection: "row",
     alignItems: "center",
     gap: space.xxs,
@@ -600,89 +483,43 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.overlay,
   },
-
-  wallet: { borderRadius: radius.xxl, padding: space.lg, gap: space.md, overflow: "hidden", borderWidth: 3, borderColor: CITY_UI.panelEdge },
-  walletTop: { flexDirection: "row", alignItems: "center", gap: space.md },
-  walletStar: { width: 58, height: 58, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: CITY_UI.white },
-  walletTexts: { flex: 1, gap: 2 },
-  walletBig: { ...type.display, fontFamily: fonts.bold, color: CITY_UI.white, textShadowColor: CITY_UI.inkShadow, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 2 },
-  walletSub: { ...type.bodySm, color: CITY_UI.muted },
-  walletHow: { padding: space.xs },
-  walletHint: { ...type.caption, color: CITY_UI.muted, textAlign: "center" },
-  sources: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  source: { width: "30%", flexGrow: 1, alignItems: "center", gap: 2, paddingVertical: space.sm, borderRadius: radius.lg, backgroundColor: CITY_UI.chip },
-  sourceIcon: { width: 28, height: 28, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
-  sourceValue: { ...type.h3, fontFamily: fonts.bold, color: CITY_UI.white },
-  sourceLabel: { ...type.caption, color: CITY_UI.muted },
-  sourceExtra: { ...type.micro, fontFamily: fonts.bold, color: CITY_UI.gold[0] },
-
-  tier: { borderRadius: radius.xxl, padding: space.lg, gap: space.sm, backgroundColor: colors.surface1, borderWidth: 2, borderColor: CITY_UI.gold[1] },
-  tierBadge: { width: 38, height: 38, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: CITY_UI.white },
-  tierHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  tierTitle: { ...type.h2, fontFamily: fonts.bold, color: colors.textPrimary, flex: 1 },
-  tierStep: { ...type.label, color: colors.textSecondary },
-  tierSub: { ...type.bodySm, color: colors.textSecondary },
-  track: { height: 14, borderRadius: radius.pill, backgroundColor: colors.surface3, overflow: "hidden" },
-  fill: { height: 14, borderRadius: radius.pill },
-
-  sectionTitle: { ...type.label, color: colors.textSecondary, marginTop: space.xs },
-  card: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.xxl, backgroundColor: colors.surface1, borderWidth: 2, borderColor: colors.border },
-  cardIcon: { width: 58, height: 58, borderRadius: radius.xl, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: CITY_UI.white },
-  cardIconOff: { backgroundColor: CITY_UI.lockBg },
-  levelBadge: {
+  placeBar: {
     position: "absolute",
-    bottom: -6,
-    right: -6,
-    minWidth: 22,
-    height: 22,
-    paddingHorizontal: space.xxs,
-    borderRadius: radius.pill,
+    left: space.sm,
+    right: space.sm,
+    bottom: space.sm,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: CITY_UI.ink,
-    borderWidth: 2,
-    borderColor: CITY_UI.white,
+    gap: space.sm,
+    paddingVertical: space.sm,
+    paddingLeft: space.md,
+    paddingRight: space.xs,
+    borderRadius: radius.lg,
+    backgroundColor: colors.overlay,
   },
-  levelBadgeText: { ...type.micro, fontFamily: fonts.bold, color: CITY_UI.white },
-  cardTexts: { flex: 1, gap: 3 },
-  cardTitle: { ...type.h3, fontFamily: fonts.bold, color: colors.textPrimary },
-  cardSub: { ...type.bodySm, color: colors.textSecondary },
-  cardNext: { ...type.caption, color: colors.brandAccent },
-  cardLocked: { color: colors.textTertiary },
-  cardMax: { ...type.caption, color: colors.win },
-  steps: { flexDirection: "row", gap: 3, marginVertical: 3 },
-  step: { flex: 1, height: 9, borderRadius: radius.pill, backgroundColor: colors.surface3 },
-  stepNext: { borderWidth: 2 },
+  placeText: { ...type.labelSm, color: colors.onDark, flex: 1 },
+  placeBtn: { flexDirection: "row", alignItems: "center", gap: space.xxs, paddingHorizontal: space.sm, height: 30, borderRadius: radius.pill, borderWidth: hairline, borderColor: colors.borderOnDark },
+  placeBtnText: { ...type.labelXs, color: colors.onDark },
+  placeClose: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
+
+  closed: { ...cardStyle, padding: space.md, gap: space.xs },
+  closedTitle: { ...type.overline, color: colors.textTertiary, marginBottom: space.xxs },
+  closedRow: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 38, borderRadius: radius.md },
+  closedName: { ...type.bodySm, fontFamily: fonts.semibold, color: colors.textSecondary, flex: 1 },
+  closedRung: { ...type.caption, color: colors.textTertiary },
+
+  marks: { ...cardStyle, padding: space.md, gap: space.md },
+  marksRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  marksTexts: { flex: 1, marginLeft: space.xs, gap: 2 },
+  marksLine: { ...type.labelSm, color: colors.textPrimary },
+  marksSub: { ...type.caption, color: colors.textTertiary },
+  marksButtons: { flexDirection: "row", gap: space.sm },
 
   sheetLead: { ...type.body, color: colors.textSecondary },
-  ladder: { gap: space.xs },
-  lockRow: { flexDirection: "row", alignItems: "center", gap: space.xs, padding: space.sm, borderRadius: radius.lg, backgroundColor: colors.surface3 },
-  lockText: { ...type.bodySm, color: colors.textSecondary, flex: 1 },
-  ladderRow: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 40, paddingHorizontal: space.sm, borderRadius: radius.lg },
-  ladderNext: { backgroundColor: colors.brandDim },
-  ladderTitle: { ...type.body, color: colors.textPrimary, flex: 1 },
-  ladderDone: { color: colors.textSecondary },
-  ladderCost: { flexDirection: "row", alignItems: "center", gap: 2 },
-  ladderCostText: { ...type.caption, color: colors.textSecondary },
-  nextDesc: { ...type.bodySm, color: colors.textSecondary, marginTop: space.xs },
-
   kits: { flexDirection: "row", flexWrap: "wrap", gap: space.sm, marginTop: space.sm },
   kit: { width: "47%", flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.sm, borderRadius: radius.lg, borderWidth: hairline, borderColor: colors.border, backgroundColor: colors.surface1 },
   kitOn: { borderColor: colors.brandAccent, backgroundColor: colors.brandDim },
   kitSwatch: { width: 30, height: 30, borderRadius: radius.pill, overflow: "hidden", flexDirection: "row", borderWidth: hairline, borderColor: colors.border },
   kitHalf: { flex: 1 },
   kitName: { ...type.bodySm, color: colors.textPrimary, flex: 1 },
-
-  how: { gap: space.lg },
-  howRow: { flexDirection: "row", gap: space.md },
-  howIcon: { width: 36, height: 36, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandDim },
-  howTexts: { flex: 1, gap: 2 },
-  howTitle: { ...type.body, fontFamily: fonts.bold, color: colors.textPrimary },
-  howText: { ...type.bodySm, color: colors.textSecondary },
-  byGame: { gap: space.xs, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surface3 },
-  byGameTitle: { ...type.label, color: colors.textSecondary },
-  byGameRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  byGameName: { ...type.bodySm, color: colors.textPrimary, flex: 1 },
-  byGameValue: { ...type.caption, fontFamily: fonts.bold, color: colors.textPrimary },
-  howButtons: { gap: space.sm },
 });
