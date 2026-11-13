@@ -191,11 +191,11 @@ export function AcademyHero({ academy, now, stageName }: { academy: City2Academy
           <Text style={styles.heroLabel} {...textScale.badge}>
             YENİ OYUNCU
           </Text>
-          <Text style={[styles.heroValue, academy.slots.full ? styles.heroValueWarn : null]} numberOfLines={1} {...textScale.badge}>
-            {academy.slots.full ? "Yer yok" : (intake ?? "—")}
+          <Text style={[styles.heroValue, academy.slots.full || academy.paused ? styles.heroValueWarn : null]} numberOfLines={1} {...textScale.badge}>
+            {academy.paused ? "Durdu" : academy.slots.full ? "Yer yok" : (intake ?? "—")}
           </Text>
           <Text style={styles.heroCaption} numberOfLines={1} {...textScale.badge}>
-            {academy.slots.full ? `${intake ?? "az sonra"} sonra gelen kaçar` : "sonra gelir"}
+            {academy.paused ? "bina kurulunca" : academy.slots.full ? `${intake ?? "az sonra"} sonra gelen kaçar` : "sonra gelir"}
           </Text>
         </View>
         <View style={styles.heroStat}>
@@ -213,7 +213,15 @@ export function AcademyHero({ academy, now, stageName }: { academy: City2Academy
           </Text>
         </View>
       </View>
-      {academy.full_text ? (
+      {academy.paused ? (
+        <View style={styles.heroNote}>
+          <Ionicons name="pause-circle" size={15} color={CITY2_EL.full} />
+          <Text style={styles.heroNoteText} {...textScale.long}>
+            {academy.paused_text ?? "Akademi binası yeniden kurulana dek yeni oyuncu gelmez; oyuncuların akademide kalır."}
+          </Text>
+        </View>
+      ) : null}
+      {academy.full_text && !academy.paused ? (
         <View style={styles.heroNote}>
           <Ionicons name="alert-circle" size={15} color={CITY2_EL.full} />
           <Text style={styles.heroNoteText} {...textScale.long}>
@@ -919,7 +927,7 @@ export function AcademyCityCard({ academy, onPress }: { academy: City2Academy; o
   const injured = academy.squad.filter((p) => p.injured).length;
   const sub = [
     `${academy.slots.used}/${academy.slots.max} oyuncu`,
-    academy.slots.full ? "kadro dolu" : academy.next_intake_at ? `yeni oyuncu ${untilText(academy.next_intake_at, now) ?? "az sonra"}` : null,
+    academy.paused ? "bina kurulana dek yeni oyuncu gelmez" : academy.slots.full ? "kadro dolu" : academy.next_intake_at ? `yeni oyuncu ${untilText(academy.next_intake_at, now) ?? "az sonra"}` : null,
     injured ? `${injured} sakat` : null,
   ]
     .filter(Boolean)

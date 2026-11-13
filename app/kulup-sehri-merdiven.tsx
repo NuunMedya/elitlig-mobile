@@ -7,6 +7,12 @@
  * kilidi) ve "Basamak atla"; ileridekilerin koşulları ham tanımdan okunur.
  * Altta tırmanış geçmişi.
  *
+ * FAZ 5 · PRESTİJ: 19. kademede (son basamak) en üstte prestij kartı:
+ * önizleme (sıfırlananlar / korunanlar / kazanılanlar) → "anladım" → jetonla
+ * onay → kutlama. Zirvede değilken merdivenin sonunda "son basamakta açılır"
+ * tanıtımı. Özette arma (sezon çerçevesi + prestij yıldızları). Eski sunucuda
+ * (`prestige` yok) hiçbiri çizilmez.
+ *
  * Bütün adlar, eşikler ve koşullar sunucudan gelir (GET /city2 → ladder).
  */
 
@@ -19,11 +25,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ChunkyButton } from "@/components/city/ChunkyButton";
 import { GateSummary } from "@/components/city2/GateView";
 import { StepCelebration, type StepResult } from "@/components/city2/Notices";
+import { PrestigeCard, PrestigeCelebration, PrestigeSheet, PrestigeTeaser } from "@/components/city2/Prestige";
+import { CrestBadge } from "@/components/city2/Season";
 import { cardStyle, fmt } from "@/components/city2/shared";
 import { NextRequirements, RungBadge } from "@/components/city2/StepCard";
 import { EmptyState, ErrorState, ScreenHeader, SkeletonCard, refreshControlProps, useRefresh } from "@/components/ui";
-import type { City2Building, City2History, City2State, City2Step } from "@/lib/puzzle/city2";
-import { useCity2, useCity2Actions } from "@/lib/puzzle/useCity2";
+import type { City2Building, City2History, City2PrestigePreviewResult, City2PrestigeResult, City2State, City2Step } from "@/lib/puzzle/city2";
+import { useCity2, useCity2Actions, useCity2Prestige } from "@/lib/puzzle/useCity2";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
 
@@ -32,7 +40,8 @@ const dateText = (iso: string | null) => {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString("tr-TR", { day: "numeric", month: "short", year: "numeric" });
 };
-const VIA_TEXT: Record<string, string> = { migration: "Eski şehirden taşındı", player: "Sahada hak edildi", fan: "Taraftar yolu", stars: "Yıldızla açıldı" };
+const VIA_TEXT: Record<string, string> = { migration: "Eski şehirden taşındı", player: "Sahada hak edildi", fan: "Taraftar yolu", stars: "Yıldızla açıldı", prestige: "Prestijle yeniden başladı" };
+const viaText = (h: City2History) => (h.via === "prestige" && h.level ? `${h.level}. prestij · yeniden başladı` : h.via ? VIA_TEXT[h.via] : null);
 
 export default function ClubCityLadderScreen() {
   const auth = useAuth();
@@ -44,6 +53,34 @@ export default function ClubCityLadderScreen() {
   const slotsBefore = useRef(0);
   const scrolled = useRef(false);
   const actions = useCity2Actions({ onStep: (res) => setStepResult({ step: res.step, via: res.via, slotsBefore: slotsBefore.current }) });
+  const [prestigeOpen, setPrestigeOpen] = useState(false);
+  const [preview, setPreview] = useState<(City2PrestigePreviewResult & { receivedAt: number }) | null>(null);
+  const [prestiged, setPrestiged] = useState<City2PrestigeResult | null>(null);
+  const prestige = useCity2Prestige({
+    onPreview: (res) => setPreview({ ...res, receivedAt: Date.now() }),
+    onDone: (res) => {
+      setPrestigeOpen(false);
+      setPreview(null);
+      scrolled.current = false;
+      setPrestiged(res);
+    },
+  });
+  const startPrestige = () => {
+    setPreview(null);
+    setPrestigeOpen(true);
+    prestige.preview.mutate(undefined, { onError: () => setPrestigeOpen(false) });
+  };
+  const confirmPrestige = (token: string) =>
+    prestige.confirm.mutate(token, {
+      // Süresi dolmuş / kullanılmış jeton: yeni önizleme iste.
+      onError: (e) => {
+        const code = (e as { code?: string } | null)?.code;
+        if (code === "TOKEN_EXPIRED" || code === "INVALID_TOKEN") {
+          setPreview(null);
+          prestige.preview.mutate(undefined);
+        }
+      },
+    });
   const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching });
 
   useEffect(() => {
@@ -56,6 +93,8 @@ export default function ClubCityLadderScreen() {
   if (!auth.user) return <Redirect href="/giris" />;
   const ladder = city2?.ladder;
   const lastNo = ladder?.steps[ladder.steps.length - 1]?.no ?? 18;
+  const pr = city2?.prestige ?? null;
+  const atTop = Boolean(ladder && pr && ladder.rung >= (pr.min_rung || ladder.max_rung));
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -75,7 +114,19 @@ export default function ClubCityLadderScreen() {
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />}
         >
+          {pr && atTop ? <PrestigeCard prestige={pr} crest={city2.crest} busy={prestige.preview.isPending} onStart={startPrestige} /> : null}
           <View style={styles.summary}>
+            {city2.crest && (city2.crest.frame || city2.crest.prestige_stars > 0) ? (
+              <>
+                <View style={styles.stat}>
+                  <CrestBadge crest={city2.crest} size={34} />
+                  <Text style={styles.statLabel} numberOfLines={1} {...textScale.dense}>
+                    {city2.crest.prestige_stars > 0 ? `${city2.crest.prestige_stars}. prestij` : "arma"}
+                  </Text>
+                </View>
+                <View style={styles.summaryRule} />
+              </>
+            ) : null}
             <Stat label="gelişim puanı" value={fmt(city2.dev)} />
             <View style={styles.summaryRule} />
             <Stat label="kurulu aşama" value={fmt(city2.stages_built)} />
@@ -90,7 +141,7 @@ export default function ClubCityLadderScreen() {
                 s={s}
                 city2={city2}
                 last={i === ladder.steps.length - 1}
-                history={ladder.history.find((h) => h.rung === s.rung) ?? null}
+                history={[...ladder.history].reverse().find((h) => h.rung === s.rung) ?? null}
                 busy={actions.step.isPending}
                 onLayoutCurrent={s.rung === ladder.rung ? setCurrentY : undefined}
                 onAdvance={(pay) => {
@@ -101,6 +152,8 @@ export default function ClubCityLadderScreen() {
               />
             ))}
           </View>
+
+          {pr && !atTop ? <PrestigeTeaser prestige={pr} crest={city2.crest} /> : null}
 
           {ladder.history.length ? (
             <View style={styles.history}>
@@ -115,6 +168,22 @@ export default function ClubCityLadderScreen() {
         </ScrollView>
       )}
       <StepCelebration result={stepResult} city2={city2} onClose={() => setStepResult(null)} />
+      <PrestigeSheet
+        visible={prestigeOpen}
+        onClose={() => setPrestigeOpen(false)}
+        preview={preview}
+        loading={prestige.preview.isPending}
+        confirming={prestige.confirm.isPending}
+        onRefresh={() => prestige.preview.mutate(undefined)}
+        onConfirm={confirmPrestige}
+      />
+      <PrestigeCelebration
+        result={prestiged}
+        onClose={() => {
+          setPrestiged(null);
+          router.navigate("/kulup-sehri");
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -188,7 +257,7 @@ function RungRow({
         </View>
         {history && (state === "done" || state === "current") ? (
           <Text style={styles.rungMeta} {...textScale.dense}>
-            {[dateText(history.at), history.via ? VIA_TEXT[history.via] : null].filter(Boolean).join(" · ")}
+            {[dateText(history.at), viaText(history)].filter(Boolean).join(" · ")}
           </Text>
         ) : null}
 
@@ -241,7 +310,7 @@ function HistoryRow({ h, steps }: { h: City2History; steps: City2Step[] }) {
           {s?.title ?? `${h.rung}. kademe`}
         </Text>
         <Text style={styles.historyMeta} {...textScale.dense}>
-          {[dateText(h.at), h.via ? VIA_TEXT[h.via] : null, h.via === "stars" && h.cost ? `${fmt(h.cost)} yıldız` : null].filter(Boolean).join(" · ")}
+          {[dateText(h.at), viaText(h), h.via === "stars" && h.cost ? `${fmt(h.cost)} yıldız` : null].filter(Boolean).join(" · ")}
         </Text>
       </View>
     </View>

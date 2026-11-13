@@ -19,6 +19,22 @@ import {
   setPrivacyPreferences,
   type City2AcceptResult,
   type PrivacyPreferences,
+  type PrivacyKey,
+  applaudCity2,
+  confirmCity2Prestige,
+  donateCity2Team,
+  getCity2Season,
+  getCity2Team,
+  getCity2Visit,
+  getCity2VisitList,
+  previewCity2Prestige,
+  type City2ApplauseResult,
+  type City2DonateResult,
+  type City2PrestigePreviewResult,
+  type City2PrestigeResult,
+  type City2TeamView,
+  type City2VisitKind,
+  type City2VisitView,
   buildCity2Stage,
   buyCity2Landmark,
   buyCity2Lock,
@@ -197,9 +213,12 @@ export function useAcademyActions(callbacks: { onAccept?: (res: City2AcceptResul
 }
 
 /**
- * "Altyapı oyunlarında adım kullanılmasın" tercihi. Eski sunucu 404 döner:
- * `supported` false → ayar hiç çizilmez. Değişince şehir durumu tazelenir
- * (akademideki adlar sunucuda hemen değişir).
+ * Gizlilik tercihleri (tek uç, iki ayar):
+ *   · "Altyapı oyunlarında adım kullanılmasın" (Faz 3) — `value`, `label`, `help`, `set`
+ *   · "Şehrimi ziyarete kapat" (Faz 5) — `visit.*`; sunucu alanı tanımıyorsa
+ *     `visit.supported` false → ayar çizilmez.
+ * Eski sunucu 404 döner: `supported` false → hiçbir ayar çizilmez. Değişince
+ * şehir durumu tazelenir (akademideki adlar ve `visit.closed` sunucuda hemen değişir).
  */
 export function usePrivacyPreferences(enabled = true) {
   const auth = useAuth();
@@ -213,24 +232,34 @@ export function usePrivacyPreferences(enabled = true) {
     retry: false,
   });
   const save = useMutation({
-    mutationFn: (value: boolean) => setPrivacyPreferences(value),
-    onMutate: async (value) => {
+    mutationFn: (v: { key: PrivacyKey; value: boolean }) => setPrivacyPreferences({ [v.key]: v.value }),
+    onMutate: async (v) => {
       await queryClient.cancelQueries({ queryKey: city2Keys.privacy() });
       const before = queryClient.getQueryData<PrivacyPreferences>(city2Keys.privacy());
-      queryClient.setQueryData<PrivacyPreferences>(city2Keys.privacy(), (cur) => ({ ...(cur ?? {}), preferences: { ...(cur?.preferences ?? {}), academy_name_opt_out: value } }));
+      queryClient.setQueryData<PrivacyPreferences>(city2Keys.privacy(), (cur) => ({ ...(cur ?? {}), preferences: { ...(cur?.preferences ?? {}), [v.key]: v.value } }));
       return { before };
     },
-    onError: (error, _value, ctx) => {
+    onError: (error, _v, ctx) => {
       if (ctx?.before) queryClient.setQueryData(city2Keys.privacy(), ctx.before);
       toast.show({ message: errorText(error), tone: "danger" });
     },
-    onSuccess: (res, value) => {
-      queryClient.setQueryData<PrivacyPreferences>(city2Keys.privacy(), res);
-      toast.show({ message: value ? "Adın artık altyapı oyunlarında kullanılmayacak" : "Adın yeni gelen oyunculara yeniden verilebilir", tone: "success" });
+    onSuccess: (res, v) => {
+      queryClient.setQueryData<PrivacyPreferences>(city2Keys.privacy(), (cur) => ({ ...(cur ?? {}), ...res, preferences: { ...(cur?.preferences ?? {}), ...(res.preferences ?? {}) } }));
+      const message =
+        v.key === "city_visit_opt_out"
+          ? v.value
+            ? "Şehrin artık ziyarete kapalı"
+            : "Şehrin yeniden ziyarete açık"
+          : v.value
+            ? "Adın artık altyapı oyunlarında kullanılmayacak"
+            : "Adın yeni gelen oyunculara yeniden verilebilir";
+      toast.show({ message, tone: "success" });
       void queryClient.invalidateQueries({ queryKey: city2Keys.me() });
     },
   });
-  const value = query.data?.preferences?.academy_name_opt_out ?? false;
+  const prefs = query.data?.preferences;
+  const value = prefs?.academy_name_opt_out ?? false;
+  const savingKey = save.isPending ? save.variables?.key : null;
   return {
     query,
     value,
@@ -238,7 +267,135 @@ export function usePrivacyPreferences(enabled = true) {
     help: query.data?.help?.academy_name_opt_out ?? null,
     /** Yalnız sunucu ayarı tanıyorsa (404/503'te ve yüklenirken çizilmez). */
     supported: query.isSuccess,
-    set: (next: boolean) => save.mutate(next),
-    saving: save.isPending,
+    set: (next: boolean) => save.mutate({ key: "academy_name_opt_out", value: next }),
+    saving: savingKey === "academy_name_opt_out",
+    /** Faz 5 · "Şehrimi ziyarete kapat" (eski sunucuda alan yok → supported false). */
+    visit: {
+      supported: query.isSuccess && typeof prefs?.city_visit_opt_out === "boolean",
+      value: prefs?.city_visit_opt_out ?? false,
+      label: query.data?.labels?.city_visit_opt_out ?? "Şehrimi ziyarete kapat",
+      help: query.data?.help?.city_visit_opt_out ?? null,
+      set: (next: boolean) => save.mutate({ key: "city_visit_opt_out", value: next }),
+      saving: savingKey === "city_visit_opt_out",
+    },
   };
+}
+
+/* ═══════════════════════ FAZ 5 ═══════════════════════ */
+
+/**
+ * Sezon okuması (GET /city2/season): sezon sonu dilimi bu okumada da verilir.
+ * Yanıt şehir önbelleğindeki `season`/`crest`/`prestige` alanlarına da yazılır.
+ * Eski sunucu (404) → `supported` false.
+ */
+export function useCity2Season(enabled = true) {
+  const auth = useAuth();
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: [...city2Keys.me(), "season"],
+    queryFn: async () => {
+      const res = await getCity2Season();
+      queryClient.setQueryData<City2Response>(city2Keys.me(), (cur) =>
+        cur ? { ...cur, city2: { ...cur.city2, season: res.season, crest: res.crest, prestige: res.prestige } } : cur,
+      );
+      return res;
+    },
+    enabled: enabled && Boolean(auth.user),
+    staleTime: 30_000,
+    retry: false,
+  });
+  return { query, season: query.data?.season, crest: query.data?.crest, supported: !(query.error instanceof ApiError && query.error.status === 404) };
+}
+
+/**
+ * Prestij: önizleme (jeton) → onay. Önizleme her açılışta yeniden istenir
+ * (yeni önizleme eski jetonu geçersiz kılar). Hatalar Türkçe toast.
+ */
+export function useCity2Prestige(callbacks: { onPreview?: (res: City2PrestigePreviewResult) => void; onDone?: (res: City2PrestigeResult) => void } = {}) {
+  const write = useCity2Write();
+  const queryClient = useQueryClient();
+  const preview = useAdminMutation(() => previewCity2Prestige(), {
+    onSuccess: (res) => {
+      write(res.city2);
+      callbacks.onPreview?.(res);
+    },
+  });
+  const confirm = useAdminMutation((token: string) => confirmCity2Prestige(token), {
+    onSuccess: (res) => {
+      write(res.city2);
+      void queryClient.invalidateQueries({ queryKey: [...city2Keys.me(), "season"] });
+      callbacks.onDone?.(res);
+    },
+  });
+  return { preview, confirm, busy: preview.isPending || confirm.isPending };
+}
+
+/** Takım tesisi (GET /city2/team). Eski sunucu 404 → `supported` false. */
+export function useCity2Team(enabled = true) {
+  const auth = useAuth();
+  const query = useQuery({ queryKey: city2Keys.team(), queryFn: getCity2Team, enabled: enabled && Boolean(auth.user), staleTime: 20_000, retry: false });
+  return { query, view: query.data, supported: !(query.error instanceof ApiError && query.error.status === 404) };
+}
+
+/** Tesise yıldız / EL bağışı: yanıt hem takım görünümüne hem şehre (bakiye, yıldız) yazılır. */
+export function useCity2Donate(callbacks: { onDone?: (res: City2DonateResult) => void } = {}) {
+  const write = useCity2Write();
+  const queryClient = useQueryClient();
+  return useAdminMutation((body: { stars?: number; el?: number }) => donateCity2Team(body), {
+    success: (res) => {
+      const parts = [res.stars > 0 ? `${fmtEl(res.stars)} yıldız` : null, res.el > 0 ? `${fmtEl(res.el)} EL` : null].filter(Boolean).join(" + ");
+      return res.level_up > 0 ? `Tesis ${res.level}. seviyeye çıktı!` : `${parts} bağışlandı · +${fmtEl(res.points)} puan`;
+    },
+    onSuccess: (res) => {
+      write(res.city2);
+      queryClient.setQueryData<City2TeamView>(city2Keys.team(), (cur) => ({
+        ...(cur ?? { text: null }),
+        team: res.team,
+        rank: res.rank ?? cur?.rank,
+        contributions: res.contributions ?? cur?.contributions,
+        today: res.today ?? cur?.today,
+        text: res.text ?? cur?.text ?? null,
+      }));
+      void queryClient.invalidateQueries({ queryKey: cityKeys.leaderboard("all").slice(0, 3) });
+      callbacks.onDone?.(res);
+    },
+  });
+}
+
+/** Ziyaret listesi (tek tür). */
+export function useCity2VisitList(kind: City2VisitKind, enabled = true) {
+  const auth = useAuth();
+  const query = useQuery({ queryKey: city2Keys.visitList(kind), queryFn: () => getCity2VisitList(kind, 20), enabled: enabled && Boolean(auth.user), staleTime: 30_000, retry: false });
+  return { query, lists: query.data, supported: !(query.error instanceof ApiError && query.error.status === 404) };
+}
+
+/** Başka bir şehrin salt okunur görünümü. 403 CITY_CLOSED / 404 → `closed` / `missing`. */
+export function useCity2Visit(userId: number | null) {
+  const auth = useAuth();
+  const query = useQuery({
+    queryKey: city2Keys.visit(userId ?? 0),
+    queryFn: () => getCity2Visit(userId as number),
+    enabled: Boolean(auth.user) && userId != null && Number.isFinite(userId),
+    staleTime: 30_000,
+    retry: false,
+  });
+  const err = query.error instanceof ApiError ? query.error : null;
+  return { query, view: query.data, closed: err?.status === 403, missing: err?.status === 404 };
+}
+
+/** Alkış: görünümü yerinde günceller; ziyaretçinin yıldızı arttığı için şehri tazeler. */
+export function useCity2Applause(callbacks: { onDone?: (res: City2ApplauseResult) => void } = {}) {
+  const queryClient = useQueryClient();
+  return useAdminMutation((userId: number) => applaudCity2(userId), {
+    success: (res) => (res.stars.visitor > 0 ? `Alkışladın · +${res.stars.visitor} yıldız` : "Alkışladın"),
+    onSuccess: (res) => {
+      queryClient.setQueryData<City2VisitView>(city2Keys.visit(res.target_id), (cur) =>
+        cur
+          ? { ...cur, city: { ...cur.city, applause: res.applause, applauded_today: true }, applause: { ...cur.applause, can: false, blocked: "ALREADY_APPLAUDED", left_today: res.left_today } }
+          : cur,
+      );
+      void queryClient.invalidateQueries({ queryKey: city2Keys.me(), exact: true });
+      callbacks.onDone?.(res);
+    },
+  });
 }

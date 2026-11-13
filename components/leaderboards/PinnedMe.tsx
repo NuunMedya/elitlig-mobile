@@ -89,7 +89,7 @@ export function useRowVisibility(isMine: (item: unknown) => boolean) {
 }
 
 /** Liste sonu: sonraki sayfa yükleniyor / hepsi listelendi. */
-export function BoardFooter({ loading, done, count, total }: { loading: boolean; done: boolean; count: number; total?: number | null }) {
+export function BoardFooter({ loading, done, count, total, noun = "oyuncu" }: { loading: boolean; done: boolean; count: number; total?: number | null; noun?: string }) {
   if (loading) {
     return (
       <View style={styles.footer}>
@@ -101,7 +101,7 @@ export function BoardFooter({ loading, done, count, total }: { loading: boolean;
   return (
     <View style={styles.footer}>
       <Text style={styles.footerText} {...textScale.dense}>
-        {`${formatCount(total ?? count)} oyuncunun tamamı listelendi`}
+        {`${formatCount(total ?? count)} ${noun}${noun === "takım" ? "ın" : "nun"} tamamı listelendi`}
       </Text>
     </View>
   );

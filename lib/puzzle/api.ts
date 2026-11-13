@@ -367,6 +367,23 @@ export interface CityLeaderRow {
   el_net?: number | null;
   /** Faz 3 · metric=el|transfer: dönemde oyuncu satışından kazanılan EL. */
   transfer?: number | null;
+  /** Faz 5 · metric=season: sezon puanı; prestij seviyesi (step/season tablolarında). */
+  season_score?: number | null;
+  prestige?: number | null;
+  me: boolean;
+}
+
+/** Faz 5 · metric=team: takım tesisleri sıralaması (satır bir takımdır). */
+export interface CityTeamRow {
+  rank: number;
+  team_id: number;
+  name: string;
+  level: number;
+  stage_title: string | null;
+  points: number;
+  contributors: number;
+  size: number;
+  el_pct: number;
   me: boolean;
 }
 
@@ -376,10 +393,13 @@ export interface CityLeaderRow {
  * el = dönemde kazanılan Elit Lira (period/from/to; varsayılan bu hafta) ·
  * transfer = dönemde akademiden oyuncu satışıyla kazanılan EL (Faz 3; aynı pencere kuralları).
  */
-export type CityBoardMetric = "dev" | "stars" | "period_stars" | "step" | "beauty" | "el" | "transfer";
+export type CityBoardMetric = "dev" | "stars" | "period_stars" | "step" | "beauty" | "el" | "transfer" | "season" | "team";
 
 export interface CityBoardOptions {
   metric?: CityBoardMetric;
+  /** Faz 5 · metric=season: sezon numarası (varsayılan şimdiki) ve yalnız takımım. */
+  season?: number;
+  team?: boolean;
   /** period_stars için kısayol (sunucu haftayı/ayı kendi hesaplar). */
   period?: "week" | "month" | "alltime";
   from?: string;
@@ -398,8 +418,13 @@ export interface CityLeaderboard {
   limit?: number | null;
   offset?: number | null;
   items: CityLeaderRow[];
+  /** Faz 5 · metric=season: sezon, takım süzgeci (false: süzgeç yok · null: takımın yok). */
+  season?: { id: number; title: string; name: string; range_text: string } | null;
+  preseason?: { text: string; starts_at: string } | null;
+  team?: false | null | { id: number; name: string };
   me?: {
     rank: number | null;
+    season_score?: number | null;
     dev?: number | null;
     stars_total?: number | null;
     stars_period?: number | null;
@@ -445,7 +470,21 @@ export const getCityLeaderboard = (scope: "all" | "city", options?: CityBoardOpt
     to: options?.to,
     limit: options?.limit,
     offset: options?.offset || undefined,
+    season: options?.season,
+    team: options?.team ? 1 : undefined,
   });
+
+/** Faz 5 · takım tesisleri sıralaması (metric=team; eski sunucuda `metric` yok). */
+export interface CityTeamBoard {
+  metric?: CityBoardMetric;
+  total?: number | null;
+  limit?: number | null;
+  offset?: number | null;
+  items: CityTeamRow[];
+  me?: CityTeamRow | null;
+}
+export const getCityTeamBoard = (options?: { limit?: number; offset?: number }) =>
+  get<CityTeamBoard>("/api/puzzle/city/leaderboard", { metric: "team", limit: options?.limit, offset: options?.offset || undefined });
 
 export const getLeaderboard = (game: string, scope: "all" | "city") =>
   get<{ game: string; scope: string; items: LeaderboardRow[] }>("/api/puzzle/leaderboard", { game, scope });

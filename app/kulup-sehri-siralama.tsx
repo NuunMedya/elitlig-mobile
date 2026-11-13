@@ -16,7 +16,12 @@
  *     (kazanılan − gider). Varsayılan bu hafta.
  *   • Transfer        — dönemde akademiden oyuncu satışıyla kazanılan EL
  *     (metric=transfer; Faz 3). Varsayılan bu hafta; `?tab=transfer` ile açılır.
- * Sekmeler yatay kayar (yedi sekme dar ekrana sığmaz).
+ *   • Sezon           — Faz 5: şimdiki sezonun puanı (metric=season); kapsam
+ *     Türkiye / ilim / takımım (team=1). Sezon öncesi "yakında başlıyor".
+ *     `?tab=season` ile açılır.
+ *   • Takımlar        — Faz 5: takım tesisleri (metric=team): seviye, toplam
+ *     bağış puanı, bağışçı sayısı; kendi takımın vurgulu. `?tab=team`.
+ * Sekmeler yatay kayar (dokuz sekme dar ekrana sığmaz).
  * Yıldız ve EL tablolarında dönem şeridi: Bu hafta · Bu ay · Tüm zamanlar · Tarih
  * aralığı. Kapsam: Türkiye / kendi ilin.
  *
@@ -57,15 +62,20 @@ import {
   type PeriodValue,
 } from "@/lib/leaderboard";
 import { ApiError } from "@/lib/http";
-import { cityKeys, getCityLeaderboard, type CityBoardMetric, type CityLeaderRow, type CityLeaderboard } from "@/lib/puzzle/api";
+import { cityKeys, getCityLeaderboard, getCityTeamBoard, type CityBoardMetric, type CityLeaderRow, type CityLeaderboard, type CityTeamBoard, type CityTeamRow } from "@/lib/puzzle/api";
+import { PrestigeStars } from "@/components/city2/Season";
+import { TeamTile } from "@/components/city2/Team";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
 
-type Tab = "step" | "beauty" | "el" | "transfer" | "dev" | "week" | "total";
-type Scope = "all" | "city";
+type Tab = "step" | "season" | "team" | "beauty" | "el" | "transfer" | "dev" | "week" | "total";
+/** "team": yalnız Sezon sekmesinde (takımımın üyeleri). */
+type Scope = "all" | "city" | "team";
 
 const TABS: SegmentedItem<Tab>[] = [
   { key: "step", label: "Basamak" },
+  { key: "season", label: "Sezon" },
+  { key: "team", label: "Takımlar" },
   { key: "beauty", label: "Güzellik" },
   { key: "el", label: "Elit Lira" },
   { key: "transfer", label: "Transfer" },
@@ -76,6 +86,8 @@ const TABS: SegmentedItem<Tab>[] = [
 
 const SUBTITLE: Record<Tab, string> = {
   step: "Kariyer merdiveninde basamak",
+  season: "Sezon puanı",
+  team: "Takım tesisleri",
   beauty: "Şehrin güzellik puanı",
   el: "Dönemde kazanılan Elit Lira",
   transfer: "Akademiden oyuncu satışıyla kazanılan EL",
@@ -86,7 +98,7 @@ const SUBTITLE: Record<Tab, string> = {
 
 /** Sekme + dönem → sunucu isteği. */
 function boardRequest(tab: Tab, pv: PeriodValue) {
-  if (tab === "dev" || tab === "step" || tab === "beauty") return { metric: tab as CityBoardMetric };
+  if (tab === "dev" || tab === "step" || tab === "beauty" || tab === "season" || tab === "team") return { metric: tab as CityBoardMetric };
   if (tab === "el" || tab === "transfer") {
     const metric = tab as CityBoardMetric;
     if (pv.period === "range" && pv.range) return { metric, from: pv.range.from, to: pv.range.to };
@@ -98,9 +110,9 @@ function boardRequest(tab: Tab, pv: PeriodValue) {
 }
 
 /** Tablonun yalnız seçili döneme bağlı olmayan (dönem şeridi olmayan) sekmeleri. */
-const STATIC_TABS: ReadonlySet<Tab> = new Set(["step", "beauty", "dev"]);
+const STATIC_TABS: ReadonlySet<Tab> = new Set(["step", "beauty", "dev", "season", "team"]);
 
-const UNIT: Record<CityBoardMetric, string> = { dev: "gelişim", stars: "yıldız", period_stars: "yıldız", step: "basamak", beauty: "güzellik", el: "EL", transfer: "EL" };
+const UNIT: Record<CityBoardMetric, string> = { dev: "gelişim", stars: "yıldız", period_stars: "yıldız", step: "basamak", beauty: "güzellik", el: "EL", transfer: "EL", season: "puan", team: "puan" };
 
 function rowValue(row: CityLeaderRow, metric: CityBoardMetric): number {
   if (metric === "dev") return row.dev;
@@ -108,6 +120,7 @@ function rowValue(row: CityLeaderRow, metric: CityBoardMetric): number {
   if (metric === "beauty") return Number(row.beauty ?? 0);
   if (metric === "el") return Number(row.el ?? 0);
   if (metric === "transfer") return Number(row.transfer ?? 0);
+  if (metric === "season") return Number(row.season_score ?? 0);
   if (metric === "stars") return Number(row.stars_total ?? 0);
   return Number(row.stars_period ?? 0);
 }
@@ -142,9 +155,12 @@ const CityRow = React.memo(function CityRow({ row, metric }: { row: CityLeaderRo
       <RankBadge rank={row.rank} mine={row.me} />
       <Avatar name={row.name} size={36} ring={row.me ? "brand" : "none"} />
       <View style={styles.texts}>
-        <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
-          {row.me ? `${row.name} (sen)` : row.name}
-        </Text>
+        <View style={styles.nameLine}>
+          <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
+            {row.me ? `${row.name} (sen)` : row.name}
+          </Text>
+          {row.prestige ? <PrestigeStars count={row.prestige} size={11} /> : null}
+        </View>
         {metric === "el" ? (
           <View style={styles.devLine}>
             {row.step_title ? (
@@ -177,13 +193,13 @@ const CityRow = React.memo(function CityRow({ row, metric }: { row: CityLeaderRo
               </Text>
             ) : null}
           </View>
-        ) : metric === "step" || metric === "beauty" ? (
+        ) : metric === "step" || metric === "beauty" || metric === "season" ? (
           <View style={styles.devLine}>
             {row.step_title ? (
               <View style={styles.tierPill}>
                 <Ionicons name="trending-up" size={10} color={colors.brandAccent} />
                 <Text style={styles.tierText} numberOfLines={1} {...textScale.badge}>
-                  {metric === "beauty" && row.step_label ? `${row.step_label} · ${row.step_title}` : row.step_title}
+                  {(metric === "beauty" || metric === "season") && row.step_label ? `${row.step_label} · ${row.step_title}` : row.step_title}
                 </Text>
               </View>
             ) : null}
@@ -220,9 +236,9 @@ const CityRow = React.memo(function CityRow({ row, metric }: { row: CityLeaderRo
             <ElCoin size={14} />
           ) : (
             <Ionicons
-              name={metric === "dev" || metric === "step" ? "trending-up" : metric === "beauty" ? "sparkles" : "star"}
+              name={metric === "dev" || metric === "step" ? "trending-up" : metric === "beauty" ? "sparkles" : metric === "season" ? "calendar" : "star"}
               size={13}
-              color={metric === "dev" || metric === "step" || metric === "beauty" ? colors.brandAccent : colors.star}
+              color={metric === "dev" || metric === "step" || metric === "beauty" || metric === "season" ? colors.brandAccent : colors.star}
             />
           )}
           <Text style={styles.value} {...textScale.badge}>
@@ -255,15 +271,18 @@ export default function ClubCityLeaderboardScreen() {
   const req = boardRequest(tab, pv);
   const metric = req.metric;
 
+  /** "Takımım" yalnız Sezon sekmesinde; diğerlerinde Türkiye sayılır. */
+  const effScope: Scope = scope === "team" && tab !== "season" ? "all" : scope;
   const fetchPage = useCallback(
-    (offset: number) => getCityLeaderboard(scope, { ...req, limit: BOARD_PAGE_SIZE, offset }),
+    (offset: number) =>
+      getCityLeaderboard(effScope === "team" ? "all" : effScope, { ...req, ...(effScope === "team" ? { team: true } : {}), limit: BOARD_PAGE_SIZE, offset }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scope, metric, req.period, req.from, req.to]
+    [effScope, metric, req.period, req.from, req.to]
   );
 
   const { query, rows, first, loadMore } = useBoardPages({
-    queryKey: cityKeys.leaderboard(scope, metric, req.period ?? null, req.from ?? null, req.to ?? null),
-    enabled: Boolean(auth.user),
+    queryKey: cityKeys.leaderboard(effScope, metric, req.period ?? null, req.from ?? null, req.to ?? null),
+    enabled: Boolean(auth.user) && tab !== "team",
     fetchPage,
     rowsOf,
     keyOf,
@@ -276,13 +295,18 @@ export default function ClubCityLeaderboardScreen() {
   const unsupported =
     metric !== "dev" &&
     ((first != null && first.metric !== metric) ||
-      (query.isError && rows.length === 0 && (metric === "step" || metric === "beauty" || metric === "el" || metric === "transfer") && query.error instanceof ApiError && query.error.status === 400));
+      (query.isError && rows.length === 0 && (metric === "step" || metric === "beauty" || metric === "el" || metric === "transfer" || metric === "season") && query.error instanceof ApiError && query.error.status === 400));
+  /** Faz 5 · Sezon: sezon öncesi ve takımı olmayan üye (team=1). */
+  const preseason = metric === "season" && !unsupported && first != null && !first.season ? first.preseason ?? { text: "Sezon yakında başlıyor.", starts_at: "" } : null;
+  const noTeam = metric === "season" && effScope === "team" && first != null && first.team === null;
 
   const meRow = useMemo(() => rows.find((row) => row.me) ?? null, [rows]);
   const meIndex = meRow ? rows.indexOf(meRow) : -1;
   const meRank = first?.me?.rank ?? meRow?.rank ?? null;
   const meValue =
-    metric === "transfer"
+    metric === "season"
+      ? first?.me?.season_score ?? meRow?.season_score ?? null
+      : metric === "transfer"
       ? first?.me?.transfer ?? meRow?.transfer ?? null
       : metric === "el"
       ? first?.me?.el ?? meRow?.el ?? null
@@ -305,8 +329,9 @@ export default function ClubCityLeaderboardScreen() {
     () => [
       { key: "all", label: "Türkiye" },
       { key: "city", label: auth.user?.city ? auth.user.city : "Şehrim" },
+      ...(tab === "season" ? [{ key: "team" as const, label: "Takımım" }] : []),
     ],
-    [auth.user?.city]
+    [auth.user?.city, tab]
   );
 
   const jumpToMe = useCallback(() => {
@@ -322,9 +347,9 @@ export default function ClubCityLeaderboardScreen() {
 
   const total = first?.total ?? null;
   const caption =
-    tab === "step" ? "kariyer merdiveni" : tab === "beauty" ? "şehrin güzelliği" : tab === "el" ? `kazanılan EL · ${periodCaption(pv)}` : tab === "transfer" ? `transfer geliri · ${periodCaption(pv)}` : tab === "dev" ? "şu anki gelişim" : metric === "stars" ? "tüm zamanlar" : periodCaption(pv);
+    tab === "season" ? (first?.season ? `${first.season.title} · ${first.season.name}${effScope === "team" && first.team ? ` · ${first.team.name}` : ""}` : "sezon puanı") : tab === "step" ? "kariyer merdiveni" : tab === "beauty" ? "şehrin güzelliği" : tab === "el" ? `kazanılan EL · ${periodCaption(pv)}` : tab === "transfer" ? `transfer geliri · ${periodCaption(pv)}` : tab === "dev" ? "şu anki gelişim" : metric === "stars" ? "tüm zamanlar" : periodCaption(pv);
   const showPinned =
-    !unsupported && !query.isLoading && !visibility.visible && (meRank != null || meRow != null) && rows.length > 0;
+    tab !== "team" && !preseason && !noTeam && !unsupported && !query.isLoading && !visibility.visible && (meRank != null || meRow != null) && rows.length > 0;
 
   const header = (
     <View style={styles.listHeader}>
@@ -349,13 +374,15 @@ export default function ClubCityLeaderboardScreen() {
         bottom={
           <View style={styles.filters}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScroll} style={styles.tabsRow}>
-              <SegmentedControl items={TABS} value={tab} onChange={setTab} size="sm" style={styles.tabs} />
+              <SegmentedControl items={TABS} value={tab} onChange={setTab} size="sm" stretch={false} style={styles.tabs} />
             </ScrollView>
-            <SegmentedControl items={scopeItems} value={scope} onChange={setScope} stretch size="sm" />
+            {tab !== "team" ? <SegmentedControl items={scopeItems} value={effScope} onChange={setScope} stretch size="sm" /> : null}
           </View>
         }
       />
-      {query.isLoading ? (
+      {tab === "team" ? (
+        <TeamBoard enabled={Boolean(auth.user)} />
+      ) : query.isLoading ? (
         <View style={styles.pad}>
           {header}
           <SkeletonListRow count={8} avatar />
@@ -365,7 +392,7 @@ export default function ClubCityLeaderboardScreen() {
       ) : (
         <FlatList
           ref={listRef}
-          data={unsupported ? [] : rows}
+          data={unsupported || preseason || noTeam ? [] : rows}
           keyExtractor={(row) => String(row.user_id)}
           renderItem={renderItem}
           contentContainerStyle={[styles.list, showPinned ? styles.listPinned : null]}
@@ -376,12 +403,16 @@ export default function ClubCityLeaderboardScreen() {
             )
           }
           ListEmptyComponent={
-            unsupported ? (
+            preseason ? (
+              <EmptyState icon="calendar-outline" title={preseason.text} body="Sezon başlayınca şehrini geliştirdikçe, EL kazandıkça ve sahada oynadıkça sezon puanın birikir." variant="inline" />
+            ) : noTeam ? (
+              <EmptyState icon="people-outline" title="Takımın yok" body="Oyuncu kartın bir takıma bağlı olduğunda takım arkadaşlarınla sezon sıralaması burada çıkar." variant="inline" action={{ label: "Türkiye", onPress: () => setScope("all"), haptic: "light" }} />
+            ) : unsupported ? (
               <EmptyState
-                icon={tab === "step" || tab === "beauty" ? "trending-up-outline" : tab === "el" ? "wallet-outline" : tab === "transfer" ? "swap-horizontal-outline" : "star-outline"}
-                title={tab === "step" ? "Basamak tablosu yakında" : tab === "beauty" ? "Güzellik tablosu yakında" : tab === "el" ? "Elit Lira tablosu yakında" : tab === "transfer" ? "Transfer tablosu yakında" : "Yıldız tablosu yakında"}
+                icon={tab === "season" ? "calendar-outline" : tab === "step" || tab === "beauty" ? "trending-up-outline" : tab === "el" ? "wallet-outline" : tab === "transfer" ? "swap-horizontal-outline" : "star-outline"}
+                title={tab === "season" ? "Sezon tablosu yakında" : tab === "step" ? "Basamak tablosu yakında" : tab === "beauty" ? "Güzellik tablosu yakında" : tab === "el" ? "Elit Lira tablosu yakında" : tab === "transfer" ? "Transfer tablosu yakında" : "Yıldız tablosu yakında"}
                 body={
-                  tab === "step" || tab === "beauty" || tab === "el" || tab === "transfer"
+                  tab === "step" || tab === "beauty" || tab === "el" || tab === "transfer" || tab === "season"
                     ? "Kulüp Şehri 2.0 sıralamaları sunucu güncellemesiyle açılacak. Şimdilik Gelişim tablosuna bakabilirsin."
                     : "Dönemlik ve toplam yıldız sıralaması sunucu güncellemesiyle açılacak. Şimdilik Gelişim tablosuna bakabilirsin."
                 }
@@ -390,10 +421,12 @@ export default function ClubCityLeaderboardScreen() {
               />
             ) : (
               <EmptyState
-                icon={tab === "transfer" ? "swap-horizontal-outline" : tab === "el" ? "wallet-outline" : tab === "beauty" ? "sparkles-outline" : tab === "dev" || tab === "step" ? "business-outline" : "star-outline"}
-                title={tab === "transfer" ? "Bu dönemde transfer yok" : tab === "el" ? "Bu dönemde EL kazanılmadı" : tab === "beauty" ? "Henüz güzel şehir yok" : tab === "dev" || tab === "step" ? "Henüz şehir yok" : "Bu dönemde yıldız yok"}
+                icon={tab === "season" ? "calendar-outline" : tab === "transfer" ? "swap-horizontal-outline" : tab === "el" ? "wallet-outline" : tab === "beauty" ? "sparkles-outline" : tab === "dev" || tab === "step" ? "business-outline" : "star-outline"}
+                title={tab === "season" ? "Bu sezonda henüz puan yok" : tab === "transfer" ? "Bu dönemde transfer yok" : tab === "el" ? "Bu dönemde EL kazanılmadı" : tab === "beauty" ? "Henüz güzel şehir yok" : tab === "dev" || tab === "step" ? "Henüz şehir yok" : "Bu dönemde yıldız yok"}
                 body={
-                  tab === "transfer"
+                  tab === "season"
+                    ? "Şehrini geliştir, maçlarını oyna; sezon tablosuna ilk sen gir."
+                    : tab === "transfer"
                     ? "Akademinden bir oyuncu sat, tabloya ilk sen gir."
                     : tab === "el"
                     ? "Binalarının depolarını topla, tabloya ilk sen gir."
@@ -432,6 +465,97 @@ export default function ClubCityLeaderboardScreen() {
   );
 }
 
+/* ───────────────────────── Faz 5 · Takımlar ───────────────────────── */
+
+const teamRowsOf = (page: CityTeamBoard) => page.items ?? [];
+const teamKeyOf = (row: CityTeamRow) => row.team_id;
+
+const TeamBoardRow = React.memo(function TeamBoardRow({ row }: { row: CityTeamRow }) {
+  return (
+    <View style={[styles.row, row.me ? styles.rowMe : null]}>
+      <RankBadge rank={row.rank} mine={row.me} />
+      <TeamTile size={36} level={row.level} />
+      <View style={styles.texts}>
+        <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
+          {row.me ? `${row.name} (takımın)` : row.name}
+        </Text>
+        <View style={styles.devLine}>
+          <View style={styles.tierPill}>
+            <Ionicons name="business" size={10} color={colors.brandAccent} />
+            <Text style={styles.tierText} numberOfLines={1} {...textScale.badge}>
+              {`${row.level}. seviye${row.stage_title ? ` · ${row.stage_title}` : ""}`}
+            </Text>
+          </View>
+          <Text style={styles.sub} numberOfLines={1} {...textScale.dense}>
+            {`${formatCount(row.contributors)} bağışçı`}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.valueBox}>
+        <View style={styles.valueLine}>
+          <Ionicons name="heart" size={12} color={colors.brandAccent} />
+          <Text style={styles.value} {...textScale.badge}>
+            {formatCount(row.points)}
+          </Text>
+        </View>
+        <Text style={styles.unit} {...textScale.badge}>
+          puan
+        </Text>
+      </View>
+    </View>
+  );
+});
+
+/** Takım tesisleri tablosu (önce seviye, sonra toplam puan). Eski sunucu → "yakında". */
+function TeamBoard({ enabled }: { enabled: boolean }) {
+  const fetchPage = useCallback((offset: number) => getCityTeamBoard({ limit: BOARD_PAGE_SIZE, offset }), []);
+  const { query, rows, first, loadMore } = useBoardPages({ queryKey: cityKeys.leaderboard("all", "team"), enabled, fetchPage, rowsOf: teamRowsOf, keyOf: teamKeyOf });
+  const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching && !query.isFetchingNextPage });
+  const unsupported = (first != null && first.metric !== "team") || (query.isError && query.error instanceof ApiError && query.error.status === 400);
+  const me = first?.me ?? null;
+  const renderItem = useCallback(({ item }: { item: CityTeamRow }) => <TeamBoardRow row={item} />, []);
+  if (query.isLoading) {
+    return (
+      <View style={styles.pad}>
+        <SkeletonListRow count={8} avatar />
+      </View>
+    );
+  }
+  if (query.isError && !unsupported) return <ErrorState error={query.error} onRetry={() => query.refetch()} />;
+  return (
+    <FlatList
+      data={unsupported ? [] : rows}
+      keyExtractor={(row) => String(row.team_id)}
+      renderItem={renderItem}
+      contentContainerStyle={styles.list}
+      ListHeaderComponent={
+        <View style={styles.listHeader}>
+          {rows.length > 0 && !unsupported ? (
+            <View style={styles.metaLine}>
+              <Ionicons name="people-outline" size={14} color={colors.textTertiary} />
+              <Text style={styles.metaText} numberOfLines={1} {...textScale.dense}>
+                {`${formatCount(first?.total ?? rows.length)} takım · önce seviye, sonra bağış puanı${me && !rows.some((r) => r.me) ? ` · takımın ${me.rank}.` : ""}`}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      }
+      ListFooterComponent={unsupported ? null : <BoardFooter loading={query.isFetchingNextPage} done={!query.hasNextPage} count={rows.length} total={first?.total ?? null} noun="takım" />}
+      ListEmptyComponent={
+        unsupported ? (
+          <EmptyState icon="people-outline" title="Takım tablosu yakında" body="Takım tesisleri sıralaması sunucu güncellemesiyle açılacak." variant="inline" />
+        ) : (
+          <EmptyState icon="people-outline" title="Henüz takım tesisi yok" body="Takımının tesisine ilk bağışı yap, tabloya takımınla gir." variant="inline" />
+        )
+      }
+      onEndReached={loadMore}
+      onEndReachedThreshold={0.6}
+      refreshControl={<RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />}
+      showsVerticalScrollIndicator={false}
+    />
+  );
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   filters: { paddingHorizontal: layout.screenPadding, paddingBottom: space.sm, gap: space.sm },
@@ -457,7 +581,8 @@ const styles = StyleSheet.create({
   },
   rowMe: { borderColor: colors.brandAccent, borderWidth: 1.5, backgroundColor: colors.brandDim },
   texts: { flex: 1, gap: 3 },
-  name: { ...type.h4, fontFamily: fonts.semibold, color: colors.textPrimary },
+  name: { ...type.h4, fontFamily: fonts.semibold, color: colors.textPrimary, flexShrink: 1 },
+  nameLine: { flexDirection: "row", alignItems: "center", gap: space.xs },
   sub: { ...type.caption, color: colors.textTertiary },
   devLine: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.xs, columnGap: space.sm },
   tierPill: {
