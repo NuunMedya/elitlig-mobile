@@ -17,6 +17,11 @@
  *   · Elit Lira (Faz 2): EL kasası (bakiye, NET gelir, depolar, "Topla"),
  *     gerçek hayat form çarpanı, EL geçmişi. Eski sunucuda (el yok) gizli.
  *   · Günlük ödül ve yıldız cüzdanı (Ekonomi A).
+ *   · Faz 5: sezon kartı (puan, kalan süre, tahmini dilim → /kulup-sehri-sezon),
+ *     takım tesisi kartı (→ /kulup-sehri-takim; takımı olmayan üyede yok),
+ *     "Şehirleri gez" (→ /kulup-sehri-ziyaret), sahnede arma (sezon çerçevesi +
+ *     prestij yıldızları) ve sezon sonu kutlaması (bir kez). Eski sunucuda
+ *     (alanlar yok) hiçbiri çizilmez.
  *
  * Kurallar, adlar ve maliyetler sunucudadır (elitlig-server services/city2).
  * Sunucu /city2'yi tanımıyorsa (404) eski şehir ekranı (components/city/CityV1)
@@ -42,11 +47,14 @@ import { ElHistorySheet, ElHowSheet, ElWallet, FormCard } from "@/components/cit
 import { LandmarkSheet, type LandmarkTab, type Placing } from "@/components/city2/Landmarks";
 import { MigrationNotice, StepCelebration, type StepResult } from "@/components/city2/Notices";
 import { BuildingIcon, LandmarkIcon, SectionTitle, cardStyle, fmt } from "@/components/city2/shared";
+import { CrestChip, SeasonCard, SeasonEndSheet } from "@/components/city2/Season";
 import { StepCard } from "@/components/city2/StepCard";
+import { TeamCityCard } from "@/components/city2/Team";
+import { VisitEntryCard } from "@/components/city2/Visit";
 import { WebGame, type WebGameHandle } from "@/components/game/WebGame";
 import { BottomSheet, Button, ErrorState, ScreenHeader, SkeletonCard, Touchable, refreshControlProps, useRefresh, useToast } from "@/components/ui";
 import { collectCityStars } from "@/lib/puzzle/api";
-import { buildingMark, rungLabel, type City2CollectResult, type City2OwnedLandmark, type City2State } from "@/lib/puzzle/city2";
+import { buildingMark, incomeOf, rungLabel, type City2CollectResult, type City2OwnedLandmark, type City2State } from "@/lib/puzzle/city2";
 import { CITY_KIT_KEY, CITY_SKY, CLUB_KITS, type ClubKit } from "@/lib/puzzle/cityPalette";
 import { useCity2, useCity2Actions } from "@/lib/puzzle/useCity2";
 import { useAuth } from "@/providers/AuthProvider";
@@ -211,6 +219,10 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
   const closedBuildings = city2?.buildings.filter((b) => !b.open) ?? [];
   const unplaced = city2?.landmarks.owned.filter((l) => !l.slot) ?? [];
   const placedCount = (city2?.landmarks.owned.length ?? 0) - unplaced.length;
+  const incomeBonus = useMemo(() => {
+    const inc = (city2?.buildings ?? []).map((b) => incomeOf(b)).find(Boolean);
+    return inc ? { prestige: inc.prestige_pct ?? 0, team: inc.team_pct ?? 0 } : null;
+  }, [city2?.buildings]);
   const titles = useMemo(() => Object.fromEntries((city2?.buildings ?? []).map((b) => [b.key, b.title])), [city2?.buildings]);
 
   return (
@@ -235,6 +247,9 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
           <WebGame ref={scene} game="sehir" background={CITY_SKY} accessibilityLabel="Kulüp şehri" onReady={() => setReady(true)} onEvent={onEvent} />
           {city2 ? (
             <View style={styles.sceneBadges} pointerEvents="none">
+              {city2.crest && (city2.crest.frame || city2.crest.prestige_stars > 0) ? (
+                <CrestChip crest={city2.crest} />
+              ) : null}
               <View style={styles.sceneBadge}>
                 <Ionicons name="star" size={13} color={colors.yellowCard} />
                 <Text style={styles.sceneBadgeText} {...textScale.badge}>
@@ -315,6 +330,9 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
                 scene.current?.send({ type: "focus", key });
               }}
             />
+            {city2.season ? (
+              <SeasonCard season={city2.season} crest={city2.crest} onPress={() => router.push("/kulup-sehri-sezon")} />
+            ) : null}
             {city2.el ? (
               <>
                 <SectionTitle title="Elit Lira" meta="kulübünün işletme geliri" />
@@ -339,6 +357,13 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
               <>
                 <SectionTitle title="Altyapı" meta="oyuncu yetiştir, transferden EL kazan" />
                 <AcademyCityCard academy={city2.academy} onPress={() => router.push("/kulup-sehri-akademi")} />
+              </>
+            ) : null}
+            {city2.team?.team || city2.visit ? (
+              <>
+                <SectionTitle title="Takım ve ziyaret" meta="takımınla tesis kur, şehirleri gez" />
+                {city2.team?.team ? <TeamCityCard team={city2.team.team} onPress={() => router.push("/kulup-sehri-takim")} /> : null}
+                {city2.visit ? <VisitEntryCard visit={city2.visit} onPress={() => router.push("/kulup-sehri-ziyaret")} /> : null}
               </>
             ) : null}
             <DailyRewardEntry />
@@ -455,7 +480,7 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
         }}
       />
       <ElHistorySheet visible={elHistory} onClose={() => setElHistory(false)} el={city2?.el ?? null} />
-      <ElHowSheet visible={elHow} onClose={() => setElHow(false)} el={city2?.el ?? null} />
+      <ElHowSheet visible={elHow} onClose={() => setElHow(false)} el={city2?.el ?? null} bonus={incomeBonus} />
       <LandmarkSheet
         visible={marksSheet}
         onClose={() => setMarksSheet(false)}
@@ -487,6 +512,13 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
         }
       />
       <MigrationNotice city2={city2} />
+      <SeasonEndSheet
+        city2={city2}
+        onPlace={() => {
+          setMarksTab("depot");
+          setMarksSheet(true);
+        }}
+      />
       <StepCelebration result={stepResult} city2={city2} onClose={() => setStepResult(null)} />
       <BottomSheet visible={kitSheet} onClose={() => setKitSheet(false)} title="Kulüp renkleri" snap="half">
         <Text style={styles.sheetLead} {...textScale.long}>

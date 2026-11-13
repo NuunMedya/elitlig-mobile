@@ -119,6 +119,8 @@ export const LANDMARK_TIER_STYLE: Record<string, { icon: string; colors: [string
   simge: { icon: "business", colors: ["#C4B5FD", "#7C3AED"] },
   kupa: { icon: "trophy", colors: ["#FDE68A", "#D97706"] },
   seri: { icon: "flame", colors: ["#FDBA74", "#EA580C"] },
+  /** Faz 5 · onur yapıları (yalnız kazanılır). */
+  onur: { icon: "ribbon", colors: ["#FDE68A", "#B45309"] },
 };
 
 /** Tek tek sembol yapıların ikonları (yoksa kademe ikonu). */
@@ -144,6 +146,11 @@ export const LANDMARK_ICONS: Record<string, string> = {
   seri_cesmesi: "water",
   sadik_baskan_heykeli: "ribbon",
   altin_kupa_aniti: "trophy",
+  sezon_kupasi_bronz: "trophy",
+  sezon_kupasi_gumus: "trophy",
+  sezon_kupasi_altin: "trophy",
+  prestij_aniti: "star",
+  takim_tesisi_kapisi: "people",
 };
 
 /**
@@ -178,3 +185,27 @@ export const CITY2_EL = {
   ink: "#0F766E",
   inkDark: "#5EEAD4",
 } as const;
+
+/**
+ * Faz 5 · sezon dilimleri (kupa, rozet, arma çerçevesi): açık → koyu madalya
+ * renkleri, kenar ve koyu metin. İki temada aynıdır (madalya kendi zeminidir).
+ * Prestij yıldızı CITY2_UI.star (altın yıldız) ile çizilir.
+ */
+export const CITY2_SEASON = {
+  altin: { colors: ["#FDE68A", "#D99A06"] as [string, string], edge: "#B45309", ink: "#5C3D02" },
+  gumus: { colors: ["#F1F5F9", "#94A3B8"] as [string, string], edge: "#64748B", ink: "#1E293B" },
+  bronz: { colors: ["#FBC08F", "#B8662D"] as [string, string], edge: "#8A4513", ink: "#4A2208" },
+  none: { colors: ["#E2E8F0", "#CBD5E1"] as [string, string], edge: "#94A3B8", ink: "#334155" },
+  /** Prestij kartının koyu sahnesi (lacivert → mor). */
+  prestige: ["#2A1F6E", "#120C3A"] as [string, string],
+} as const;
+
+export type SeasonTierKey = "altin" | "gumus" | "bronz" | "none";
+export const seasonTierStyle = (tier: string | null | undefined) =>
+  CITY2_SEASON[(tier === "altin" || tier === "gumus" || tier === "bronz" ? tier : "none") as SeasonTierKey];
+
+/** Takım tesisi: tesis karosu (yeşil saha tonu, binalardan ayrı). */
+export const CITY2_TEAM = {
+  tile: ["#34D399", "#047857"] as [string, string],
+} as const;
+

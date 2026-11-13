@@ -841,6 +841,8 @@ export function IncomeSection({
     `taban ${fmtRate(inc.base_per_hour)}`,
     inc.boost_pct ? `destek +${fmtPct(inc.boost_pct)}` : null,
     inc.staff_pct ? `personel +${fmtPct(inc.staff_pct)}` : null,
+    inc.prestige_pct ? `prestij +${fmtPct(inc.prestige_pct)}` : null,
+    inc.team_pct ? `takım tesisi +${fmtPct(inc.team_pct)}` : null,
     `form ${fmtMult(inc.multiplier)}`,
   ]
     .filter(Boolean)
@@ -1352,10 +1354,13 @@ export function ElHowSheet({
   visible,
   onClose,
   el,
+  bonus,
 }: {
   visible: boolean;
   onClose: () => void;
   el: City2El | null;
+  /** Faz 5: prestij ve takım tesisi üretim bonusu (yoksa satır çizilmez). */
+  bonus?: { prestige: number; team: number } | null;
 }) {
   const rows: {
     icon: keyof typeof Ionicons.glyphMap;
@@ -1383,6 +1388,20 @@ export function ElHowSheet({
           title: "Gerçek futbol geliri artırır",
           text: "Son 4 haftadaki maçların, reytingin, galibiyetlerin ya da taraftar etkinliklerin gelir çarpanını ×0,6 ile ×1,6 arasında belirler.",
         },
+        ...(bonus && (bonus.prestige > 0 || bonus.team > 0)
+          ? [
+              {
+                icon: "star" as const,
+                title: "Prestij ve takım bonusu",
+                text: [
+                  bonus.prestige > 0 ? `Prestijin bütün binaların üretimine +${fmtPct(bonus.prestige)} ekler.` : null,
+                  bonus.team > 0 ? `Takım tesisin +${fmtPct(bonus.team)} ekler.` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" "),
+              },
+            ]
+          : []),
         {
           icon: "construct",
           title: "EL ile yükselt",

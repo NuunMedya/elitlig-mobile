@@ -14,7 +14,8 @@
  *   3. Lig              — lig/sezon ve şehir: kapsam alt sayfası (tek örnek,
  *                         app/_layout.tsx) `openScopeSheet()` ile açılır.
  *   4. Hesap ve güvenlik — Hesabım, Şifre değiştir, Engellediğim üyeler.
- *   4b. Gizlilik        — "Altyapı oyunlarında adım kullanılmasın" (Kulüp
+ *   4b. Gizlilik        — "Altyapı oyunlarında adım kullanılmasın" ve (Faz 5)
+ *                         "Şehrimi ziyarete kapat" (Kulüp
  *                         Şehri akademisi; GET/PUT /api/users/me/privacy-
  *                         preferences). Sunucu tanımıyorsa (404) grup çizilmez.
  *                         Aynı anahtar akademinin bilgi penceresinde de var.
@@ -407,6 +408,27 @@ export default function SettingsScreen() {
                   </View>
                   <Toggle value={privacy.value} onValueChange={privacy.set} disabled={privacy.saving} accessibilityLabel={privacy.label} />
                 </Touchable>
+                {privacy.visit.supported ? (
+                  <Touchable
+                    feedback="row"
+                    onPress={() => !privacy.visit.saving && privacy.visit.set(!privacy.visit.value)}
+                    accessibilityRole="switch"
+                    accessibilityState={{ checked: privacy.visit.value, disabled: privacy.visit.saving }}
+                    accessibilityLabel={`${privacy.visit.label}. ${privacy.visit.value ? "açık" : "kapalı"}`}
+                    style={[styles.privacyRow, styles.privacyRowRule]}
+                  >
+                    <IconTile icon="business" tone="violet" size={36} glow={false} />
+                    <View style={styles.flex}>
+                      <Text style={styles.privacyTitle} {...textScale.dense}>
+                        {privacy.visit.label}
+                      </Text>
+                      <Text style={styles.privacyHelp} {...textScale.long}>
+                        {privacy.visit.help ?? "Açıkken Kulüp Şehrin başka üyelere gösterilmez ve ziyaret listelerinde çıkmaz."}
+                      </Text>
+                    </View>
+                    <Toggle value={privacy.visit.value} onValueChange={privacy.visit.set} disabled={privacy.visit.saving} accessibilityLabel={privacy.visit.label} />
+                  </Touchable>
+                ) : null}
               </MenuGroup>
             ) : null}
             <MenuGroup title="Oturum" icon="power" tone="red" items={sessionItems} style={styles.group} />
@@ -536,6 +558,7 @@ const styles = StyleSheet.create({
 
   themeRow: { flexDirection: "row", gap: space.sm },
   privacyRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.md, paddingVertical: space.m },
+  privacyRowRule: { borderTopWidth: hairline, borderTopColor: colors.separator },
   privacyTitle: { ...type.h3, color: colors.textPrimary },
   privacyHelp: { ...type.bodySm, color: colors.textTertiary, marginTop: 1 },
   sheetRow: { flexDirection: "row", gap: space.sm, paddingBottom: space.md },

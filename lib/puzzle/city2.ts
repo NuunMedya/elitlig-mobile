@@ -113,7 +113,9 @@ export interface City2Step extends City2StepView {
 export interface City2History {
   rung: number;
   at: string | null;
-  via: "migration" | "player" | "fan" | "stars" | null;
+  /** Faz 5: "prestige" — prestijle 1. kademeye dönüş (`level` = yeni prestij seviyesi). */
+  via: "migration" | "player" | "fan" | "stars" | "prestige" | null;
+  level?: number;
   /** Yıldızla açıldıysa ödenen bedel. */
   cost?: number;
 }
@@ -182,7 +184,7 @@ export interface City2Building {
 export type City2LandmarkLock =
   | { code: "RUNG"; rung: number }
   | { code: "MAX_OWNED"; max: number }
-  | { code: "GRANT_ONLY"; grant: string }
+  | { code: "GRANT_ONLY"; grant: string; text?: string }
   | { code: string; [k: string]: unknown };
 
 export interface City2CatalogueItem {
@@ -234,8 +236,10 @@ export interface City2Stars {
   spent_total: number;
   available: number;
   /** Eski city.stars ile aynı kaynak kırılımı (Ekonomi A). */
-  sources: Omit<CityState["stars"], "spent" | "available"> & { refund?: number };
+  sources: Omit<CityState["stars"], "spent" | "available"> & { refund?: number; visit?: number };
   xp: CityXp;
+  /** Faz 5: prestij yıldız bonusu (yalnız > 0; `available` içinde). */
+  prestige_bonus?: number;
 }
 
 export interface City2Migration {
@@ -267,6 +271,12 @@ export interface City2State {
    * `undefined` (alan yok): eski sunucu → akademi arayüzü hiç çizilmez.
    */
   academy?: City2Academy | null;
+  /* Faz 5 (eski sunucuda yok → ilgili arayüz hiç çizilmez). */
+  season?: City2Season;
+  prestige?: City2Prestige;
+  crest?: City2Crest;
+  team?: { team: City2TeamSummary | null; text: string | null };
+  visit?: City2VisitSummary;
 }
 
 export interface City2Response {
@@ -301,6 +311,9 @@ export interface City2IncomeBuilding {
   base_per_hour: number;
   boost_pct: number;
   staff_pct: number;
+  /** Faz 5: prestij ve takım tesisi gelir bonusu (eski sunucuda yok). */
+  prestige_pct?: number;
+  team_pct?: number;
   multiplier: number;
   per_hour: number;
   per_day: number;
@@ -448,6 +461,10 @@ export const city2Keys = {
   elHistory: () => [...cityKeys.me(), "v2", "el-history"] as const,
   /** Faz 3: üyenin gizlilik tercihleri (akademide adının kullanılmaması). */
   privacy: () => ["users", "me", "privacy-preferences"] as const,
+  /* Faz 5 */
+  team: () => [...cityKeys.me(), "v2", "team"] as const,
+  visitList: (kind: string) => [...cityKeys.me(), "v2", "visit-list", kind] as const,
+  visit: (userId: number) => [...cityKeys.me(), "v2", "visit", userId] as const,
 };
 
 export const getCity2 = () => get<City2Response>("/api/puzzle/city2", undefined, { retry: false });
@@ -575,7 +592,10 @@ export interface City2Academy {
   time: { year_hours: number; text: string };
   names_text: string;
   name_stages: { key: string; title: string; min: number; max: number | null }[];
-  slots: { used: number; max: number; by_stage: number[]; full: boolean };
+  slots: { used: number; max: number; by_stage: number[]; full: boolean; over?: number };
+  /** Faz 5: akademi binası yokken (prestij sonrası) yeni oyuncu gelmez. */
+  paused?: boolean;
+  paused_text?: string | null;
   next_intake_at: string | null;
   intake_hours: number | null;
   full_text: string | null;
@@ -613,11 +633,16 @@ export const promoteAcademyPlayer = (player: string) =>
 export const listAcademyPlayer = (player: string, listed: boolean) =>
   post<City2AcademyWrite & { player: string; listed: boolean }>("/api/puzzle/city2/academy/list", { player, listed }, { retry: false });
 
-/** "Altyapı oyunlarında adım kullanılmasın" (eski sunucuda 404 → ayar gizlenir). */
+/**
+ * Gizlilik tercihleri: "Altyapı oyunlarında adım kullanılmasın" (Faz 3) ve
+ * "Şehrimi ziyarete kapat" (Faz 5; eski sunucuda alan yok → anahtar gizlenir).
+ * Eski sunucuda 404 → bütün ayar gizlenir.
+ */
+export type PrivacyKey = "academy_name_opt_out" | "city_visit_opt_out";
 export interface PrivacyPreferences {
-  preferences: { academy_name_opt_out: boolean };
-  labels?: { academy_name_opt_out?: string };
-  help?: { academy_name_opt_out?: string };
+  preferences: { academy_name_opt_out?: boolean; city_visit_opt_out?: boolean };
+  labels?: Partial<Record<PrivacyKey, string>>;
+  help?: Partial<Record<PrivacyKey, string>>;
   message?: string;
   /** Hemen yeniden adlandırılan akademi sayısı. */
   renamed?: number;
@@ -625,8 +650,9 @@ export interface PrivacyPreferences {
 
 export const getPrivacyPreferences = () => get<PrivacyPreferences>("/api/users/me/privacy-preferences", undefined, { retry: false });
 
-export const setPrivacyPreferences = (academyNameOptOut: boolean) =>
-  put<PrivacyPreferences>("/api/users/me/privacy-preferences", { academy_name_opt_out: academyNameOptOut }, { retry: false });
+/** Yalnız verilen anahtar yazılır (sunucu ikisini de tek tek kabul eder). */
+export const setPrivacyPreferences = (body: Partial<Record<PrivacyKey, boolean>>) =>
+  put<PrivacyPreferences>("/api/users/me/privacy-preferences", body, { retry: false });
 
 /* ───────────── Akademi yardımcıları ───────────── */
 
@@ -771,6 +797,8 @@ export function landmarkLockText(lock: City2LandmarkLock | null, ladder: Pick<Ci
   if (!lock) return null;
   if (lock.code === "RUNG" && typeof lock.rung === "number") return rungOpensText(ladder, lock.rung);
   if (lock.code === "MAX_OWNED") return Number(lock.max) === 1 ? "Bundan bir tane olur" : `En çok ${lock.max} tane`;
+  // Faz 5 onur yapıları (sezon kupası, prestij anıtı, takım kapısı) kendi açıklamasını taşır.
+  if (lock.code === "GRANT_ONLY" && typeof lock.text === "string" && lock.text) return lock.text;
   if (lock.code === "GRANT_ONLY") return grantTitle ? `Seri ödülü · ${grantTitle}` : "Seri ödülü";
   return "Şu an alınamaz";
 }
@@ -792,3 +820,345 @@ export function buildingMark(b: City2Building, available: number): "up" | "lock"
   if (a.blocked) return null;
   return available >= a.cost ? "up" : null;
 }
+
+/* ═══════════════════════ FAZ 5 · SEZON, PRESTİJ, TAKIM, ZİYARET ═══════════════════════
+ *
+ *   GET  /api/puzzle/city2/season                → { season, crest, prestige } (sezon sonu dilimi bu okumada verilir)
+ *   POST /api/puzzle/city2/prestige/preview      → { token, expires_at, preview, prestige, city2 }
+ *   POST /api/puzzle/city2/prestige {token}      → { level, collected, unplaced, prestige, crest, city2 }
+ *   GET  /api/puzzle/city2/team                  → takım tesisi + katkı sıralaması + bugünkü bağış hakkı
+ *   POST /api/puzzle/city2/team/donate {stars?, el?}
+ *   GET  /api/puzzle/city2/visit ?kind&limit     → listeler (featured · team · city · random)
+ *   GET  /api/puzzle/city2/visit/:userId         → başka bir şehrin salt okunur görünümü
+ *   POST /api/puzzle/city2/visit/:userId/applause
+ *
+ * Sezon kupaları, rozetler, arma çerçeveleri, prestij yıldızları ve takım
+ * yapısı yalnız görünüştür; Elit Lira oyun içi paradır, hiçbir şey satın alınmaz.
+ */
+
+export type City2SeasonTier = "altin" | "gumus" | "bronz";
+export type City2SeasonGroup = "city" | "real" | "quest" | "social";
+
+export interface City2SeasonInfo {
+  id: number;
+  title: string;
+  name: string;
+  from: string;
+  to: string;
+  next: string;
+  start_at: string;
+  end_at: string;
+  range_text: string;
+}
+
+export interface City2SeasonPart {
+  key: string;
+  label: string;
+  group: City2SeasonGroup | string;
+  have: number;
+  per: number;
+  points_per: number;
+  cap: number;
+  counted: number;
+  points: number;
+  max_points: number;
+}
+
+export interface City2SeasonCurrent extends City2SeasonInfo {
+  days_left: number;
+  score: number;
+  parts: City2SeasonPart[];
+  /** Sıra (en az 100 puanı olanlar arasında); puan < 100 ise null. */
+  rank: number | null;
+  ranked: number | null;
+  ext_at: string | null;
+}
+
+export interface City2SeasonBadge {
+  season: number;
+  tier: City2SeasonTier | string;
+  key: string;
+  title: string;
+  frame: string;
+  frame_title: string;
+}
+
+export interface City2SeasonHistory extends City2SeasonInfo {
+  score: number;
+  parts: Record<string, number>;
+  tier: City2SeasonTier | string | null;
+  tier_title: string | null;
+  rank: number | null;
+  total: number | null;
+  pct: number | null;
+  basis: "rank" | "fallback" | string | null;
+  /** Sıra henüz hesaplanmadı (bir sonraki okumada verilir). */
+  pending: boolean;
+  at: string | null;
+  badge: City2SeasonBadge | null;
+}
+
+export interface City2SeasonReward {
+  tier: City2SeasonTier | string;
+  title: string;
+  top_pct: number;
+  landmark: string;
+  min_score: number;
+}
+
+export interface City2Season {
+  intro: string;
+  current: City2SeasonCurrent | null;
+  preseason: { text: string; starts_at: string; season: City2SeasonInfo } | null;
+  rewards: City2SeasonReward[];
+  weights: { key: string; label: string; group: string; per: number; points: number; cap: number }[];
+  /** Yeniden eskiye. */
+  history: City2SeasonHistory[];
+  badges: City2SeasonBadge[];
+}
+
+export interface City2Prestige {
+  level: number;
+  max_level: number;
+  min_rung: number;
+  el_pct: number;
+  star_pct: number;
+  star_bonus: number;
+  at: string | null;
+  history: { level: number; at: string; dev_before: number; stars_at: number }[];
+  can_prestige: boolean;
+  blocked: null | "RUNG_REQUIRED" | "PRESTIGE_MAXED" | string;
+  next: { level: number; el_pct: number; star_pct: number } | null;
+  intro: string;
+  warning: string;
+}
+
+export interface City2Crest {
+  prestige_stars: number;
+  frame: string | null;
+  frame_title: string | null;
+  best: City2SeasonBadge | null;
+  badges: City2SeasonBadge[];
+}
+
+export interface City2TeamSummary {
+  id: number;
+  name: string;
+  level: number;
+  max_level: number;
+  stage_title: string | null;
+  el_pct: number;
+  progress: number;
+  next_cost: number | null;
+  size: number;
+}
+
+export interface City2VisitSummary {
+  applause: number;
+  today: number;
+  closed: boolean;
+  privacy_label: string;
+}
+
+export interface City2SeasonResponse {
+  season: City2Season;
+  crest: City2Crest;
+  prestige: City2Prestige;
+}
+
+export const getCity2Season = () => get<City2SeasonResponse>("/api/puzzle/city2/season", undefined, { retry: false });
+
+/* ───────────── Prestij ───────────── */
+
+export interface City2PrestigePreview {
+  level: { before: number; after: number };
+  gains: {
+    el_pct: { before: number; after: number };
+    star_pct: { before: number; after: number };
+    landmark: { key: string; title: string; beauty: number } | null;
+    crest_stars: number;
+  };
+  reset: {
+    rung: { before: number; after: number };
+    dev: { before: number; after: number };
+    buildings: { key: string; title: string; before: number; after: number }[];
+    landmarks_unplaced: string[];
+    academy: { players: number; a_team: number; paused: boolean; text: string } | null;
+  };
+  keep: { el_balance: number; el_upgrades: boolean; landmarks: number; academy_players: number; history: boolean; stars_spent_refund: number };
+  warning: string;
+}
+
+export interface City2PrestigePreviewResult {
+  token: string;
+  expires_at: string;
+  preview: City2PrestigePreview;
+  prestige: City2Prestige;
+  city2: City2State;
+}
+
+export interface City2PrestigeResult {
+  level: number;
+  collected: number;
+  unplaced: string[];
+  prestige: City2Prestige;
+  crest: City2Crest;
+  city2: City2State;
+}
+
+export const previewCity2Prestige = () => post<City2PrestigePreviewResult>("/api/puzzle/city2/prestige/preview", undefined, { retry: false });
+export const confirmCity2Prestige = (token: string) => post<City2PrestigeResult>("/api/puzzle/city2/prestige", { token }, { retry: false });
+
+/* ───────────── Takım tesisi ───────────── */
+
+export interface City2TeamContribution {
+  rank: number;
+  user_id: number;
+  name: string;
+  points: number;
+  stars: number;
+  el: number;
+  last_at: string | null;
+  me: boolean;
+}
+
+export interface City2TeamFacility {
+  id: number;
+  name: string;
+  size: number;
+  size_counted: number;
+  level: number;
+  max_level: number;
+  stage_title: string | null;
+  next_stage_title: string | null;
+  progress: number;
+  next_cost: number | null;
+  points_total: number;
+  stars_total: number;
+  el_total: number;
+  contributors: number;
+  el_pct: number;
+  next_el_pct: number | null;
+  landmark: { key: string; level: number; unlocked: boolean };
+  costs: { level: number; cost: number; title: string }[];
+  rates: { star_points: number; el_per_point: number; daily_cap: { stars: number; el: number } };
+  intro: string;
+}
+
+export interface City2TeamToday {
+  stars: number;
+  el: number;
+  left: { stars: number; el: number };
+  cap: { stars: number; el: number };
+}
+
+export interface City2TeamView {
+  team: City2TeamFacility | null;
+  rank?: { rank: number | null; total: number };
+  contributions?: { top: City2TeamContribution[]; me: { rank: number | null; points: number; stars: number; el: number } };
+  today?: City2TeamToday;
+  text: string | null;
+  intro?: string;
+}
+
+export interface City2DonateResult extends City2TeamView {
+  stars: number;
+  el: number;
+  points: number;
+  level: number;
+  level_up: number;
+  balance: number;
+  city2: City2State;
+}
+
+export const getCity2Team = () => get<City2TeamView>("/api/puzzle/city2/team", undefined, { retry: false });
+export const donateCity2Team = (body: { stars?: number; el?: number }) => post<City2DonateResult>("/api/puzzle/city2/team/donate", body, { retry: false });
+
+/* ───────────── Şehir ziyareti ───────────── */
+
+export type City2VisitKind = "featured" | "team" | "city" | "random";
+
+export interface City2VisitCard {
+  user_id: number;
+  name: string;
+  city: string | null;
+  beauty: number;
+  rung: number;
+  step_label: string | null;
+  step_title: string | null;
+  prestige: number;
+  applause: number;
+  frame: string | null;
+}
+
+export interface City2VisitLists {
+  intro: string;
+  privacy: PrivacyPreferences;
+  featured?: City2VisitCard[];
+  team?: City2VisitCard[];
+  team_info?: { id: number; name: string } | null;
+  city?: City2VisitCard[];
+  random?: City2VisitCard[];
+}
+
+export interface City2PublicCity {
+  user_id: number;
+  name: string;
+  city: string | null;
+  team_name: string | null;
+  ladder: { rung: number; max_rung: number; no: number; label: string; key: string; title: string };
+  buildings: { key: string; title: string; icon: string; stage: number; max: number; current: { key: string; title: string } | null }[];
+  landmarks: { id: string; key: string; title: string; tier: string; beauty: number; slot: string }[];
+  grid: { cols: number; rows: number; open_rows: number };
+  beauty: number;
+  dev: number;
+  prestige: { level: number };
+  crest: City2Crest;
+  applause: { total: number; today: number };
+  mine: boolean;
+  applauded_today: boolean;
+}
+
+export interface City2VisitView {
+  city: City2PublicCity;
+  applause: { can: boolean; blocked: string | null; left_today: number; rewards: { visitor: number; target: number } };
+}
+
+export interface City2ApplauseResult {
+  applauded: boolean;
+  target_id: number;
+  stars: { visitor: number; target: number };
+  applause: { total: number; today: number };
+  left_today: number;
+}
+
+export const getCity2VisitList = (kind: City2VisitKind, limit = 20) => get<City2VisitLists>("/api/puzzle/city2/visit", { kind, limit }, { retry: false });
+export const getCity2Visit = (userId: number) => get<City2VisitView>(`/api/puzzle/city2/visit/${userId}`, undefined, { retry: false });
+export const applaudCity2 = (userId: number) => post<City2ApplauseResult>(`/api/puzzle/city2/visit/${userId}/applause`, undefined, { retry: false });
+
+/* ───────────── Faz 5 yardımcıları ───────────── */
+
+/** "altin" → "Altın" (sunucu başlığı yoksa). */
+export const SEASON_TIER_TITLE: Record<string, string> = { altin: "Altın", gumus: "Gümüş", bronz: "Bronz" };
+
+/**
+ * Bu sezon için tahmini dilim (yalnız sıra biliniyorsa): sunucunun kuralı
+ * (en az 100 puanlılar arasında ilk %10 altın, ilk %35 gümüş, kalanlar bronz).
+ */
+export function estimateTier(season: Pick<City2Season, "current" | "rewards">): City2SeasonReward | null {
+  const cur = season.current;
+  if (!cur || cur.rank == null || !cur.ranked) return null;
+  const rewards = [...season.rewards].sort((a, b) => a.top_pct - b.top_pct);
+  if (!rewards.length || cur.score < (rewards[0]?.min_score ?? 100)) return null;
+  for (const r of rewards) if (cur.rank <= Math.max(1, Math.ceil(r.top_pct * cur.ranked))) return r;
+  return rewards[rewards.length - 1] ?? null;
+}
+
+/** Sezon bitimine kalan süre: "81 gün" · son iki günde saat/dakika. */
+export function seasonLeftText(cur: Pick<City2SeasonCurrent, "days_left" | "end_at">, now = Date.now()): string {
+  if (cur.days_left > 2) return `${cur.days_left} gün`;
+  return spanText(cur.end_at, now) ?? `${Math.max(0, cur.days_left)} gün`;
+}
+
+/** Faz 5 alanları sunucuda var mı? */
+export const hasFaz5 = (c: City2State | null | undefined) => Boolean(c && c.season && c.prestige);
