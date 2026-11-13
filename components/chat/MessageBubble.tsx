@@ -602,7 +602,7 @@ export function RowShell({ mine, selecting, selected, highlighted, last, onPress
   const responder = useMemo(
     () =>
       PanResponder.create({
-        onMoveShouldSetPanResponder: (_e, g) => g.dx > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
+        onMoveShouldSetPanResponder: (_e, g) => g.dx > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
         onPanResponderTerminationRequest: () => false,
         onPanResponderMove: (_e, g) => {
           const x = Math.max(0, g.dx);
@@ -630,40 +630,40 @@ export function RowShell({ mine, selecting, selected, highlighted, last, onPress
     transform: [{ scale: dx.interpolate({ inputRange: [0, REPLY_TRIGGER, REPLY_TRIGGER + 20], outputRange: [0.4, 1, 1.15], extrapolate: "clamp" }) }],
   };
 
+  // Kaydırma tutamağı satırın ATASINDADIR: basılı Touchable yanıtlayıcıyken
+  // hareket ancak bir ata tarafından devralınabilir (RN yanıtlayıcı kuralı).
   return (
-    <Touchable
-      feedback="none"
-      haptic="none"
-      onPress={onPress}
-      onLongPress={onLongPress}
-      delayLongPress={260}
-      accessible={selecting || whole}
-      accessibilityRole={selecting ? "checkbox" : "text"}
-      accessibilityLabel={accessibilityLabel}
-      accessibilityHint={selecting ? undefined : whole ? "Mesaj seçenekleri için basılı tut" : undefined}
-      accessibilityState={selecting ? { checked: selected } : undefined}
-      style={[styles.row, last ? styles.rowLast : null, selected || highlighted ? styles.rowMarked : null]}
-    >
-      {selecting ? (
-        <View style={styles.check}>
-          <Ionicons name={selected ? "checkmark-circle" : "ellipse-outline"} size={22} color={selected ? colors.brand : chatPalette.bubbleMeta} />
-        </View>
-      ) : null}
+    <View>
       {swipeable ? (
         <Animated.View pointerEvents="none" style={[styles.replyHint, arrow]}>
           <Ionicons name="arrow-undo" size={16} color={colors.brandAccent} />
         </Animated.View>
       ) : null}
-      <Animated.View style={[styles.rowBody, rise.style]} pointerEvents={selecting ? "none" : "box-none"}>
-        <Animated.View
-          style={[styles.rowSlide, center ? styles.rowCenter : mine ? styles.rowMine : styles.rowTheirs, swipeable ? { transform: [{ translateX: dx }] } : null]}
-          pointerEvents="box-none"
-          {...(swipeable ? responder.panHandlers : null)}
+      <Animated.View style={swipeable ? { transform: [{ translateX: dx }] } : null} {...(swipeable ? responder.panHandlers : null)}>
+        <Touchable
+          feedback="none"
+          haptic="none"
+          onPress={onPress}
+          onLongPress={onLongPress}
+          delayLongPress={260}
+          accessible={selecting || whole}
+          accessibilityRole={selecting ? "checkbox" : "text"}
+          accessibilityLabel={accessibilityLabel}
+          accessibilityHint={selecting ? undefined : whole ? "Mesaj seçenekleri için basılı tut" : undefined}
+          accessibilityState={selecting ? { checked: selected } : undefined}
+          style={[styles.row, last ? styles.rowLast : null, selected || highlighted ? styles.rowMarked : null]}
         >
-          {children}
-        </Animated.View>
+          {selecting ? (
+            <View style={styles.check}>
+              <Ionicons name={selected ? "checkmark-circle" : "ellipse-outline"} size={22} color={selected ? colors.brand : chatPalette.bubbleMeta} />
+            </View>
+          ) : null}
+          <Animated.View style={[styles.rowBody, center ? styles.rowCenter : mine ? styles.rowMine : styles.rowTheirs, rise.style]} pointerEvents={selecting ? "none" : "box-none"}>
+            {children}
+          </Animated.View>
+        </Touchable>
       </Animated.View>
-    </Touchable>
+    </View>
   );
 }
 
@@ -823,7 +823,6 @@ const styles = StyleSheet.create({
   rowMarked: { backgroundColor: chatPalette.highlight },
   check: { width: 30, alignItems: "flex-start", justifyContent: "center" },
   rowBody: { flex: 1, minWidth: 0 },
-  rowSlide: { alignSelf: "stretch" },
   rowMine: { alignItems: "flex-end" },
   rowTheirs: { alignItems: "flex-start" },
   rowCenter: { alignItems: "stretch" },
@@ -929,5 +928,5 @@ const styles = StyleSheet.create({
   unreadPill: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: space.md, height: 24, borderRadius: radius.pill },
   unreadPillFill: { borderRadius: radius.pill },
   unreadText: { ...type.labelXs, color: palette.textOnBrand },
-  replyHint: { position: "absolute", left: space.md, width: 30, height: 30, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandDim },
+  replyHint: { position: "absolute", left: space.md, top: "50%", marginTop: -15, width: 30, height: 30, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandDim },
 });

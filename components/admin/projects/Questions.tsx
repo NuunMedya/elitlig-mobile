@@ -14,7 +14,7 @@ import { ChipsField, DateField, SelectField, confirmAction } from "@/components/
 import { Badge, Button, Chip, ChipGroup, EmptyState, Input, SegmentedControl, Touchable, withAlpha } from "@/components/ui";
 import { PRIORITIES, PRIORITY_META, QUESTION_STATUS_META, dueLabel, matches, timeAgo, todayIso } from "@/lib/admin/projectUtils";
 import type { Priority, Question, QuestionStatus } from "@/lib/api/admin/projects";
-import { colors, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 import { useProject } from "./ProjectContext";
 import { Pill } from "./ui";

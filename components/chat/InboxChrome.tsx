@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
   fieldBack: { width: 36, height: ACTION, alignItems: "center", justifyContent: "center" },
   fieldIcon: { width: ACTION - 2, height: ACTION, alignItems: "center", justifyContent: "center" },
   inputWrap: { flex: 1, flexDirection: "row", alignItems: "center", paddingRight: space.sm },
-  input: { ...type.body, lineHeight: undefined, color: colors.textPrimary, flex: 1, paddingVertical: 0 },
+  input: { ...type.body, lineHeight: undefined, color: colors.textPrimary, flex: 1, paddingVertical: 0, ...({ outlineStyle: "none" } as object) },
   clear: { width: 22, height: 22, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface3 },
 
   pillBar: { height: FILTER_BAR_HEIGHT, justifyContent: "center" },

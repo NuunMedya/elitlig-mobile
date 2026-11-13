@@ -9,7 +9,7 @@
  *   · Zemin: gece mürekkebi degrade + sahne aurorası.
  *   · Avatar: imza degradesi halka; çalarken (gelen / giden / bağlanıyor)
  *     avatarın çevresinden 1,6 sn'de bir "ses dalgası" halkası büyüyüp söner.
- *     (Sürekli `Animated.loop` yerine zamanlayıcıyla tetiklenen TEK seferlik
+ *     (Sürekli döngü yerine zamanlayıcıyla tetiklenen TEK seferlik
  *     animasyon; "hareketi azalt" açıkken hiç oynamaz.)
  *   · Durum: cam kapsül; görüşmede nane nokta + Archivo sayaç.
  *   · Denetimler: cam dok içinde yuvarlak cam düğmeler (sessiz, hoparlör);
