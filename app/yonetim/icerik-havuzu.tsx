@@ -28,13 +28,14 @@ import {
   AdminScreen,
   confirmAction,
   FormSheet,
-  RecordCard,
   useAdminMutation,
   type FieldDef,
   type FilterOption,
   type SheetAction,
 } from "@/components/admin";
-import { Button, FAB, SegmentedControl, useToast } from "@/components/ui";
+import { FolderCard, PresetCard, TemplateCard } from "@/components/admin/broadcast/PoolParts";
+import { CountTiles } from "@/components/admin/system/SysKit";
+import { Button, FAB, IconTile, SegmentedControl, useToast } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { formatDate } from "@/lib/admin/format";
 import {
@@ -317,17 +318,16 @@ export default function ContentPoolScreen() {
           emptyIcon="images-outline"
           emptyTitle="Sonuç bulunamadı"
           emptyBody={q ? `“${q}” için eşleşen içerik türü yok.` : undefined}
-          renderItem={({ item }) => (
-            <RecordCard
-              title={item.name}
-              subtitle={item.description}
-              meta={TEMPLATE_CATEGORY_LABELS[item.category]}
-              icon="image-outline"
-              iconTone={item.featured ? "brand" : "neutral"}
-              badges={[item.featured ? { label: "Öne çıkan", tone: "brand" } : null, ...item.sizes.map((s) => ({ label: TEMPLATE_SIZE_LABELS[s] }))]}
-              onPress={() => templateMenu(item)}
+          extraHeader={
+            <CountTiles
+              items={[
+                { key: "all", label: "İçerik türü", value: CONTENT_TEMPLATES.length, icon: "images-outline", tone: "brand" },
+                { key: "featured", label: "Öne çıkan", value: CONTENT_TEMPLATES.filter((t) => t.featured).length, icon: "sparkles-outline", tone: "warn" },
+                { key: "folders", label: "Klasör", value: folders.length, icon: "folder-outline", tone: "accent" },
+              ]}
             />
-          )}
+          }
+          renderItem={({ item }) => <TemplateCard item={item} onPress={() => templateMenu(item)} />}
         />
       ) : folder ? (
         <AdminList<ContentPreset>
@@ -340,6 +340,7 @@ export default function ContentPoolScreen() {
           extraHeader={
             <View style={styles.folderHead}>
               <Button label="Klasörler" icon="chevron-back" variant="ghost" size="sm" onPress={() => setFolderId(null)} />
+              <IconTile icon="folder-open" tone="violet" size={40} />
               <View style={styles.folderTitle}>
                 <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
                   {folder.name}
@@ -357,12 +358,9 @@ export default function ContentPoolScreen() {
           emptyTitle="Klasör boş"
           emptyBody={folder.canEdit ? "“İçerik ekle” ile bu klasöre hazır içerik ekle." : undefined}
           renderItem={({ item }) => (
-            <RecordCard
-              title={item.title}
-              subtitle={templateById(item.templateId)?.name ?? item.templateId}
+            <PresetCard
+              item={item}
               meta={[item.updatedAt ? formatDate(item.updatedAt) : null, item.updatedByName].filter(Boolean).join(" · ") || null}
-              icon="image-outline"
-              iconTone="brand"
               onPress={() => presetMenu(item, folder)}
             />
           )}
@@ -381,16 +379,7 @@ export default function ContentPoolScreen() {
           emptyTitle="Henüz klasör yok"
           emptyBody={canManage ? "Hazır içerik ayarlarını ekiple paylaşmak için klasör aç." : undefined}
           renderItem={({ item }) => (
-            <RecordCard
-              title={item.name}
-              subtitle={item.description || null}
-              meta={[`${item.presets.length} içerik`, item.updatedAt ? `Son güncelleme ${formatDate(item.updatedAt)}` : null].filter(Boolean).join(" · ")}
-              icon="folder-outline"
-              iconTone={item.canEdit ? "brand" : "neutral"}
-              badges={[item.canEdit ? { label: "Düzenleyebilirsin", tone: "brand" } : { label: `Sahibi: ${item.ownerName || "başka bir yönetici"}` }]}
-              onPress={() => setFolderId(item.id)}
-              onLongPress={canManage && item.canEdit ? () => folderMenu(item) : undefined}
-            />
+            <FolderCard item={item} onPress={() => setFolderId(item.id)} onLongPress={canManage && item.canEdit ? () => folderMenu(item) : undefined} />
           )}
         />
       )}

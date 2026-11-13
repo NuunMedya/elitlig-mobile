@@ -257,7 +257,7 @@ export default function PlayerMergeScreen() {
             <View style={styles.stack}>
               <CountStrip
                 items={[
-                  { key: "groups", label: "İlişkili grup", value: groups.data?.length ?? "—", icon: "git-merge", tone: "brand" },
+                  { key: "groups", label: "Grup", value: groups.data?.length ?? "—", icon: "git-merge", tone: "brand" },
                   { key: "records", label: "Kayıt", value: (groups.data ?? []).reduce((n, g) => n + g.players.length, 0), icon: "people" },
                 ]}
               />

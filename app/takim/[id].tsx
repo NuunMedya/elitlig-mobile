@@ -9,7 +9,7 @@
  *
  * EYLEMLER (detay sayfalarında ortak sözleşme):
  *   - PAYLAŞ başlığın SAĞ ÜSTÜNDE tek ikondur ("share-outline" →
- *     `TeamShareSheet`); başka yerde tekrarı yok.
+ *     paylaşım stüdyosu `TeamShare`); başka yerde tekrarı yok.
  *   - TAKİP = BİLDİRİM: kimlik şeridindeki "Takip et" `useFollowFlow().toggle`
  *     çağırır — takip edilir ve o takibin bildirim türleri alt sayfası açılır;
  *     zil (`openSettings`) aynı alt sayfayı yeniden açar.
@@ -72,7 +72,7 @@ import {
   type SquadEntry,
 } from "@/components/teampage/model";
 import { OverviewTab } from "@/components/teampage/OverviewTab";
-import { TeamShareSheet } from "@/components/teampage/ShareSheet";
+import { TeamShare } from "@/components/share/ProfileShare";
 import { SquadTab } from "@/components/teampage/SquadTab";
 import { StatsTab } from "@/components/teampage/StatsTab";
 import { TeamHero } from "@/components/teampage/TeamHero";
@@ -564,10 +564,6 @@ export default function TeamDetailScreen() {
   const closeShare = useCallback(() => setShareOpen(false), []);
   const openH2h = useCallback(() => setH2hOpen(true), []);
   const closeH2h = useCallback(() => setH2hOpen(false), []);
-  const shareError = useCallback(
-    () => toast.show({ message: "Görsel oluşturulamadı", tone: "danger" }),
-    [toast],
-  );
 
   /* Sekme kısayolları — `changeTab`tan geçer ki rota parametresi ve kaydırma
      sıfırlaması derin bağlantıyla birebir aynı yolu izlesin. */
@@ -820,18 +816,18 @@ export default function TeamDetailScreen() {
 
       <H2hSheet visible={h2hOpen} onClose={closeH2h} teamName={teamLabel} rivals={rivals} onPick={pickRival} />
 
-      <TeamShareSheet
+      {/* Paylaşım stüdyosu: sezon kartı, sıra rozeti ve takımı ortalayan
+          10'luk puan tablosu (components/share). */}
+      <TeamShare
         visible={shareOpen}
         onClose={closeShare}
-        teamName={teamLabel}
+        teamId={teamId}
+        name={teamLabel}
         logo={team.logo ?? null}
-        context={[meaningful(team.current_league), meaningful(team.current_season)]
-          .filter(Boolean)
-          .join(" · ")
-          .toLocaleUpperCase("tr-TR")}
-        rank={standing?.position ?? null}
-        row={standing?.row ?? null}
-        onError={shareError}
+        league={meaningful(team.current_league) ?? scope.leagueLabel ?? null}
+        season={meaningful(team.current_season) ?? scope.seasonLabel ?? null}
+        city={team.city ?? scope.cityLabel ?? null}
+        standings={standingsQuery.data}
       />
     </SafeAreaView>
   );

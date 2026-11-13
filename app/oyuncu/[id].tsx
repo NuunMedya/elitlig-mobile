@@ -12,7 +12,7 @@
  *
  * EYLEMLER (detay sayfalarının ortak sözleşmesi):
  *   - PAYLAŞ başlığın SAĞ ÜSTÜNDE tek ikon ("share-outline" → oyuncu kartı
- *     alt sayfası, ViewShot + expo-sharing). Kimlik şeridinde tekrarı yok.
+ *     paylaşım stüdyosu `PlayerShare`). Kimlik şeridinde tekrarı yok.
  *   - TAKİP: oyuncu takibi sunucuda yok; şerit oyuncunun TAKIMINI takip eder
  *     ("Takımını takip et") ve `useFollowFlow` ile bildirim türleri alt
  *     sayfasını açar; zil aynı alt sayfayı yeniden açar.
@@ -127,6 +127,7 @@ import { formatAge, formatDateShort, mediaUrl } from "@/lib/format";
 import { ApiError, get } from "@/lib/http";
 import { openLink } from "@/lib/links";
 import { queryKeys } from "@/lib/queryKeys";
+import { PlayerShare } from "@/components/share/ProfileShare";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useFollowFlow } from "@/providers/FollowFlowProvider";
 import { useScope } from "@/providers/ScopeProvider";
@@ -915,19 +916,24 @@ export default function PlayerDetailScreen() {
         />
       )}
 
-      <ShareSheet
+      {/* Paylaşım stüdyosu: oyuncu kartı ve poster (components/share). */}
+      <PlayerShare
         visible={shareOpen}
         onClose={closeShare}
-        playerName={playerName}
-        playerImage={player.player_img ?? null}
-        position={position}
+        name={playerName}
+        image={player.player_img ?? null}
+        position={position || null}
+        jersey={lineup.jersey}
         teamName={team?.team_name ?? null}
+        teamLogo={team?.logo ?? null}
         matches={totalMatches}
         goals={num(player.total_goals)}
+        assists={assists}
         average={careerAverage}
         wins={num(player.wins)}
         draws={num(player.draws)}
         losses={num(player.losses)}
+        city={team?.city ?? null}
       />
     </SafeAreaView>
   );

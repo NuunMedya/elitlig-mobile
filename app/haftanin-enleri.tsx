@@ -47,6 +47,7 @@ import {
   type PitchPlayerView,
 } from "@/components/ui";
 import { StageCard, StageStat } from "@/components/league/kit";
+import { WeeklyShare } from "@/components/share/ProfileShare";
 import { getWeeklyAwards, type WeeklyAwardItem } from "@/lib/api/weeklyAwards";
 import { formatDateShort, mediaUrl } from "@/lib/format";
 import { useScope } from "@/providers/ScopeProvider";
@@ -146,6 +147,7 @@ export default function WeeklyAwardsScreen() {
   const { scrollY, scrollProps } = useHeaderScroll();
   const { width } = useWindowDimensions();
   const [setId, setSetId] = useState<number | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const query = useQuery({
     queryKey: ["weekly-awards", scope.cityId, scope.leagueId, scope.seasonId],
@@ -200,7 +202,16 @@ export default function WeeklyAwardsScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader title="Haftanın enleri" back scrollY={scrollY} />
+      <ScreenHeader
+        title="Haftanın enleri"
+        back
+        scrollY={scrollY}
+        actions={
+          current
+            ? [{ icon: "share-outline", onPress: () => setShareOpen(true), accessibilityLabel: "Haftanın enlerini paylaş" }]
+            : undefined
+        }
+      />
       <ScrollView {...scrollProps} contentContainerStyle={styles.content} refreshControl={refresh.control}>
         <LeaguePicker pinned={false} flush />
         {!scope.ready || query.isLoading ? (
@@ -360,6 +371,13 @@ export default function WeeklyAwardsScreen() {
           </>
         )}
       </ScrollView>
+      {/* Paylaşım stüdyosu: haftanın oyuncusu, kadro sahası ve ödüller. */}
+      <WeeklyShare
+        visible={shareOpen}
+        onClose={() => setShareOpen(false)}
+        set={current}
+        weekLabel={current ? current.title || weekLabel(current.start_date, current.end_date) : ""}
+      />
     </SafeAreaView>
   );
 }

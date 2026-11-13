@@ -205,7 +205,7 @@ export default function TeamMergeScreen() {
             <View style={styles.stack}>
               <CountStrip
                 items={[
-                  { key: "groups", label: "Benzer grup", value: visible.length, icon: "git-merge", tone: "brand" },
+                  { key: "groups", label: "Grup", value: visible.length, icon: "git-merge", tone: "brand" },
                   { key: "blocked", label: "Kilitli", value: blockedCount, icon: "ban", tone: "danger", selected: !hideBlocked, onPress: () => setHideBlocked((v) => !v) },
                   { key: "ignored", label: "Yoksayılan", value: ignored.length, icon: "eye-off", selected: showIgnored, onPress: () => setShowIgnored((v) => !v) },
                 ]}
