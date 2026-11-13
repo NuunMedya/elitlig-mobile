@@ -279,6 +279,10 @@ export function ChatCompose({ admin = false, initialTab }: ChatComposeProps) {
           <Input label="Açıklama (isteğe bağlı)" value={description} onChangeText={setDescription} placeholder="Grubun amacı" maxLength={2000} size="sm" />
           <ListRow title="Yalnız yöneticiler mesaj göndersin" subtitle="Duyuru grubu: üyeler yalnız okur" toggle={{ value: onlyAdminsSend, onValueChange: setOnlyAdminsSend }} position="first" />
           <ListRow title="Grup bilgisini yalnız yöneticiler düzenlesin" subtitle="Ad, fotoğraf, üye ekleme ve sabitleme" toggle={{ value: onlyAdminsEdit, onValueChange: setOnlyAdminsEdit }} position="last" />
+          <View style={[styles.sectionRow, styles.sectionRowFlush]} accessibilityRole="header">
+            <View style={styles.sectionMark} />
+            <Text style={styles.section} {...textScale.dense}>KİŞİLER</Text>
+          </View>
         </View>
   );
 
@@ -443,6 +447,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   headerBottom: { gap: space.sm, paddingBottom: space.sm },
   sectionRow: { flexDirection: "row", alignItems: "center", gap: space.s, paddingHorizontal: layout.screenPadding, paddingTop: space.xl, paddingBottom: space.sm },
+  sectionRowFlush: { paddingHorizontal: 0, paddingTop: space.lg },
   sectionMark: { width: 3, height: 12, borderRadius: radius.pill, backgroundColor: colors.brand },
   section: { ...type.overline, color: colors.textSecondary },
   shortcuts: { flexDirection: "row", gap: space.sm, paddingHorizontal: layout.screenPadding, paddingTop: space.md },
