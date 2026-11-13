@@ -362,14 +362,18 @@ export interface CityLeaderRow {
   rung?: number | null;
   beauty?: number | null;
   dev2?: number | null;
+  /** Faz 2 · metric=el: dönemde kazanılan EL ve (kazanılan − gider). */
+  el?: number | null;
+  el_net?: number | null;
   me: boolean;
 }
 
 /**
  * dev = gelişim puanı · stars = toplam yıldız · period_stars = aralıkta kazanılan yıldız ·
- * step = Şehir 2.0 merdiven basamağı (eşitlikte 2.0 gelişim) · beauty = güzellik puanı.
+ * step = Şehir 2.0 merdiven basamağı (eşitlikte 2.0 gelişim) · beauty = güzellik puanı ·
+ * el = dönemde kazanılan Elit Lira (period/from/to; varsayılan bu hafta).
  */
-export type CityBoardMetric = "dev" | "stars" | "period_stars" | "step" | "beauty";
+export type CityBoardMetric = "dev" | "stars" | "period_stars" | "step" | "beauty" | "el";
 
 export interface CityBoardOptions {
   metric?: CityBoardMetric;
@@ -402,6 +406,8 @@ export interface CityLeaderboard {
     rung?: number | null;
     beauty?: number | null;
     dev2?: number | null;
+    el?: number | null;
+    el_net?: number | null;
   } | null;
 }
 

@@ -15,6 +15,13 @@ import { cityKeys, type CityState, type CityXp, type DailyStatus } from "./api";
  *   POST /api/puzzle/city2/landmark {key}
  *   POST /api/puzzle/city2/place  {id?, key?, slot|null}
  *
+ * FAZ 2 · ELİT LİRA (EL): oyun içi kulüp kasası (satın alınmaz).
+ *   GET  /api/puzzle/city2            → city2.el + buildings[].income
+ *   POST /api/puzzle/city2/collect    {building?}  (yoksa hepsi)
+ *   POST /api/puzzle/city2/upgrade    {building, kind: "depo"|"personel"}
+ *   GET  /api/puzzle/city2/el/history ?limit&before
+ * Eski sunucuda `el`/`income` yok: EL arayüzü hiç çizilmez.
+ *
  * Eski sunucu GET /city2'ye 404 döner: ekran o zaman eski (v1) şehre düşer.
  */
 
@@ -166,6 +173,8 @@ export interface City2Building {
   locks_total: number;
   next_action: City2Action;
   stages: City2Stage[];
+  /** Faz 2 (EL). Eski sunucuda yok. */
+  income?: City2Income;
 }
 
 /* ───────────────────────── Sembol yapılar ───────────────────────── */
@@ -251,6 +260,8 @@ export interface City2State {
   stages_built: number;
   migration: City2Migration | null;
   gate_metrics: Record<string, { label: string; path: "player" | "fan" }>;
+  /** Faz 2 · Elit Lira. Eski sunucuda yok → EL arayüzü gizlenir. */
+  el?: City2El;
 }
 
 export interface City2Response {
@@ -258,11 +269,178 @@ export interface City2Response {
   daily?: DailyStatus;
 }
 
+/* ───────────────────────── Faz 2 · Elit Lira ───────────────────────── */
+
+export interface City2IncomeStream {
+  key: string;
+  title: string;
+  /** Akışın açıldığı aşama. */
+  from: number;
+  active: boolean;
+  base_per_hour: number;
+}
+
+export type City2UpgradeKind = "depo" | "personel";
+
+export interface City2Upgrade {
+  title: string;
+  text: string;
+  level: number;
+  max: number;
+  next: { level: number; cost: number; min_stage: number; blocked: { code: string; stage?: number } | null } | null;
+}
+
+export interface City2IncomeBuilding {
+  has_income: true;
+  streams: City2IncomeStream[];
+  base_per_hour: number;
+  boost_pct: number;
+  staff_pct: number;
+  multiplier: number;
+  per_hour: number;
+  per_day: number;
+  stored: number;
+  stored_exact: number;
+  collectable: number;
+  cap: number;
+  cap_hours: number;
+  full: boolean;
+  full_at: string | null;
+  next_stage_per_hour: number | null;
+  upgrades: Partial<Record<City2UpgradeKind, City2Upgrade>>;
+  text: string | null;
+}
+
+export interface City2SupportEffect {
+  kind: "income" | "expense";
+  pct: number;
+  per_stage: number;
+  targets: string[] | null;
+  text: string;
+}
+
+export type City2Income = City2IncomeBuilding | { has_income: false; effect: City2SupportEffect | null };
+
+export interface City2FormPart {
+  key: string;
+  label: string;
+  have: number | null;
+  value: number;
+  max: number;
+  per?: number;
+  cap?: number;
+  /** Yalnız reyting: [eşik, katkı] basamakları. */
+  steps?: [number, number][];
+  rated?: number;
+  min_rated?: number;
+}
+
+export interface City2FormPath {
+  available: boolean;
+  multiplier: number;
+  max: number;
+  parts: City2FormPart[];
+}
+
+export interface City2Form {
+  multiplier: number;
+  text: string;
+  path: "player" | "fan" | "none";
+  days: number;
+  min: number;
+  max: number;
+  headline: string;
+  tip: string;
+  player: City2FormPath;
+  fan: City2FormPath;
+}
+
+export interface City2ElDay {
+  earned: number;
+  expense: number;
+  spent: number;
+  admin: number;
+}
+
+export interface City2El {
+  unit: string;
+  title: string;
+  intro: string;
+  balance: number;
+  earned_total: number;
+  spent_total: number;
+  expense_total: number;
+  admin_total: number;
+  per_hour: number;
+  per_day: number;
+  net_per_hour: number;
+  stored: number;
+  collectable: number;
+  cap: number;
+  producing: number;
+  full: number;
+  form: City2Form;
+  expenses: {
+    per_hour: number;
+    per_day: number;
+    salary_day: number;
+    maintenance_day: number;
+    reduction_pct: number;
+    due: number;
+    due_hours: number;
+    cap_hours: number;
+    text: string;
+  };
+  support: { building: string; kind: "income" | "expense"; pct: number; targets: string[] | null; text: string }[];
+  today: City2ElDay;
+  days: Record<string, City2ElDay>;
+  started_at: string | null;
+  last_collect_at: string | null;
+}
+
+export interface City2CollectResult {
+  collected: number;
+  by_building: Record<string, number>;
+  expense: number;
+  forgiven: number;
+  net: number;
+  balance: number;
+  multiplier: number;
+  city2: City2State;
+}
+
+export type City2LedgerKind = "production" | "expense" | "bonus" | "spend" | "admin";
+
+export interface City2LedgerItem {
+  id: number;
+  kind: City2LedgerKind;
+  building: string | null;
+  building_title: string | null;
+  amount: number;
+  balance_after: number;
+  multiplier: number | null;
+  day: string | null;
+  at: string | null;
+  data: Record<string, unknown> | null;
+}
+
+export interface City2ElHistory {
+  items: City2LedgerItem[];
+  limit: number;
+  next_before: number | null;
+  balance: number;
+  earned_total: number;
+  spent_total: number;
+  expense_total: number;
+  days: Record<string, City2ElDay>;
+}
+
 /* ───────────────────────── Uçlar ───────────────────────── */
 
 export const city2Keys = {
   /** ["puzzle","city"] önekinin altında: eski şehir tazelenince bu da tazelenir. */
   me: () => [...cityKeys.me(), "v2"] as const,
+  elHistory: () => [...cityKeys.me(), "v2", "el-history"] as const,
 };
 
 export const getCity2 = () => get<City2Response>("/api/puzzle/city2", undefined, { retry: false });
@@ -299,7 +477,67 @@ export const buyCity2Landmark = (key: string) =>
 export const placeCity2Landmark = (body: { id?: string; key?: string; slot: string | null }) =>
   post<{ landmark: City2OwnedLandmark; city2: City2State }>("/api/puzzle/city2/place", body, { retry: false });
 
+/** Depodaki EL'i topla: tek bina ya da (building yoksa) hepsi. Toplanacak yoksa collected: 0. */
+export const collectCity2El = (building?: string | null) =>
+  post<City2CollectResult>("/api/puzzle/city2/collect", building ? { building } : undefined, { retry: false });
+
+export const upgradeCity2El = (building: string, kind: City2UpgradeKind) =>
+  post<{ building: string; upgrade: City2UpgradeKind; level: number; cost: number; balance: number; city2: City2State }>(
+    "/api/puzzle/city2/upgrade",
+    { building, kind },
+    { retry: false },
+  );
+
+export const getCity2ElHistory = (before?: number | null, limit = 50) =>
+  get<City2ElHistory>("/api/puzzle/city2/el/history", { limit, before: before ?? undefined }, { retry: false });
+
 /* ───────────────────────── Yardımcılar ───────────────────────── */
+
+/** Gelir binası mı (yeni sunucu)? */
+export function incomeOf(b: Pick<City2Building, "income"> | null | undefined): City2IncomeBuilding | null {
+  return b?.income && b.income.has_income ? b.income : null;
+}
+
+/** EL miktarı: tam sayılar "1.250", küçük oranlar bir ondalıkla "2,4". */
+export function fmtEl(n: number, digits = 0): string {
+  const v = Number.isFinite(n) ? n : 0;
+  return v.toLocaleString("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: digits });
+}
+
+/** Saatlik oran: 100.ün altında bir ondalık. */
+export const fmtRate = (n: number) => fmtEl(n, Math.abs(n) < 100 ? 1 : 0);
+
+/** ×1,26 */
+export const fmtMult = (n: number) => `×${(Number.isFinite(n) ? n : 1).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/** 0.04 → "%4", 0.015 → "%1,5" */
+export const fmtPct = (n: number) => `%${(Math.round(n * 1000) / 10).toLocaleString("tr-TR", { maximumFractionDigits: 1 })}`;
+
+/** Bir zamana kalan süre: "2 sa 15 dk" · "40 dk" · "az sonra". */
+export function untilText(iso: string | null | undefined, now = Date.now()): string | null {
+  if (!iso) return null;
+  const ms = new Date(iso).getTime() - now;
+  if (!Number.isFinite(ms)) return null;
+  if (ms <= 60_000) return "az sonra";
+  const min = Math.round(ms / 60_000);
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  if (h <= 0) return `${m} dk`;
+  return m ? `${h} sa ${m} dk` : `${h} sa`;
+}
+
+/** Bütün gelir binaları içinde en erken dolacak depo. */
+export function firstFullAt(buildings: City2Building[]): string | null {
+  let best: string | null = null;
+  for (const b of buildings) {
+    const inc = incomeOf(b);
+    if (!inc || !inc.full_at) continue;
+    if (!best || new Date(inc.full_at).getTime() < new Date(best).getTime()) best = inc.full_at;
+  }
+  return best;
+}
+
+/* ───────────────────────── Yardımcılar (Faz 1) ───────────────────────── */
 
 /** rung → gösterilecek etiket ("16a"); bilinmiyorsa sayının kendisi. */
 export function rungLabel(ladder: Pick<City2Ladder, "steps"> | null | undefined, rung: number): string {
@@ -335,6 +573,8 @@ export function grantText(grant: string | null | undefined): string | null {
 /** Sahne rozeti: up = alınabilir eylem · lock = kilit bekliyor · max · closed. */
 export function buildingMark(b: City2Building, available: number): "up" | "lock" | "max" | "closed" | null {
   const a = b.next_action;
+  // Faz 2: deposu dolan gelir binası da "dokun" rozeti alır (topla ki üretim sürsün).
+  if (b.open && incomeOf(b)?.full) return "up";
   if (a.kind === "closed") return "closed";
   if (a.kind === "maxed") return "max";
   if (a.kind === "lock") return available >= a.cost ? "up" : "lock";
