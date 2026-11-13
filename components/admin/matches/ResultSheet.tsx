@@ -76,7 +76,7 @@ export function ResultSheet({
   const register = () => {
     const label = `${homeName} ${preview.home} – ${preview.away} ${awayName}`;
     const tail = publish
-      ? "Maç tamamlandı olarak işaretlenir ve puan durumu yeniden hesaplanır."
+      ? "Maç yayınlandı olarak işaretlenir ve puan durumu yeniden hesaplanır."
       : "Puan durumu yeniden hesaplanır.";
     if (mode === "manual") {
       void submit({ mode, home, away, note, publish }, "Skor elle tescil edilecek", `${label}\n\n${tail}`);
@@ -191,7 +191,7 @@ export function ResultSheet({
 
         <OpsGroup title="Kayıt" icon="document-text-outline" tone="neutral">
           <Input label="Gerekçe (isteğe bağlı)" value={note} onChangeText={setNote} placeholder="Ör. takım sahaya çıkmadı" multiline />
-          <ToggleField label="Maçı tamamlandı olarak işaretle" hint="Kapalıysa yalnız skor yazılır, durum değişmez." value={publish} onChange={setPublish} />
+          <ToggleField label="Maçı yayınlandı olarak işaretle" hint="Kapalıysa yalnız skor yazılır, durum değişmez." value={publish} onChange={setPublish} />
         </OpsGroup>
       </View>
     </BottomSheet>

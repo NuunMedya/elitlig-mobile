@@ -125,9 +125,9 @@ const SECTION_GAP = space.xs;
 /** Durum sayacı karolarındaki kısa adlar ve simgeler. */
 const STATUS_TILE: Record<MacDurumu, { label: string; icon: keyof typeof Ionicons.glyphMap }> = {
   taslak: { label: "Taslak", icon: "document-outline" },
-  zamanlanmis: { label: "Planlı", icon: "calendar-outline" },
+  zamanlanmis: { label: "Zamanlandı", icon: "calendar-outline" },
   canli: { label: "Canlı", icon: "radio-outline" },
-  yayinlanmis: { label: "Bitti", icon: "checkmark-done-outline" },
+  yayinlanmis: { label: "Yayınlandı", icon: "checkmark-done-outline" },
 };
 
 /** Bugünün "YYYY-MM-DD" anahtarı (yerel saat) — "sonuç bekliyor" uyarısı için. */

@@ -96,7 +96,7 @@ const NEXT_STEP: Record<string, { text: string; step?: StepKey; label?: string }
     label: "Kadroya geç",
   },
   canli: { text: "Maç canlı. Olaylar ve skor Canlı akış adımından yönetilir.", step: "canli", label: "Canlı akışa git" },
-  yayinlanmis: { text: "Maç tamamlandı. Puanlar, manşet ve maçın enleri Maç sonu adımında.", step: "mac-sonu", label: "Maç sonuna git" },
+  yayinlanmis: { text: "Maç yayınlandı. Puanlar, manşet ve maçın enleri Maç sonu adımında.", step: "mac-sonu", label: "Maç sonuna git" },
 };
 
 export function InfoStep({
