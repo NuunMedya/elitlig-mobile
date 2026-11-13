@@ -125,6 +125,12 @@ export default function HosgeldinScreen() {
   }, []);
 
   const finish = useCallback(() => router.replace("/(tabs)"), [router]);
+  /** "Geç": tanıtım bayrağı yazılmazsa sekmeler yeniden şehir seçimine yönlendirir. */
+  const skip = useCallback(() => {
+    void AsyncStorage.setItem(INTRO_SEEN_KEY, "1")
+      .catch(() => undefined)
+      .then(() => router.replace("/(tabs)"));
+  }, [router]);
   /** Tanıtımın sonu: şehir/lig seçimi. Düğmenin adı buranın adıdır. */
   const chooseLeague = useCallback(() => router.replace("/sehir"), [router]);
 
@@ -135,7 +141,7 @@ export default function HosgeldinScreen() {
       width={width}
       index={index}
       onIndex={setIndex}
-      onSkip={finish}
+      onSkip={skip}
       onFinish={chooseLeague}
       onLogin={() => router.push("/giris")}
     />

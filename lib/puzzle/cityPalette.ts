@@ -24,6 +24,19 @@ export const CLUB_KITS: readonly ClubKit[] = [
   { key: "mavibeyaz", name: "Mavi-beyaz", primary: "#2563EB", secondary: "#FFFFFF" },
 ];
 
+/**
+ * Şehir 2.1: jetonla alınan özel kulüp renkleri (kozmetik). Anahtar ve fiyat
+ * sunucuda (services/puzzle/rules.js KITS); sahip olunmayan renk seçilemez.
+ */
+export const PREMIUM_KITS: readonly ClubKit[] = [
+  { key: "altin_siyah", name: "Altın-siyah", primary: "#111827", secondary: "#F5B700" },
+  { key: "mor_altin", name: "Mor-altın", primary: "#4C1D95", secondary: "#FBBF24" },
+  { key: "turuncu_lacivert", name: "Turuncu-lacivert", primary: "#1E2A5A", secondary: "#FB923C" },
+  { key: "gece_mavisi", name: "Gece mavisi", primary: "#0B1E3F", secondary: "#7DD3FC" },
+  { key: "zumrut", name: "Zümrüt yeşili", primary: "#065F46", secondary: "#A7F3D0" },
+  { key: "efsane_beyaz", name: "Efsane beyaz-altın", primary: "#F8FAFC", secondary: "#D4A017" },
+];
+
 export const CITY_KIT_KEY = "elitlig.city.kit.v1";
 
 /** Sahnenin yüklenirken gösterdiği gökyüzü zemini (WebView arka planı). */

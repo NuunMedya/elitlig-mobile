@@ -94,7 +94,8 @@ export interface QuizConfig {
   title: string;
   subtitle: string;
   icon: keyof typeof Ionicons.glyphMap;
-  bestKey: string;
+  /** ESKİ cihaz rekor anahtarı: yalnız ilk geçişte taşınır (bkz. lib/puzzle/saves). */
+  bestKey?: string;
   /** Hangi veriden soru üretilir. */
   source: "players" | "matches";
   rules: { icon: keyof typeof Ionicons.glyphMap; text: string }[];
@@ -148,7 +149,7 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
   const exitGame = useExitGame();
   const scope = useScope();
   const reduceMotion = useReduceMotion();
-  const run = useArenaScore(config.game, config.bestKey);
+  const run = useArenaScore(config.game);
 
   /* — Kurulum: il seçimi — */
   const [city, setCity] = useState<QuizCity>(null);

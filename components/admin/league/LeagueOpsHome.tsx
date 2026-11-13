@@ -130,7 +130,7 @@ const STATUS_META: Record<MacDurumu, { label: string; tone: Tone }> = {
   taslak: { label: "Taslak", tone: "neutral" },
   zamanlanmis: { label: "Zamanlandı", tone: "info" },
   canli: { label: "Canlı", tone: "live" },
-  yayinlanmis: { label: "Bitti", tone: "win" },
+  yayinlanmis: { label: "Yayınlandı", tone: "win" },
 };
 
 const LIVE_POLL_MS = 20_000;

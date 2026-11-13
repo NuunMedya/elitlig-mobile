@@ -116,11 +116,11 @@ export function StepCard({
   const done = reqs.filter(Boolean).length;
   return (
     <View style={styles.card}>
-      <Touchable onPress={onLadder} feedback="row" style={styles.head} accessibilityRole="button" accessibilityLabel={`${ladder.current.label}. basamak, ${ladder.current.title}. Merdiveni aç`}>
+      <Touchable onPress={onLadder} feedback="row" style={styles.head} accessibilityRole="button" accessibilityLabel={`Lig ${ladder.current.label}, ${ladder.current.title}. Bütün ligleri aç`}>
         <RungBadge label={ladder.current.label} />
         <View style={styles.headTexts}>
           <Text style={styles.overline} {...textScale.badge}>
-            KARİYER MERDİVENİ · {ladder.current.no}/{lastNo}
+            LİG · {ladder.current.no}/{lastNo}
           </Text>
           <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
             {ladder.current.title}
@@ -144,7 +144,7 @@ export function StepCard({
           <NextRequirements next={next} buildings={buildings} onBuilding={onBuilding} busy={busy} onPay={() => onAdvance(true)} />
 
           {next.can_advance ? (
-            <ChunkyButton label={busy ? "ÇIKILIYOR…" : `BASAMAK ATLA · ${next.label}`} icon="arrow-up-circle" tone="green" disabled={busy} onPress={() => onAdvance()} accessibilityLabel={`Basamak atla: ${next.title}`} />
+            <ChunkyButton label={busy ? "ÇIKILIYOR…" : `LİGE YÜKSEL · ${next.label}`} icon="arrow-up-circle" tone="green" disabled={busy} onPress={() => onAdvance()} accessibilityLabel={`Lige yüksel: ${next.title}`} />
           ) : null}
         </>
       ) : (

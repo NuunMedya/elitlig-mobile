@@ -21,7 +21,7 @@ export interface ClubEntry {
 }
 
 export const getClubBoard = (cityId?: number | null) =>
-  get<{ entries: ClubEntry[]; mine: ClubEntry | null; rules: { dailyGames: number; pointsPerGame: number } }>("/api/arena/clubs", {
+  get<{ entries: ClubEntry[]; mine: ClubEntry | null; rules: { dailyGames: number; pointsPerGame: number; /** Şehir 2.1: haftalık yıldız ödülü (il içi sıra). */ rewards?: { from: number; to: number; stars: number }[]; rewardScope?: string } }>("/api/arena/clubs", {
     cityId: cityId ?? undefined,
   });
 

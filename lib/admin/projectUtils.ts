@@ -134,7 +134,7 @@ export const TOOL_META: Record<ProjectTool, { label: string; icon: IconName; int
   accounting: { label: "Muhasebe", icon: "receipt-outline", route: "/yonetim/araclar/muhasebe" },
   contacts: { label: "Rehber", icon: "call-outline", route: "/yonetim/araclar/rehber" },
   calc: { label: "Hesap Araçları", icon: "calculator-outline", route: "/yonetim/araclar/hesap-araclari" },
-  focus: { label: "Odak Sayacı", icon: "timer-outline" },
+  focus: { label: "Odak Sayacı", icon: "timer-outline", route: "/yonetim/araclar/odak-sayaci" },
 };
 export const TOOL_KEYS = Object.keys(TOOL_META) as ProjectTool[];
 

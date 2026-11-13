@@ -1,10 +1,12 @@
 /**
  * BİNA — liste satırı ve ayrıntı penceresi.
  *
- * Her bina aşamalarla büyür; her aşamanın içinde 2–4 İÇ KİLİT (oda/eşya)
- * vardır. Sıradaki aşamaya geçmek için önce o anki aşamanın bütün kilitleri
- * açılır, sonra "Aşamayı yükselt". Ana düğmeyi sunucunun `next_action`'ı
- * belirler; kapalı/bloklu durumlar açıklanır ("N. basamakta açılır").
+ * Her bina ANA YÜKSELTMELERLE (aşama) büyür; her aşamanın içinde 3–4 ARA
+ * ADIM (oda/eşya; sunucuda "kilit") vardır. Ara adımlar yalnız yıldız ister;
+ * hepsi bitince ana yükseltme açılır (yıldız + Elit Lira + lig şartı). Ana
+ * düğmeyi sunucunun `next_action`'ı belirler; kapalı/bloklu durumlar
+ * açıklanır ("4. Amatör olunca açılır"). Gelir binalarında kazanç, toplama ve
+ * tesis bakımı en üsttedir.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -13,7 +15,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { ChunkyButton } from "@/components/city/ChunkyButton";
 import { BottomSheet, Touchable } from "@/components/ui";
-import { incomeOf, rungOpensText, type City2Academy, type City2Building, type City2El, type City2Ladder, type City2Lock, type City2Stage, type City2UpgradeKind } from "@/lib/puzzle/city2";
+import { fmtEl, incomeOf, leagueNeedOf, rungOpensText, type City2Academy, type City2Building, type City2El, type City2Ladder, type City2Lock, type City2Stage, type City2UpgradeKind } from "@/lib/puzzle/city2";
 import { colors, fonts, hairline, radius, space, textScale, type } from "@/theme";
 
 import { AcademyBuildingSection } from "./Academy";
@@ -41,7 +43,7 @@ function ActionHint({ b, available, ladder }: { b: City2Building; available: num
   return (
     <View style={styles.hintCol}>
       <Text style={[styles.hintKind, ready ? styles.hintReady : null]} {...textScale.badge}>
-        {a.kind === "lock" ? "KİLİT" : b.stage === 0 ? "KUR" : "YÜKSELT"}
+        {a.kind === "lock" ? "ARA ADIM" : b.stage === 0 ? "KUR" : "ANA"}
       </Text>
       <StarCost value={a.cost} muted={!ready} />
     </View>
@@ -65,7 +67,7 @@ export function BuildingRow({ b, available, ladder, onPress }: { b: City2Buildin
       ? rungOpensText(ladder, a.rung)
       : b.current
         ? a.kind === "lock"
-          ? `${b.current.title} · ${b.locks_done}/${b.locks_total} kilit`
+          ? `${b.current.title} · ara adım ${b.locks_done}/${b.locks_total}`
           : b.current.title
         : "Henüz kurulmadı";
   return (
@@ -110,10 +112,10 @@ function LockCard({ lock, available, busy, onBuy }: { lock: City2Lock; available
       </View>
       {lock.state === "open" ? (
         <Text style={styles.lockDone} {...textScale.badge}>
-          AÇIK
+          TAMAM
         </Text>
       ) : lock.state === "available" ? (
-        <CostButton cost={lock.cost} available={available} busy={busy} onPress={onBuy} accessibilityLabel={`${lock.title} kilidini aç, ${lock.cost} yıldız`} />
+        <CostButton cost={lock.cost} available={available} busy={busy} onPress={onBuy} accessibilityLabel={`Ara adım: ${lock.title}, ${lock.cost} yıldız`} />
       ) : (
         <StarCost value={lock.cost} muted />
       )}
@@ -147,6 +149,23 @@ function StageRow({ s, ladder, rung }: { s: City2Stage; ladder: City2Ladder; run
   );
 }
 
+/** Ana yükseltmenin bir şartı: tik/çarpı, metin, değer. */
+function Need({ ok, icon, text, value }: { ok: boolean; icon: keyof typeof Ionicons.glyphMap; text: string; value?: string | null }) {
+  return (
+    <View style={styles.need}>
+      <Ionicons name={ok ? "checkmark-circle" : icon} size={16} color={ok ? colors.win : colors.textTertiary} />
+      <Text style={[styles.needText, ok ? null : styles.needOff]} numberOfLines={2} {...textScale.dense}>
+        {text}
+      </Text>
+      {value ? (
+        <Text style={[styles.needValue, ok ? styles.needOk : null]} {...textScale.badge}>
+          {value}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 export function BuildingSheet({
   b,
   ladder,
@@ -160,6 +179,8 @@ export function BuildingSheet({
   collecting,
   onCollect,
   onUpgrade,
+  caring,
+  onCare,
   academy,
   onAcademy,
 }: {
@@ -176,6 +197,9 @@ export function BuildingSheet({
   collecting?: boolean;
   onCollect?: (building: string) => void;
   onUpgrade?: (building: string, kind: City2UpgradeKind) => void;
+  /** Şehir 2.1: tesis bakımı (yıldızla). */
+  caring?: boolean;
+  onCare?: (building: string) => void;
   /** Faz 3: akademi durumu (`undefined` = eski sunucu → bölüm çizilmez; `null` = kurulmadı). */
   academy?: City2Academy | null;
   onAcademy?: () => void;
@@ -184,31 +208,35 @@ export function BuildingSheet({
   const effect = el && b?.income && !b.income.has_income ? b.income.effect : null;
   const current = b?.stages.find((s) => s.state === "current") ?? null;
   const next = b?.stages.find((s) => s.state === "next") ?? null;
+  const need = b && ladder ? leagueNeedOf(ladder, b.key) : null;
   const a = b?.next_action;
+  const balance = el?.balance ?? 0;
   let footer: ReactNode = null;
   if (b && a && ladder) {
     if (a.kind === "lock") {
       const short = available < a.cost;
       footer = (
         <ChunkyButton
-          label={short ? `${fmt(a.cost - available)} YILDIZ EKSİK` : `${upper(a.title)} · ${fmt(a.cost)}`}
-          icon={short ? "star-outline" : "key"}
+          label={short ? `${fmt(a.cost - available)} YILDIZ EKSİK` : `ARA ADIM: ${upper(a.title)} · ${fmt(a.cost)}`}
+          icon={short ? "star-outline" : "construct"}
           tone="green"
           disabled={short || busy}
           onPress={() => onLock(b.key, a.lock)}
-          accessibilityLabel={`${a.title} kilidini aç, ${a.cost} yıldız`}
+          accessibilityLabel={`Ara adım: ${a.title}, ${a.cost} yıldız`}
         />
       );
     } else if (a.kind === "stage" && !a.blocked) {
+      const elNeed = a.el ?? 0;
       const short = available < a.cost;
+      const elShort = elNeed > balance;
       footer = (
         <ChunkyButton
-          label={short ? `${fmt(a.cost - available)} YILDIZ EKSİK` : `${b.stage === 0 ? "KUR" : "AŞAMAYI YÜKSELT"} · ${fmt(a.cost)}`}
-          icon={short ? "star-outline" : "hammer"}
-          tone="green"
-          disabled={short || busy}
+          label={short ? `${fmt(a.cost - available)} YILDIZ EKSİK` : elShort ? `${fmtEl(elNeed - balance)} EL EKSİK` : `${b.stage === 0 ? "KUR" : "ANA YÜKSELTME"}: ${upper(a.title)}`}
+          icon={short ? "star-outline" : elShort ? "wallet-outline" : "hammer"}
+          tone="gold"
+          disabled={short || elShort || busy}
           onPress={() => onStage(b.key)}
-          accessibilityLabel={`${b.stage === 0 ? "Kur" : "Aşamayı yükselt"}: ${a.title}, ${a.cost} yıldız`}
+          accessibilityLabel={`${b.stage === 0 ? "Kur" : "Ana yükseltme"}: ${a.title}, ${a.cost} yıldız${elNeed ? `, ${elNeed} Elit Lira` : ""}`}
         />
       );
     } else {
@@ -216,8 +244,8 @@ export function BuildingSheet({
         a.kind === "maxed"
           ? "Son aşama: bu bina tamamlandı."
           : a.kind === "closed"
-            ? `Bu bina ${rungOpensText(ladder, a.rung)}. Merdivende ilerle.`
-            : `Sıradaki aşama (${a.title}) ${rungOpensText(ladder, a.blocked?.rung ?? b.opens)}.`;
+            ? `Bu bina ${rungOpensText(ladder, a.rung)}. Ligde yüksel.`
+            : `Sıradaki ana yükseltme (${a.title}) ${rungOpensText(ladder, a.blocked?.rung ?? b.opens)}.`;
       footer = (
         <View style={styles.footNote}>
           <Ionicons name={a.kind === "maxed" ? "checkmark-circle" : "lock-closed"} size={16} color={a.kind === "maxed" ? colors.win : colors.textSecondary} />
@@ -228,6 +256,7 @@ export function BuildingSheet({
       );
     }
   }
+  const locksDone = b ? b.locks_done >= b.locks_total : false;
   return (
     <BottomSheet visible={Boolean(b)} onClose={onClose} title={b?.title} snap="full" footer={footer}>
       {b && ladder ? (
@@ -236,7 +265,7 @@ export function BuildingSheet({
             <BuildingIcon buildingKey={b.key} icon={b.icon} size={60} off={!b.open} />
             <View style={styles.heroTexts}>
               <Text style={styles.heroOver} {...textScale.badge}>
-                AŞAMA {b.stage}/{b.max}
+                ANA YÜKSELTME {b.stage}/{b.max}
               </Text>
               <Text style={styles.heroTitle} {...textScale.dense}>
                 {b.current?.title ?? "Henüz kurulmadı"}
@@ -249,6 +278,17 @@ export function BuildingSheet({
             </View>
           </View>
 
+          {need ? (
+            <View style={[styles.leagueNote, need.ok ? styles.leagueNoteOk : null]}>
+              <Ionicons name={need.ok ? "checkmark-circle" : "trophy"} size={16} color={need.ok ? colors.win : colors.brandAccent} />
+              <Text style={styles.leagueNoteText} {...textScale.long}>
+                {need.ok
+                  ? `${ladder.next?.title} için gereken aşama tamam.`
+                  : `${ladder.next?.title} ligine yükselmek için bu binanın ${need.need}. aşaması (${need.title}) gerekli.`}
+              </Text>
+            </View>
+          ) : null}
+
           {inc && b ? (
             <IncomeSection
               b={b}
@@ -258,6 +298,9 @@ export function BuildingSheet({
               collecting={Boolean(collecting)}
               onCollect={() => onCollect?.(b.key)}
               onUpgrade={(kind) => onUpgrade?.(b.key, kind)}
+              stars={available}
+              caring={caring}
+              onCare={onCare ? () => onCare(b.key) : undefined}
             />
           ) : effect ? (
             <SupportSection effect={effect} open={b.open} titles={titles ?? {}} />
@@ -265,57 +308,72 @@ export function BuildingSheet({
 
           {b.key === "akademi" && academy !== undefined ? <AcademyBuildingSection academy={academy} onOpen={() => onAcademy?.()} /> : null}
 
-          {current && current.locks.length ? (
+          {b.open ? (
             <View style={styles.block}>
               <Text style={styles.blockTitle} {...textScale.dense}>
-                İç kilitler · {b.locks_done}/{b.locks_total}
+                Yükseltme yolu
               </Text>
-              <Text style={styles.blockLead} {...textScale.long}>
-                {b.locks_done < b.locks_total
-                  ? `${current.title} aşamasının odalarını ve eşyalarını aç; hepsi açılınca bina bir sonraki aşamaya geçebilir.`
-                  : "Bu aşamanın bütün kilitleri açık."}
-              </Text>
-              {current.locks.map((l) => (
-                <LockCard key={l.key} lock={l} available={available} busy={busy} onBuy={() => onLock(b.key, l.key)} />
-              ))}
-            </View>
-          ) : null}
-
-          {next ? (
-            <View style={styles.nextCard}>
-              <View style={styles.nextHead}>
-                <Text style={styles.nextOver} {...textScale.badge}>
-                  SIRADAKİ AŞAMA
-                </Text>
-                {next.cost > 0 ? <StarCost value={next.cost} /> : null}
-              </View>
-              <Text style={styles.nextTitle} {...textScale.dense}>
-                {next.index}. {next.title}
-              </Text>
-              {next.desc ? (
-                <Text style={styles.nextDesc} {...textScale.long}>
-                  {next.desc}
-                </Text>
-              ) : null}
-              {next.locks.length ? (
-                <Text style={styles.nextLocks} numberOfLines={2} {...textScale.long}>
-                  İçinde: {next.locks.map((l) => l.title).join(" · ")}
-                </Text>
-              ) : null}
-              {next.min_rung > ladder.rung ? (
-                <View style={styles.nextGate}>
-                  <Ionicons name="lock-closed" size={12} color={colors.textSecondary} />
-                  <Text style={styles.nextGateText} {...textScale.dense}>
-                    {rungOpensText(ladder, next.min_rung)}
+              {current && current.locks.length ? (
+                <View style={styles.pathCard}>
+                  <View style={styles.pathHead}>
+                    <Text style={styles.pathOver} {...textScale.badge}>
+                      ARA ADIMLAR · {b.locks_done}/{b.locks_total}
+                    </Text>
+                    <Text style={styles.pathHint} {...textScale.badge}>
+                      yalnız yıldız
+                    </Text>
+                  </View>
+                  <Text style={styles.blockLead} {...textScale.long}>
+                    {locksDone ? `${current.title} hazır: ana yükseltmeye geçebilirsin.` : `${current.title} içine eklenecekler. Hepsi bitince bina büyür.`}
                   </Text>
+                  {current.locks.map((l) => (
+                    <LockCard key={l.key} lock={l} available={available} busy={busy} onBuy={() => onLock(b.key, l.key)} />
+                  ))}
                 </View>
+              ) : null}
+
+              {next ? (
+                <>
+                  <View style={styles.connector}>
+                    <Ionicons name="arrow-down" size={18} color={colors.textTertiary} />
+                  </View>
+                  <View style={[styles.pathCard, styles.mainCard]}>
+                    <View style={styles.pathHead}>
+                      <Text style={styles.pathOver} {...textScale.badge}>
+                        SIRADAKİ ANA YÜKSELTME
+                      </Text>
+                      <Text style={styles.pathHint} {...textScale.badge}>
+                        {next.index}/{b.max}
+                      </Text>
+                    </View>
+                    <Text style={styles.nextTitle} {...textScale.dense}>
+                      {next.title}
+                    </Text>
+                    {next.desc ? (
+                      <Text style={styles.nextDesc} {...textScale.long}>
+                        {next.desc}
+                      </Text>
+                    ) : null}
+                    <View style={styles.needs}>
+                      {current ? <Need ok={locksDone} icon="construct-outline" text="Ara adımlar tamam" value={`${b.locks_done}/${b.locks_total}`} /> : null}
+                      <Need ok={next.min_rung <= ladder.rung} icon="trophy-outline" text={next.min_rung <= ladder.rung ? "Lig şartı tamam" : rungOpensText(ladder, next.min_rung)} />
+                      <Need ok={available >= next.cost} icon="star-outline" text="Yıldız" value={`${fmt(Math.min(available, next.cost))}/${fmt(next.cost)}`} />
+                      {next.el ? <Need ok={balance >= next.el} icon="wallet-outline" text="Elit Lira" value={`${fmtEl(Math.min(balance, next.el))}/${fmtEl(next.el)}`} /> : null}
+                    </View>
+                    {next.locks.length ? (
+                      <Text style={styles.nextLocks} numberOfLines={2} {...textScale.long}>
+                        Sonra içine: {next.locks.map((l) => l.title).join(" · ")}
+                      </Text>
+                    ) : null}
+                  </View>
+                </>
               ) : null}
             </View>
           ) : null}
 
           <View style={styles.block}>
             <Text style={styles.blockTitle} {...textScale.dense}>
-              Bütün aşamalar
+              Bütün ana yükseltmeler
             </Text>
             <View style={styles.timeline}>
               {b.stages.map((s) => (
@@ -377,6 +435,21 @@ const styles = StyleSheet.create({
   stageTitle: { ...type.bodySm, fontFamily: fonts.semibold, color: colors.textPrimary },
   stageLocked: { color: colors.textTertiary },
   stageMeta: { ...type.caption, color: colors.textTertiary },
+  leagueNote: { flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.brandDim },
+  leagueNoteOk: { backgroundColor: colors.winDim },
+  leagueNoteText: { ...type.bodySm, color: colors.textPrimary, flex: 1 },
+  pathCard: { gap: space.sm, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
+  mainCard: { backgroundColor: colors.surface2, borderColor: colors.brandBorder },
+  pathHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  pathOver: { ...type.overline, color: colors.textSecondary },
+  pathHint: { ...type.micro, color: colors.textTertiary },
+  connector: { alignItems: "center", marginVertical: -space.xs },
+  needs: { gap: 6, marginTop: space.xxs },
+  need: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 24 },
+  needText: { ...type.bodySm, color: colors.textPrimary, flex: 1 },
+  needOff: { color: colors.textSecondary },
+  needValue: { ...type.numSmStrong, color: colors.textSecondary },
+  needOk: { color: colors.win },
   footNote: { flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surface2 },
   footNoteText: { ...type.bodySm, color: colors.textSecondary, flex: 1 },
 });

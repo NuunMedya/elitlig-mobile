@@ -27,7 +27,7 @@ import { BottomSheet, Touchable, useReduceMotion, useToast } from "@/components/
 import { errorText } from "@/lib/admin/errors";
 import { CARTOON } from "@/lib/game/cartoon";
 import { HUB } from "@/lib/game/hubPalette";
-import { cityKeys, claimStreakSaver, startStreakSaver, type DailyClaimResponse, type DailyReward, type DailyStatus } from "@/lib/puzzle/api";
+import { cityKeys, claimStreakSaver, saveStreakWithCoins, startStreakSaver, type DailyClaimResponse, type DailyReward, type DailyStatus } from "@/lib/puzzle/api";
 import { LANDMARK_ICONS, rewardLine, type DailyDay, type DailyView } from "@/lib/puzzle/daily";
 import { puzzleGame, PUZZLE_GAMES } from "@/lib/puzzle/registry";
 import type { PuzzleGameKey } from "@/lib/puzzle/types";
@@ -144,6 +144,7 @@ export function DailyRewardSheet({ visible, onClose }: { visible: boolean; onClo
   const [joker, setJoker] = useState<string>(DEFAULT_JOKER);
   const [lifeGame, setLifeGame] = useState<PuzzleGameKey | null>(null);
   const [ad, setAd] = useState(false);
+  const [coinSaving, setCoinSaving] = useState(false);
 
   // Gün 5: varsayılan oyun en az canı olan (sunucu da öyle seçer).
   const fewest = useMemo<PuzzleGameKey | null>(() => {
@@ -214,7 +215,26 @@ export function DailyRewardSheet({ visible, onClose }: { visible: boolean; onClo
       ) : (
         <View style={styles.sheet}>
           <StreakHero view={view} />
-          {view.offerSaver && view.saver ? <SaverOffer view={view} onWatch={() => setAd(true)} /> : null}
+          {view.offerSaver && view.saver ? (
+            <SaverOffer
+              view={view}
+              onWatch={() => setAd(true)}
+              coins={me?.profile.coins}
+              coinPrice={me?.profile.coin_shop?.saver_coins ?? null}
+              busy={coinSaving}
+              onCoins={() => {
+                setCoinSaving(true);
+                saveStreakWithCoins()
+                  .then((res) => {
+                    writeDaily(res.daily);
+                    void queryClient.invalidateQueries({ queryKey: ["puzzle", "me"] });
+                    toast.show({ message: "Serin jetonla kurtarıldı! Şimdi bugünün ödülünü al.", tone: "success" });
+                  })
+                  .catch((error) => toast.show({ message: errorText(error), tone: "danger" }))
+                  .finally(() => setCoinSaving(false));
+              }}
+            />
+          ) : null}
           <DayGrid view={view} />
           {view.available && today.joker ? (
             <JokerPicker selected={joker} onSelect={setJoker} catalog={me?.catalog.boosters} stock={me?.profile.boosters} />
@@ -283,7 +303,7 @@ function StreakHero({ view }: { view: DailyView }) {
   );
 }
 
-function SaverOffer({ view, onWatch }: { view: DailyView; onWatch: () => void }) {
+function SaverOffer({ view, onWatch, coins, coinPrice, onCoins, busy }: { view: DailyView; onWatch: () => void; coins?: number; coinPrice?: number | null; onCoins?: () => void; busy?: boolean }) {
   const saver = view.saver!;
   return (
     <View style={styles.saver}>
@@ -301,6 +321,17 @@ function SaverOffer({ view, onWatch }: { view: DailyView; onWatch: () => void })
         </View>
       </View>
       <ChunkyButton label="REKLAM İZLE, SERİNİ KURTAR" icon="play-circle" tone="green" onPress={onWatch} accessibilityLabel={`Reklam izle, ${saver.streak} günlük serini kurtar`} />
+      {coinPrice && onCoins ? (
+        <ChunkyButton
+          label={(coins ?? 0) >= coinPrice ? `JETONLA KURTAR · ${coinPrice.toLocaleString("tr-TR")}` : `${(coinPrice - (coins ?? 0)).toLocaleString("tr-TR")} JETON EKSİK`}
+          icon="disc"
+          tone="gold"
+          small
+          disabled={(coins ?? 0) < coinPrice || busy}
+          onPress={onCoins}
+          accessibilityLabel={`Jetonla serini kurtar, ${coinPrice} jeton`}
+        />
+      ) : null}
       <Text style={styles.saverFoot} {...textScale.dense}>
         Haftada {saver.per_week} kez · {saver.seconds} sn reklam
       </Text>

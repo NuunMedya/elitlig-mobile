@@ -76,6 +76,7 @@ import { getPlayerRankings } from "@/lib/api/players";
 import { CARTOON } from "@/lib/game/cartoon";
 import { QUIZ, QUIZ_LETTER_TONES, QUIZ_TONES, type QuizToneName } from "@/lib/game/quizPalette";
 import { ApiError, get } from "@/lib/http";
+import { useGameSave } from "@/lib/puzzle/saves";
 import { queryKeys } from "@/lib/queryKeys";
 import { instagramUrl } from "@/lib/socials";
 import type { PlayerRankRow } from "@/lib/types";
@@ -87,7 +88,6 @@ import { fonts, haptics, layout, radius, space, textScale, type, upperTR } from 
 
 const ROUND = 10;
 const SECONDS = 12;
-const BEST_KEY = "elitlig.gunun.best.v1";
 const DAY_KEY = (day: string) => `elitlig.gunun.${day}.v1`;
 
 /**
@@ -420,7 +420,9 @@ export default function DailyQuizScreen() {
   const [correctCount, setCorrectCount] = useState(0);
   const [official, setOfficial] = useState(true);
   const [todayResult, setTodayResult] = useState<DayResult | null>(null);
-  const [best, setBest] = useState(0);
+  // En iyi gün puanı hesaba bağlıdır (lib/puzzle/saves `bests.gunun`).
+  const bests = useGameSave("bests");
+  const best = bests.data?.gunun ?? 0;
   /* — Yalnız sunum: ilerleme şeridi ve tur süresi — */
   const [marks, setMarks] = useState<Mark[]>([]);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -439,7 +441,6 @@ export default function DailyQuizScreen() {
   const answerRef = useRef<(index: number | null) => void>(() => {});
 
   useEffect(() => {
-    AsyncStorage.getItem(BEST_KEY).then((v) => setBest(Number(v) || 0));
     AsyncStorage.getItem(DAY_KEY(day)).then((v) => {
       if (v) {
         try {
@@ -594,13 +595,7 @@ export default function DailyQuizScreen() {
       const result: DayResult = { score: finalScore, correct: finalCorrect, pending: finalScore > 0 };
       setTodayResult(result);
       AsyncStorage.setItem(DAY_KEY(day), JSON.stringify(result));
-      setBest((b) => {
-        if (finalScore > b) {
-          AsyncStorage.setItem(BEST_KEY, String(finalScore));
-          return finalScore;
-        }
-        return b;
-      });
+      if (finalScore > best) bests.update({ gunun: finalScore });
     }
   };
 

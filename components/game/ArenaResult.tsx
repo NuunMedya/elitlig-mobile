@@ -1,7 +1,7 @@
 /**
  * ARENA SONUÇ KATMANI — bütün Arena oyunlarının ortak "tur bitti" parçaları.
  *
- *   · `useArenaScore`  kişisel rekor (cihazda), skorun rekor tablosuna
+ *   · `useArenaScore`  kişisel rekor (hesabın oyun kaydı `bests`), skorun rekor tablosuna
  *                      gönderimi ve misafirin giriş yapıp dönünce skorunun
  *                      KENDİLİĞİNDEN gönderilmesi.
  *   · `ArenaResultCard` skor, yeni rekor rozeti, tur istatistikleri, gönderim
@@ -18,7 +18,6 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -42,6 +41,7 @@ import { CartoonButton, CartoonPanel, IconBubble, PopIn, Ribbon } from "@/compon
 import { ARENA_RESULT } from "@/lib/game/arenaResultPalette";
 import { CARTOON } from "@/lib/game/cartoon";
 import { QUIZ } from "@/lib/game/quizPalette";
+import { useGameSave } from "@/lib/puzzle/saves";
 import { instagramUrl } from "@/lib/socials";
 import { useAuth } from "@/providers/AuthProvider";
 import { fonts, radius, space, textScale, type, upperTR } from "@/theme";
@@ -70,10 +70,15 @@ function readEntry(data: unknown): { rank: number; score: number } | null {
 
 /* ═════════════════════════ KANCA: rekor + gönderim ═════════════════════════ */
 
-export function useArenaScore(game: ArenaGame, bestKey: string) {
+export function useArenaScore(game: ArenaGame) {
   const auth = useAuth();
   const queryClient = useQueryClient();
-  const [best, setBest] = useState(0);
+  // Kişisel rekor hesaba bağlıdır (lib/puzzle/saves): başka hesapla girince
+  // eskisi görünmez, telefon değişince sunucudan gelir. Kayıt büyüğü tutar.
+  const bests = useGameSave("bests");
+  const best = bests.data?.[game] ?? 0;
+  const updateBests = bests.update;
+  const setBest = useCallback((value: number) => updateBests({ [game]: value }), [updateBests, game]);
   const [prevBest, setPrevBest] = useState(0);
   const [submit, setSubmit] = useState<SubmitState>("idle");
   const [score, setScore] = useState<number | null>(null);
@@ -87,10 +92,6 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
   const statsRef = useRef<Record<string, number> | null>(null);
   /** Bu turun oyun oturumu (Kariyer Modu doğrulaması); açılamazsa null. */
   const sessionRef = useRef<Promise<string | null> | null>(null);
-
-  useEffect(() => {
-    AsyncStorage.getItem(bestKey).then((value) => setBest(Number(value) || 0));
-  }, [bestKey]);
 
   const send = useCallback(
     (value: number) => {
@@ -118,7 +119,6 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
           const entry = response?.entry;
           if (entry && typeof entry.best === "number" && entry.best > bestRef.current) {
             setBest(entry.best);
-            void AsyncStorage.setItem(bestKey, String(entry.best));
           }
           if (entry && typeof entry.record === "boolean") setServerRecord(Boolean(entry.record || entry.first));
           if (entry && typeof entry.stars === "number") setStars(entry.stars);
@@ -129,7 +129,7 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
         })
         .catch(() => setSubmit("failed"));
     },
-    [auth.user, bestKey, game, queryClient],
+    [auth.user, game, queryClient, setBest],
   );
 
   /* Misafir giriş yapıp döndüyse bekleyen skor kendiliğinden gönderilir. */
@@ -147,11 +147,10 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
       setPrevBest(bestRef.current);
       if (value > bestRef.current) {
         setBest(value);
-        void AsyncStorage.setItem(bestKey, String(value));
       }
       send(value);
     },
-    [bestKey, send],
+    [send, setBest],
   );
 
   /** Yeni tur: skor sıfırlanır ve girişliyse oyun oturumu açılır. */

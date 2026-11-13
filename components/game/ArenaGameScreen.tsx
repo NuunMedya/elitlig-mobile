@@ -37,6 +37,7 @@ import { Touchable, useReduceMotion } from "@/components/ui";
 import { CARTOON } from "@/lib/game/cartoon";
 import { ARENA_CARD } from "@/lib/game/arenaPalette";
 import { getPlayerCareer } from "@/lib/api/career";
+import { useGameSave, type SaveData } from "@/lib/puzzle/saves";
 import type { WebGameKey } from "@/lib/game/web/games.generated";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
@@ -58,8 +59,12 @@ export interface ArenaGameConfig {
   icon: keyof typeof Ionicons.glyphMap;
   /** Giriş kartındaki 3–4 kısa kural. */
   rules: ArenaGameRule[];
-  /** Cihazdaki kişisel rekor anahtarı — `(tabs)/oyunlar.tsx` aynı anahtarı okur. */
-  bestKey: string;
+  /**
+   * ESKİ cihaz rekor anahtarı (ARENA_BEST_KEYS). Rekor artık hesabın oyun
+   * kaydındadır (lib/puzzle/saves `bests`, oyun adıyla); bu anahtar yalnız
+   * ilk geçişte taşınır ve okunmaz.
+   */
+  bestKey?: string;
   /** Bitiş kartındaki istatistik satırı: "12 gol · Seviye 4". */
   describe: (stats: Record<string, number>) => string[];
   /** Tur kötü bittiğinde başlık ("Hakların bitti"). */
@@ -84,7 +89,7 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
   const router = useRouter();
   const scope = useScope();
   const reduceMotion = useReduceMotion();
-  const run = useArenaScore(config.game, config.bestKey);
+  const run = useArenaScore(config.game);
   const auth = useAuth();
 
   /* Kariyer avantajı (Elit Kart): bağlı oyuncunun gerçek istatistiklerinden
@@ -154,28 +159,24 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
   );
 
   /* Oyunun kalıcı verisi (Savunma Hattı: açılan bölümler ve yıldızlar).
-     WebView'in kendi depolaması kapalı; veri burada saklanır ve hazır olunca
-     oyuna geri gönderilir. */
-  const storeKey = `elitlig.arena.${config.game}.store.v1`;
+     WebView'in kendi depolaması kapalı; veri HESABA bağlı oyun kaydında
+     durur (lib/puzzle/saves: cihaz önbelleği + sunucu) ve her değişince oyuna
+     gönderilir — oyun kendi ilerlemesiyle birleştirir (büyüğü kalır). Sunucu
+     kaydı geç gelirse (başka telefonda açılan bölümler) oyun açıkken de alınır. */
+  const storeSave = useGameSave(config.game === "savunma" ? "savunma" : null);
   const storeRef = useRef<Record<string, unknown> | null>(null);
+  storeRef.current = storeSave.data;
   useEffect(() => {
-    AsyncStorage.getItem(storeKey)
-      .then((raw) => {
-        if (!raw) return;
-        const data = JSON.parse(raw) as Record<string, unknown>;
-        storeRef.current = data;
-        game.current?.send({ type: "config", store: data });
-      })
-      .catch(() => undefined);
-  }, [storeKey]);
+    if (storeSave.data) game.current?.send({ type: "config", store: storeSave.data });
+  }, [storeSave.data]);
+  const updateStore = storeSave.update;
   const onEvent = useCallback(
     (message: Record<string, unknown>) => {
       if (message.type === "store" && message.data && typeof message.data === "object") {
-        storeRef.current = message.data as Record<string, unknown>;
-        void AsyncStorage.setItem(storeKey, JSON.stringify(message.data)).catch(() => undefined);
+        updateStore(message.data as SaveData["savunma"]);
       }
     },
-    [storeKey],
+    [updateStore],
   );
 
   const onReady = useCallback(() => {

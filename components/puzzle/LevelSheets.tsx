@@ -360,6 +360,7 @@ export function ResultSheet({
   level,
   coins,
   firstClear,
+  starsGained,
   summary,
   onNext,
   onRetry,
@@ -374,6 +375,8 @@ export function ResultSheet({
   level: number;
   coins: number;
   firstClear: boolean;
+  /** Şehre bu seviyeden eklenen yıldız (tekrar oyunda yalnız artış; eski sunucuda yok). */
+  starsGained?: number | null;
   summary?: string;
   onNext: () => void;
   onRetry: () => void;
@@ -418,7 +421,7 @@ export function ResultSheet({
           </View>
           <View style={styles.rewards}>
             <Reward icon="disc" tint={S.gold} value={`+${coins}`} label="jeton" />
-            {firstClear ? <Reward icon="star" tint={S.gold} value={`+${stars}`} label="şehir yıldızı" /> : null}
+            {(starsGained ?? (firstClear ? stars : 0)) > 0 ? <Reward icon="star" tint={S.gold} value={`+${starsGained ?? stars}`} label="şehir yıldızı" /> : null}
           </View>
         </>
       ) : (

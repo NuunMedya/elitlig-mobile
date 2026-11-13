@@ -149,7 +149,7 @@ export function GateLive({ next, gate, busy, onPay }: { next: City2Next; gate: C
           <Ionicons name="star" size={14} color={next.can_buy ? colors.yellowCard : colors.textTertiary} />
           <Text style={[styles.payText, !next.can_buy ? styles.payTextOff : null]} {...textScale.dense}>
             {next.can_buy
-              ? `Yıldızla aç ve basamak atla · ${fmt(cost)}`
+              ? `Yıldızla aç ve lige yüksel · ${fmt(cost)}`
               : !baseOk
                 ? "Yıldızla açmak için önce diğer koşullar"
                 : `Yıldızla açmak için ${fmt(missing)} yıldız eksik`}
@@ -177,7 +177,7 @@ export function GateLive({ next, gate, busy, onPay }: { next: City2Next; gate: C
         }
       >
         <Text style={styles.confirmText} {...textScale.long}>
-          {`${next.label}. basamağın (${next.title}) gerçek hayat kilidi ${fmt(cost)} yıldızla açılır ve hemen basamak atlarsın. ${player.available ? "Sahada oynayarak ya da taraftar yolundan" : "Taraftar yolundan"} bu kilidi ücretsiz de açabilirsin.`}
+          {`${next.label}. ligin (${next.title}) gerçek hayat kilidi ${fmt(cost)} yıldızla açılır ve hemen lige yükselirsin. ${player.available ? "Sahada oynayarak ya da taraftar yolundan" : "Taraftar yolundan"} bu kilidi ücretsiz de açabilirsin.`}
         </Text>
       </BottomSheet>
     </View>

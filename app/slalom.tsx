@@ -23,7 +23,7 @@ const CONFIG: ArenaGameConfig = {
     { icon: "warning-outline", text: "Alçak engelin üstünden zıpla, pankartın altından kay, otobüsün şeridinden çık. Çarpmak bir hak götürür (3 hak)." },
     { icon: "shield-outline", text: "2. seviyeden sonra ligin savunmacıları gelir: kayan savunmacının üstünden zıpla, kollarını açan duvardan kaç." },
     { icon: "flash-outline", text: "Parlayan kutular güç verir: MIKNATIS altınları çeker, KALKAN bir çarpışmayı affeder, ×2 puanı ikiye katlar, TURBO her şeyi devirir." },
-    { icon: "star-outline", text: "Her 10 metre ve temiz geçilen her sıra puan; altınlar +1. Hatasız seri çarpanı ×5'e kadar çıkarır." },
+    { icon: "star-outline", text: "Her 10 metre ve temiz geçilen her sıra puan; altınlar +1. Hatasız seri çarpanı ×5'e kadar çıkarır; ×2 PUAN gücüyle ×10'a kadar." },
     { icon: "trending-up-outline", text: "Hız artar, sıralar sıklaşır; her seviyede ligin bir takımı, gündüzden geceye." },
   ],
   describe: (stats) =>

@@ -24,7 +24,6 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -41,7 +40,8 @@ import { XpTransferBanner } from "@/components/city/XpTransferBanner";
 import { WebGame, type WebGameHandle } from "@/components/game/WebGame";
 import { BottomSheet, Button, ErrorState, ScreenHeader, SkeletonCard, Touchable, useToast } from "@/components/ui";
 import { cityKeys, collectCityStars, getCity, puzzleKeys, upgradeCity, type CityBuilding, type CityState } from "@/lib/puzzle/api";
-import { CITY_ICONS, CITY_KIT_KEY, CITY_SKY, CITY_UI, CITY_UNIT_COLORS, CLUB_KITS, type ClubKit } from "@/lib/puzzle/cityPalette";
+import { CITY_ICONS, CITY_SKY, CITY_UI, CITY_UNIT_COLORS, CLUB_KITS, type ClubKit } from "@/lib/puzzle/cityPalette";
+import { useClubKit } from "@/lib/puzzle/saves";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
 
@@ -59,20 +59,14 @@ export function CityV1Screen() {
   const scene = useRef<WebGameHandle>(null);
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
-  const [kit, setKit] = useState<ClubKit>(CLUB_KITS[0]);
+  // Forma rengi hesaba bağlıdır (lib/puzzle/saves): başka telefonda da aynı.
+  const [kit, setKit] = useClubKit();
   const [kitSheet, setKitSheet] = useState(false);
   const [howSheet, setHowSheet] = useState(false);
   const [matchSheet, setMatchSheet] = useState(false);
 
   const query = useQuery({ queryKey: cityKeys.me(), queryFn: getCity, enabled: Boolean(auth.user), staleTime: 20_000, retry: false });
   const city = query.data?.city;
-
-  useEffect(() => {
-    AsyncStorage.getItem(CITY_KIT_KEY).then((value) => {
-      const found = CLUB_KITS.find((k) => k.key === value);
-      if (found) setKit(found);
-    });
-  }, []);
 
   const write = useCallback(
     (next: CityState) => {
@@ -130,7 +124,6 @@ export function CityV1Screen() {
 
   const chooseKit = (next: ClubKit) => {
     setKit(next);
-    void AsyncStorage.setItem(CITY_KIT_KEY, next.key);
     setKitSheet(false);
   };
 

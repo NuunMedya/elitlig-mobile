@@ -18,7 +18,7 @@
  *
  * GELİŞİM: kazanılan her yıldız bir antrenman puanıdır. Maç öncesi üç karttan
  * biri seçilir; kart puanı özelliklere dağıtır. Yıldızlar sunucudadır
- * (/api/puzzle), dağıtım cihazda saklanır (lib/kariyer/progress.ts).
+ * (/api/puzzle), dağıtım hesabın oyun kaydında saklanır (lib/kariyer/progress.ts, lib/puzzle/saves.ts).
  */
 
 import { seededRandom } from "@/lib/puzzle/types";

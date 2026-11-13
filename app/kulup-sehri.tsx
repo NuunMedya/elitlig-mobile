@@ -29,7 +29,6 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
@@ -37,26 +36,28 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ActionSheet, useAdminMutation } from "@/components/admin";
 import { CityV1Screen } from "@/components/city/CityV1";
-import { DailyRewardEntry } from "@/components/city/DailyReward";
+import { ChunkyButton } from "@/components/city/ChunkyButton";
+import { DailyRewardEntry, DailyRewardSheet } from "@/components/city/DailyReward";
 import { MatchStarsSheet } from "@/components/city/MatchStars";
 import { HowSheet, StarWallet, type WalletStars } from "@/components/city/StarWallet";
 import { XpTransferBanner } from "@/components/city/XpTransferBanner";
-import { AcademyCityCard } from "@/components/city2/Academy";
-import { BuildingRow, BuildingSheet } from "@/components/city2/Building";
+import { BuildingSheet } from "@/components/city2/Building";
+import { BuildingGrid, CityHud, ClubTiles, LeagueSheet, type ClubTile } from "@/components/city2/CityHome";
 import { ElHistorySheet, ElHowSheet, ElWallet, FormCard } from "@/components/city2/ElitLira";
 import { LandmarkSheet, type LandmarkTab, type Placing } from "@/components/city2/Landmarks";
 import { MigrationNotice, StepCelebration, type StepResult } from "@/components/city2/Notices";
-import { BuildingIcon, LandmarkIcon, SectionTitle, cardStyle, fmt } from "@/components/city2/shared";
-import { CrestChip, SeasonCard, SeasonEndSheet } from "@/components/city2/Season";
-import { StepCard } from "@/components/city2/StepCard";
-import { TeamCityCard } from "@/components/city2/Team";
-import { VisitEntryCard } from "@/components/city2/Visit";
+import { SectionTitle, cardStyle, fmt } from "@/components/city2/shared";
+import { CrestChip, SeasonEndSheet } from "@/components/city2/Season";
 import { WebGame, type WebGameHandle } from "@/components/game/WebGame";
-import { BottomSheet, Button, ErrorState, ScreenHeader, SkeletonCard, Touchable, refreshControlProps, useRefresh, useToast } from "@/components/ui";
+import { BottomSheet, Button, ErrorState, SkeletonCard, Touchable, refreshControlProps, useRefresh, useToast } from "@/components/ui";
 import { collectCityStars } from "@/lib/puzzle/api";
-import { buildingMark, incomeOf, rungLabel, type City2CollectResult, type City2OwnedLandmark, type City2State } from "@/lib/puzzle/city2";
-import { CITY_KIT_KEY, CITY_SKY, CLUB_KITS, type ClubKit } from "@/lib/puzzle/cityPalette";
+import { buildingMark, incomeOf, type City2CollectResult, type City2OwnedLandmark, type City2State } from "@/lib/puzzle/city2";
+import { CITY_SKY, CLUB_KITS, PREMIUM_KITS, type ClubKit } from "@/lib/puzzle/cityPalette";
+import { useClubKit } from "@/lib/puzzle/saves";
 import { useCity2, useCity2Actions } from "@/lib/puzzle/useCity2";
+import { useDailyStatus } from "@/lib/puzzle/useDaily";
+import { usePuzzleMe } from "@/lib/puzzle/usePuzzle";
+import { CoinShopSheet } from "@/components/puzzle/CoinShop";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
 
@@ -81,8 +82,11 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
   const scroll = useRef<ScrollView>(null);
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
-  const [kit, setKit] = useState<ClubKit>(CLUB_KITS[0]);
+  // Forma rengi hesaba bağlıdır (lib/puzzle/saves): başka telefonda da aynı.
+  const [kit, setKit] = useClubKit();
   const [kitSheet, setKitSheet] = useState(false);
+  const [coinShop, setCoinShop] = useState(false);
+  const puzzleMe = usePuzzleMe();
   const [howSheet, setHowSheet] = useState(false);
   const [matchSheet, setMatchSheet] = useState(false);
   const [marksSheet, setMarksSheet] = useState(false);
@@ -92,6 +96,11 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
   const [stepResult, setStepResult] = useState<StepResult | null>(null);
   const [elHistory, setElHistory] = useState(false);
   const [elHow, setElHow] = useState(false);
+  const [starsSheet, setStarsSheet] = useState(false);
+  const [elSheet, setElSheet] = useState(false);
+  const [leagueSheet, setLeagueSheet] = useState(false);
+  const [dailySheet, setDailySheet] = useState(false);
+  const daily = useDailyStatus();
   const [collected, setCollected] = useState<{ res: City2CollectResult; key: number } | null>(null);
   const slotsBefore = useRef(0);
   const params = useLocalSearchParams<{ bina?: string }>();
@@ -100,15 +109,6 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
   useEffect(() => {
     if (typeof params.bina === "string" && params.bina) setOpen(params.bina);
   }, [params.bina]);
-
-  useEffect(() => {
-    AsyncStorage.getItem(CITY_KIT_KEY)
-      .then((value) => {
-        const found = CLUB_KITS.find((k) => k.key === value);
-        if (found) setKit(found);
-      })
-      .catch(() => undefined);
-  }, []);
 
   const actions = useCity2Actions({
     onLock: (key) => scene.current?.send({ type: "focus", key }),
@@ -207,7 +207,6 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
 
   const chooseKit = (next: ClubKit) => {
     setKit(next);
-    void AsyncStorage.setItem(CITY_KIT_KEY, next.key).catch(() => undefined);
     setKitSheet(false);
   };
 
@@ -215,27 +214,54 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
   const selected = city2?.buildings.find((b) => b.key === open) ?? null;
   const sceneHeight = Math.max(260, Math.min(440, height * 0.44));
   const ladder = city2?.ladder ?? null;
-  const openBuildings = city2?.buildings.filter((b) => b.open) ?? [];
-  const closedBuildings = city2?.buildings.filter((b) => !b.open) ?? [];
   const unplaced = city2?.landmarks.owned.filter((l) => !l.slot) ?? [];
-  const placedCount = (city2?.landmarks.owned.length ?? 0) - unplaced.length;
   const incomeBonus = useMemo(() => {
     const inc = (city2?.buildings ?? []).map((b) => incomeOf(b)).find(Boolean);
     return inc ? { prestige: inc.prestige_pct ?? 0, team: inc.team_pct ?? 0 } : null;
   }, [city2?.buildings]);
   const titles = useMemo(() => Object.fromEntries((city2?.buildings ?? []).map((b) => [b.key, b.title])), [city2?.buildings]);
 
+  const openBuilding = (key: string) => {
+    setOpen(key);
+    scene.current?.send({ type: "focus", key });
+  };
+  const tiles: ClubTile[] = city2
+    ? [
+        ...(city2.academy
+          ? [{ key: "akademi", icon: "school-outline" as const, title: "Altyapı", meta: `${city2.academy.squad.length} oyuncu`, badge: city2.academy.offers.length ? String(city2.academy.offers.length) : null, onPress: () => router.push("/kulup-sehri-akademi") }]
+          : []),
+        ...(city2.season ? [{ key: "sezon", icon: "calendar-outline" as const, title: "Sezon", meta: city2.season.current ? `${fmt(city2.season.current.score)} puan` : null, onPress: () => router.push("/kulup-sehri-sezon") }] : []),
+        ...(city2.team?.team ? [{ key: "takim", icon: "people-outline" as const, title: "Takım tesisi", meta: `Seviye ${city2.team.team.level}`, onPress: () => router.push("/kulup-sehri-takim") }] : []),
+        {
+          key: "sembol",
+          icon: "sparkles-outline",
+          title: "Sembol yapılar",
+          meta: `${fmt(city2.beauty)} güzellik`,
+          badge: unplaced.length ? String(unplaced.length) : null,
+          onPress: () => {
+            setMarksTab(unplaced.length ? "depot" : "shop");
+            setMarksSheet(true);
+          },
+        },
+        { key: "gunluk", icon: "gift-outline", title: "Günlük ödül", meta: daily.view ? `${daily.view.streak} gün seri` : null, badge: daily.view?.available ? "!" : null, onPress: () => setDailySheet(true) },
+        ...(city2.visit ? [{ key: "gez", icon: "airplane-outline" as const, title: "Şehirleri gez", meta: `${fmt(city2.visit.applause)} alkış`, onPress: () => router.push("/kulup-sehri-ziyaret") }] : []),
+        { key: "siralama", icon: "podium-outline", title: "Sıralama", meta: "Türkiye ve il", onPress: () => router.push("/kulup-sehri-siralama") },
+        { key: "merdiven", icon: "trending-up-outline", title: "Bütün ligler", meta: `${ladder?.current.label ?? 1}/${ladder?.steps[ladder.steps.length - 1]?.label ?? 18}`, onPress: () => router.push("/kulup-sehri-merdiven") },
+        { key: "renk", icon: "color-palette-outline", title: "Kulüp renkleri", meta: kit.name, onPress: () => setKitSheet(true) },
+        { key: "jeton", icon: "disc-outline", title: "Jeton mağazası", meta: puzzleMe.data ? `${puzzleMe.data.profile.coins.toLocaleString("tr-TR")} jeton` : "Yıldız takası", onPress: () => setCoinShop(true) },
+      ]
+    : [];
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader
-        title="Kulüp Şehrin"
-        subtitle={ladder ? `${ladder.current.label}. basamak · ${ladder.current.title}` : "Yıldızlarınla futbol şehrini kur"}
-        back
-        actions={[
-          { icon: "color-palette-outline", onPress: () => setKitSheet(true), accessibilityLabel: "Kulüp renkleri" },
-          { icon: "trending-up-outline", onPress: () => router.push("/kulup-sehri-merdiven"), accessibilityLabel: "Kariyer merdiveni" },
-          { icon: "podium-outline", onPress: () => router.push("/kulup-sehri-siralama"), accessibilityLabel: "Şehir sıralaması" },
-        ]}
+      <CityHud
+        ladder={ladder}
+        stars={city2 ? city2.stars.available : null}
+        el={city2?.el ?? null}
+        onBack={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/oyunlar"))}
+        onStars={() => setStarsSheet(true)}
+        onEl={() => setElSheet(true)}
+        onLeague={() => setLeagueSheet(true)}
       />
       <ScrollView
         ref={scroll}
@@ -247,36 +273,14 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
           <WebGame ref={scene} game="sehir" background={CITY_SKY} accessibilityLabel="Kulüp şehri" onReady={() => setReady(true)} onEvent={onEvent} />
           {city2 ? (
             <View style={styles.sceneBadges} pointerEvents="none">
-              {city2.crest && (city2.crest.frame || city2.crest.prestige_stars > 0) ? (
-                <CrestChip crest={city2.crest} />
-              ) : null}
+              {city2.crest && (city2.crest.frame || city2.crest.prestige_stars > 0) ? <CrestChip crest={city2.crest} /> : null}
               <View style={styles.sceneBadge}>
-                <Ionicons name="star" size={13} color={colors.yellowCard} />
+                <Ionicons name="hand-left-outline" size={13} color={colors.onDark} />
                 <Text style={styles.sceneBadgeText} {...textScale.badge}>
-                  {fmt(city2.stars.available)}
-                </Text>
-              </View>
-              <View style={styles.sceneBadge}>
-                <Ionicons name="sparkles" size={13} color={colors.onDark} />
-                <Text style={styles.sceneBadgeText} {...textScale.badge}>
-                  {fmt(city2.beauty)}
+                  Binaya dokun
                 </Text>
               </View>
             </View>
-          ) : null}
-          {city2?.academy?.offers.length ? (
-            <Touchable
-              feedback="chip"
-              onPress={() => router.push("/kulup-sehri-akademi")}
-              style={styles.sceneOffer}
-              accessibilityRole="button"
-              accessibilityLabel={`${city2.academy.offers.length} bekleyen transfer teklifi`}
-            >
-              <Ionicons name="mail-unread" size={13} color={colors.textOnBrand} />
-              <Text style={styles.sceneBadgeText} {...textScale.badge}>
-                {city2.academy.offers.length} teklif
-              </Text>
-            </Touchable>
           ) : null}
           <Touchable onPress={() => scene.current?.send({ type: "focus", key: null })} style={styles.sceneHome} accessibilityRole="button" accessibilityLabel="Bütün şehri göster">
             <Ionicons name="scan-outline" size={18} color={colors.onDark} />
@@ -316,149 +320,155 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
         ) : (
           <>
             <XpTransferBanner transfer={city2.stars.xp.transfer} perStar={city2.stars.xp.per_star} />
-            <StepCard
-              ladder={ladder}
-              buildings={city2.buildings}
-              busy={actions.step.isPending}
-              onAdvance={(pay) => {
-                slotsBefore.current = city2.landmarks.grid.open_slots;
-                actions.step.mutate(pay);
-              }}
-              onLadder={() => router.push("/kulup-sehri-merdiven")}
-              onBuilding={(key) => {
-                setOpen(key);
-                scene.current?.send({ type: "focus", key });
-              }}
-            />
-            {city2.season ? (
-              <SeasonCard season={city2.season} crest={city2.crest} onPress={() => router.push("/kulup-sehri-sezon")} />
-            ) : null}
-            {city2.el ? (
-              <>
-                <SectionTitle title="Elit Lira" meta="kulübünün işletme geliri" />
-                <ElWallet
-                  el={city2.el}
-                  buildings={city2.buildings}
-                  collecting={actions.collect.isPending && actions.collect.variables == null}
-                  result={collected?.res ?? null}
-                  burstKey={collected?.key ?? 0}
-                  onCollect={() => actions.collect.mutate(null)}
-                  onHistory={() => setElHistory(true)}
-                  onHow={() => setElHow(true)}
-                  onBuilding={(key) => {
-                    setOpen(key);
-                    scene.current?.send({ type: "focus", key });
-                  }}
-                />
-                <FormCard form={city2.el.form} />
-              </>
-            ) : null}
-            {city2.academy ? (
-              <>
-                <SectionTitle title="Altyapı" meta="oyuncu yetiştir, transferden EL kazan" />
-                <AcademyCityCard academy={city2.academy} onPress={() => router.push("/kulup-sehri-akademi")} />
-              </>
-            ) : null}
-            {city2.team?.team || city2.visit ? (
-              <>
-                <SectionTitle title="Takım ve ziyaret" meta="takımınla tesis kur, şehirleri gez" />
-                {city2.team?.team ? <TeamCityCard team={city2.team.team} onPress={() => router.push("/kulup-sehri-takim")} /> : null}
-                {city2.visit ? <VisitEntryCard visit={city2.visit} onPress={() => router.push("/kulup-sehri-ziyaret")} /> : null}
-              </>
-            ) : null}
-            <DailyRewardEntry />
-
-            <SectionTitle title="Binalar" meta={`${fmt(city2.stages_built)} aşama · ${fmt(city2.dev)} gelişim puanı`} />
-            {openBuildings.map((b) => (
-              <BuildingRow
-                key={b.key}
-                b={b}
-                ladder={ladder}
-                available={city2.stars.available}
+            {ladder.next?.can_advance ? (
+              <ChunkyButton
+                label={actions.step.isPending ? "YÜKSELİYOR…" : `LİGE YÜKSEL · ${ladder.next.title}`}
+                icon="arrow-up-circle"
+                tone="green"
+                disabled={actions.step.isPending}
                 onPress={() => {
-                  setOpen(b.key);
-                  scene.current?.send({ type: "focus", key: b.key });
+                  slotsBefore.current = city2.landmarks.grid.open_slots;
+                  actions.step.mutate(undefined);
                 }}
+                accessibilityLabel={`Lige yüksel: ${ladder.next.title}`}
               />
-            ))}
-            {closedBuildings.length ? (
-              <View style={styles.closed}>
-                <Text style={styles.closedTitle} {...textScale.badge}>
-                  MERDİVENDE AÇILACAKLAR
+            ) : null}
+            {daily.view?.available ? <DailyRewardEntry /> : null}
+            {city2.el?.care && city2.el.care.cost > 0 && city2.el.care.low > 0 ? (
+              <Touchable onPress={() => setElSheet(true)} feedback="card" style={styles.careBanner} accessibilityRole="button" accessibilityLabel={`${city2.el.care.low} tesisin bakımı düşük. Bakım için kasayı aç`}>
+                <Ionicons name="build" size={18} color={colors.warn} />
+                <Text style={styles.careBannerText} {...textScale.long}>
+                  {city2.el.care.low} tesisin bakımı düşük (ortalama %{city2.el.care.avg_pct}). Gelirin azaldı: yıldızla bakım yap.
                 </Text>
-                {closedBuildings.map((b) => (
-                  <Touchable key={b.key} onPress={() => setOpen(b.key)} feedback="row" style={styles.closedRow} accessibilityRole="button" accessibilityLabel={`${b.title}, ${rungLabel(ladder, b.opens)}. basamakta açılır`}>
-                    <BuildingIcon buildingKey={b.key} icon={b.icon} size={30} off />
-                    <Text style={styles.closedName} numberOfLines={1} {...textScale.dense}>
-                      {b.title}
-                    </Text>
-                    <Ionicons name="lock-closed" size={12} color={colors.textTertiary} />
-                    <Text style={styles.closedRung} {...textScale.badge}>
-                      {rungLabel(ladder, b.opens)}. basamak
-                    </Text>
-                  </Touchable>
-                ))}
-              </View>
+                <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+              </Touchable>
             ) : null}
 
-            <SectionTitle title="Sembol yapılar" meta={`${fmt(city2.beauty)} güzellik puanı`} />
-            <View style={styles.marks}>
-              <View style={styles.marksRow}>
-                {(city2.landmarks.owned.length ? city2.landmarks.owned.slice(0, 5) : city2.landmarks.catalogue.filter((c) => c.buyable).slice(0, 5)).map((l) => (
-                  <LandmarkIcon
-                    key={"id" in l ? l.id : l.key}
-                    landmarkKey={l.key}
-                    tier={city2.landmarks.catalogue.find((c) => c.key === l.key)?.tier ?? "sus"}
-                    size={36}
-                  />
-                ))}
-                <View style={styles.marksTexts}>
-                  <Text style={styles.marksLine} {...textScale.dense}>
-                    {placedCount} şehirde · {unplaced.length} depoda
-                  </Text>
-                  <Text style={styles.marksSub} {...textScale.dense}>
-                    {city2.landmarks.grid.open_slots - Object.keys(city2.landmarks.grid.taken).length} boş yuva
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.marksButtons}>
-                <Button
-                  label="Mağaza"
-                  icon="storefront-outline"
-                  variant="secondary"
-                  size="sm"
-                  onPress={() => {
-                    setMarksTab("shop");
-                    setMarksSheet(true);
-                  }}
-                  style={styles.flex}
-                />
-                <Button
-                  label={unplaced.length ? `Yerleştir · ${unplaced.length}` : "Yerleşim"}
-                  icon="location-outline"
-                  variant={unplaced.length ? "primary" : "secondary"}
-                  size="sm"
-                  onPress={() => {
-                    setMarksTab(unplaced.length ? "depot" : "grid");
-                    setMarksSheet(true);
-                  }}
-                  style={styles.flex}
-                />
-              </View>
-            </View>
+            <SectionTitle title="Binaların" meta="ara adım → ana yükseltme → lig" action={{ label: "Nasıl?", onPress: () => setLeagueSheet(true) }} />
+            <BuildingGrid buildings={city2.buildings} ladder={ladder} available={city2.stars.available} onOpen={openBuilding} />
 
-            <SectionTitle title="Yıldızların" />
+            <SectionTitle title="Kulübün" />
+            <ClubTiles tiles={tiles} />
+          </>
+        )}
+      </ScrollView>
+
+      <LeagueSheet
+        visible={leagueSheet}
+        onClose={() => setLeagueSheet(false)}
+        ladder={ladder}
+        buildings={city2?.buildings ?? []}
+        busy={actions.step.isPending}
+        onAdvance={(pay) => {
+          if (city2) slotsBefore.current = city2.landmarks.grid.open_slots;
+          actions.step.mutate(pay);
+        }}
+        onBuilding={(key) => {
+          setLeagueSheet(false);
+          openBuilding(key);
+        }}
+        onLadder={() => {
+          setLeagueSheet(false);
+          router.push("/kulup-sehri-merdiven");
+        }}
+      />
+      <BottomSheet visible={starsSheet} onClose={() => setStarsSheet(false)} title="Yıldızların" snap="full">
+        {city2 ? (
+          <View style={styles.sheetBody}>
             <StarWallet
               stars={walletStars(city2)}
               xp={city2.stars.xp}
               collecting={collect.isPending}
               onCollect={() => collect.mutate(undefined)}
-              onHow={() => setHowSheet(true)}
-              onMatch={() => setMatchSheet(true)}
+              onHow={() => {
+                setStarsSheet(false);
+                setHowSheet(true);
+              }}
+              onMatch={() => {
+                setStarsSheet(false);
+                setMatchSheet(true);
+              }}
             />
-          </>
-        )}
-      </ScrollView>
+            <Text style={styles.sheetLead} {...textScale.long}>
+              Yıldız şehrin asıl parasıdır: ara adımlar, ana yükseltmeler, tesis bakımı ve sembol yapılar yıldızla alınır. Oyun oynayarak, maçlarla, görevlerle ve günlük girişle kazanılır.
+            </Text>
+          </View>
+        ) : null}
+      </BottomSheet>
+      <BottomSheet visible={elSheet} onClose={() => setElSheet(false)} title="Elit Lira kasası" snap="full">
+        {city2?.el ? (
+          <View style={styles.sheetBody}>
+            <ElWallet
+              el={city2.el}
+              buildings={city2.buildings}
+              collecting={actions.collect.isPending && actions.collect.variables == null}
+              result={collected?.res ?? null}
+              burstKey={collected?.key ?? 0}
+              onCollect={() => actions.collect.mutate(null)}
+              onHistory={() => setElHistory(true)}
+              onHow={() => setElHow(true)}
+              onBuilding={(key) => {
+                setElSheet(false);
+                openBuilding(key);
+              }}
+            />
+            {city2.el.care ? (
+              <View style={styles.careCard}>
+                <View style={styles.careHead}>
+                  <Ionicons name="build" size={18} color={city2.el.care.low ? colors.warn : colors.win} />
+                  <Text style={styles.careTitle} {...textScale.dense}>
+                    Tesis bakımı · ortalama %{city2.el.care.avg_pct}
+                  </Text>
+                </View>
+                <Text style={styles.sheetLead} {...textScale.long}>
+                  {city2.el.care.text} Bakım günde %{city2.el.care.decay_per_day} düşer, en çok %{city2.el.care.floor}'e iner.
+                </Text>
+                <Button
+                  label={city2.el.care.cost > 0 ? `Hepsine bakım yap · ${fmt(city2.el.care.cost)} yıldız` : "Bütün tesisler bakımlı"}
+                  icon="construct-outline"
+                  variant={city2.el.care.cost > 0 ? "primary" : "secondary"}
+                  disabled={city2.el.care.cost < 1 || city2.el.care.cost > city2.stars.available || actions.busy}
+                  loading={actions.care.isPending && actions.care.variables == null}
+                  onPress={() => actions.care.mutate(null)}
+                />
+                {city2.el.care.cost > city2.stars.available ? (
+                  <Text style={styles.careShort} {...textScale.dense}>
+                    {fmt(city2.el.care.cost - city2.stars.available)} yıldız eksik. Oyunlardan yıldız kazan ya da binaya tek tek bakım yap.
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+            {city2.el.star_trade ? (
+              <View style={styles.careCard}>
+                <View style={styles.careHead}>
+                  <Ionicons name="star" size={18} color={colors.yellowCard} />
+                  <Text style={styles.careTitle} {...textScale.dense}>
+                    Yıldıza çevir · bu hafta {city2.el.star_trade.used}/{city2.el.star_trade.per_week}
+                  </Text>
+                </View>
+                <Text style={styles.sheetLead} {...textScale.long}>
+                  Fazla Elit Lira'nı yıldıza çevir: {fmt(city2.el.star_trade.el)} EL = {city2.el.star_trade.stars} yıldız. Haftada en çok {city2.el.star_trade.per_week} kez; Pazartesi yenilenir.
+                </Text>
+                <Button
+                  label={
+                    city2.el.star_trade.left < 1
+                      ? "Bu haftanın hakkı bitti"
+                      : city2.el.balance < city2.el.star_trade.el
+                        ? `${fmt(city2.el.star_trade.el - city2.el.balance)} EL eksik`
+                        : `${fmt(city2.el.star_trade.el)} EL → ${city2.el.star_trade.stars} yıldız`
+                  }
+                  icon="swap-horizontal"
+                  variant={city2.el.star_trade.left > 0 && city2.el.balance >= city2.el.star_trade.el ? "primary" : "secondary"}
+                  disabled={city2.el.star_trade.left < 1 || city2.el.balance < city2.el.star_trade.el || actions.busy}
+                  loading={actions.elStars.isPending}
+                  onPress={() => actions.elStars.mutate(undefined)}
+                />
+              </View>
+            ) : null}
+            <FormCard form={city2.el.form} />
+          </View>
+        ) : null}
+      </BottomSheet>
 
       <BuildingSheet
         b={selected}
@@ -473,12 +483,15 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
         collecting={actions.collect.isPending && actions.collect.variables === selected?.key}
         onCollect={(building) => actions.collect.mutate(building)}
         onUpgrade={(building, kind) => actions.upgrade.mutate({ building, kind })}
+        caring={actions.care.isPending && actions.care.variables === selected?.key}
+        onCare={city2?.el?.care ? (building) => actions.care.mutate(building) : undefined}
         academy={city2?.academy}
         onAcademy={() => {
           setOpen(null);
           router.push("/kulup-sehri-akademi");
         }}
       />
+      <DailyRewardSheet visible={dailySheet} onClose={() => setDailySheet(false)} />
       <ElHistorySheet visible={elHistory} onClose={() => setElHistory(false)} el={city2?.el ?? null} />
       <ElHowSheet visible={elHow} onClose={() => setElHow(false)} el={city2?.el ?? null} bonus={incomeBonus} />
       <LandmarkSheet
@@ -525,19 +538,38 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
           Formalar, çatılar, bayraklar ve tabelalar bu renklerle boyanır.
         </Text>
         <View style={styles.kits}>
-          {CLUB_KITS.map((k) => (
-            <Touchable key={k.key} onPress={() => chooseKit(k)} style={[styles.kit, k.key === kit.key ? styles.kitOn : null]} accessibilityRole="button" accessibilityLabel={k.name}>
-              <View style={styles.kitSwatch}>
-                <View style={[styles.kitHalf, { backgroundColor: k.primary }]} />
-                <View style={[styles.kitHalf, { backgroundColor: k.secondary }]} />
-              </View>
-              <Text style={styles.kitName} numberOfLines={1} {...textScale.dense}>
-                {k.name}
-              </Text>
-            </Touchable>
-          ))}
+          {[...CLUB_KITS, ...PREMIUM_KITS].map((k) => {
+            const premium = PREMIUM_KITS.includes(k);
+            const owned = !premium || Boolean(puzzleMe.data?.profile.coin_shop?.kits.find((x) => x.key === k.key)?.owned);
+            return (
+              <Touchable
+                key={k.key}
+                onPress={() => (owned ? chooseKit(k) : (setKitSheet(false), setCoinShop(true)))}
+                style={[styles.kit, k.key === kit.key ? styles.kitOn : null]}
+                accessibilityRole="button"
+                accessibilityLabel={owned ? k.name : `${k.name}, jeton mağazasında açılır`}
+              >
+                <View style={styles.kitSwatch}>
+                  <View style={[styles.kitHalf, { backgroundColor: k.primary }]} />
+                  <View style={[styles.kitHalf, { backgroundColor: k.secondary }]} />
+                </View>
+                <Text style={styles.kitName} numberOfLines={1} {...textScale.dense}>
+                  {k.name}
+                </Text>
+                {!owned ? <Ionicons name="lock-closed" size={13} color={colors.textTertiary} /> : null}
+              </Touchable>
+            );
+          })}
         </View>
       </BottomSheet>
+      <CoinShopSheet
+        visible={coinShop}
+        onClose={() => setCoinShop(false)}
+        onKitBought={(key) => {
+          const next = PREMIUM_KITS.find((k) => k.key === key);
+          if (next) chooseKit(next);
+        }}
+      />
       <MatchStarsSheet visible={matchSheet} onClose={() => setMatchSheet(false)} detail={city2?.stars.sources.match_detail} total={city2?.stars.sources.match ?? 0} />
       <HowSheet
         visible={howSheet}
@@ -554,7 +586,6 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { paddingHorizontal: layout.screenPadding, paddingBottom: space.giant * 2, gap: space.md, paddingTop: space.xs },
-  flex: { flex: 1 },
   scene: { borderRadius: radius.xl, overflow: "hidden", backgroundColor: colors.inkBlock, borderWidth: hairline, borderColor: colors.inkTileBorder },
   sceneBadges: { position: "absolute", top: space.sm, left: space.sm, flexDirection: "row", gap: space.xs },
   sceneBadge: {
@@ -567,18 +598,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   sceneBadgeText: { ...type.label, fontFamily: fonts.bold, color: colors.onDark },
-  sceneOffer: {
-    position: "absolute",
-    top: space.sm + 34,
-    left: space.sm,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.xxs,
-    backgroundColor: colors.brandAccent,
-    paddingHorizontal: space.sm,
-    paddingVertical: space.xxs,
-    borderRadius: radius.pill,
-  },
   sceneHome: {
     position: "absolute",
     top: space.sm,
@@ -609,20 +628,15 @@ const styles = StyleSheet.create({
   placeBtnText: { ...type.labelXs, color: colors.onDark },
   placeClose: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
 
-  closed: { ...cardStyle, padding: space.md, gap: space.xs },
-  closedTitle: { ...type.overline, color: colors.textTertiary, marginBottom: space.xxs },
-  closedRow: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 38, borderRadius: radius.md },
-  closedName: { ...type.bodySm, fontFamily: fonts.semibold, color: colors.textSecondary, flex: 1 },
-  closedRung: { ...type.caption, color: colors.textTertiary },
-
-  marks: { ...cardStyle, padding: space.md, gap: space.md },
-  marksRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  marksTexts: { flex: 1, marginLeft: space.xs, gap: 2 },
-  marksLine: { ...type.labelSm, color: colors.textPrimary },
-  marksSub: { ...type.caption, color: colors.textTertiary },
-  marksButtons: { flexDirection: "row", gap: space.sm },
 
   sheetLead: { ...type.body, color: colors.textSecondary },
+  sheetBody: { gap: space.md, paddingBottom: space.lg },
+  careBanner: { ...cardStyle, flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, borderColor: colors.warn },
+  careBannerText: { ...type.bodySm, color: colors.textPrimary, flex: 1 },
+  careCard: { ...cardStyle, padding: space.md, gap: space.sm },
+  careHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  careTitle: { ...type.h3, color: colors.textPrimary, flex: 1 },
+  careShort: { ...type.caption, color: colors.textTertiary },
   kits: { flexDirection: "row", flexWrap: "wrap", gap: space.sm, marginTop: space.sm },
   kit: { width: "47%", flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.sm, borderRadius: radius.lg, borderWidth: hairline, borderColor: colors.border, backgroundColor: colors.surface1 },
   kitOn: { borderColor: colors.brandAccent, backgroundColor: colors.brandDim },

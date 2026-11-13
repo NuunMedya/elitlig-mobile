@@ -38,7 +38,9 @@ import {
   buildCity2Stage,
   buyCity2Landmark,
   buyCity2Lock,
+  careCity2,
   city2Keys,
+  tradeCity2ElForStars,
   collectCity2El,
   fmtEl,
   getCity2,
@@ -101,7 +103,7 @@ export function useCity2Actions(callbacks: {
     },
   });
   const stage = useAdminMutation((building: string) => buildCity2Stage(building), {
-    success: (res) => `${res.stage.title} hazır!`,
+    success: (res) => `${res.stage.title} hazır!${res.el_cost ? ` · −${fmtEl(res.el_cost)} EL` : ""}`,
     onSuccess: (res) => {
       write(res.city2);
       callbacks.onStage?.(res.building, res.stage.title);
@@ -148,8 +150,18 @@ export function useCity2Actions(callbacks: {
       callbacks.onUpgrade?.(res);
     },
   });
-  const busy = lock.isPending || stage.isPending || step.isPending || landmark.isPending || place.isPending || collect.isPending || upgrade.isPending;
-  return { lock, stage, step, landmark, place, collect, upgrade, busy };
+  /** Şehir 2.1: tesis bakımı (yıldızla; building yoksa bakımı eksik bütün binalar). */
+  const care = useAdminMutation((building: string | null) => careCity2(building), {
+    success: (res) => `Bakım yapıldı · −${res.cost} yıldız`,
+    onSuccess: (res) => write(res.city2),
+  });
+  /** Şehir 2.1: EL → yıldız takası. */
+  const elStars = useAdminMutation(() => tradeCity2ElForStars(), {
+    success: (res) => `+${res.stars} yıldız · −${fmtEl(res.cost)} EL`,
+    onSuccess: (res) => write(res.city2),
+  });
+  const busy = lock.isPending || stage.isPending || step.isPending || landmark.isPending || place.isPending || collect.isPending || upgrade.isPending || care.isPending || elStars.isPending;
+  return { lock, stage, step, landmark, place, collect, upgrade, care, elStars, busy };
 }
 
 /** EL defteri (yeniden eskiye, sayfalı: before = next_before). */

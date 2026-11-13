@@ -45,7 +45,8 @@ import {
   type TrainingCard,
 } from "@/lib/kariyer/levels";
 import { HUD, paletteForTier } from "@/lib/kariyer/palette";
-import { attrsOf, emptySave, identityOf, loadSave, storeSave, type KariyerSave } from "@/lib/kariyer/progress";
+import { attrsOf, emptySave, identityOf, normalizeSave, type KariyerSave } from "@/lib/kariyer/progress";
+import { useGameSave } from "@/lib/puzzle/saves";
 import { OUTCOME_TEXT, PHASE_OVER, createMoment, drawMoment, emptyTouch, stepMoment, type MomentState } from "@/lib/kariyer/sim";
 import type { PuzzleGameProps } from "@/lib/puzzle/types";
 import { usePuzzleMe } from "@/lib/puzzle/usePuzzle";
@@ -71,7 +72,6 @@ const ROW2_H = 34;
 export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, boosterStock, useBooster, onFinish, paused }: PuzzleGameProps) {
   const auth = useAuth();
   const puzzle = usePuzzleMe();
-  const userId = auth.user?.id ?? 0;
 
   /* — Kimlik: gerçek oyuncu profili varsa oradan başlar — */
   const hasPlayer = Boolean(auth.user?.player_id);
@@ -83,16 +83,11 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
   const pal = useMemo(() => paletteForTier(def.tier), [def.tier]);
 
   /* — Gelişim — */
-  const [save, setSave] = useState<KariyerSave | null>(null);
-  useEffect(() => {
-    let alive = true;
-    void loadSave(userId).then((loaded) => {
-      if (alive) setSave(loaded);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [userId]);
+  // Hesaba bağlı kayıt (lib/puzzle/saves): sunucu yanıtı gelene dek beklenir —
+  // başka telefonda harcanan puanlar yeniden dağıtılmaya açılmasın.
+  const kariyerSave = useGameSave("kariyer");
+  const save = useMemo<KariyerSave | null>(() => (kariyerSave.ready ? normalizeSave(kariyerSave.data) : null), [kariyerSave.ready, kariyerSave.data]);
+  const writeKariyer = kariyerSave.update;
 
   // Cüzdan sorgusu bitti ya da hiç çalışmıyor (çevrimdışı): oyun beklemeye takılmaz.
   const puzzleReady = puzzle.isFetched || puzzle.fetchStatus === "idle";
@@ -253,11 +248,10 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
       haptics.select();
       const zero: Attrs = { sut: 0, pas: 0, teknik: 0, hiz: 0 };
       const next: KariyerSave = { spent: save.spent + 1, gains: applyGains(applyGains(zero, save.gains), card.gains) };
-      setSave(next);
-      void storeSave(userId, next);
+      writeKariyer(next);
       if (totalStars - next.spent <= 0) setStage("intro");
     },
-    [save, totalStars, userId],
+    [save, totalStars, writeKariyer],
   );
 
   /* — Parmak: çekiş başı ve ucu paylaşılan değere yazılır — */

@@ -296,7 +296,7 @@ function NotificationStep() {
           })
         ) : (
           <Text style={styles.note} {...textScale.long}>
-            Bildirim türleri şu an yüklenemedi; Profil → Ayarlar'dan sonra seçebilirsin.
+            Bildirim türleri şu an yüklenemedi; Menü → Ayarlar'dan sonra seçebilirsin.
           </Text>
         )
       ) : (

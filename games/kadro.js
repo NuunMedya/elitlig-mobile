@@ -97,7 +97,7 @@
   /* Yolda bulunan futbol silahları. secs: ateş edilen saniye cinsinden cephane. */
   var POWERS = {
     sack: { name: "TOP ÇUVALI", tip: "2 kat şut", col: "#22C55E", dark: "#15803D", secs: 6 },
-    fire: { name: "ATEŞLİ TOP", tip: "3 kat hasar, deler", col: "#FF6A1F", dark: "#C2410C", secs: 5 },
+    fire: { name: "ATEŞLİ TOP", tip: "2,6 kat hasar, deler", col: "#FF6A1F", dark: "#C2410C", secs: 5 },
     triple: { name: "ÜÇLÜ TOP", tip: "her vuruşta 3 top", col: "#3B82F6", dark: "#1D4ED8", secs: 5 },
     curve: { name: "FALSOLU TOP", tip: "döner, 3 rakibe seker", col: "#A855F7", dark: "#7E22CE", secs: 5 },
     giant: { name: "DEV TOP", tip: "grubu biçer", col: "#FACC15", dark: "#B45309" },

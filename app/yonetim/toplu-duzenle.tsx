@@ -212,7 +212,7 @@ export default function BulkEditScreen() {
     if (!Object.keys(body).length) throw new Error("Değiştirilecek en az bir alan seç.");
     if (body.mac_durumu === "yayinlanmis" || body.mac_durumu === "taslak") {
       const ok = await confirmAction({
-        title: `${selected.size} maç ${body.mac_durumu === "yayinlanmis" ? "tamamlanacak" : "taslağa alınacak"}`,
+        title: `${selected.size} maç ${body.mac_durumu === "yayinlanmis" ? "yayınlanacak" : "taslağa alınacak"}`,
         message:
           body.mac_durumu === "yayinlanmis"
             ? "Skorlar kesinleşir, puan durumu yeniden hesaplanır ve üyelere sonuç bildirimi gider."

@@ -22,7 +22,7 @@
  *     Bulmacalar (eski "Lig Yolu" başlığı) doğrudan kendi haritasına açılır.
  *   · En altta sıralamalar, bu haftanın özeti, görevler ve kariyer.
  *
- * VERİ: rekorlar cihazdan (AsyncStorage, oyun ekranlarının yazdığı anahtarlar)
+ * VERİ: rekorlar hesabın oyun kaydından (lib/puzzle/saves `bests`: cihaz önbelleği + sunucu)
  * ve sunucudan (/api/arena/me); şehir /api/puzzle/city; bulmaca seviyesi ve
  * canları /api/puzzle/me. Misafir oynayabilir; şehir ve bulmacalar girişte.
  *
@@ -44,9 +44,9 @@ import { DailyRewardEntry } from "@/components/city/DailyReward";
 import { XpTransferBanner } from "@/components/city/XpTransferBanner";
 import { Touchable } from "@/components/ui";
 import { getMyArenaSummary, type ArenaGame } from "@/lib/api/arena";
-import { ARENA_BEST_KEYS } from "@/lib/game/arenaKeys";
 import { HUB } from "@/lib/game/hubPalette";
 import { cityKeys, getCity, type CityState } from "@/lib/puzzle/api";
+import { useGameSave } from "@/lib/puzzle/saves";
 import type { PuzzleGameKey } from "@/lib/puzzle/types";
 import { usePuzzleMe } from "@/lib/puzzle/usePuzzle";
 import { useAuth } from "@/providers/AuthProvider";
@@ -107,36 +107,20 @@ const CATEGORIES: { key: Category; title: string; hint: string; icon: keyof type
   { key: "quiz", title: "BİLGİ YARIŞMALARI", hint: "Skoruna göre şehrine yıldız", icon: "bulb" },
   { key: "puzzle", title: "BULMACALAR", hint: "Her seviye 1–3 yıldız · oyun başına 5 can", icon: "extension-puzzle" },
   { key: "arcade", title: "ARCADE", hint: "Skoruna göre şehrine yıldız", icon: "game-controller" },
-  { key: "league", title: "LİG YARIŞMALARI", hint: "Gerçek maçlarla puan · puana göre yıldız", icon: "trophy" },
+  { key: "league", title: "LİG YARIŞMALARI", hint: "Gerçek maçlarla puan · Fantezi ve Tahmin yıldız verir", icon: "trophy" },
 ];
 
 /** Lig yarışmalarının satır alt yazısı (oyunlar XP vermez; puan yıldıza döner). */
 const LEAGUE_LINE: Record<string, string> = {
   fantezi: "Haftalık puanına göre yıldız",
   tahminLigi: "Tahmin puanına göre yıldız",
-  kulupArenasi: "Takımının haftalık yarışı",
+  kulupArenasi: "Takımının haftalık yarışı · yıldız vermez",
 };
 
-/** Cihazdaki rekor anahtarları (oyun ekranlarıyla birebir). */
-const BEST_KEYS: Record<ArenaGame, string> = {
-  seri: ARENA_BEST_KEYS.seri,
-  sektir: ARENA_BEST_KEYS.sektir,
-  kimbu: ARENA_BEST_KEYS.kimbu,
-  slalom: ARENA_BEST_KEYS.slalom,
-  gunun: "elitlig.gunun.best.v1",
-  penalti: ARENA_BEST_KEYS.penalti,
-  tahmin: ARENA_BEST_KEYS.tahmin,
-  savunma: ARENA_BEST_KEYS.savunma,
-  kadro: ARENA_BEST_KEYS.kadro,
-};
-const ARENA_GAMES = Object.keys(BEST_KEYS) as ArenaGame[];
+/** Rekoru gösterilen oyunlar (kişisel rekor: hesabın oyun kaydı `bests`, oyun adıyla). */
+const ARENA_GAMES: ArenaGame[] = ["seri", "sektir", "kimbu", "slalom", "gunun", "penalti", "tahmin", "savunma", "kadro"];
 const dailyResultKey = (day: string) => `elitlig.gunun.${day}.v1`;
 
-function parseBest(raw: string | null): number | null {
-  if (raw == null) return null;
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
 function parseDaily(raw: string | null): { correct: number; total: number } | null {
   if (!raw) return null;
   try {
@@ -165,18 +149,15 @@ export default function OyunlarScreen() {
   const summary = useQuery({ queryKey: ["arena", "me", "summary"], queryFn: getMyArenaSummary, enabled: signedIn, staleTime: 60_000, retry: false });
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const [local, setLocal] = useState<{ best: Partial<Record<ArenaGame, number>>; daily: { correct: number; total: number } | null }>({ best: {}, daily: null });
+  // Kişisel rekorlar hesaba bağlı oyun kaydından (lib/puzzle/saves); Günün
+  // Testi'nin bugünkü sonucu cihazdan.
+  const bests = useGameSave("bests");
+  const [daily, setDaily] = useState<{ correct: number; total: number } | null>(null);
   const loadLocal = useCallback(async () => {
-    const keys = [...ARENA_GAMES.map((g) => BEST_KEYS[g]), dailyResultKey(today)];
-    const pairs = await AsyncStorage.multiGet(keys).catch(() => [] as readonly [string, string | null][]);
-    const valueOf = (key: string) => pairs.find((p) => p[0] === key)?.[1] ?? null;
-    const best: Partial<Record<ArenaGame, number>> = {};
-    ARENA_GAMES.forEach((g) => {
-      const v = parseBest(valueOf(BEST_KEYS[g]));
-      if (v != null) best[g] = v;
-    });
-    setLocal({ best, daily: parseDaily(valueOf(dailyResultKey(today))) });
+    const raw = await AsyncStorage.getItem(dailyResultKey(today)).catch(() => null);
+    setDaily(parseDaily(raw));
   }, [today]);
+  const local = useMemo(() => ({ best: (bests.data ?? {}) as Partial<Record<ArenaGame, number>>, daily }), [bests.data, daily]);
   useFocusEffect(
     useCallback(() => {
       void loadLocal();

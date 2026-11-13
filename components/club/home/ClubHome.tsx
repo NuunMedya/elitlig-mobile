@@ -347,7 +347,7 @@ function NoTeam({
   go: (href: string) => void;
 }) {
   const requests = useQuery({
-    queryKey: ["club", "account-requests"],
+    queryKey: ["account-requests"],
     queryFn: getAccountRequests,
     enabled: !error,
     staleTime: 60_000,
