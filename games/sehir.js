@@ -17,6 +17,20 @@
  *   sahne → RN : { type:"tap", key }  (birime dokunuldu)
  *                { type:"ready" }
  *
+ * KÖPRÜ v2 (Kulüp Şehri 2.0; ilk "city2" iletisiyle sahne v2 düzenine geçer,
+ * v1 "city" yolu eski sunucular için olduğu gibi çalışır):
+ *   RN → sahne : ArenaCmd({ type:"city2", buildings, rung, kit, marks, landmarks, grid, place, focus })
+ *                  buildings  { halisaha:3, kulup:1, stadyum:0, … }  (12 bina, aşama; 0 = kurulmadı)
+ *                  marks      { <bina>: "up" | "lock" | "max" | "closed" }  (closed: kilitli arsa + tabela)
+ *                  landmarks  [{ id, key, slot:"r0c3", tier }]  (yerleşik sembol yapılar)
+ *                  grid       { cols:8, rows:8, open_rows }  (satır ≥ open_rows çitli/soluk)
+ *                  place      null | { key }  (yerleştirme: boş açık yuvalar parlar, hayalet yapı)
+ *                  focus      null | <bina> | "landmarks"
+ *                ArenaCmd({ type:"build", key })  (o binanın inşaat animasyonu)
+ *                Aşama iki ileti arasında yükselirse inşaat kendiliğinden oynar.
+ *   sahne → RN : { type:"tap", key }  (12 bina anahtarından biri)
+ *                { type:"slot", slot:"r2c5", id:null | <landmark id> }
+ *
  * ÇİZİM: düz Canvas 2D, 2:1 İZOMETRİK. Savunma Hattı ailesinin "flat vector"
  * dili: doygun renkler, kalın lacivert kontur, parlak vurgu, yumuşak gölge,
  * iri kafalı çizgi film futbolcular. Dünya metre cinsindendir; x sağa-aşağı,
@@ -151,6 +165,7 @@
   var received = false;
   var W = 0, H = 0;
   function lvOf(k) {
+    if (V2 && MAX2[k] != null) return Math.min(st2[k] || 0, MAX2[k]);
     return Math.min(levels[k], MAXLV[k]);
   }
 
@@ -167,11 +182,13 @@
     homeZoom = A.clamp(Math.min(W / 292, H / 318), 0.4, 4);
   }
   function focusZoom(key) {
-    if (key === "saha" || key === "tribun") return A.clamp(Math.min(W / 80, H / 74), 0.8, ZMAX);
+    if (key === "landmarks") return A.clamp(Math.min(W / 84, H / 70), 0.8, ZMAX);
+    if (V2 && key === "halisaha") return A.clamp(Math.min(W / 96, H / 84), 0.8, ZMAX);
+    if (isStad(key)) return A.clamp(Math.min(W / 80, H / 74), 0.8, ZMAX);
     return A.clamp(Math.min(W / 66, H / 60), 0.8, ZMAX);
   }
   function setFocus(key) {
-    var p = PLOTS[key];
+    var p = V2 ? (key === "landmarks" ? { x: LMD.x, z: LMD.z } : key === "halisaha" ? { x: CC[-1] + 1, z: -11 } : PLOTS[key]) : PLOTS[key];
     focusKey = p ? key : null;
     if (!p) {
       camGoal.tx = 0;
@@ -183,7 +200,7 @@
     camGoal.tx = p.x;
     camGoal.tz = p.z;
     camGoal.zoom = focusZoom(key);
-    camGoal.lift = key === "saha" || key === "tribun" ? 6 : focusLift(key);
+    camGoal.lift = isStad(key) || key === "landmarks" ? 6 : focusLift(key);
   }
 
   /** Dünya → ekran (css px). */
@@ -1220,12 +1237,13 @@
     });
   }
   /** Şemsiye (sap + çizgili kubbe). */
-  function umbrella(x, z, h, r, col, col2) {
-    extBox(x, z, r * 2, r * 2, 0, h + r * 0.5);
-    shadowEllipse(x, z, r * 0.9, h * 0.4);
-    body(x + z + 0.3, function () {
+  function umbrella(x, z, h, r, col, col2, y0) {
+    y0 = y0 || 0;
+    extBox(x, z, r * 2, r * 2, y0, h + r * 0.5);
+    if (!y0) shadowEllipse(x, z, r * 0.9, h * 0.4);
+    body(x + z + 0.3 + y0, function () {
       var c = G.c, P = G.P;
-      var b = P(x, 0, z), t = P(x, h, z), rx = r * SQ2 * G.s, ry = rx / 2, hh = r * 0.55 * G.s;
+      var b = P(x, y0, z), t = P(x, y0 + h, z), rx = r * SQ2 * G.s, ry = rx / 2, hh = r * 0.55 * G.s;
       c.strokeStyle = NAVY;
       c.lineWidth = Math.max(G.lw * 1.4, 0.25 * G.s);
       c.beginPath();
@@ -1979,37 +1997,39 @@
     });
   }
 
-  function emptyPlot() {
-    pad(0, 0, 40, 40, "#D8A56C", {
+  function emptyPlot(S) {
+    S = S || 40;
+    var q = S / 40;
+    pad(0, 0, S, S, "#D8A56C", {
       th: 0.3,
       side: "#9C6B3E",
       r: 2.5,
       fn: function (c) {
         var r = A.seeded(5);
-        for (var i = 0; i < 40; i++) {
+        for (var i = 0; i < 40 * q * q; i++) {
           c.fillStyle = r() < 0.5 ? "rgba(255,230,190,0.35)" : "rgba(110,60,30,0.18)";
           c.beginPath();
-          c.ellipse(-20 + r() * 40, -20 + r() * 40, 0.5 + r() * 1.4, 0.3 + r() * 0.7, r() * 3, 0, Math.PI * 2);
+          c.ellipse((-20 + r() * 40) * q, (-20 + r() * 40) * q, 0.5 + r() * 1.4, 0.3 + r() * 0.7, r() * 3, 0, Math.PI * 2);
           c.fill();
         }
         c.strokeStyle = "rgba(110,60,30,0.3)";
         c.lineWidth = 0.25;
         c.setLineDash([1, 0.8]);
-        c.strokeRect(-12, -12, 24, 24);
+        c.strokeRect(-12 * q, -12 * q, 24 * q, 24 * q);
         c.setLineDash([]);
       },
     });
-    woodFence(0, 0, 38, 38);
+    woodFence(0, 0, S - 2, S - 2);
     // taşlar, tuğla yığını, koniler, el arabası
     [[-9, -7, 1.2], [6, -10, 0.9], [-12, 8, 1], [11, 4, 0.8]].forEach(function (r) {
-      box(r[0], r[1], r[2] * 1.6, r[2] * 1.3, 0, r[2], "#A9AEC6");
+      box(r[0] * q, r[1] * q, r[2] * 1.6, r[2] * 1.3, 0, r[2], "#A9AEC6");
     });
-    for (var i = 0; i < 3; i++) for (var j = 0; j < 2 - (i > 1 ? 1 : 0); j++) box(4 + j * 1.3, 6 + i * 0.01, 1.2, 2.4, i * 0.6, 0.6, "#E2704F", { depth: 10 + i * 0.01 });
-    box(-3, -2, 5, 3, 0, 0.9, "#E9C28A", { top: "#F2D6A8" }); // kum yığını yerine tahta palet
-    cone(9, 15);
-    cone(13, 15);
-    cone(17, 15);
-    billboard(-8, 17, 1.5, 7, 2.2, "İNŞAAT ALANI", "#FFD43B", NAVY);
+    for (var i = 0; i < 3; i++) for (var j = 0; j < 2 - (i > 1 ? 1 : 0); j++) box(4 * q + j * 1.3, 6 * q + i * 0.01, 1.2, 2.4, i * 0.6, 0.6, "#E2704F", { depth: 10 * q + i * 0.01 });
+    box(-3 * q, -2 * q, 5, 3, 0, 0.9, "#E9C28A", { top: "#F2D6A8" }); // kum yığını yerine tahta palet
+    cone(9 * q, 15 * q);
+    cone(13 * q, 15 * q);
+    cone(17 * q, 15 * q);
+    billboard(-8 * q, 17 * q, 1.5, 7, 2.2, "İNŞAAT ALANI", "#FFD43B", NAVY);
   }
 
   /* ─────────────── ANA SAHA ─────────────── */
@@ -2090,7 +2110,7 @@
       goalS(hw - 0.6, 0, -1, gw, gh, lvS >= 2, lvS >= 2);
     }
     if (lvS >= 2 && lvS <= 4 && lvT < 5) fenceS(0, 0, P.w + 3, P.d + 3, lvS >= 3 ? 3.2 : 2.2, "#22C55E", lvT >= 1 ? "WSE" : "NWSE");
-    if (lvS >= 3 && lvS <= 4 && lvT < 5)
+    if (lvS >= 3 && lvS <= 4 && lvT < 5 && !SVF)
       [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (q) {
         floodS(q[0] * (hw + 2.6), q[1] * (hd + 2.6), 10, false);
       });
@@ -2122,7 +2142,7 @@
       // ısıtma kontrol kulübeleri
       box(hw + 3.2, -hd - 1, 1.6, 1.6, 0, 1.4, "#E9ECF8", { fL: function (cc, FW, FH) { cc.fillStyle = TH.night > 0.3 ? "#7CFF9B" : K("#22C55E"); cc.fillRect(0.3, 0.3, FW - 0.6, 0.3); } });
     }
-    if (lvS < 5 && lvT < 4) {
+    if (lvS < 5 && lvT < 4 && !SVF) {
       // OKUL: sahanın -x tarafında
       var sx = -hw - 6.5;
       gable(sx, 0, 6, 22, 0, 6, 2.6, "#FFD9A8", "#E2574C", {
@@ -2236,7 +2256,7 @@
     var lower = lv >= 7 ? 4 : lv >= 6 ? 7 : 6;
     var step = 0.9, rise = 0.55;
     var D1 = lower * step, top1 = lower * rise;
-    var vipD = lv >= 7 ? 1 : 0, upR = lv >= 7 ? 5 : 0, upStep = 0.85, upRise = 0.75;
+    var vipD = lv >= 7 && !(SVF && SVF.noVip) ? 1 : 0, upR = lv >= 7 ? 5 : 0, upStep = 0.85, upRise = 0.75;
     var Dt = D1 + vipD + upR * upStep, topT = top1 + (lv >= 7 ? 2.2 + upR * upRise : 0);
     var facadeH = topT + (lv >= 6 ? 3.4 : 1.2);
     var concrete = "#D9DCEE", facade = lv >= 7 ? "#E9EDF8" : lv >= 6 ? "#E3E6F4" : "#C9CDE2";
@@ -2288,7 +2308,7 @@
         var vo = (side === "N" || side === "S" ? hd : hw) + D1 + vipD / 2;
         var vb = { N: [0, -vo, L, vipD], S: [0, vo, L, vipD], W: [-vo, 0, vipD, L], E: [vo, 0, vipD, L] }[side];
         var back = side === "N" || side === "W";
-        box(vb[0], vb[1], vb[2], vb[3], 0, top1 + 2.2, "#2B2F6E", {
+        if (vipD) box(vb[0], vb[1], vb[2], vb[3], 0, top1 + 2.2, "#2B2F6E", {
           depth: base + (back ? 0.005 : 0.15),
           noShadow: true,
           top: "#D9DCEE",
@@ -2328,7 +2348,7 @@
       tiers("S", hw * 2, 25);
       corner([1, 1], 60);
     }
-    if (lv === 5) {
+    if (lv === 5 && !(SVF && SVF.noFlood)) {
       // açık stadyum: köşe projektör kuleleri
       corners.forEach(function (q) {
         var front = q[0] > 0 || q[1] > 0;
@@ -2386,7 +2406,7 @@
         if (front !== !B) return;
         anchor({ t: "flood", x: q[0] * (hw + rIn + 1), y: ry + 0.4, z: q[1] * (hd + rIn + 1), big: true, roof: true });
       });
-      if (B) {
+      if (B && !(SVF && SVF.noScreens)) {
         // dev ekranlar (köşelerde, sahaya bakar)
         [[1, -1], [-1, 1]].forEach(function (q) {
           var sx = q[0] * (hw + Dt * 0.5), sz = q[1] * (hd + Dt * 0.5);
@@ -2399,7 +2419,7 @@
         });
       }
     }
-    if (lv >= 7 && !B) {
+    if (lv >= 7 && !B && !(SVF && SVF.noArch)) {
       // WEMBLEY KEMERİ: stadyumun üstünden geçen dev beyaz kemer + çatıya inen kablolar
       var span = hw + Dt + 0.5, lean = -(hd + Dt) * 0.25, archH = 40;
       extBox(0, 0, span * 2, 4, 0, archH + 2);
@@ -3722,8 +3742,10 @@
       },
     });
     box(-6, -15, 20.4, 5.4, 6, 0.4, "#2FAE4E", { noShadow: true });
-    glassTower(14, -12, 7, 7, 0, 18, "#7BD3C2");
-    billboard(14, -8.2, 15, 3, 1, "YURT", "#1D4ED8", "#FFFFFF", { posts: false, glow: true });
+    if (!XV.noDorm) {
+      glassTower(14, -12, 7, 7, 0, 18, "#7BD3C2");
+      billboard(14, -8.2, 15, 3, 1, "YURT", "#1D4ED8", "#FFFFFF", { posts: false, glow: true });
+    }
     tree(13, 4, 1);
     tree(17, 10, 0.9);
     bench(15, 15, true, 3);
@@ -4343,6 +4365,2023 @@
     c.restore();
   }
 
+
+  /* ═══════════════════════ KULÜP ŞEHRİ 2.0: binalar ═══════════════════════
+   * 12 bina, toplam 92 aşama (elitlig-server constants/city2.js). Her aşama
+   * ayrı bir görünüm; eski birim kurucuları uygun düştüğü aşamalarda yeniden
+   * kullanılır (XV bayraklarıyla küçük farklar), aradaki aşamalar yeni çizim.
+   * Halısaha iki hücreye yayılır: A (sahalar) ve B (salonlar, 7. aşamadan). */
+
+  var XV = {};
+  function oldB(k, lv, flags) {
+    var prev = XV;
+    XV = flags || {};
+    try {
+      BUILD[k](lv);
+    } finally {
+      XV = prev;
+    }
+  }
+  /** Kilitli arsa: sakin, soluk çim; ip çit; asma kilitli küçük tabela. */
+  function closedPlot(opens, S) {
+    S = S || 40;
+    var h = S / 2;
+    pad(0, 0, S, S, "#A9C79A", {
+      th: 0.25,
+      side: "#7E9B73",
+      r: 2.5,
+      line: 0.35,
+      fn: function (c) {
+        var r = A.seeded(13);
+        for (var i = 0; i < 30; i++) {
+          c.fillStyle = r() < 0.5 ? "rgba(255,255,255,0.12)" : "rgba(60,90,50,0.1)";
+          c.beginPath();
+          c.ellipse(-h + r() * S, -h + r() * S, 0.6 + r() * 1, 0.3 + r() * 0.5, 0, 0, Math.PI * 2);
+          c.fill();
+        }
+      },
+    });
+    // alçak direkler + ip
+    var posts = [];
+    var n = Math.round(S / 5);
+    for (var i = 0; i <= n; i++) {
+      var t = -h + 1 + ((S - 2) * i) / n;
+      posts.push([t, -h + 1], [-h + 1, t]);
+      if (i) posts.push([t, h - 1], [h - 1, t]);
+    }
+    posts.forEach(function (q) {
+      box(q[0], q[1], 0.3, 0.3, 0, 0.9, "#C9CDE2", { noShadow: true, gloss: false, noLine: true });
+    });
+    flat(function () {
+      topDo(0.75, function (c) {
+        c.strokeStyle = K("#E9ECF8");
+        c.lineWidth = 0.12;
+        c.strokeRect(-h + 1, -h + 1, S - 2, S - 2);
+      });
+    });
+    tree(-h + 4, -h + 5, 0.8, "#7FBF6A");
+    tree(h - 5, -h + 4, 0.7, "#7FBF6A");
+    lockSign(3, 6, opens);
+  }
+  /** Asma kilit + "N. BASAMAK" tabelası (direkli). */
+  function lockSign(x, z, opens) {
+    box(x - 2.4, z, 0.3, 0.3, 0, 1.8, "#8A90B5", { noShadow: true, gloss: false });
+    box(x + 2.4, z, 0.3, 0.3, 0, 1.8, "#8A90B5", { noShadow: true, gloss: false });
+    box(x, z, opens ? 7.4 : 2.6, 0.3, 1.6, 2.2, "#3A3F72", {
+      noShadow: true,
+      gloss: false,
+      fL: function (cc, FW, FH) {
+        A.roundRect(cc, 0.1, 0.1, FW - 0.2, FH - 0.2, 0.3);
+        cc.fillStyle = K("#2B2F5E");
+        cc.fill();
+        // kilit
+        var lx = opens ? 1.2 : FW / 2, ly = FH / 2 + 0.2;
+        cc.strokeStyle = "#FFFFFF";
+        cc.lineWidth = 0.16;
+        cc.beginPath();
+        cc.arc(lx, ly - 0.4, 0.32, Math.PI, 0);
+        cc.stroke();
+        cc.fillStyle = "#FFFFFF";
+        A.roundRect(cc, lx - 0.48, ly - 0.4, 0.96, 0.76, 0.12);
+        cc.fill();
+        if (opens) ftext(cc, opens + ". BASAMAK", FW / 2 + 0.7, FH / 2, 0.9, "#FFFFFF", FW - 2.6);
+      },
+    });
+  }
+  /** Ortak: bir halısaha (saha + kaleler + çit + isteğe bağlı ışık). */
+  function fiveSide(x, z, w, d, style, o) {
+    o = o || {};
+    pitchFlat(x, z, w, d, style, o.seed || 3, o.y || 0.4);
+    var gw = o.gw || 3, gh = o.gh || 1.7;
+    goalS(x - w / 2 + 0.5, z, 1, gw, gh, o.white !== false, o.net !== false);
+    goalS(x + w / 2 - 0.5, z, -1, gw, gh, o.white !== false, o.net !== false);
+    if (o.fence) fenceS(x, z, w + 2.4, d + 2.4, o.fh || 3.2, o.fcol || "#1F9D55", o.sides || "NWSE");
+    if (o.flood)
+      [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (q) {
+        floodS(x + q[0] * (w / 2 + 1.6), z + q[1] * (d / 2 + 1.6), o.fl || 8, false);
+      });
+  }
+  function signFace(text, bg, fg, v, wk, hk) {
+    return function (cc, FW, FH) {
+      fsign(cc, FW / 2, v == null ? 0.6 : v, Math.min(FW - 0.6, (wk || 0.8) * FW), hk || 0.8, text, bg, fg || "#FFFFFF", true);
+    };
+  }
+  function both(a, b) {
+    return function (cc, FW, FH) {
+      a(cc, FW, FH);
+      b(cc, FW, FH);
+    };
+  }
+  function winFace(o) {
+    return function (cc, FW, FH) {
+      windowsGrid(cc, FW, FH, o || {});
+    };
+  }
+  /** Düz çatı kenarı (parapet). */
+  function roofCap(x, z, w, d, y, col) {
+    box(x, z, w + 0.5, d + 0.5, y, 0.45, col || "#E3E6F4", { noShadow: true, depth: x + z + 0.02 });
+  }
+  /** Ekrana dönük küresel dünya (scout merkezi). */
+  function globeS(x, z, y, r) {
+    extBill(x, z, r * 1.6, y + r * 2.2);
+    shadowEllipse(x, z, r * 0.9, y + r);
+    body(x + z + 0.4, function () {
+      var c = G.c, p = G.P(x, y + r * 1.05, z), R = r * G.s * 1.35;
+      var g = c.createRadialGradient(p[0] - R * 0.35, p[1] - R * 0.35, R * 0.1, p[0], p[1], R);
+      g.addColorStop(0, K("#7FD3FF"));
+      g.addColorStop(1, K("#1D6FD8"));
+      c.beginPath();
+      c.arc(p[0], p[1], R, 0, Math.PI * 2);
+      c.fillStyle = g;
+      c.fill();
+      c.save();
+      c.clip();
+      c.fillStyle = K("#4CC86A");
+      [[-0.35, -0.3, 0.38, 0.22], [0.2, -0.05, 0.3, 0.42], [-0.15, 0.45, 0.25, 0.15], [0.55, -0.45, 0.2, 0.15]].forEach(function (q) {
+        c.beginPath();
+        c.ellipse(p[0] + q[0] * R, p[1] + q[1] * R, q[2] * R, q[3] * R, 0.4, 0, Math.PI * 2);
+        c.fill();
+      });
+      c.strokeStyle = "rgba(255,255,255,0.55)";
+      c.lineWidth = Math.max(0.6, R * 0.04);
+      for (var i = -2; i <= 2; i++) {
+        c.beginPath();
+        c.ellipse(p[0], p[1], Math.abs(i) * R * 0.33 + 0.01, R, 0, 0, Math.PI * 2);
+        c.stroke();
+        c.beginPath();
+        c.moveTo(p[0] - R, p[1] + i * R * 0.38);
+        c.lineTo(p[0] + R, p[1] + i * R * 0.38);
+        c.stroke();
+      }
+      c.restore();
+      c.beginPath();
+      c.arc(p[0], p[1], R, 0, Math.PI * 2);
+      outline(c, G.lw * 0.8);
+      // halka
+      c.beginPath();
+      c.ellipse(p[0], p[1], R * 1.3, R * 0.42, -0.35, 0, Math.PI * 2);
+      c.strokeStyle = K("#FFD43B");
+      c.lineWidth = Math.max(1, R * 0.08);
+      c.stroke();
+    });
+    cyl(x, z, r * 0.7, 0, y, "#E3E6F4", { noShadow: true });
+  }
+
+  /* ─────────────── HALISAHA ─────────────── */
+
+  var HS = { w: 16, d: 10, p: [[-10, -12.2], [-10, 0.6], [-10, 13.4]], t: [11.5, 11.5] };
+  /** A hücresinin içeriği hangi aşamada değişir (7, 8, 10'da değişmez). */
+  function hsEffA(st) {
+    return st === 7 || st === 8 ? 6 : st === 10 ? 9 : st;
+  }
+  function hsEffB(st) {
+    return st < 7 ? 0 : st;
+  }
+  function hsA(st) {
+    if (st <= 1) {
+      // BOŞ ARSA: tozlu toprak, taşlardan kaleler
+      pad(0, 0, 40, 40, "#D8B07A", {
+        th: 0.25,
+        side: "#A57A48",
+        r: 3,
+        line: 0.4,
+        fn: function (c) {
+          var r = A.seeded(21);
+          for (var i = 0; i < 60; i++) {
+            c.fillStyle = r() < 0.5 ? "rgba(255,240,210,0.35)" : "rgba(120,80,40,0.16)";
+            c.beginPath();
+            c.ellipse(-20 + r() * 40, -20 + r() * 40, 0.5 + r() * 1.3, 0.3 + r() * 0.6, r() * 3, 0, Math.PI * 2);
+            c.fill();
+          }
+          c.fillStyle = "rgba(110,170,80,0.55)";
+          for (var j = 0; j < 26; j++) {
+            c.beginPath();
+            c.ellipse(-20 + r() * 40, (r() < 0.5 ? -19 : 15) + r() * 4, 0.9, 0.5, 0, 0, Math.PI * 2);
+            c.fill();
+          }
+        },
+      });
+      [-1, 1].forEach(function (s) {
+        [-1.5, 1.5].forEach(function (q) {
+          box(s * 8, q, 0.8, 0.8, 0, 0.55, "#A3A8BC");
+        });
+        bagS(s * 9.6, 3.2, s > 0 ? "#3B82F6" : "#FF4D5E");
+      });
+      box(-12, 9, 1.4, 1.4, 0, 0.5, "#4A4F86", { top: "#2B2F5E" }); // eski lastik
+      tree(-15, -14, 1.2);
+      tree(-17, 13, 0.9);
+      tree(15, -15, 1);
+      bush(14, 13, 1.2);
+      bush(-4, -16, 0.9);
+      return;
+    }
+    if (st === 2) {
+      // TOPRAK SAHA: kireç çizgiler, demir kaleler
+      lawn();
+      fiveSide(-1, -1, 24, 15, "dirt", { gw: 3.4, gh: 1.9, net: false, seed: 4 });
+      bench(-1, -11, true, 5, "#B9783E");
+      cyl(15, -12, 1.2, 0, 2.8, "#C9CDE2", { top: "#A9AEC6" }); // su deposu
+      box(15, -12, 0.3, 0.3, 0, 0.5, "#5B6385", { noShadow: true });
+      tree(-15, -15, 1.1);
+      tree(16, 14, 0.9);
+      tree(-16, 14, 0.8);
+      bikeS(14, 6, "#FF4D5E");
+      return;
+    }
+    // 3+: sentetik çim sahalar (tel kafes), soldan sağa büyüyen tesis
+    var style = st >= 11 ? "hybrid" : "turf";
+    pad(0, 0, 42, 42, "#E4E8EF", { fn: tiles(2.2, "rgba(27,22,72,0.07)"), th: 0.3, side: "#AEB4C8", r: 3 });
+    var n = st >= 9 ? 3 : st >= 6 ? 2 : 1;
+    for (var i = 0; i < n; i++) {
+      fiveSide(HS.p[i][0], HS.p[i][1], HS.w, HS.d, style, { fence: true, sides: i ? "WSE" : "NWSE", seed: 5 + i });
+    }
+    if (st >= 4) {
+      // projektörler yalnız dış köşelerde ve ilk iki saha arasında (sade)
+      var fz = [HS.p[0][1] - HS.d / 2 - 1.2];
+      if (n >= 2) fz.push((HS.p[0][1] + HS.p[1][1]) / 2);
+      fz.push(HS.p[n - 1][1] + HS.d / 2 + 1.2);
+      fz.forEach(function (z) {
+        [-1, 1].forEach(function (sx) {
+          floodS(HS.p[0][0] + sx * (HS.w / 2 + 1.4), z, 8, false);
+        });
+      });
+    }
+    // sağ sütun
+    if (st >= 12) {
+      // KOMPLEKS OTELİ: alt katta soyunma
+      box(12.5, -12, 11, 10, 0, 17, "#F6F3FF", {
+        fL: both(winFace({ ww: 1.4, wh: 1.4, gx: 0.9, gy: 1.3, top: 1, bot: 3, glass: "#8FD3FF" }), function (cc, FW, FH) {
+          cc.fillStyle = K(kit.primary);
+          cc.fillRect(0, FH - 2.6, FW, 0.5);
+          fsign(cc, FW / 2, FH - 1.3, 8, 0.9, "KOMPLEKS OTEL", kit.primary, kit.secondary, true);
+        }),
+        fR: winFace({ ww: 1.4, wh: 1.4, gx: 0.9, gy: 1.3, top: 1, bot: 3, glass: "#8FD3FF" }),
+      });
+      roofCap(12.5, -12, 11, 10, 17, "#E3E6F4");
+      crestS(12.5, -12, 18.6, 1.4);
+    } else if (st >= 5) {
+      // SOYUNMA + DUŞ
+      box(12.5, -12, 10, 8, 0, 3.6, "#FFF1DE", {
+        fL: function (cc, FW, FH) {
+          windowsGrid(cc, FW, FH, { ww: 1.4, wh: 0.9, gx: 1, top: 0.6, rows: 1, skip: function (r, k, R, Cn) { return k === Math.floor(Cn / 2); } });
+          A.roundRect(cc, FW / 2 - 0.8, FH - 2.2, 1.6, 2.2, 0.2);
+          cc.fillStyle = K("#4A4F86");
+          cc.fill();
+          fsign(cc, FW / 2, FH - 2.75, 6.2, 0.75, "SOYUNMA · DUŞ", kit.primary, kit.secondary, true);
+        },
+        fR: winFace({ ww: 1.2, wh: 0.9, top: 0.6, rows: 1 }),
+      });
+      roofCap(12.5, -12, 10, 8, 3.6, "#E0D2B8");
+      [[10, -14], [14, -14]].forEach(function (q) {
+        cyl(q[0], q[1], 0.45, 4, 1.2, "#A9AEC6", { noShadow: true });
+        anchor({ t: "steam", x: q[0], y: 5.4, z: q[1] });
+      });
+    } else {
+      // giriş kulübesi
+      box(12, -13, 4.5, 3.5, 0, 2.6, "#FFFFFF", {
+        fL: signFace("HALI SAHA", "#16A34A", "#FFFFFF", 0.55, 0.95, 0.75),
+        fR: function (cc, FW, FH) {
+          win(cc, FW / 2 - 0.8, 0.9, 1.6, 1, true);
+        },
+      });
+      roofCap(12, -13, 4.5, 3.5, 2.6, "#16A34A");
+      tree(16, -4, 0.9);
+    }
+    if (st >= 11) {
+      // KAFE-RESTORAN (sahaya bakan teras)
+      box(13, 1.5, 12, 8, 0, 4.2, "#2A2F55", {
+        fL: winFace({ ww: 1.6, wh: 2.4, gx: 0.6, top: 1.2, rows: 1, glass: "#FFD98A", litK: 1 }),
+        fR: winFace({ ww: 1.4, wh: 2.4, top: 1.2, rows: 1, glass: "#FFD98A", litK: 1 }),
+      });
+      box(13, 1.5, 12.6, 8.6, 4.2, 0.4, "#B45309", { noShadow: true });
+      billboard(13, 6, 0.2, 7, 1, "KAFE · RESTORAN", "#B45309", "#FFFFFF", { posts: false, glow: true });
+      [9.5, 13, 16.5].forEach(function (x, i) {
+        table(x, 8.5);
+        umbrella(x, 8.5, 2.4, 1.5, i % 2 ? kit.primary : "#FFFFFF", i % 2 ? "#FFFFFF" : kit.primary);
+      });
+    } else if (st >= 6) {
+      // ÇAY OCAĞI
+      box(12, 0, 5, 4, 0, 2.6, "#E8C79A", {
+        fL: function (cc, FW, FH) {
+          A.roundRect(cc, 0.6, 0.7, FW - 1.2, 1.1, 0.15);
+          cc.fillStyle = K("#7A3E10");
+          cc.fill();
+          fsign(cc, FW / 2, 0.45, 3.8, 0.6, "ÇAY OCAĞI", "#9A3412", "#FFFFFF", true);
+        },
+      });
+      roofCap(12, 0, 5, 4, 2.6, "#9A3412");
+      cyl(13.4, -1, 0.3, 2.9, 1.2, "#5B6385", { noShadow: true });
+      anchor({ t: "steam", x: 13.4, y: 4.3, z: -1 });
+      table(10.5, 5);
+      table(14.5, 5.5);
+      umbrella(12.5, 6.5, 2.4, 1.6, "#FFFFFF", "#E2574C");
+    }
+    if (st >= 12) {
+      // PERFORMANS LAB (camdan küp)
+      box(13.5, 15, 8, 7, 0, 6, "#BFF3FF", {
+        rawL: null,
+        fL: both(winFace({ ww: 1.6, wh: 1.6, gx: 0.4, gy: 0.6, top: 0.5, bot: 0.4, glass: "#7FE3FF", litK: 0.9 }), signFace("PERFORMANS LAB", "#141043", "#22D3EE", 0.55, 0.95, 0.75)),
+        fR: winFace({ ww: 1.6, wh: 1.6, gx: 0.4, gy: 0.6, top: 0.5, bot: 0.4, glass: "#7FE3FF", litK: 0.9 }),
+      });
+      roofCap(13.5, 15, 8, 7, 6, "#E3E6F4");
+      dishS(15, 14, 6.6, 0.7, -0.6);
+    } else if (st >= 11) {
+      // FİZYO
+      box(13.5, 15, 8, 6, 0, 3.4, "#FFFFFF", {
+        fL: function (cc, FW, FH) {
+          windowsGrid(cc, FW, FH, { ww: 1.3, wh: 1, gx: 1, top: 1.4, rows: 1 });
+          redCross(cc, 0.9, 0.75, 0.45);
+          fsign(cc, FW / 2 + 0.6, 0.6, 4.5, 0.7, "FİZYO", "#0EA5E9", "#FFFFFF", true);
+        },
+      });
+      roofCap(13.5, 15, 8, 6, 3.4, "#0EA5E9");
+    } else {
+      // bisiklet parkı + ağaçlar
+      bikeS(10, 13, "#3B82F6");
+      bikeS(11.4, 13.4, "#FF4D5E");
+      bikeS(12.8, 13.8, "#22C55E");
+      tree(16, 16, 1);
+      tree(17, 10, 0.8);
+    }
+    if (n < 3) {
+      tree(-17, 17, 0.9);
+      tree(-8, 18, 0.8);
+      bench(-12, 16, true, 3);
+    }
+  }
+  function hsB(st) {
+    if (st < 7) {
+      // genişleme arsası: çayır, birkaç ağaç
+      lawn();
+      flat(function () {
+        topDo(0.27, function (c) {
+          c.strokeStyle = K("#F1E4C8");
+          c.lineWidth = 2;
+          c.lineCap = "round";
+          c.beginPath();
+          c.moveTo(21, 6);
+          c.quadraticCurveTo(2, 2, -6, 21);
+          c.stroke();
+        });
+      });
+      [[-12, -12, 1.2], [-4, -15, 0.9], [-15, -2, 1], [8, -12, 1.1], [14, -2, 0.8], [-12, 12, 0.9], [12, 14, 0.8]].forEach(function (q) {
+        tree(q[0], q[1], q[2]);
+      });
+      bench(4, 7, true, 3);
+      return;
+    }
+    pad(0, 0, 42, 42, "#E4E8EF", { fn: tiles(2.2, "rgba(27,22,72,0.07)"), th: 0.3, side: "#AEB4C8", r: 3 });
+    // FUTBOL OKULU SALONU (12'de KAPALI ARENA olur)
+    if (st >= 12) {
+      box(-7, -9, 24, 15, 0, 9, "#F2F4FF", {
+        fL: function (cc, FW, FH) {
+          var g = cc.createLinearGradient(0, 0, FW, 0);
+          g.addColorStop(0, TH.night > 0.5 ? lit(kit.primary, 0.15) : K(kit.primary));
+          g.addColorStop(1, TH.night > 0.5 ? "#8B5CF6" : K(dk(kit.primary, 0.25)));
+          cc.fillStyle = g;
+          cc.fillRect(0, 1.2, FW, 1.4);
+          ftext(cc, "ELİT ARENA", FW / 2, 1.95, 1, "#FFFFFF", FW * 0.7);
+          windowsGrid(cc, FW, FH, { ww: 2.2, wh: 3.4, gx: 0.5, top: 4.2, rows: 1, glass: "#9FE0FF" });
+        },
+        fR: winFace({ ww: 2, wh: 3.4, gx: 0.6, top: 4.2, rows: 1, glass: "#9FE0FF" }),
+      });
+      vaultX(-7, -9, 23, 6.8, 9, "#EEF1FB", { rib: 2.4, ribCol: "#B9C2E0", cap: "#DDE2F4" });
+    } else {
+      box(-7, -10, 20, 11, 0, 4.4, "#FFE7B8", {
+        fL: function (cc, FW, FH) {
+          windowsGrid(cc, FW, FH, { ww: 1.6, wh: 1.4, gx: 1.1, top: 1.6, rows: 1, skip: function (r, k, R, Cn) { return k === Math.floor(Cn / 2); } });
+          A.roundRect(cc, FW / 2 - 1, FH - 2.4, 2, 2.4, 0.2);
+          cc.fillStyle = K("#2D3270");
+          cc.fill();
+          fsign(cc, FW / 2, 0.55, 8, 0.8, "FUTBOL OKULU", "#16A34A", "#FFFFFF", true);
+        },
+        fR: winFace({ ww: 1.4, wh: 1.4, top: 1.6, rows: 1 }),
+      });
+      vaultX(-7, -10, 19.6, 5.2, 4.4, "#4DB6F0", { rib: 2.2, cap: "#3B9BD6" });
+    }
+    // ANTRENMAN TESİSİ (8+)
+    if (st >= 8) {
+      box(12, -11, 10, 10, 0, 8, "#E9ECF8", {
+        fL: function (cc, FW, FH) {
+          windowsGrid(cc, FW, FH, { ww: 2, wh: 2.6, gx: 0.4, top: 0.8, rows: 1, glass: "#7CC7FF", litK: 0.9 });
+          // video analiz ekranı
+          cc.fillStyle = "#141043";
+          cc.fillRect(1, 4.4, FW - 2, 2.6);
+          var g = cc.createLinearGradient(0, 4.6, FW, 6.8);
+          g.addColorStop(0, "#22D3EE");
+          g.addColorStop(1, "#16A34A");
+          cc.fillStyle = TH.night > 0.5 ? g : K("#1E2A5A");
+          cc.fillRect(1.3, 4.7, FW - 2.6, 2);
+          cc.strokeStyle = TH.night > 0.5 ? "#FFFFFF" : "#7FE3FF";
+          cc.lineWidth = 0.12;
+          cc.beginPath();
+          cc.moveTo(1.6, 6.4);
+          cc.lineTo(3.4, 5.4);
+          cc.lineTo(5, 6);
+          cc.lineTo(7.4, 5);
+          cc.stroke();
+          fsign(cc, FW / 2, 3.6, 7.6, 0.7, "ANTRENMAN TESİSİ", "#141043", "#22D3EE", true);
+        },
+        fR: winFace({ ww: 1.8, wh: 2.6, gx: 0.5, gy: 1.6, top: 0.8, glass: "#7CC7FF" }),
+      });
+      roofCap(12, -11, 10, 10, 8, "#C6CAE0");
+      // çevik koşu alanı: koni + merdiven
+      [8, 10, 12, 14, 16].forEach(function (x) {
+        cone(x, -3.2);
+      });
+    }
+    // ön sol: 7-8 mini saha (çocuklar), 9+ KAPALI SAHA (şişme kubbe)
+    if (st >= 9) {
+      vaultX(-7, 10, 22, 6.2, 0, st >= 12 ? "#F7F9FF" : "#F2F4FF", { rib: 2.75, ribCol: "#C9D1EC", cap: "#E3E6F4", lit: "#D6F5FF" });
+      billboard(-7, 16.8, 0.3, 8, 1.1, st >= 12 ? "KAPALI SAHA · ARENA" : "KAPALI SAHA", kit.primary, kit.secondary, { posts: false, glow: true });
+    } else {
+      fiveSide(-7, 9, 14, 9, "mini", { gw: 2.4, gh: 1.3, fence: true, fh: 1.4, seed: 11 });
+      [[-14, 15], [-11, 15], [-8, 15], [-5, 15]].forEach(function (q, i) {
+        bagS(q[0], q[1] + 0.6, ["#FF4D5E", "#3B82F6", "#FFD43B", "#22C55E"][i]);
+      });
+    }
+    // TURNUVA SAHASI + tribün + skorbord (10+)
+    if (st >= 10) {
+      var tx = HS.t[0], tz = HS.t[1];
+      fiveSide(tx, tz, 15, 9, st >= 11 ? "hybrid" : "turf2", { flood: true, fl: 9, seed: 21 });
+      for (var r = 0; r < 3; r++)
+        (function (r) {
+          box(tx, tz - 6.2 - r * 0.9, 15, 0.9, 0, (r + 1) * 0.5, "#D5D8EA", { top: dk(kit.primary, 0.3), noShadow: true, gloss: false, depth: tx + tz - 30 + (2 - r) * 0.01 });
+          body(tx + tz - 30 + (2 - r) * 0.01 + 0.001, function () {
+            crowdRow(G.c, true, tx - 7.2, tx + 7.2, tz - 6.2 - r * 0.9, (r + 1) * 0.5, 90 + r, 0.7);
+          });
+        })(r);
+      box(tx, tz - 9.2, 15.6, 0.4, 0, 2.6, "#4A4F86", { depth: tx + tz - 40, noShadow: true });
+      // skorbord
+      box(tx + 9.6, tz - 2, 0.4, 5, 2.4, 2.6, "#141043", {
+        depth: tx + tz + 5,
+        fR: function (cc, FW, FH) {
+          cc.fillStyle = "#0B0A2A";
+          cc.fillRect(0.15, 0.15, FW - 0.3, FH - 0.3);
+          ftext(cc, "3 - 2", FW / 2, FH * 0.58, FH * 0.5, "#FFD43B", FW * 0.8);
+          ftext(cc, "TURNUVA", FW / 2, FH * 0.2, FH * 0.22, "#7FE3FF", FW * 0.8);
+        },
+      });
+      [-1.6, 1.6].forEach(function (dz) {
+        box(tx + 9.6, tz - 2 + dz, 0.3, 0.3, 0, 2.4, "#8A90B5", { noShadow: true, depth: tx + tz + 4.9 });
+      });
+    } else {
+      tree(15, 6, 1);
+      tree(10, 15, 0.9);
+      tree(17, 16, 0.8);
+      bench(12, 10, true, 3);
+    }
+  }
+
+  /* ─────────────── STADYUM ─────────────── */
+
+  /** Aşama → eski stadyum çizimi: [saha, tribün, bayraklar]. */
+  var STAD_MAP = [null, [4, 1, ""], [4, 2, ""], [4, 3, ""], [4, 4, ""], [5, 5, "nf"], [5, 5, ""], [6, 6, "ns"], [6, 7, "na nv ns"], [7, 7, "na"], [7, 7, ""]];
+  var SVF = null; // etkin stadyum aşamasının bayrakları (kurulum sırasında)
+  function svFlags(sv) {
+    if (sv == null) return null;
+    var f = (STAD_MAP[sv] && STAD_MAP[sv][2]) || "";
+    return { v2: true, noFlood: f.indexOf("nf") >= 0, noScreens: f.indexOf("ns") >= 0, noArch: f.indexOf("na") >= 0, noVip: f.indexOf("nv") >= 0 };
+  }
+
+  /* ─────────────── KULÜP BİNASI ─────────────── */
+
+  function adminBlock(x, z, w, d, h) {
+    box(x, z, w, d, 0, h, "#F7F5FF", {
+      fL: function (cc, FW, FH) {
+        cc.fillStyle = K(kit.primary);
+        cc.fillRect(0, FH - 3.2, FW, 0.5);
+        windowsGrid(cc, FW, FH, { ww: 1.5, wh: 1.6, gx: 0.6, gy: 1.2, top: 0.8, bot: 3.6, glass: "#8FD3FF" });
+        A.roundRect(cc, FW / 2 - 1.4, FH - 2.6, 2.8, 2.6, 0.2);
+        cc.fillStyle = K("#7CC7FF");
+        cc.fill();
+        fsign(cc, FW / 2, FH - 3.6, 7.5, 0.8, "YÖNETİM", kit.primary, kit.secondary, true);
+      },
+      fR: winFace({ ww: 1.5, wh: 1.6, gx: 0.6, gy: 1.2, top: 0.8, bot: 1.4, glass: "#8FD3FF" }),
+    });
+    roofCap(x, z, w, d, h, "#DADDEE");
+    crestS(x + w * 0.25, z, h + 1.6, 1);
+  }
+  function museumPav(x, z, k) {
+    k = k || 1;
+    box(x, z, 9 * k, 6.5 * k, 0, 0.8, "#F4F1FA", { noShadow: true, depth: x + z - 6 });
+    box(x, z - 0.6 * k, 7.6 * k, 4.6 * k, 0.8, 4.2 * k, "#FBF9FF", {
+      fL: function (cc, FW, FH) {
+        for (var u = 0.8; u < FW - 0.4; u += 1.2) {
+          cc.fillStyle = K("#E6E2F2");
+          cc.fillRect(u, 0.5, 0.55, FH - 0.5);
+        }
+        A.roundRect(cc, FW / 2 - 0.8, FH - 2.2, 1.6, 2.2, 0.2);
+        cc.fillStyle = K("#7C2D12");
+        cc.fill();
+      },
+    });
+    dome(x, z - 0.6 * k, 2.4 * k, 5 * k, "#FFC93C", { ribs: true });
+    billboard(x, z + 2.9 * k, 0.2, 6 * k, 0.9, "KUPA MÜZESİ", "#7C2D12", "#FFD43B", { glow: true, posts: false });
+  }
+
+  /* ─────────────── ÜNİVERSİTE ─────────────── */
+
+  function facultyBlock(x, z, w, d, h, sign, col, tower) {
+    box(x, z, w, d, 0, h, col || "#FFF3DF", {
+      fL: function (cc, FW, FH) {
+        windowsGrid(cc, FW, FH, { ww: 1.3, wh: 1.6, gx: 0.8, gy: 1.2, top: 1.6, bot: 2.8, glass: "#9FD8FF" });
+        cc.fillStyle = K("#E6D8BE");
+        for (var u = FW / 2 - 3; u <= FW / 2 + 3; u += 1.5) cc.fillRect(u - 0.25, FH - 2.6, 0.5, 2.6);
+        A.roundRect(cc, FW / 2 - 0.8, FH - 2.2, 1.6, 2.2, 0.2);
+        cc.fillStyle = K("#7A4B2A");
+        cc.fill();
+        fsign(cc, FW / 2, 0.75, Math.min(FW - 1, 11), 0.85, sign, "#1E3A8A", "#FFFFFF", true);
+      },
+      fR: winFace({ ww: 1.3, wh: 1.6, gx: 0.8, gy: 1.2, top: 1.6, bot: 1.2, glass: "#9FD8FF" }),
+    });
+    roofCap(x, z, w, d, h, "#C9B99A");
+    if (tower) {
+      box(x, z, 4, 4, h, 9, col || "#FFF3DF", {
+        depth: x + z + 0.5,
+        fL: function (cc, FW, FH) {
+          clockFace(cc, FW / 2, 2.2, 1.3);
+        },
+        fR: function (cc, FW, FH) {
+          clockFace(cc, FW / 2, 2.2, 1.3);
+        },
+      });
+      pyramid(x, z, 4.6, 4.6, h + 9, 4, "#1E3A8A", { depth: x + z + 0.6, noShadow: true });
+    }
+  }
+  function clockFace(cc, u, v, r) {
+    cc.beginPath();
+    cc.arc(u, v, r, 0, Math.PI * 2);
+    cc.fillStyle = K("#FFFFFF");
+    cc.fill();
+    cc.lineWidth = r * 0.14;
+    cc.strokeStyle = K("#C9A227");
+    cc.stroke();
+    cc.strokeStyle = NAVY;
+    cc.lineWidth = r * 0.1;
+    cc.lineCap = "round";
+    cc.beginPath();
+    cc.moveTo(u, v);
+    cc.lineTo(u, v - r * 0.7);
+    cc.moveTo(u, v);
+    cc.lineTo(u + r * 0.45, v + r * 0.2);
+    cc.stroke();
+  }
+
+  var BUILD2 = {};
+  BUILD2.halisaha = function (st, part) {
+    if (part === "B") return hsB(st);
+    hsA(st);
+  };
+  BUILD2.kulup = function (st) {
+    if (st <= 4) return oldB("kulup", st);
+    if (st === 5) {
+      // YÖNETİM BİNASI
+      paved("#EEE9F8");
+      adminBlock(-2, -7, 18, 10, 13);
+      // basın girişi kanopisi + sponsor panosu
+      box(-2, 0.4, 8, 3, 3.2, 0.35, kit.primary, { noShadow: true });
+      [-5.5, 1.5].forEach(function (x) {
+        cyl(x, 1.6, 0.2, 0, 3.2, "#C6CAE0", { noShadow: true });
+      });
+      billboard(12, 3, 0.2, 5, 2.2, "SPONSOR", "#1B1648", "#FFD43B", { posts: false });
+      [-12, -9.5].forEach(function (x, i) {
+        flagpole(x, 6, 7, i % 2 ? kit.secondary : kit.primary, i % 2 ? kit.primary : kit.secondary);
+      });
+      tree(-17, -16, 1);
+      tree(16, -15, 1);
+      tree(15, 14, 0.8);
+      bush(-8, 12, 1);
+      return;
+    }
+    if (st === 6) {
+      // KUPA MÜZESİ + yönetim binası
+      paved("#EEE9F8");
+      adminBlock(-5, -9, 16, 9, 13);
+      museumPav(7, 6, 1.35);
+      box(-12, 7, 2, 2, 0, 1.4, "#3A3F72");
+      flagpole(-14, 12, 7, kit.primary, kit.secondary);
+      tree(15, -15, 1);
+      tree(-17, -16, 1);
+      tree(-16, 16, 0.8);
+      return;
+    }
+    oldB("kulup", 6);
+    if (st >= 8) {
+      // en üst katta kupa müzesi (altın taç) + müze pavyonu
+      box(6, -6, 7.4, 6.4, 26.6, 2.8, "#FFD86B", {
+        noShadow: true,
+        depth: 30,
+        fL: function (cc, FW, FH) {
+          win(cc, 0.4, 0.4, FW - 0.8, FH - 0.8, true, "#FFE9A8");
+          ftext(cc, "MÜZE", FW / 2, FH / 2, FH * 0.45, "#7C2D12", FW * 0.8);
+        },
+        fR: function (cc, FW, FH) {
+          win(cc, 0.4, 0.4, FW - 0.8, FH - 0.8, true, "#FFE9A8");
+        },
+      });
+      dome(6, -6, 2.4, 29.4, "#FFC93C", { ribs: true, depth: 31 });
+      anchor({ t: "glow", x: 6, y: 28, z: -3, col: "#FFD98A" });
+      museumPav(-12, 10, 0.8);
+    }
+  };
+  BUILD2.stadyum = function () {};
+  BUILD2.restoran = function (st) {
+    if (st <= 4) return oldB("kantin", st);
+    if (st === 5) {
+      // TAKIM YEMEKHANESİ: uzun salon, uzun masalar
+      paved();
+      gable(0, -7, 22, 9, 0, 4.4, 2.6, "#FBE7CF", "#B45309", {
+        fL: function (cc, FW, FH) {
+          windowsGrid(cc, FW, FH, { ww: 1.8, wh: 1.6, gx: 0.8, top: 1.6, rows: 1, glass: "#FFE3A8", litK: 0.9, skip: function (r, k, R, Cn) { return k === Math.floor(Cn / 2); } });
+          A.roundRect(cc, FW / 2 - 1, FH - 2.5, 2, 2.5, 0.2);
+          cc.fillStyle = K("#7A3E10");
+          cc.fill();
+          fsign(cc, FW / 2, 0.6, 7, 0.8, "YEMEKHANE", "#B45309", "#FFFFFF", true);
+        },
+        fR: winFace({ ww: 1.6, wh: 1.6, top: 1.6, rows: 1, glass: "#FFE3A8" }),
+      });
+      cyl(6, -9, 0.5, 6.5, 1.6, "#A9AEC6", { noShadow: true });
+      anchor({ t: "steam", x: 6, y: 8.3, z: -9 });
+      [2, 7].forEach(function (z) {
+        box(-1, z, 12, 1.4, 0.75, 0.15, "#E0A562", { noShadow: true });
+        box(-1, z - 1.2, 12, 0.5, 0.42, 0.12, "#C98A4B", { noShadow: true });
+        box(-1, z + 1.2, 12, 0.5, 0.42, 0.12, "#C98A4B", { noShadow: true });
+      });
+      stringLights(-8, 10.5, 8, 10.5, 3.2, 10);
+      [-8, 8].forEach(function (x) {
+        cyl(x, 10.5, 0.15, 0, 3.2, "#5B6385", { noShadow: true });
+      });
+      tree(-17, -16, 1);
+      tree(17, -15, 1);
+      tree(16, 14, 0.8);
+      return;
+    }
+    if (st === 6) return oldB("kantin", 5);
+    if (st === 7) {
+      // TERAS RESTORAN: çatı terası + şemsiyeler
+      oldB("kantin", 5);
+      box(0, -6, 18.4, 9.4, 8.6, 0.15, "#D9925A", { noShadow: true, depth: -5.5, gloss: false });
+      box(0, -6, 18.6, 9.6, 8.75, 0.9, "#BFE6FF", { noShadow: true, alpha: 0.35, depth: -5.4, gloss: false, noLine: true });
+      [-6, 0, 6].forEach(function (x, i) {
+        umbrella(x, -6, 2.4, 1.5, i % 2 ? "#FFFFFF" : kit.primary, i % 2 ? kit.primary : "#FFFFFF", 8.6);
+      });
+      billboard(13, 10, 0.4, 5, 1.2, "TERAS", "#B45309", "#FFFFFF", { glow: true });
+      return;
+    }
+    oldB("kantin", 6);
+  };
+  BUILD2.magaza = function (st) {
+    if (st <= 3) return oldB("magaza", st);
+    if (st === 4) {
+      // KULÜP MAĞAZASI: vitrinli tek katlı mağaza
+      paved();
+      box(0, -5, 15, 8, 0, 4.6, "#F7F5FF", {
+        fL: function (cc, FW, FH) {
+          [[0.6, 4.2], [FW - 4.8, 4.2]].forEach(function (q) {
+            A.roundRect(cc, q[0], 1.6, q[1], FH - 1.9, 0.2);
+            cc.fillStyle = TH.night > 0.5 ? "#FFE3A8" : K("#CFEAFF");
+            cc.fill();
+            for (var i = 0; i < 2; i++) shirtAt(cc, q[0] + 1.1 + i * 2, 2.6, 1.3, i ? kit.secondary : kit.primary, i ? kit.primary : kit.secondary, i ? "7" : "10");
+          });
+          A.roundRect(cc, FW / 2 - 1.2, FH - 2.7, 2.4, 2.7, 0.2);
+          cc.fillStyle = K("#7CC7FF");
+          cc.fill();
+          fsign(cc, FW / 2, 0.75, 9, 0.9, "KULÜP MAĞAZASI", kit.primary, kit.secondary, true);
+        },
+        fR: winFace({ ww: 1.6, wh: 2, top: 1.6, rows: 1, glass: "#CFEAFF" }),
+      });
+      roofCap(0, -5, 15, 8, 4.6, kit.primary);
+      // tente
+      box(0, -0.4, 15, 1.6, 3.4, 0.25, kit.secondary, { noShadow: true, fL: function (cc, FW, FH) { for (var x = 0; x < FW; x += 1.2) { cc.fillStyle = K(kit.primary); cc.fillRect(x, 0, 0.6, FH); } } });
+      tree(-16, -15, 1);
+      tree(16, -14, 1);
+      tree(15, 13, 0.8);
+      return;
+    }
+    if (st === 5) return oldB("magaza", 4);
+    if (st >= 8) return oldB("magaza", 5);
+    oldB("magaza", 4);
+    // BÜYÜK MAĞAZA: yan kanat
+    box(13.5, -2, 7, 12, 0, 5.4, "#ECEAF8", {
+      fL: function (cc, FW, FH) {
+        A.roundRect(cc, 0.5, 1.4, FW - 1, FH - 1.6, 0.2);
+        cc.fillStyle = TH.night > 0.5 ? "#FFE3A8" : K("#CFEAFF");
+        cc.fill();
+        shirtAt(cc, FW / 2, 2.6, 1.5, kit.primary, kit.secondary, "9");
+      },
+      fR: winFace({ ww: 2.2, wh: 3, gx: 0.6, top: 1.4, rows: 1, glass: "#CFEAFF" }),
+    });
+    roofCap(13.5, -2, 7, 12, 5.4, kit.primary);
+    if (st >= 7) {
+      // FORMA BASKI MERKEZİ: testere çatılı atölye
+      box(-11, 9, 12, 7, 0, 4, "#E9ECF8", {
+        fL: function (cc, FW, FH) {
+          windowsGrid(cc, FW, FH, { ww: 1.4, wh: 1.2, gx: 0.8, top: 1.6, rows: 1 });
+          fsign(cc, FW / 2, 0.6, 9, 0.8, "FORMA BASKI", "#1B1648", "#FFD43B", true);
+        },
+      });
+      for (var i = 0; i < 4; i++) box(-15.5 + i * 3, 9, 3, 7, 4, 1.4, i % 2 ? "#B9C2E0" : "#9FD8FF", { noShadow: true, depth: -2 + i * 0.01 });
+      cyl(-6.5, 7, 0.4, 4, 2.6, "#A9AEC6", { noShadow: true });
+      anchor({ t: "steam", x: -6.5, y: 7, z: 7 });
+      body(30, function () {
+        var p = G.P(-11, 9.5, 10);
+        shirtAt(G.c, p[0], p[1], 3.2 * G.s, kit.primary, kit.secondary, "10");
+      });
+      extBill(-11, 10, 4, 12);
+    } else {
+      tree(-16, 12, 0.9);
+    }
+  };
+  BUILD2.akademi = function (st) {
+    if (st <= 2) return oldB("akademi", st);
+    if (st === 3) {
+      // U-12: lisanslı takım — yedek kulübesi, küçük skorbord, bayraklar
+      oldB("akademi", 2);
+      box(0, 12.6, 6, 1.4, 0, 0.4, "#4A4F86", { noShadow: true });
+      box(0, 13.2, 6.2, 0.25, 0, 1.9, "#BFE6FF", { alpha: 0.8 });
+      box(0, 12.6, 6.4, 1.8, 1.9, 0.2, kit.primary);
+      billboard(-15, -6, 1.2, 3.6, 1.6, "U-12", "#2FAE4E", "#FFFFFF", { glow: true });
+      flagpole(15, -8, 6, kit.primary, kit.secondary);
+      return;
+    }
+    if (st === 4) return oldB("akademi", 3);
+    if (st <= 6) {
+      oldB("akademi", 3);
+      // ANTRENÖR OFİSİ (konteyner)
+      box(15, -5, 5, 8, 0, 3, "#FFFFFF", {
+        fR: function (cc, FW, FH) {
+          win(cc, 1, 0.8, 2, 1.2, true);
+          win(cc, FW - 3, 0.8, 2, 1.2, true);
+          fsign(cc, FW / 2, FH - 0.5, 4.6, 0.6, "ANTRENÖR", "#1B1648", "#FFFFFF", true);
+        },
+        fL: function (cc, FW, FH) {
+          cc.fillStyle = K("#2FAE4E");
+          cc.fillRect(0, 0.3, FW, 0.35);
+        },
+      });
+      roofCap(15, -5, 5, 8, 3, "#2FAE4E");
+      if (st === 6) {
+        // U-17 / U-19: iki sıra tribün + ışıklar
+        for (var r = 0; r < 2; r++)
+          (function (r) {
+            box(-1, -3.4 - r * 0.9, 20, 0.9, 0, (r + 1) * 0.5, "#D5D8EA", { top: dk(kit.primary, 0.3), noShadow: true, gloss: false, depth: -8 - r * 0.01 });
+            body(-8 - r * 0.01 + 0.001, function () {
+              crowdRow(G.c, true, -10, 8, -3.4 - r * 0.9, (r + 1) * 0.5, 40 + r, 0.5);
+            });
+          })(r);
+        [[-1, -1], [1, 1]].forEach(function (q) {
+          floodS(q[0] * 15.5, 6 + q[1] * 9.5, 9, false);
+        });
+        billboard(-16, 14, 1.2, 4.4, 1.6, "U-19", "#2FAE4E", "#FFFFFF", { glow: true });
+      }
+      return;
+    }
+    oldB("akademi", 4, st === 7 ? { noDorm: true } : null);
+    if (st === 7) {
+      // AKADEMİ OKULU: yurt yerine sınıf bloğu
+      box(14, -12, 8, 8, 0, 7, "#FFF6D8", {
+        fL: winFace({ ww: 1.2, wh: 1.4, gx: 0.8, gy: 1, top: 0.8, bot: 0.8 }),
+        fR: winFace({ ww: 1.2, wh: 1.4, gx: 0.8, gy: 1, top: 0.8, bot: 0.8 }),
+      });
+      roofCap(14, -12, 8, 8, 7, "#2FAE4E");
+      billboard(14, -7.8, 7.2, 4, 0.9, "OKUL", "#1D4ED8", "#FFFFFF", { posts: false, glow: true });
+    }
+  };
+  BUILD2.ulasim = function (st) {
+    oldB("ulasim", st);
+  };
+  BUILD2.saglik = function (st) {
+    if (st <= 3) return oldB("saglik", st);
+    if (st === 4) {
+      // MASAJ + BUZ HAVUZU + sauna
+      oldB("saglik", 3);
+      pool(11, 4, 4, 3, "#BDEBFF");
+      pool(11, 9, 4, 3, "#BDEBFF");
+      box(11, 6.5, 0.4, 0.4, 0, 0.1, "#FFFFFF", { noShadow: true });
+      box(-11, 8, 5, 4, 0, 2.6, "#C98A4B", {
+        fL: function (cc, FW, FH) {
+          cc.strokeStyle = rgba("#6B3A1E", 0.4);
+          cc.lineWidth = 0.08;
+          for (var y = 0.3; y < FH; y += 0.35) {
+            cc.beginPath();
+            cc.moveTo(0, y);
+            cc.lineTo(FW, y);
+            cc.stroke();
+          }
+          fsign(cc, FW / 2, 0.55, 3.6, 0.6, "SAUNA", "#7A3E10", "#FFFFFF", true);
+        },
+      });
+      roofCap(-11, 8, 5, 4, 2.6, "#7A3E10");
+      anchor({ t: "steam", x: -10, y: 3.5, z: 7 });
+      return;
+    }
+    if (st === 5) return oldB("saglik", 4);
+    if (st <= 7) {
+      oldB("saglik", 4);
+      // SPOR TIP: laboratuvar kanadı
+      box(10, -12, 9, 7, 0, 9, "#FFFFFF", {
+        fL: both(winFace({ ww: 1.2, wh: 1.3, gx: 0.6, gy: 1, top: 1.6, bot: 0.8, glass: "#9FE0FF" }), signFace("LAB", "#0EA5E9", "#FFFFFF", 0.7, 0.45, 0.8)),
+        fR: winFace({ ww: 1.2, wh: 1.3, gx: 0.6, gy: 1, top: 1.6, bot: 0.8, glass: "#9FE0FF" }),
+      });
+      roofCap(10, -12, 9, 7, 9, "#0EA5E9");
+      if (st === 7) {
+        // GÖRÜNTÜLEME: MR pavyonu (yuvarlak)
+        cyl(-11, 10, 4, 0, 5, "#EAF3FF", {
+          fS: function (c, b, t, rx, ry) {
+            c.fillStyle = TH.night > 0.5 ? "rgba(255,217,138,0.8)" : "rgba(143,211,255,0.85)";
+            c.fillRect(b[0] - rx, t[1] + (b[1] - t[1]) * 0.35, rx * 2, (b[1] - t[1]) * 0.25);
+          },
+          top: "#0EA5E9",
+        });
+        billboard(-11, 14.6, 0.2, 5, 1, "MR · ULTRASON", "#0EA5E9", "#FFFFFF", { posts: false, glow: true });
+        anchor({ t: "beacon", x: 10, y: 9.6, z: -12 });
+      }
+      return;
+    }
+    oldB("saglik", 5);
+  };
+  BUILD2.tv = function (st) {
+    if (st <= 4) return oldB("medya", st);
+    if (st === 5) {
+      // STÜDYO
+      paved();
+      box(-3, -5, 15, 10, 0, 7, "#2A2F55", {
+        fL: function (cc, FW, FH) {
+          windowsGrid(cc, FW, FH, { ww: 2.4, wh: 1.6, gx: 0.8, top: 4, rows: 1, glass: "#9FD8FF" });
+          cc.fillStyle = "#141043";
+          cc.fillRect(1, 0.8, FW - 2, 2.4);
+          ftext(cc, "STÜDYO", FW / 2 - 1.2, 2, 1.3, TH.night > 0.5 ? "#FFFFFF" : K("#FFFFFF"), FW * 0.6);
+          cc.beginPath();
+          cc.arc(FW - 3, 2, 0.55, 0, Math.PI * 2);
+          cc.fillStyle = "#FF3355";
+          cc.fill();
+        },
+        fR: winFace({ ww: 1.6, wh: 1.6, top: 4, rows: 1, glass: "#9FD8FF" }),
+      });
+      roofCap(-3, -5, 15, 10, 7, kit.primary);
+      anchor({ t: "rec", x: -3, y: 8.2, z: 0 });
+      latticeS(11, -9, 18, 1.5);
+      dishS(11, -9, 16, 1.1, -0.6);
+      dishS(-7, -7, 7.8, 1, -0.4);
+      busS(7, 8, true, true);
+      tree(-16, 12, 1);
+      tree(-16, -15, 1);
+      return;
+    }
+    oldB("medya", 5);
+    if (st >= 7) {
+      // UYDU YAYIN MERKEZİ: büyük çanak çiftliği
+      [[-15.5, -9], [-15.5, -2], [-15.5, 5]].forEach(function (q, i) {
+        box(q[0], q[1], 2.4, 2.4, 0, 1.2, "#C6CAE0", { noShadow: true });
+        dishS(q[0], q[1], 1.6, 3, -0.9 + i * 0.3);
+      });
+      anchor({ t: "beacon", x: -15.5, y: 5.5, z: -2 });
+    }
+  };
+  BUILD2.otel = function (st) {
+    if (st <= 4) return oldB("kamp", st);
+    if (st === 6) return oldB("kamp", 5);
+    // SPA'LI KAMP OTELİ
+    oldB("kamp", 4);
+    vaultX(-11, 11, 9, 3, 0, "#BFE6FF", { alpha: 0.85, rib: 1.8, lit: "#FFD590", cap: "#9FD8FF" });
+    cyl(12, 11, 2.2, 0, 0.6, "#F2F0FA", { top: "#5FE0F5" });
+    anchor({ t: "steam", x: 12, y: 1, z: 11 });
+    anchor({ t: "steam", x: -11, y: 3.4, z: 11 });
+    billboard(-11, 15, 0.3, 4, 1, "SPA", "#0F766E", "#FFFFFF", { posts: false, glow: true });
+  };
+  BUILD2.universite = function (st) {
+    if (st <= 1) {
+      // ANTRENÖRLÜK KURSU: prefabrik sınıf + açık hava tahtası
+      lawn();
+      box(7, -9, 9, 5, 0, 3, "#FFFFFF", {
+        fL: function (cc, FW, FH) {
+          cc.fillStyle = K("#1E3A8A");
+          cc.fillRect(0, FH - 0.5, FW, 0.25);
+          win(cc, 0.8, 0.8, 1.8, 1.1, true);
+          win(cc, FW - 2.6, 0.8, 1.8, 1.1, true);
+          A.roundRect(cc, FW / 2 - 0.7, FH - 2.3, 1.4, 2.3, 0.15);
+          cc.fillStyle = K("#4A4F86");
+          cc.fill();
+        },
+      });
+      roofCap(7, -9, 9, 5, 3, "#1E3A8A");
+      billboard(7, -5.6, 0.3, 7, 1, "ANTRENÖRLÜK KURSU", "#1E3A8A", "#FFFFFF", { posts: true });
+      // tahta + sandalyeler
+      box(-6, -2, 4.4, 0.25, 0.8, 2.4, "#FFFFFF", {
+        noShadow: true,
+        fL: function (cc, FW, FH) {
+          cc.strokeStyle = K("#2563EB");
+          cc.lineWidth = 0.12;
+          cc.beginPath();
+          cc.arc(1.2, 1.2, 0.4, 0, Math.PI * 2);
+          cc.moveTo(1.6, 1.2);
+          cc.quadraticCurveTo(2.4, 0.4, 3.4, 1);
+          cc.stroke();
+          cc.strokeStyle = K("#E11D48");
+          cc.beginPath();
+          cc.moveTo(2.6, 1.6);
+          cc.lineTo(3.2, 2);
+          cc.moveTo(3.2, 1.6);
+          cc.lineTo(2.6, 2);
+          cc.stroke();
+        },
+      });
+      [-7.5, -4.5].forEach(function (x) {
+        box(x, -2, 0.2, 0.2, 0, 0.8, "#5B6385", { noShadow: true });
+      });
+      for (var r = 0; r < 2; r++) for (var k = 0; k < 4; k++) box(-8.5 + k * 1.6, 2 + r * 1.8, 0.8, 0.8, 0, 0.7, "#3B82F6", { noShadow: true, top: "#60A5FA" });
+      [0, 2, 4, 6].forEach(function (x) {
+        cone(x + 4, 9);
+      });
+      tree(-15, -15, 1.1);
+      tree(16, 13, 0.9);
+      tree(-16, 13, 0.8);
+      return;
+    }
+    paved(st >= 5 ? "#ECEFF5" : null);
+    if (st >= 5)
+      flat(function () {
+        topDo(0.32, function (c) {
+          A.roundRect(c, -5, -2, 15, 11, 2);
+          c.fillStyle = K(GRASSP);
+          c.fill();
+          c.strokeStyle = K("#F1E4C8");
+          c.lineWidth = 1.2;
+          c.beginPath();
+          c.moveTo(2.5, -2);
+          c.lineTo(2.5, 9);
+          c.moveTo(-5, 3.5);
+          c.lineTo(10, 3.5);
+          c.stroke();
+        });
+      });
+    // SEMİNER SALONU
+    gable(12, -11, 10, 8, 0, 4.4, 2.4, "#F6D7B0", "#9A3412", {
+      fL: function (cc, FW, FH) {
+        windowsGrid(cc, FW, FH, { ww: 1.4, wh: 1.4, gx: 0.8, top: 1.4, rows: 1, skip: function (r, k, R, Cn) { return k === Math.floor(Cn / 2); } });
+        A.roundRect(cc, FW / 2 - 0.8, FH - 2.3, 1.6, 2.3, 0.2);
+        cc.fillStyle = K("#6B3A1E");
+        cc.fill();
+        fsign(cc, FW / 2, 0.55, 7, 0.7, "SEMİNER", "#9A3412", "#FFFFFF", true);
+      },
+    });
+    if (st >= 3) facultyBlock(-6, -10, 18, 9, st >= 6 ? 12 : 9.5, st >= 6 ? "ELİTLİG ÜNİVERSİTESİ" : "SPOR BİLİMLERİ", "#FFF3DF", st >= 6);
+    else {
+      bench(-6, -6, true, 4);
+      tree(-8, -12, 1.1);
+      tree(-1, -15, 0.9);
+    }
+    if (st >= 4) {
+      // KÜTÜPHANE (sütunlu) + veri laboratuvarı
+      box(-12, 7, 11, 8, 0, 6, "#F4F1FA", {
+        fL: function (cc, FW, FH) {
+          for (var u = 0.7; u < FW - 0.3; u += 1.3) {
+            cc.fillStyle = K("#E2DDF0");
+            cc.fillRect(u, 1.4, 0.55, FH - 1.4);
+          }
+          fsign(cc, FW / 2, 0.65, 7.5, 0.8, "KÜTÜPHANE", "#1E3A8A", "#FFFFFF", true);
+        },
+        fR: winFace({ ww: 1.2, wh: 2.4, top: 1.6, rows: 1, glass: "#9FD8FF" }),
+      });
+      gable(-12, 7, 11, 8, 6, 0.01, 2, "#F4F1FA", "#C9C3DD", { depth: -4.9, over: 0.3 });
+      box(12, 3, 7, 7, 0, 5.5, "#BFF3FF", {
+        fL: both(winFace({ ww: 1.4, wh: 1.4, gx: 0.4, gy: 0.5, top: 1.4, bot: 0.4, glass: "#7FE3FF", litK: 0.9 }), signFace("LAB", "#141043", "#22D3EE", 0.6, 0.6, 0.7)),
+        fR: winFace({ ww: 1.4, wh: 1.4, gx: 0.4, gy: 0.5, top: 1.4, bot: 0.4, glass: "#7FE3FF", litK: 0.9 }),
+      });
+      roofCap(12, 3, 7, 7, 5.5, "#E3E6F4");
+    } else {
+      tree(-13, 8, 1);
+      tree(12, 4, 0.9);
+      bush(-9, 12, 1);
+    }
+    if (st >= 5) {
+      // YERLEŞKE: yurt + kafeterya
+      box(10, 15, 13, 6, 0, 7.5, "#E8F0FF", {
+        fL: both(winFace({ ww: 1.1, wh: 1.2, gx: 0.6, gy: 0.9, top: 1.6, bot: 0.6 }), signFace("YURT", "#1D4ED8", "#FFFFFF", 0.65, 0.4, 0.75)),
+        fR: winFace({ ww: 1.1, wh: 1.2, gx: 0.6, gy: 0.9, top: 1.6, bot: 0.6 }),
+      });
+      roofCap(10, 15, 13, 6, 7.5, "#1D4ED8");
+      [-3, 1].forEach(function (x, i) {
+        table(x, 15);
+        umbrella(x, 15, 2.3, 1.4, i ? "#FFFFFF" : "#1D4ED8", i ? "#1D4ED8" : "#FFFFFF");
+      });
+      tree(-1, 3, 0.8);
+      tree(6, 3, 0.8);
+      tree(-17, 17, 0.8);
+    } else {
+      tree(10, 15, 1);
+      tree(16, 9, 0.8);
+    }
+    if (st >= 6) {
+      turkFlag(-16, -2, 9);
+      flagpole(-16, 1.5, 7, kit.primary, kit.secondary);
+    }
+  };
+  BUILD2.scout = function (st) {
+    if (st <= 1) {
+      // GÖZLEMCİ MASASI
+      lawn();
+      box(0, 0, 3.2, 1.6, 0.8, 0.15, "#E0A562", { noShadow: true });
+      [[-1.4, -0.6], [1.4, -0.6], [-1.4, 0.6], [1.4, 0.6]].forEach(function (q) {
+        box(q[0], q[1], 0.15, 0.15, 0, 0.8, "#8A5426", { noShadow: true });
+      });
+      box(-0.4, -0.2, 1.2, 0.8, 0.95, 0.06, "#3A3F72", { noShadow: true });
+      box(-0.4, -0.55, 1.2, 0.08, 0.95, 0.8, "#1B1648", { noShadow: true, fL: function (cc, FW, FH) { cc.fillStyle = TH.night > 0.5 ? "#7FE3FF" : K("#5AA2E8"); cc.fillRect(0.06, 0.06, FW - 0.12, FH - 0.12); } });
+      box(0.2, 1.6, 0.9, 0.9, 0, 0.5, "#FF8A3D", { noShadow: true });
+      umbrella(0.6, -0.8, 2.6, 1.8, "#FFFFFF", "#1D4ED8");
+      // dürbün sehpası
+      cyl(3.4, -1, 0.1, 0, 1.5, "#3A3F72", { noShadow: true });
+      box(3.4, -1, 0.9, 0.4, 1.5, 0.35, "#1B1648", { noShadow: true });
+      billboard(-5, 3, 0.4, 3.4, 1.1, "SCOUT", "#1D4ED8", "#FFFFFF", {});
+      tree(-14, -14, 1.1);
+      tree(14, -13, 1);
+      tree(13, 14, 0.8);
+      tree(-15, 13, 0.9);
+      return;
+    }
+    paved(st >= 4 ? "#ECEFF5" : null);
+    if (st === 2) {
+      // VİDEO ARŞİVİ
+      box(-2, -5, 12, 8, 0, 4.4, "#2A2F55", {
+        fL: function (cc, FW, FH) {
+          for (var i = 0; i < 4; i++) {
+            cc.fillStyle = "#0B0A2A";
+            cc.fillRect(0.8 + i * 2.7, 1.6, 2.2, 1.5);
+            cc.fillStyle = TH.night > 0.3 ? ["#7FE3FF", "#9EF0A8", "#FFD98A", "#C4B5FD"][i] : K(["#5AA2E8", "#4CC86A", "#FFB547", "#8B5CF6"][i]);
+            cc.fillRect(0.95 + i * 2.7, 1.75, 1.9, 1.2);
+          }
+          fsign(cc, FW / 2, 0.55, 8, 0.75, "VİDEO ARŞİVİ", "#1D4ED8", "#FFFFFF", true);
+        },
+        fR: winFace({ ww: 1.4, wh: 1.2, top: 1.6, rows: 1 }),
+      });
+      roofCap(-2, -5, 12, 8, 4.4, "#1D4ED8");
+      dishS(1, -6, 5.2, 0.9, -0.5);
+      // film makarası tabelası
+      body(5, function () {
+        var p = G.P(8, 3.2, 0), c = G.c, s = G.s;
+        c.beginPath();
+        c.arc(p[0], p[1], 1.2 * s, 0, Math.PI * 2);
+        c.fillStyle = K("#3A3F72");
+        c.fill();
+        c.fillStyle = K("#E9ECF8");
+        for (var i = 0; i < 5; i++) {
+          var a = (i / 5) * Math.PI * 2;
+          c.beginPath();
+          c.arc(p[0] + Math.cos(a) * 0.6 * s, p[1] + Math.sin(a) * 0.6 * s, 0.26 * s, 0, Math.PI * 2);
+          c.fill();
+        }
+      });
+      extBill(8, 0, 1.6, 4.6);
+      box(8, 0, 0.3, 0.3, 0, 2, "#8A90B5", { noShadow: true });
+      tree(-15, 12, 1);
+      tree(15, -14, 1);
+      tree(14, 13, 0.8);
+      return;
+    }
+    // 3+: gözlemciler binası (4'te veri merkezi, 5'te Avrupa merkezi)
+    var flags = ["#1D4ED8", "#E11D48", "#FACC15", "#16A34A", "#F97316"];
+    if (st === 3) {
+      box(-3, -7, 15, 9, 0, 7, "#F2F4FF", {
+        fL: both(winFace({ ww: 1.6, wh: 1.6, gx: 0.8, gy: 1.2, top: 1.8, bot: 0.6 }), signFace("BÖLGE GÖZLEMCİLERİ", "#1D4ED8", "#FFFFFF", 0.7, 0.85, 0.8)),
+        fR: winFace({ ww: 1.6, wh: 1.6, gx: 0.8, gy: 1.2, top: 1.8, bot: 0.6 }),
+      });
+      roofCap(-3, -7, 15, 9, 7, "#1D4ED8");
+    } else {
+      // VERİ ANALİZ MERKEZİ: koyu cam, veri çizgileri
+      box(-3, -7, 17, 10, 0, st >= 5 ? 14 : 10, "#1F2A4D", {
+        fL: function (cc, FW, FH) {
+          for (var y = 1.6; y < FH - 0.4; y += 1.6) {
+            cc.fillStyle = TH.night > 0.5 ? "rgba(34,211,238,0.85)" : K("#3E5A96");
+            cc.fillRect(0.4, y, FW - 0.8, 0.9);
+          }
+          cc.strokeStyle = TH.night > 0.5 ? "#9EF0A8" : K("#7FE3FF");
+          cc.lineWidth = 0.1;
+          for (var i = 0; i < 6; i++) {
+            cc.beginPath();
+            cc.moveTo(1 + i * 2.6, 1.7);
+            cc.lineTo(1 + i * 2.6, FH - 0.5);
+            cc.stroke();
+          }
+          fsign(cc, FW / 2, 0.6, 9, 0.8, st >= 5 ? "AVRUPA SCOUT MERKEZİ" : "VERİ MERKEZİ", "#141043", "#22D3EE", true);
+        },
+        fR: function (cc, FW, FH) {
+          for (var y = 1.6; y < FH - 0.4; y += 1.6) {
+            cc.fillStyle = TH.night > 0.5 ? "rgba(34,211,238,0.6)" : K("#36508A");
+            cc.fillRect(0.4, y, FW - 0.8, 0.9);
+          }
+        },
+      });
+      roofCap(-3, -7, 17, 10, st >= 5 ? 14 : 10, "#C6CAE0");
+      // çatıda soğutucular + anten
+      var top = st >= 5 ? 14.45 : 10.45;
+      [-8, -4, 0].forEach(function (x) {
+        box(x, -9, 2.4, 2.4, top, 1, "#C6CAE0", { noShadow: true, depth: 20 + x * 0.01 });
+      });
+      cyl(4, -10, 0.15, top, 5, "#5B6385", { noShadow: true, depth: 21 });
+      anchor({ t: "beacon", x: 4, y: top + 5, z: -10 });
+    }
+    if (st >= 5) {
+      globeS(10, 7, 1.4, 3.4);
+    } else {
+      // Avrupa haritası panosu
+      box(11, 4, 0.4, 7, 1.2, 4, "#FFFFFF", {
+        fR: function (cc, FW, FH) {
+          cc.fillStyle = K("#BFE6FF");
+          cc.fillRect(0.2, 0.2, FW - 0.4, FH - 0.4);
+          cc.fillStyle = K("#4CC86A");
+          [[2.2, 1.6, 1.4, 0.9], [4.2, 2.2, 1.6, 1.1], [3, 3.1, 1.1, 0.6], [5.6, 1.3, 0.9, 0.7]].forEach(function (q) {
+            cc.beginPath();
+            cc.ellipse(q[0], q[1], q[2], q[3], 0.3, 0, Math.PI * 2);
+            cc.fill();
+          });
+          cc.fillStyle = "#E11D48";
+          [[2.4, 1.8], [4.6, 2.4], [3.4, 3], [5.6, 1.4]].forEach(function (q) {
+            cc.beginPath();
+            cc.arc(q[0], q[1], 0.18, 0, Math.PI * 2);
+            cc.fill();
+          });
+        },
+      });
+      [-2, 2].forEach(function (dz) {
+        box(11, 4 + dz, 0.25, 0.25, 0, 1.2, "#8A90B5", { noShadow: true });
+      });
+    }
+    flags.forEach(function (col, i) {
+      flagpole(-14 + i * 2.6, 10 + (i % 2) * 0.3, st >= 5 ? 8 : 6.5, col, i % 2 ? "#FFFFFF" : null);
+    });
+    tree(16, -15, 1);
+    tree(-17, -15, 1);
+    if (st < 5) tree(15, 15, 0.8);
+  };
+
+  /* ═══════════════════════ KULÜP ŞEHRİ 2.0: sembol yapılar ═══════════════════════
+   * Her anahtara bir sprite (yuva ±2,4 m içinde); bilinmeyen anahtar için kademe
+   * yedeği. Heykel ve kupalar ekrana dönük, metalik degrade, ince kontur. */
+
+  var METAL = {
+    bronze: ["#E9B872", "#B5793A", "#7A4B22"],
+    marble: ["#FFFFFF", "#E7E3F2", "#B9B3CF"],
+    gold: ["#FFF0A8", "#F5C542", "#B8860B"],
+    silver: ["#FFFFFF", "#D3D8E8", "#8A93B0"],
+  };
+  function metalGrad(c, x0, y0, x1, y1, m) {
+    var g = c.createLinearGradient(x0, y0, x1, y1);
+    g.addColorStop(0, K(m[0]));
+    g.addColorStop(0.45, K(m[1]));
+    g.addColorStop(1, K(m[2]));
+    return g;
+  }
+  /** Taş kaide (kare), üstü y = h. */
+  function plinth(w, h, col, plate) {
+    box(0, 0, w, w, 0, h, col || "#DCD8E8", {
+      fL: plate
+        ? function (cc, FW, FH) {
+            A.roundRect(cc, FW * 0.18, FH * 0.3, FW * 0.64, FH * 0.36, 0.08);
+            cc.fillStyle = K(plate);
+            cc.fill();
+          }
+        : null,
+    });
+    box(0, 0, w + 0.5, w + 0.5, 0, 0.3, dk(col || "#DCD8E8", 0.1), { noShadow: true, depth: -0.5 });
+  }
+  /** Heykel figürü (ekrana dönük). pose: kick | coach | raise | suit. */
+  function figureS(y0, pose, metal, sz) {
+    sz = sz || 1;
+    extBill(0, 0, 1.6 * sz, y0 + 2.6 * sz);
+    body(0.6, function () {
+      var c = G.c, p = G.P(0, y0, 0), s = G.s * HY * sz;
+      var m = METAL[metal] || METAL.bronze;
+      var fill = metalGrad(c, p[0] - s, p[1] - 2.4 * s, p[0] + s, p[1], m);
+      var lw = Math.max(1, 0.26 * s);
+      c.lineCap = "round";
+      c.lineJoin = "round";
+      var limb = function (pts, w) {
+        c.beginPath();
+        c.moveTo(p[0] + pts[0][0] * s, p[1] - pts[0][1] * s);
+        for (var i = 1; i < pts.length; i++) c.lineTo(p[0] + pts[i][0] * s, p[1] - pts[i][1] * s);
+        c.strokeStyle = K(m[2]);
+        c.lineWidth = w * s + lw * 0.5;
+        c.stroke();
+        c.strokeStyle = fill;
+        c.lineWidth = w * s;
+        c.stroke();
+      };
+      var hip = [0, 0.95], neck = [0, 1.75];
+      if (pose === "kick") {
+        limb([[-0.05, 0.95], [-0.3, 0.5], [-0.15, 0.02]], 0.24);
+        limb([[0.05, 0.95], [0.45, 0.62], [0.85, 0.75]], 0.24);
+        limb([[-0.1, 1.65], [-0.6, 1.35], [-0.85, 1.55]], 0.18);
+        limb([[0.1, 1.65], [0.55, 1.75], [0.8, 2.0]], 0.18);
+      } else if (pose === "raise") {
+        limb([[-0.08, 0.95], [-0.18, 0.5], [-0.2, 0.02]], 0.24);
+        limb([[0.08, 0.95], [0.18, 0.5], [0.2, 0.02]], 0.24);
+        limb([[-0.12, 1.65], [-0.45, 2.1], [-0.55, 2.55]], 0.18);
+        limb([[0.12, 1.65], [0.45, 2.1], [0.55, 2.55]], 0.18);
+      } else if (pose === "coach") {
+        limb([[-0.08, 0.95], [-0.14, 0.5], [-0.16, 0.02]], 0.26);
+        limb([[0.08, 0.95], [0.14, 0.5], [0.16, 0.02]], 0.26);
+        limb([[-0.15, 1.6], [0.2, 1.35]], 0.2);
+        limb([[0.15, 1.6], [0.7, 1.65], [1.0, 1.75]], 0.17);
+      } else {
+        limb([[-0.08, 0.95], [-0.14, 0.5], [-0.16, 0.02]], 0.26);
+        limb([[0.08, 0.95], [0.14, 0.5], [0.16, 0.02]], 0.26);
+        limb([[-0.15, 1.62], [-0.3, 1.2], [-0.25, 0.95]], 0.18);
+        limb([[0.15, 1.62], [0.45, 2.05], [0.5, 2.45]], 0.18);
+      }
+      // gövde
+      var coat = pose === "coach" || pose === "suit";
+      c.beginPath();
+      c.moveTo(p[0] - 0.3 * s, p[1] - neck[1] * s);
+      c.lineTo(p[0] + 0.3 * s, p[1] - neck[1] * s);
+      c.lineTo(p[0] + (coat ? 0.34 : 0.24) * s, p[1] - (coat ? 0.7 : hip[1]) * s);
+      c.lineTo(p[0] - (coat ? 0.34 : 0.24) * s, p[1] - (coat ? 0.7 : hip[1]) * s);
+      c.closePath();
+      c.fillStyle = fill;
+      c.fill();
+      c.lineWidth = lw * 0.5;
+      c.strokeStyle = K(m[2]);
+      c.stroke();
+      // baş
+      c.beginPath();
+      c.arc(p[0], p[1] - 2.02 * s, 0.25 * s, 0, Math.PI * 2);
+      c.fillStyle = fill;
+      c.fill();
+      c.stroke();
+      if (pose === "kick") {
+        c.beginPath();
+        c.arc(p[0] + 1.05 * s, p[1] - 0.72 * s, 0.17 * s, 0, Math.PI * 2);
+        c.fillStyle = fill;
+        c.fill();
+        c.stroke();
+      }
+    });
+  }
+  /** Kupa (ekrana dönük). kind: sl | el | cl | gold. */
+  function trophyS(y0, kind, sz) {
+    sz = sz || 1;
+    extBill(0, 0, 1.8 * sz, y0 + 3.2 * sz);
+    body(0.6, function () {
+      var c = G.c, p = G.P(0, y0, 0), s = G.s * HY * sz;
+      var m = kind === "el" || kind === "cl" ? METAL.silver : METAL.gold;
+      var fill = metalGrad(c, p[0] - s, p[1] - 3 * s, p[0] + s, p[1], m);
+      var edge = K(m[2]);
+      c.lineJoin = "round";
+      c.lineWidth = Math.max(0.8, 0.07 * s);
+      c.strokeStyle = edge;
+      // ayak
+      A.roundRect(c, p[0] - 0.55 * s, p[1] - 0.45 * s, 1.1 * s, 0.45 * s, 0.08 * s);
+      c.fillStyle = K(kind === "sl" ? "#2B2F5E" : "#3A3F72");
+      c.fill();
+      c.beginPath();
+      c.moveTo(p[0] - 0.14 * s, p[1] - 0.45 * s);
+      c.lineTo(p[0] - 0.08 * s, p[1] - 1.0 * s);
+      c.lineTo(p[0] + 0.08 * s, p[1] - 1.0 * s);
+      c.lineTo(p[0] + 0.14 * s, p[1] - 0.45 * s);
+      c.closePath();
+      c.fillStyle = fill;
+      c.fill();
+      c.stroke();
+      if (kind === "el") {
+        // uzun vazo
+        c.beginPath();
+        c.moveTo(p[0] - 0.2 * s, p[1] - 1.0 * s);
+        c.bezierCurveTo(p[0] - 0.75 * s, p[1] - 1.5 * s, p[0] - 0.75 * s, p[1] - 2.5 * s, p[0] - 0.42 * s, p[1] - 3.0 * s);
+        c.lineTo(p[0] + 0.42 * s, p[1] - 3.0 * s);
+        c.bezierCurveTo(p[0] + 0.75 * s, p[1] - 2.5 * s, p[0] + 0.75 * s, p[1] - 1.5 * s, p[0] + 0.2 * s, p[1] - 1.0 * s);
+        c.closePath();
+      } else {
+        // kupa gövdesi
+        c.beginPath();
+        c.moveTo(p[0] - 0.2 * s, p[1] - 1.0 * s);
+        c.quadraticCurveTo(p[0] - 0.75 * s, p[1] - 1.5 * s, p[0] - 0.72 * s, p[1] - 2.55 * s);
+        c.lineTo(p[0] + 0.72 * s, p[1] - 2.55 * s);
+        c.quadraticCurveTo(p[0] + 0.75 * s, p[1] - 1.5 * s, p[0] + 0.2 * s, p[1] - 1.0 * s);
+        c.closePath();
+      }
+      c.fillStyle = fill;
+      c.fill();
+      c.stroke();
+      // kulplar
+      c.lineWidth = Math.max(1.2, (kind === "cl" ? 0.16 : 0.12) * s);
+      c.strokeStyle = fill;
+      var hw = kind === "cl" ? 1.35 : 1.05;
+      if (kind !== "el")
+        [-1, 1].forEach(function (sd) {
+          c.beginPath();
+          c.moveTo(p[0] + sd * 0.62 * s, p[1] - 2.35 * s);
+          c.bezierCurveTo(p[0] + sd * hw * s, p[1] - (kind === "cl" ? 2.9 : 2.5) * s, p[0] + sd * hw * s, p[1] - 1.5 * s, p[0] + sd * 0.42 * s, p[1] - 1.45 * s);
+          c.stroke();
+        });
+      // ağız
+      c.beginPath();
+      c.ellipse(p[0], p[1] - (kind === "el" ? 3.0 : 2.55) * s, (kind === "el" ? 0.42 : 0.72) * s, 0.12 * s, 0, 0, Math.PI * 2);
+      c.fillStyle = K(m[2]);
+      c.fill();
+      // şerit / parlama
+      if (kind === "sl") {
+        c.fillStyle = K("#E30A17");
+        c.fillRect(p[0] - 0.55 * s, p[1] - 1.85 * s, 1.1 * s, 0.2 * s);
+      }
+      c.fillStyle = "rgba(255,255,255,0.55)";
+      c.beginPath();
+      c.ellipse(p[0] - 0.3 * s, p[1] - 1.9 * s, 0.08 * s, 0.4 * s, 0.2, 0, Math.PI * 2);
+      c.fill();
+    });
+  }
+  function lmFountain(col, top) {
+    cyl(0, 0, 2.1, 0, 0.6, "#E9ECF8", { top: col || "#5FD3F5", noShadow: true });
+    cyl(0, 0, 0.35, 0.6, 1.1, "#D5D8EA", { noShadow: true });
+    cyl(0, 0, 0.9, 1.7, 0.25, "#E9ECF8", { top: col || "#5FD3F5", noShadow: true });
+    if (top) top();
+    anchor({ t: "fountain", x: 0, y: 2.1, z: 0 });
+  }
+  var LM_BUILD = {
+    bank: function () {
+      bench(0, 0.3, true, 3.2, "#C98A4B");
+      bush(-2, -1.2, 0.6);
+      bush(2, -1.2, 0.6);
+    },
+    sokak_lambasi: function () {
+      cyl(0, 0, 0.5, 0, 0.3, "#C6CAE0", { noShadow: true });
+      lampS(0, 0);
+    },
+    agac_sirasi: function () {
+      box(0, 0, 4.4, 1.2, 0, 0.35, "#C9B99A", { top: "#6FD064", noShadow: true });
+      [-1.6, 0, 1.6].forEach(function (x) {
+        tree(x, 0, 0.62);
+      });
+    },
+    bayrak: function () {
+      cyl(0, 0, 0.8, 0, 0.35, "#D5D8EA", { noShadow: true });
+      flagpole(0, 0, 7, kit.primary, kit.secondary);
+    },
+    cicek_bahcesi: function () {
+      box(0, 0, 3.8, 3.8, 0, 0.5, "#D9B48A", {
+        top: "#5EA84E",
+        fT: function (cc, FW, FH) {
+          var r = A.seeded(4);
+          var cols = ["#FF6FA0", "#FFD43B", "#B9A4FF", "#FF8A3D", "#FFFFFF"];
+          for (var i = 0; i < 46; i++) {
+            cc.fillStyle = K(cols[i % cols.length]);
+            cc.beginPath();
+            cc.arc(0.3 + r() * (FW - 0.6), 0.3 + r() * (FH - 0.6), 0.16, 0, Math.PI * 2);
+            cc.fill();
+          }
+        },
+      });
+      bush(0.4, 0.4, 0.7, "#4FB859");
+    },
+    cesme: function () {
+      lmFountain();
+    },
+    taraftar_duvari: function () {
+      box(0, -0.6, 4.6, 0.7, 0, 2.8, "#F2F0FA", {
+        fL: function (cc, FW, FH) {
+          cc.fillStyle = K(kit.primary);
+          cc.fillRect(0, 0, FW, FH);
+          cc.fillStyle = K(kit.secondary);
+          for (var x = -FH; x < FW; x += 1.1) {
+            cc.beginPath();
+            cc.moveTo(x, FH);
+            cc.lineTo(x + 0.45, FH);
+            cc.lineTo(x + 0.45 + FH, 0);
+            cc.lineTo(x + FH, 0);
+            cc.closePath();
+            cc.fill();
+          }
+          fsign(cc, FW / 2, FH * 0.42, FW - 0.6, 0.8, "TARAFTAR", "#1B1648", "#FFFFFF", true);
+        },
+      });
+      roofCap(0, -0.6, 4.6, 0.7, 2.8, "#D5D8EA");
+      [-1.4, 0, 1.4].forEach(function (x, i) {
+        standee(x, 1, i % 2 ? kit.secondary : kit.primary, i + 2, 0.75);
+      });
+    },
+    arma_meydani: function () {
+      flat(function () {
+        topDo(0.05, function (c) {
+          c.beginPath();
+          c.arc(0, 0, 2.5, 0, Math.PI * 2);
+          c.fillStyle = K("#E6E1D3");
+          c.fill();
+          c.lineWidth = 0.15;
+          c.strokeStyle = K("#BFB49A");
+          c.stroke();
+          c.beginPath();
+          c.arc(0, 0, 1.7, 0, Math.PI * 2);
+          c.fillStyle = K(kit.primary);
+          c.fill();
+          c.beginPath();
+          c.arc(0, 0, 1.0, 0, Math.PI * 2);
+          c.fillStyle = K(kit.secondary);
+          c.fill();
+        });
+      });
+      box(0, -1.4, 0.9, 0.5, 0, 2, "#DCD8E8", { noShadow: true });
+      crestS(0, -1.4, 2.9, 0.75);
+    },
+    efsane_oyuncu_heykeli: function () {
+      plinth(2, 1.5, "#DCD8E8", "#B8860B");
+      figureS(1.5, "kick", "bronze");
+    },
+    teknik_direktor_heykeli: function () {
+      plinth(2, 1.5, "#D5D1E3", "#B8860B");
+      figureS(1.5, "coach", "bronze");
+    },
+    kendi_heykelin: function () {
+      plinth(2.4, 1.8, "#2B2F5E", "#F5C542");
+      figureS(1.8, "raise", "marble", 1.05);
+      flagpole(1.6, 1.6, 4.5, kit.primary, kit.secondary);
+    },
+    sadik_baskan_heykeli: function () {
+      plinth(2.2, 1.6, "#DCD8E8", "#F5C542");
+      figureS(1.6, "suit", "bronze");
+    },
+    saat_kulesi: function () {
+      box(0, 0, 3, 3, 0, 1, "#DCD8E8", { noShadow: true });
+      box(0, 0, 2.4, 2.4, 1, 11, "#F2E6D0", {
+        fL: function (cc, FW, FH) {
+          clockFace(cc, FW / 2, 1.4, 0.9);
+          for (var y = 3.2; y < FH - 1; y += 2.2) {
+            A.roundRect(cc, FW / 2 - 0.3, y, 0.6, 1.2, 0.3);
+            cc.fillStyle = K("#7C6A9E");
+            cc.fill();
+          }
+        },
+        fR: function (cc, FW, FH) {
+          clockFace(cc, FW / 2, 1.4, 0.9);
+        },
+      });
+      pyramid(0, 0, 3, 3, 12, 3.2, kit.primary, { noShadow: true, depth: 1 });
+      anchor({ t: "glow", x: 0, y: 10.6, z: 1.3, col: "#FFE9A8" });
+    },
+    dev_forma: function () {
+      [-1.6, 1.6].forEach(function (x) {
+        box(x, 0, 0.3, 0.3, 0, 6.6, "#8A90B5", { noShadow: true });
+      });
+      box(0, 0, 3.6, 0.3, 6.4, 0.25, "#8A90B5", { noShadow: true });
+      extBill(0, 0, 2.8, 7);
+      body(1, function () {
+        var p = G.P(0, 4.2, 0);
+        shirtAt(G.c, p[0], p[1], 4.4 * G.s, kit.primary, kit.secondary, "10");
+        ftext(G.c, "10", p[0], p[1] + 0.2 * G.s, 1.4 * G.s, K(kit.secondary === kit.primary ? "#FFFFFF" : kit.secondary));
+      });
+      shadowBox(0, 0, 3, 0.4, 6);
+    },
+    sampiyonluk_kemeri: function () {
+      [-1.9, 1.9].forEach(function (x) {
+        box(x, 0, 0.8, 0.8, 0, 5.4, "#F5C542", { top: "#FFE58A" });
+      });
+      box(0, 0, 4.6, 0.9, 5.4, 1.2, "#F5C542", {
+        depth: 1,
+        fL: function (cc, FW, FH) {
+          ftext(cc, "ŞAMPİYON", FW / 2, FH / 2, FH * 0.55, "#7C2D12", FW * 0.85);
+        },
+      });
+      for (var i = 0; i < 5; i++) {
+        (function (i) {
+          var x = -1.6 + i * 0.8;
+          extBill(x, 0, 0.4, 7.4);
+          body(1.2, function () {
+            var p = G.P(x, 7, 0), s = G.s;
+            G.c.beginPath();
+            for (var k = 0; k < 10; k++) {
+              var rr = k % 2 ? 0.14 * s : 0.32 * s, a = (k * Math.PI) / 5 - Math.PI / 2;
+              G.c.lineTo(p[0] + Math.cos(a) * rr, p[1] + Math.sin(a) * rr);
+            }
+            G.c.closePath();
+            G.c.fillStyle = K("#FFD43B");
+            G.c.fill();
+          });
+        })(i);
+      }
+    },
+    isik_gosterisi: function () {
+      box(0, 0, 4, 4, 0, 0.4, "#2B2F5E", { noShadow: true });
+      [[-1.3, -1.3, "#38BDF8"], [1.3, -1.3, "#F472B6"], [-1.3, 1.3, "#FACC15"], [1.3, 1.3, "#34D399"]].forEach(function (q) {
+        cyl(q[0], q[1], 0.18, 0.4, 3.4, "#5B6385", { noShadow: true });
+        cyl(q[0], q[1], 0.38, 3.8, 0.5, "#1B1648", { noShadow: true, top: q[2] });
+        anchor({ t: "show", x: q[0], y: 4.3, z: q[1], col: q[2] });
+      });
+    },
+    super_lig_kupasi: function () {
+      plinth(2.2, 1.8, "#DCD8E8", "#E30A17");
+      trophyS(1.8, "sl", 1);
+    },
+    avrupa_ligi_kupasi: function () {
+      plinth(2.2, 1.8, "#2B2F5E", "#F97316");
+      trophyS(1.8, "el", 1);
+    },
+    sampiyonlar_ligi_kupasi: function () {
+      plinth(2.4, 2, "#1B1648", "#38BDF8");
+      trophyS(2, "cl", 1.05);
+    },
+    seri_cesmesi: function () {
+      lmFountain("#7FD8FF", function () {
+        extBill(0, 0, 0.6, 3.4);
+        body(1, function () {
+          var p = G.P(0, 2.7, 0), s = G.s;
+          G.c.beginPath();
+          for (var k = 0; k < 10; k++) {
+            var rr = k % 2 ? 0.22 * s : 0.5 * s, a = (k * Math.PI) / 5 - Math.PI / 2;
+            G.c.lineTo(p[0] + Math.cos(a) * rr, p[1] + Math.sin(a) * rr);
+          }
+          G.c.closePath();
+          G.c.fillStyle = K("#FFD43B");
+          G.c.fill();
+        });
+      });
+    },
+    altin_kupa_aniti: function () {
+      box(0, 0, 2.2, 2.2, 0, 2.8, "#2B2F5E", { top: "#3A3F72", fL: function (cc, FW, FH) { cc.fillStyle = K("#F5C542"); cc.fillRect(0.3, FH * 0.35, FW - 0.6, 0.3); } });
+      box(0, 0, 2.7, 2.7, 0, 0.3, "#1B1648", { noShadow: true, depth: -0.5 });
+      trophyS(2.8, "gold", 1.1);
+    },
+  };
+  var LM_TIER = { sus: "cicek_bahcesi", meydan: "cesme", heykel: "efsane_oyuncu_heykeli", simge: "obelisk", kupa: "kupa_genel", seri: "seri_genel" };
+  LM_BUILD.obelisk = function () {
+    box(0, 0, 2, 2, 0, 0.8, "#DCD8E8");
+    box(0, 0, 1.1, 1.1, 0.8, 7, "#F2E6D0", { fL: function (cc, FW, FH) { cc.fillStyle = K(kit.primary); cc.fillRect(0, 0.8, FW, 0.35); } });
+    pyramid(0, 0, 1.1, 1.1, 7.8, 1.1, "#F5C542", { noShadow: true, depth: 1 });
+  };
+  LM_BUILD.kupa_genel = function () {
+    plinth(2.2, 1.8, "#DCD8E8", "#F5C542");
+    trophyS(1.8, "gold", 1);
+  };
+  LM_BUILD.seri_genel = function () {
+    LM_BUILD.seri_cesmesi();
+  };
+  function lmBuildFor(key, tier) {
+    if (LM_BUILD[key]) return LM_BUILD[key];
+    return LM_BUILD[LM_TIER[tier]] || LM_BUILD.cicek_bahcesi;
+  }
+
+  /* ═══════════════════════ KULÜP ŞEHRİ 2.0: düzen ve durum ═══════════════════════
+   * İlk { type:"city2" } iletisiyle sahne v2 düzenine geçer (v1 "city" yolu
+   * olduğu gibi çalışır). Eski arsalar yeni binalara: saha+tribün → stadyum,
+   * soyunma+antrenman → halısaha (iki hücre), kantin → restoran, medya → TV,
+   * kamp → otel; üniversite, scout ve sembol yapı meydanı yeni hücrelerde. */
+
+  var KEYS2 = ["halisaha", "kulup", "stadyum", "restoran", "magaza", "akademi", "ulasim", "saglik", "tv", "universite", "otel", "scout"];
+  var TITLES2 = {
+    halisaha: "Halısaha", kulup: "Kulüp binası", stadyum: "Stadyum", restoran: "Restoran", magaza: "Mağaza", akademi: "Akademi",
+    ulasim: "Ulaşım", saglik: "Sağlık", tv: "Kulüp TV", universite: "Üniversite", otel: "Kamp oteli", scout: "Scout merkezi",
+  };
+  var MAX2 = { halisaha: 12, kulup: 8, stadyum: 10, restoran: 8, magaza: 8, akademi: 8, ulasim: 6, saglik: 8, tv: 7, universite: 6, otel: 6, scout: 5 };
+  var OPENS2 = { halisaha: 1, kulup: 3, stadyum: 5, restoran: 5, magaza: 6, akademi: 7, ulasim: 8, saglik: 9, tv: 11, universite: 13, otel: 14, scout: 16 };
+  var CELL2 = {
+    stadyum: [0, 0], halisaha: [-1, 0], kulup: [0, -1], restoran: [-1, 1], magaza: [0, 1], saglik: [1, -1], tv: [1, 0],
+    akademi: [-2, -2], otel: [1, 1], ulasim: [2, 2], universite: [2, -1], scout: [-1, 2],
+  };
+  var HS_B = [-1, -1], LMD_CELL = [1, 2];
+  var PLOTS2 = {}, PARTS2 = {};
+  KEYS2.forEach(function (k) {
+    PLOTS2[k] = { x: CC[CELL2[k][0]], z: CC[CELL2[k][1]] };
+    PARTS2[k] = [{ id: "", x: PLOTS2[k].x, z: PLOTS2[k].z, eff: null }];
+  });
+  PARTS2.halisaha = [
+    { id: "A", x: CC[-1], z: CC[0], eff: hsEffA },
+    { id: "B", x: CC[HS_B[0]], z: CC[HS_B[1]], eff: hsEffB },
+  ];
+  var FILLERS2 = [];
+  (function () {
+    var used = {};
+    KEYS2.forEach(function (k) {
+      used[CELL2[k][0] + "," + CELL2[k][1]] = 1;
+    });
+    used[HS_B[0] + "," + HS_B[1]] = 1;
+    used[LMD_CELL[0] + "," + LMD_CELL[1]] = 1;
+    for (var i = -2; i <= 2; i++)
+      for (var j = -2; j <= 2; j++) if (!used[i + "," + j]) FILLERS2.push({ i: i, j: j, x: CC[i], z: CC[j], kind: fillerKind(i, j) });
+  })();
+  /** Sembol yapı meydanı: 8×8 yuva, satır z boyunca (r0 şehre yakın). */
+  var LMD = { x: CC[LMD_CELL[0]], z: 113, size: 44 };
+  var V2 = false, received2 = false;
+  var st2 = {}, rung2 = 1, lms = [], grid2 = { cols: 8, rows: 8, open: 2 }, place2 = null, ghost2 = null;
+  KEYS2.forEach(function (k) {
+    st2[k] = 0;
+  });
+  function slotSize() {
+    return LMD.size / Math.max(grid2.cols, grid2.rows);
+  }
+  function slotPos(r, c) {
+    var s = slotSize();
+    return { x: LMD.x - (grid2.cols * s) / 2 + (c + 0.5) * s, z: LMD.z - (grid2.rows * s) / 2 + (r + 0.5) * s };
+  }
+  function slotAt(x, z) {
+    var s = slotSize();
+    var c = Math.floor((x - (LMD.x - (grid2.cols * s) / 2)) / s), r = Math.floor((z - (LMD.z - (grid2.rows * s) / 2)) / s);
+    if (r < 0 || c < 0 || r >= grid2.rows || c >= grid2.cols) return null;
+    return { r: r, c: c, id: "r" + r + "c" + c };
+  }
+  function parseSlot(id) {
+    var m = /^r(\d+)c(\d+)$/.exec(String(id || ""));
+    return m ? { r: +m[1], c: +m[2], id: "r" + m[1] + "c" + m[2] } : null;
+  }
+  function lmAt(id) {
+    for (var i = 0; i < lms.length; i++) if (lms[i].slot === id) return lms[i];
+    return null;
+  }
+  function freeSlots() {
+    var out = [];
+    for (var r = 0; r < Math.min(grid2.open, grid2.rows); r++) for (var c = 0; c < grid2.cols; c++) if (!lmAt("r" + r + "c" + c)) out.push({ r: r, c: c, id: "r" + r + "c" + c });
+    return out;
+  }
+  function isStad(k) {
+    return k === "saha" || k === "tribun" || k === "stadyum";
+  }
+  function closedOf(k) {
+    if (marks[k] === "closed") return true;
+    if (marks[k]) return false;
+    return (st2[k] || 0) === 0 && rung2 < OPENS2[k];
+  }
+  function enterV2() {
+    if (V2) return;
+    V2 = true;
+    ORDER = KEYS2;
+    TITLES = TITLES2;
+    PLOTS = PLOTS2;
+    FILLERS = FILLERS2;
+    focusKey = null;
+    pillCache = {};
+    pillCount = 0;
+    match = null;
+  }
+  /** Stadyum aşaması → eski çizimin (saha, tribün) basamakları. */
+  function stadSync() {
+    var m = STAD_MAP[Math.min(st2.stadyum || 0, 10)];
+    levels.saha = m ? m[0] : 0;
+    levels.tribun = m ? m[1] : 0;
+  }
+  function partEff(k, part, st) {
+    return part.eff ? part.eff(st) : st;
+  }
+  function partSprite(k, part, st) {
+    var eff = partEff(k, part, st);
+    var closed = eff === 0 && !part.eff && closedOf(k);
+    var id = "v2:" + k + (part.id ? "_" + part.id : "") + ":" + eff + (eff === 0 && !part.eff ? (closed ? ":c" : ":e") : "");
+    return getSprite(id, function () {
+      if (eff === 0 && !part.eff) {
+        if (closed) closedPlot(OPENS2[k]);
+        else emptyPlot();
+        return;
+      }
+      BUILD2[k](eff, part.id);
+    });
+  }
+  function partMeta(k, part, st) {
+    var eff = partEff(k, part, st);
+    var id = "v2:" + k + (part.id ? "_" + part.id : "") + ":" + eff + (eff === 0 && !part.eff ? (closedOf(k) ? ":c" : ":e") : "");
+    return meta[id + "|" + TH.key + "|" + kit.primary + kit.secondary];
+  }
+  function drawUnit2(c, k, part) {
+    var st = lvOf(k);
+    if (con && con.key === k && (con.part === part || !con.part)) {
+      var cs = conScale();
+      drawScaffold(c, false);
+      if (cs.old.a > 0) {
+        var o = partSprite(k, part, Math.min(con.from, MAX2[k]));
+        blitSprite(c, o, part.x, part.z, cs.old.sx, cs.old.sy, cs.old.a);
+      }
+      if (cs.nu.a > 0) blitSprite(c, partSprite(k, part, st), part.x, part.z, cs.nu.sx, cs.nu.sy, 1);
+      drawScaffold(c, true);
+      return;
+    }
+    blitSprite(c, partSprite(k, part, st), part.x, part.z);
+  }
+  /** İnşaatın oynadığı parça (halısahada içeriği değişen hücre). */
+  function conPart(k, from, to) {
+    var parts = PARTS2[k];
+    if (!parts) return null;
+    for (var i = 0; i < parts.length; i++) if (partEff(k, parts[i], from) !== partEff(k, parts[i], to)) return parts[i];
+    return parts[0];
+  }
+  function stadBig() {
+    return getSprite("v2:stadyum:0:" + (closedOf("stadyum") ? "c" : "e"), function () {
+      if (closedOf("stadyum")) closedPlot(OPENS2.stadyum, 50);
+      else emptyPlot(50);
+    });
+  }
+
+  /* ─────────────── meydan zemini + yuvalar ─────────────── */
+
+  function plazaSprite() {
+    return getSprite("lmd:" + grid2.cols + "x" + grid2.rows + ":" + grid2.open, function () {
+      var s = slotSize(), cols = grid2.cols, rows = grid2.rows, open = Math.min(grid2.open, rows);
+      var hw = (cols * s) / 2, hd = (rows * s) / 2;
+      pad(0, 0, hw * 2 + 3, hd * 2 + 3, "#EDE9F5", { th: 0.3, side: "#B4ACD2", r: 3, fn: tiles(1.375, "rgba(27,22,72,0.05)") });
+      flat(function () {
+        topDo(0.32, function (c) {
+          // kilitli satırlar: soluk çim
+          if (open < rows) {
+            c.fillStyle = K("#B8C7AE");
+            c.fillRect(-hw, -hd + open * s, hw * 2, (rows - open) * s);
+            c.strokeStyle = "rgba(255,255,255,0.35)";
+            c.lineWidth = 0.08;
+            for (var t = -hw * 2; t < hw * 2; t += 1.6) {
+              c.beginPath();
+              c.moveTo(-hw + Math.max(0, t), -hd + open * s + Math.max(0, -t));
+              c.lineTo(-hw + Math.min(hw * 2, t + (rows - open) * s), -hd + open * s + Math.min((rows - open) * s, (rows - open) * s + Math.min(0, hw * 2 - t - (rows - open) * s)));
+              c.stroke();
+            }
+          }
+          // açık yuvalar
+          for (var r = 0; r < open; r++)
+            for (var k = 0; k < cols; k++) {
+              A.roundRect(c, -hw + k * s + 0.35, -hd + r * s + 0.35, s - 0.7, s - 0.7, 0.6);
+              c.fillStyle = K((r + k) % 2 ? "#E2DCEE" : "#E7E2F1");
+              c.fill();
+              c.lineWidth = 0.08;
+              c.strokeStyle = rgba(NAVY, 0.12);
+              c.stroke();
+            }
+        });
+      });
+      if (open < rows) {
+        // alçak çit: açık/kilitli sınırı
+        var zb = -hd + open * s;
+        var n = cols * 2;
+        for (var i = 0; i <= n; i++) box(-hw + (i * hw * 2) / n, zb, 0.25, 0.25, 0, 0.9, "#C9CDE2", { noShadow: true, gloss: false, noLine: true });
+        box(0, zb, hw * 2, 0.12, 0.65, 0.12, "#E9ECF8", { noShadow: true, gloss: false, noLine: true, depth: zb + 0.1 });
+        lockSign(0, zb + ((rows - open) * s) / 2, null);
+      }
+      // köşelerde ağaçlar
+      [[-hw - 0.2, -hd - 0.2], [hw + 0.2, -hd - 0.2]].forEach(function (q) {
+        bush(q[0], q[1], 0.9);
+      });
+    });
+  }
+  function drawPlaza(c) {
+    var sp = plazaSprite();
+    blitSprite(c, sp, LMD.x, LMD.z);
+  }
+  /** Yerleştirme: boş açık yuvalar nabız gibi parlar. */
+  function drawSlotsOverlay(c) {
+    if (!place2) return;
+    var s = slotSize(), a = 0.45 + 0.3 * Math.sin(A.time * 4);
+    var free = freeSlots();
+    topDo(0.36, function (cc) {
+      free.forEach(function (q) {
+        var p = slotPos(q.r, q.c);
+        A.roundRect(cc, p.x - s / 2 + 0.45, p.z - s / 2 + 0.45, s - 0.9, s - 0.9, 0.6);
+        cc.fillStyle = ghost2 === q.id ? "rgba(34,197,94,0.35)" : "rgba(255,255,255," + a * 0.45 + ")";
+        cc.fill();
+        cc.lineWidth = ghost2 === q.id ? 0.32 : 0.2;
+        cc.strokeStyle = ghost2 === q.id ? "#22C55E" : "rgba(34,197,94," + (0.5 + a * 0.5) + ")";
+        cc.stroke();
+      });
+    });
+  }
+  function lmSprite(key, tier) {
+    return getSprite("lm:" + (LM_BUILD[key] ? key : "t:" + tier), function () {
+      lmBuildFor(key, tier)();
+    });
+  }
+  function lmMeta(key, tier) {
+    return meta["lm:" + (LM_BUILD[key] ? key : "t:" + tier) + "|" + TH.key + "|" + kit.primary + kit.secondary];
+  }
+  var LM_TIER_OF = {};
+  function tierOf(l) {
+    return l.tier || LM_TIER_OF[l.key] || "sus";
+  }
+  function lmEntries(list) {
+    lms.forEach(function (l) {
+      var q = parseSlot(l.slot);
+      if (!q) return;
+      var p = slotPos(q.r, q.c);
+      list.push({
+        d: p.x + p.z,
+        fn: function (c) {
+          blitSprite(c, lmSprite(l.key, tierOf(l)), p.x, p.z);
+        },
+      });
+    });
+    if (place2 && ghost2) {
+      var g = parseSlot(ghost2);
+      if (g && !lmAt(ghost2)) {
+        var gp = slotPos(g.r, g.c);
+        list.push({
+          d: gp.x + gp.z + 0.01,
+          fn: function (c) {
+            var bob = A.reduceMotion ? 1 : 1 + Math.sin(A.time * 3) * 0.03;
+            blitSprite(c, lmSprite(place2.key, place2.tier || tierOf(place2)), gp.x, gp.z, 1, bob, 0.6);
+          },
+        });
+      }
+    }
+  }
+  function hitSlot(px, py) {
+    var g = S2W(px, py, 0);
+    var q = slotAt(g.x, g.z);
+    // uzun yapılar (kule, heykel): gövdesine dokunuş da sayılır
+    if (!q || !lmAt(q.id)) {
+      var Z = cam.zoom, best = null;
+      lms.forEach(function (l) {
+        var sq = parseSlot(l.slot);
+        if (!sq) return;
+        var p = slotPos(sq.r, sq.c), m = lmMeta(l.key, tierOf(l));
+        if (!m) return;
+        var b = W2S(p.x, 0, p.z);
+        var top = b[1] + m.v0 * Z, half = slotSize() * 0.7 * Z;
+        if (px > b[0] - half && px < b[0] + half && py > top && py < b[1] + 2) best = sq;
+      });
+      if (best) q = best;
+    }
+    return q;
+  }
+
+  /* ─────────────── halısahada maçlar, çevrede insanlar ─────────────── */
+
+  var kicks = [], kicksKey = "";
+  function syncKicks() {
+    var st = lvOf("halisaha");
+    var key = st + "|" + (A.reduceMotion ? 1 : 0);
+    if (key === kicksKey) return;
+    kicksKey = key;
+    kicks = [];
+    var a = PARTS2.halisaha[0], b = PARTS2.halisaha[1];
+    var add = function (ox, oz, w, d, n, kids, kit2, part) {
+      part = part || a;
+      kicks.push({ px: part.x, pz: part.z, ox: ox, oz: oz, P: { w: w, d: d, players: n }, kids: kids, kit2: kit2, m: makeMatch({ w: w, d: d, players: n }) });
+    };
+    if (st <= 1) add(a.x, a.z, 16, 8, 6, true, 0);
+    else if (st === 2) add(a.x - 1, a.z - 1, 24, 15, 10, false, 1);
+    else {
+      var n = st >= 9 ? 3 : st >= 6 ? 2 : 1;
+      for (var i = 0; i < n; i++) add(a.x + HS.p[i][0], a.z + HS.p[i][1], HS.w, HS.d, i === 0 ? 10 : 8, false, i);
+      if (st >= 7 && st <= 8) add(b.x - 7, b.z + 9, 14, 9, 6, true, 0, b);
+      if (st >= 10) add(b.x + HS.t[0], b.z + HS.t[1], 15, 9, 10, false, 3, b);
+    }
+  }
+  var BIB = [["#FF8A3D", "#1B1648"], ["#FFD43B", "#1B1648"], ["#22C55E", "#FFFFFF"], ["#38BDF8", "#1B1648"]];
+  function stepKicks(dt) {
+    if (!V2) return;
+    syncKicks();
+    kicks.forEach(function (k) {
+      simMatch(k.m, k.P, dt, null);
+    });
+  }
+  /** Arsadaki kişiler arsa sprite'ından SONRA çizilsin (zemin pedi onları örtmesin). */
+  function onPlot(list, e, x0, z0) {
+    var pd = x0 + z0;
+    e.d = pd + 0.5 + (e.d - pd) * 0.001;
+    list.push(e);
+  }
+  function kickEntries(list) {
+    var home = { p: kit.primary, s: kit.secondary };
+    kicks.forEach(function (k, ki) {
+      if (isBuilding("halisaha")) return;
+      var bib = BIB[k.kit2 % BIB.length], away = { p: bib[0], s: bib[1] };
+      k.m.players.forEach(function (p) {
+        var kicking = A.time - p.kick < 0.4;
+        var pose = kicking ? "kick" : p.keeper ? "keeper" : p.moving ? "run" : "ready";
+        var kt = kicking ? (A.time - p.kick) / 0.4 : p.phase;
+        var kk = k.kids ? (p.team ? { p: "#FFFFFF", s: "#1E3A8A" } : { p: "#38BDF8", s: "#1E3A8A" }) : p.team ? away : ki % 2 ? { p: "#FFFFFF", s: kit.primary } : home;
+        onPlot(list, personEntry(k.ox + p.x, k.oz + p.z, { kit: kk, pose: pose, t: kt, dir: p.dir, look: p.look, scale: k.kids ? 0.74 : 0.92 }), k.px, k.pz);
+      });
+      var bl = k.m.ball;
+      onPlot(list, ballEntry(k.ox + bl.x, bl.y, k.oz + bl.z, bl.spin, 0.85), k.px, k.pz);
+    });
+  }
+  /** Kuyruk noktaları (arsa merkezine göre) aşama başına. */
+  var QUEUE2 = {
+    restoran: [null, [2, 2.6], [0, 4.4], [0, 2.6], [0, 2.4], [0, 3], [-3, 9], [-3, 9], [0, 15]],
+    magaza: [null, [0, 4.2], [0, 2.4], [-1, 2.4], [0, 0.6], [0, 2.6], [0, 2.6], [0, 2.6], [5, 11]],
+  };
+  function life2(list) {
+    kickEntries(list);
+    ["restoran", "magaza"].forEach(function (k) {
+      var lv = lvOf(k), q = QUEUE2[k][lv];
+      if (!q || isBuilding(k)) return;
+      var p = PLOTS2[k], n = Math.min(2 + lv, 8);
+      for (var i = 0; i < n; i++) {
+        var x = p.x + q[0] + Math.sin(i * 1.7) * 0.4, z = p.z + q[1] + i * 1.25;
+        onPlot(list, personEntry(x, z, { kit: { p: ["#FF4D5E", "#3B82F6", kit.primary, "#FFD43B", "#22C55E"][i % 5], s: "#FFFFFF" }, pose: "idle", t: A.time + i * 1.3, look: i, dir: -1 }), p.x, p.z);
+      }
+    });
+    // akademi: top peşinde çocuklar
+    var lk = lvOf("akademi");
+    if (lk >= 1 && !isBuilding("akademi")) {
+      var pk = PLOTS2.akademi, cx = pk.x + (lk >= 7 ? -4 : 0), cz = pk.z + (lk >= 4 ? 6 : 2), nk = Math.min(4 + lk * 2, 14);
+      var bx = cx + Math.cos(A.time * 0.7) * 5, bz = cz + Math.sin(A.time * 0.9) * 3;
+      for (var k2 = 0; k2 < nk; k2++) {
+        var a2 = A.time * (0.5 + (k2 % 3) * 0.13) + k2 * 1.7;
+        onPlot(list, personEntry(bx + Math.cos(a2) * (1.5 + (k2 % 4) * 0.9), bz + Math.sin(a2 * 1.3) * 2, { kit: k2 % 2 ? { p: "#FFFFFF", s: "#1E3A8A" } : { p: kit.primary, s: kit.secondary }, pose: "run", t: A.time * 10 + k2, look: k2, dir: Math.cos(a2 + 1.6) > 0 ? 1 : -1, scale: lk >= 6 ? 0.85 : 0.72 }), pk.x, pk.z);
+      }
+      onPlot(list, ballEntry(bx, 0.25, bz, A.time * 6, 0.75), pk.x, pk.z);
+    }
+    // otel: kamp ateşi ya da önde yürüyüş
+    var lc = lvOf("otel");
+    if (lc >= 1 && !isBuilding("otel")) {
+      var pc = PLOTS2.otel;
+      if (lc === 1) {
+        for (var s2 = 0; s2 < 6; s2++) {
+          var aa = (s2 / 6) * Math.PI * 2 + 0.3;
+          onPlot(list, personEntry(pc.x + Math.cos(aa) * 3.2, pc.z + 2 + Math.sin(aa) * 3.2, { kit: { p: kit.primary, s: kit.secondary }, pose: s2 === 0 ? "cheer" : "idle", t: A.time * (s2 === 0 ? 0.6 : 1) + s2, look: s2, dir: Math.cos(aa) > 0 ? -1 : 1, sit: true }), pc.x, pc.z);
+        }
+      } else
+        for (var w2 = 0; w2 < 4; w2++) {
+          var uu = (A.time * 0.05 + w2 / 4) % 1;
+          onPlot(list, personEntry(pc.x - 12 + uu * 24, pc.z + 17 + (w2 % 2) * 1.5, { kit: { p: kit.primary, s: kit.secondary }, pose: "walk", t: A.time * 6 + w2, look: w2, dir: 1 }), pc.x, pc.z);
+        }
+    }
+    // üniversite: avluda öğrenciler
+    var lu = lvOf("universite");
+    if (lu >= 1 && !isBuilding("universite")) {
+      var pu = PLOTS2.universite, nu = lu === 1 ? 6 : Math.min(3 + lu, 8);
+      for (var i3 = 0; i3 < nu; i3++) {
+        if (lu === 1) {
+          onPlot(list, personEntry(pu.x - 8.5 + (i3 % 4) * 1.6, pu.z + 2.6 + Math.floor(i3 / 4) * 1.8, { kit: { p: ["#3B82F6", "#FF4D5E", "#22C55E", "#FFD43B"][i3 % 4], s: "#FFFFFF" }, pose: "idle", t: A.time + i3, look: i3, dir: -1, sit: true }), pu.x, pu.z);
+          continue;
+        }
+        var u3 = (A.time * 0.04 + i3 / nu) % 1;
+        var px3 = i3 % 2 ? pu.x - 5 + u3 * 15 : pu.x + 2.5, pz3 = i3 % 2 ? pu.z + 3.5 : pu.z - 2 + u3 * 11;
+        onPlot(list, personEntry(px3, pz3, { kit: { p: ["#3B82F6", "#FF4D5E", "#A855F7", "#FFD43B"][i3 % 4], s: "#FFFFFF" }, pose: "walk", t: A.time * 6 + i3, look: i3, dir: i3 % 2 ? 1 : -1 }), pu.x, pu.z);
+      }
+    }
+    // scout: masada gözlemci
+    if (lvOf("scout") === 1 && !isBuilding("scout")) {
+      var ps = PLOTS2.scout;
+      onPlot(list, personEntry(ps.x + 0.2, ps.z + 1.2, { kit: { p: "#1D4ED8", s: "#FFFFFF" }, pose: "idle", t: A.time, look: 3, dir: -1, sit: true }), ps.x, ps.z);
+    }
+    trafficEntries(list);
+  }
+
+  /* ─────────────── komutlar ─────────────── */
+
+  function applyCity2(cmd) {
+    enterV2();
+    if (cmd.kit && cmd.kit.primary) kit = { primary: hex(cmd.kit.primary, "#5B3DF5"), secondary: hex(cmd.kit.secondary, "#FFFFFF") };
+    if (cmd.marks && typeof cmd.marks === "object") marks = cmd.marks;
+    if (cmd.rung != null && isFinite(Number(cmd.rung))) rung2 = Math.max(1, Math.floor(Number(cmd.rung)));
+    if (cmd.grid && typeof cmd.grid === "object") {
+      var cols = A.clamp(Math.floor(Number(cmd.grid.cols) || 8), 1, 12), rows = A.clamp(Math.floor(Number(cmd.grid.rows) || 8), 1, 12);
+      var open = cmd.grid.open_rows != null ? cmd.grid.open_rows : cmd.grid.openRows;
+      grid2 = { cols: cols, rows: rows, open: A.clamp(Math.floor(Number(open) || 0), 0, rows) };
+    }
+    var prevSlots = {};
+    lms.forEach(function (l) {
+      prevSlots[l.slot + "|" + l.key] = 1;
+    });
+    if (Array.isArray(cmd.landmarks))
+      lms = cmd.landmarks
+        .filter(function (l) {
+          return l && typeof l.key === "string" && parseSlot(l.slot);
+        })
+        .map(function (l) {
+          return { id: l.id == null ? null : l.id, key: l.key, slot: parseSlot(l.slot).id, tier: typeof l.tier === "string" ? l.tier : null };
+        });
+    var wasPlacing = !!place2;
+    if (cmd.place !== undefined) {
+      place2 = cmd.place && typeof cmd.place.key === "string" ? { key: cmd.place.key, tier: typeof cmd.place.tier === "string" ? cmd.place.tier : null } : null;
+      if (!place2) ghost2 = null;
+      else if (!ghost2 || lmAt(ghost2) || !parseSlot(ghost2) || parseSlot(ghost2).r >= grid2.open) {
+        var fs = freeSlots();
+        ghost2 = fs.length ? fs[0].id : null;
+      }
+    }
+    var built = null;
+    if (cmd.buildings && typeof cmd.buildings === "object") {
+      var ups = [];
+      KEYS2.forEach(function (k) {
+        var v = A.clamp(Math.floor(Number(cmd.buildings[k]) || 0), 0, 99);
+        if (v !== st2[k]) {
+          if (v > st2[k]) ups.push({ key: k, from: st2[k], to: v });
+          st2[k] = v;
+        }
+      });
+      stadSync();
+      if (received2 && ups.length === 1) built = ups[0];
+    }
+    // yeni yerleşen sembol yapı: toz + kıvılcım
+    if (received2)
+      lms.forEach(function (l) {
+        if (prevSlots[l.slot + "|" + l.key]) return;
+        var q = parseSlot(l.slot), p = slotPos(q.r, q.c);
+        for (var i = 0; i < 10; i++) addPuff(p.x + A.rand(-2, 2), 0.5, p.z + A.rand(-2, 2));
+        for (var j = 0; j < 14; j++) addSpark(p.x, 3, p.z, A.pick(["#FFD43B", "#FFFFFF", kit.primary]), 7);
+        A.sound("place");
+        A.haptic("medium");
+      });
+    received2 = true;
+    if (built) {
+      startConstruction(built.key, built.from, built.to);
+      setFocus(built.key);
+    }
+    if (typeof cmd.focus === "string") setFocus(cmd.focus);
+    else if (cmd.focus === null && !built && !place2 && !wasPlacing) setFocus(null);
+    if (place2 && !wasPlacing && typeof cmd.focus !== "string") setFocus("landmarks");
+  }
+  /** { type:"build", key }: o binanın inşaat animasyonu (aşama değişmeden). */
+  function playBuild(key) {
+    if (!V2 || MAX2[key] == null) return;
+    var to = lvOf(key);
+    if (to < 1) return;
+    startConstruction(key, to - 1, to);
+    setFocus(key);
+  }
+
   /* ═══════════════════════ dolgu hücreleri ═══════════════════════ */
 
   var APT_COLS = ["#B9A4FF", "#7CC7FF", "#FFB38A", "#8EE3C8", "#FF9FB8", "#FFD27A", "#9DB4FF"];
@@ -4728,7 +6767,8 @@
   function drawFocusRing(c) {
     if (!focusKey) return;
     var p = PLOTS[focusKey];
-    var big = focusKey === "saha" || focusKey === "tribun";
+    if (!p) return;
+    var big = isStad(focusKey);
     var hw = big ? 26 : 22.5;
     var a = 0.45 + 0.35 * Math.sin(A.time * 4);
     topDo(0.1, function (cc) {
@@ -4759,8 +6799,11 @@
 
   var match = null;
   function resetMatch() {
-    var P = pitchSize();
-    match = { ball: { x: 0, z: 0, y: 0.25, vx: 0, vz: 0, vy: 0, spin: 0 }, players: [], P: P, lv: lvOf("saha") };
+    match = makeMatch(pitchSize());
+    match.lv = lvOf("saha");
+  }
+  function makeMatch(P) {
+    var match = { ball: { x: 0, z: 0, y: 0.25, vx: 0, vz: 0, vy: 0, spin: 0 }, players: [], P: P };
     var n = P.players;
     for (var i = 0; i < n; i++) {
       var team = i % 2;
@@ -4776,10 +6819,18 @@
         keeper: i < 2 && P.players >= 10,
       });
     }
+    return match;
   }
   function stepMatch(dt) {
+    if (V2 && lvOf("stadyum") < 1) {
+      match = null;
+      return;
+    }
     var P = pitchSize();
     if (!match || match.P !== P || match.lv !== lvOf("saha")) resetMatch();
+    simMatch(match, P, dt, goalFx);
+  }
+  function simMatch(match, P, dt, onGoal) {
     var b = match.ball;
     b.vy -= 16 * dt;
     b.x += b.vx * dt;
@@ -4793,7 +6844,7 @@
     var hw = P.w / 2 - 0.6, hd = P.d / 2 - 0.6;
     if (Math.abs(b.x) > hw) {
       if (Math.abs(b.z) < (P.w >= 28 ? 2.6 : 1.4) && b.y < 2) {
-        goalFx(Math.sign(b.x) * hw, b.z);
+        if (onGoal) onGoal(Math.sign(b.x) * hw, b.z);
         b.x = 0;
         b.z = 0;
         b.vx = b.vz = 0;
@@ -4967,6 +7018,10 @@
           list.push(personEntry(pc.x - 12 + uu * 24, pc.z + 15 + (w2 % 2) * 1.5, { kit: { p: kit.primary, s: kit.secondary }, pose: "walk", t: A.time * 6 + w2, look: w2, dir: 1 }));
         }
     }
+    trafficEntries(list);
+  }
+  function trafficEntries(list) {
+    if (!walkers) initTraffic();
     // kaldırımdaki yayalar
     walkers.forEach(function (w) {
       var x = w.ax ? w.pos : w.line, z = w.ax ? w.line : w.pos;
@@ -5240,13 +7295,21 @@
   var con = null;
   var CON_DUR = 2.8;
   function isBuilding(k) {
-    return con && (con.key === k || ((k === "saha" || k === "tribun") && (con.key === "saha" || con.key === "tribun")) ) && conT() < 0.5;
+    return con && (con.key === k || ((k === "saha" || k === "tribun") && (con.key === "saha" || con.key === "tribun"))) && conT() < 0.5;
   }
   function conT() {
     return con ? (A.time - con.t0) / CON_DUR : 9;
   }
   function startConstruction(key, from, to) {
     con = { key: key, from: from, to: to, t0: A.time, popped: false, dusted: false, dust2: false };
+    if (V2 && !isStad(key)) {
+      var part = conPart(key, from, to);
+      if (part) {
+        con.part = part;
+        con.px = part.x;
+        con.pz = part.z;
+      }
+    }
     A.sound("place");
     A.haptic("medium");
     A.shake(5);
@@ -5276,8 +7339,8 @@
   function stepConstruction(dt) {
     if (!con) return;
     var t = conT();
-    var p = PLOTS[con.key];
-    var R = con.key === "saha" || con.key === "tribun" ? 24 : 18;
+    var p = con.px != null ? { x: con.px, z: con.pz } : PLOTS[con.key];
+    var R = isStad(con.key) ? 24 : 18;
     if (!con.dusted && t > 0.02) {
       con.dusted = true;
       for (var i = 0; i < 16; i++) {
@@ -5300,7 +7363,7 @@
       A.haptic("success");
       goalAt = A.time - 1.5;
       var sp = W2S(p.x, top, p.z);
-      A.floatText("Sv " + con.to, sp[0], sp[1] - 10, "#FFD43B", 22);
+      A.floatText((V2 ? "Aşama " : "Sv ") + con.to, sp[0], sp[1] - 10, "#FFD43B", 22);
     }
     if (t > 1.08) con = null;
   }
@@ -5310,15 +7373,15 @@
     return A.clamp((-m.v0 - 21) / HY * 0.42, 3, 16);
   }
   function conHeight(key) {
-    var m = metaFor(key, lvOf(key));
-    var R = key === "saha" || key === "tribun" ? 25 : 21;
+    var m = con && con.part && con.key === key ? partMeta(key, con.part, lvOf(key)) : metaFor(key, lvOf(key));
+    var R = isStad(key) ? 25 : 21;
     return m ? A.clamp((-m.v0 - R * 0.6) / HY, 4, 40) : 10;
   }
   /** İskele (arka ya da ön yüzler) ve vinç. */
   function drawScaffold(c, front) {
     var t = conT();
-    var p = PLOTS[con.key];
-    var big = con.key === "saha" || con.key === "tribun";
+    var p = con.px != null ? { x: con.px, z: con.pz } : PLOTS[con.key];
+    var big = isStad(con.key);
     var hw = big ? 22 : 13, hd = big ? 17 : 11, cz = big ? 0 : -3;
     var Hs = Math.min(big ? 14 : 22, conHeight(con.key) * 0.8 + 3);
     var rise = t < 0.15 ? A.easeOutBack(t / 0.15) : t > 0.82 ? 1 - A.smooth(A.clamp((t - 0.82) / 0.2, 0, 1)) : 1;
@@ -5432,7 +7495,21 @@
 
   /* ═══════════════════════ sahne çizimi ═══════════════════════ */
 
+  function stadIds(lvS, lvT, sv) {
+    var x = sv == null ? "" : ":v" + sv;
+    return { g: "sahaG:" + lvS + ":" + lvT + x, i: "sahaI:" + lvS + ":" + lvT + x, b: "tribB:" + lvT + ":" + lvS + x, f: "tribF:" + lvT + ":" + lvS + x };
+  }
   function metaFor(k, lv) {
+    if (V2) {
+      var suf = "|" + TH.key + "|" + kit.primary + kit.secondary;
+      if (isStad(k)) {
+        var sv = lvOf("stadyum");
+        if (!sv) return meta["v2:stadyum:0:" + (closedOf("stadyum") ? "c" : "e") + suf];
+        var ids = stadIds(levels.saha, levels.tribun, sv);
+        return meta[ids.b + suf] || meta[ids.f + suf];
+      }
+      return PARTS2[k] ? partMeta(k, PARTS2[k][0], lv) : null;
+    }
     var id = k === "saha" ? "sahaI:" + lv + ":" + lvOf("tribun") : k === "tribun" ? "tribF:" + lv + ":" + lvOf("saha") : k + ":" + lv;
     var m = meta[id + "|" + TH.key + "|" + kit.primary + kit.secondary];
     if (k === "tribun") {
@@ -5446,23 +7523,63 @@
       BUILD[k](lv);
     });
   }
-  function stadiumSprites(lvS, lvT) {
+  function stadiumSprites(lvS, lvT, sv) {
+    var ids = stadIds(lvS, lvT, sv);
+    var wrap = function (fn) {
+      return function () {
+        var prev = SVF;
+        SVF = svFlags(sv);
+        try {
+          fn();
+        } finally {
+          SVF = prev;
+        }
+      };
+    };
     return {
-      g: getSprite("sahaG:" + lvS + ":" + lvT, function () {
+      g: getSprite(ids.g, wrap(function () {
         buildSahaG(lvS, lvT);
-      }),
-      i: getSprite("sahaI:" + lvS + ":" + lvT, function () {
+      })),
+      i: getSprite(ids.i, wrap(function () {
         buildSahaI(lvS, lvT);
-      }),
-      b: getSprite("tribB:" + lvT + ":" + lvS, function () {
+      })),
+      b: getSprite(ids.b, wrap(function () {
         buildTribun(lvT, lvS, "B");
-      }),
-      f: getSprite("tribF:" + lvT + ":" + lvS, function () {
+      })),
+      f: getSprite(ids.f, wrap(function () {
         buildTribun(lvT, lvS, "F");
-      }),
+      })),
     };
   }
+  /** v2 stadyumu: aşama → eski çizim + bayraklar; 0. aşamada büyük arsa. */
+  function drawStadium2(c) {
+    var sv = lvOf("stadyum");
+    var cs = con && con.key === "stadyum" ? conScale() : null;
+    if (!cs) {
+      if (!sv) return blitSprite(c, stadBig(), 0, 0);
+      var s = stadiumSprites(levels.saha, levels.tribun, sv);
+      blitSprite(c, s.g, 0, 0);
+      blitSprite(c, s.b, 0, 0);
+      blitSprite(c, s.i, 0, 0);
+      drawMatch(c);
+      blitSprite(c, s.f, 0, 0);
+      return;
+    }
+    var ov = Math.min(con.from, 10), om = STAD_MAP[ov];
+    var nu = sv ? stadiumSprites(levels.saha, levels.tribun, sv) : null;
+    var old = ov && cs.old.a > 0 ? stadiumSprites(om[0], om[1], ov) : null;
+    drawScaffold(c, false);
+    if (!ov && cs.old.a > 0) blitSprite(c, stadBig(), 0, 0, cs.old.sx, cs.old.sy, cs.old.a);
+    if (old && cs.t < 0.36) blitSprite(c, old.g, 0, 0);
+    else if (nu && cs.nu.a > 0) blitSprite(c, nu.g, 0, 0, ov ? 1 : cs.nu.sx, ov ? 1 : cs.nu.sy, 1);
+    ["b", "i", "f"].forEach(function (L) {
+      if (old && cs.old.a > 0) blitSprite(c, old[L], 0, 0, cs.old.sx, cs.old.sy, cs.old.a);
+      if (nu && cs.nu.a > 0) blitSprite(c, nu[L], 0, 0, cs.nu.sx, cs.nu.sy, 1);
+    });
+    drawScaffold(c, true);
+  }
   function drawStadium(c) {
+    if (V2) return drawStadium2(c);
     var lvS = lvOf("saha"), lvT = lvOf("tribun");
     var cs = con && (con.key === "saha" || con.key === "tribun") ? conScale() : null;
     if (!cs) {
@@ -5512,6 +7629,7 @@
   }
   /** Kare için çizim listesi: derinliğe göre (x+z) sıralı. */
   function drawWorld(c) {
+    if (V2) return drawWorld2(c);
     G.c = c;
     G.P = W2S;
     G.s = cam.zoom;
@@ -5553,6 +7671,47 @@
       G.P = W2S;
       G.s = cam.zoom;
       G.lw = A.clamp(0.3 * cam.zoom, 0.9, 3.4);
+      list[i].fn(c);
+    }
+    if (lvOf("ulasim") >= 6) drawTrain(c);
+  }
+  function drawWorld2(c) {
+    var setG = function () {
+      G.c = c;
+      G.P = W2S;
+      G.s = cam.zoom;
+      G.lw = A.clamp(0.3 * cam.zoom, 0.9, 3.4);
+    };
+    setG();
+    var list = [{ d: 0, fn: function () { drawStadium(c); } }];
+    KEYS2.forEach(function (k) {
+      if (k === "stadyum") return;
+      PARTS2[k].forEach(function (part) {
+        list.push({
+          d: part.x + part.z,
+          fn: function () {
+            drawUnit2(c, k, part);
+          },
+        });
+      });
+    });
+    FILLERS2.forEach(function (f) {
+      var s = W2S(f.x, 0, f.z), Z = cam.zoom;
+      if (s[0] < -50 * Z || s[0] > W + 50 * Z || s[1] < -10 * Z || s[1] > H + 60 * Z) return;
+      list.push({
+        d: f.x + f.z,
+        fn: function () {
+          blitSprite(c, fillerSprite(f), f.x, f.z);
+        },
+      });
+    });
+    lmEntries(list);
+    life2(list);
+    list.sort(function (a, b) {
+      return a.d - b.d;
+    });
+    for (var i = 0; i < list.length; i++) {
+      setG();
       list[i].fn(c);
     }
     if (lvOf("ulasim") >= 6) drawTrain(c);
@@ -5615,6 +7774,43 @@
   }
   function eachAnchor(fn) {
     var suffix = "|" + TH.key + "|" + kit.primary + kit.secondary;
+    if (V2) {
+      var sv = lvOf("stadyum");
+      if (sv) {
+        var ids = stadIds(levels.saha, levels.tribun, sv);
+        [ids.g, ids.i, ids.b, ids.f].forEach(function (id) {
+          var m = meta[id + suffix];
+          if (m) m.anchors.forEach(function (a) {
+            fn(a, 0, 0, "stad");
+          });
+        });
+      }
+      KEYS2.forEach(function (k) {
+        if (k === "stadyum") return;
+        if (con && con.key === k && conT() < 0.82) return;
+        PARTS2[k].forEach(function (part) {
+          var m = partMeta(k, part, lvOf(k));
+          if (m) m.anchors.forEach(function (a) {
+            fn(a, part.x, part.z, k);
+          });
+        });
+      });
+      FILLERS2.forEach(function (f) {
+        var m = meta["fill:" + f.i + ":" + f.j + suffix];
+        if (m) m.anchors.forEach(function (a) {
+          fn(a, f.x, f.z, "fill");
+        });
+      });
+      lms.forEach(function (l) {
+        var q = parseSlot(l.slot), m = lmMeta(l.key, tierOf(l));
+        if (!q || !m) return;
+        var p = slotPos(q.r, q.c);
+        m.anchors.forEach(function (a) {
+          fn(a, p.x, p.z, "lm");
+        });
+      });
+      return;
+    }
     var lvS = lvOf("saha"), lvT = lvOf("tribun");
     ["sahaG:" + lvS + ":" + lvT, "sahaI:" + lvS + ":" + lvT, "tribB:" + lvT + ":" + lvS, "tribF:" + lvT + ":" + lvS].forEach(function (id) {
       var m = meta[id + suffix];
@@ -5698,6 +7894,24 @@
         p = W2S(ox + a.x, a.y, oz + a.z);
         var ph = Math.sin(A.time * 10) > 0;
         glow(c, p[0] - 0.4 * Z, p[1], 2 * Z + 3, ph ? "#3B82F6" : "#FF3344", 0.6 + night * 0.3);
+      } else if (a.t === "show") {
+        p = W2S(ox + a.x, a.y, oz + a.z);
+        glow(c, p[0], p[1], 1.2 * Z + 3, a.col, 0.45 + night * 0.4);
+        if (night > 0.3) {
+          var sw = Math.sin(A.time * 0.9 + a.x * 1.7) * 0.5, L2 = 60 * Z, wd2 = 2.4 * Z;
+          var tx = p[0] + Math.sin(sw) * L2, ty = p[1] - Math.cos(sw) * L2;
+          var gb = c.createLinearGradient(p[0], p[1], tx, ty);
+          gb.addColorStop(0, rgba(a.col, 0.45 * night));
+          gb.addColorStop(1, rgba(a.col, 0));
+          c.fillStyle = gb;
+          c.beginPath();
+          c.moveTo(p[0] - 0.3 * Z, p[1]);
+          c.lineTo(tx - wd2, ty);
+          c.lineTo(tx + wd2, ty);
+          c.lineTo(p[0] + 0.3 * Z, p[1]);
+          c.closePath();
+          c.fill();
+        }
       } else if (a.t === "rec") {
         p = W2S(ox + a.x, a.y, oz + a.z);
         if (Math.sin(A.time * 5) > 0) glow(c, p[0], p[1], 0.9 * Z + 3, "#FF3355", 0.9);
@@ -5767,6 +7981,10 @@
   var labelRects = [];
   function labelAnchor(k) {
     var p = PLOTS[k], lv = lvOf(k);
+    if (V2) {
+      var m2 = metaFor(k, lv), g2 = W2S(p.x, 0, p.z);
+      return [g2[0], g2[1] + (m2 ? Math.max(m2.v0, isStad(k) ? -40 : -60) : -14) * cam.zoom - 4];
+    }
     if (k === "saha") {
       var P = pitchSize();
       var s0 = W2S(-P.w * 0.1, 0.5, P.d / 2 + 1.5);
@@ -5785,28 +8003,45 @@
   }
   function drawLabels(c) {
     labelRects = [];
+    if (V2 && place2) return;
     var Z = cam.zoom;
     var zk = A.clamp((Z - homeZoom) / Math.max(0.01, focusZoom("kantin") - homeZoom), 0, 1);
     var fs = 9.5 + zk * 2.5;
     c.save();
     c.textAlign = "center";
     c.textBaseline = "middle";
+    // v2 genel görünüm: etiket arsanın ön yarısında (komşu arsalarla çakışmaz, kendi binasının üstünde kalır)
+    var mid = V2 && zk < 0.5;
     var items = ORDER.map(function (k) {
       var a = labelAnchor(k);
+      if (mid) {
+        // arsanın ön yarısı: bina (genelde arkada) görünür kalır
+        var pp = PARTS2[k] ? PARTS2[k][0] : { x: 0, z: 0 }, fo = k === "stadyum" ? 16 : 13, gc = W2S(pp.x + fo, 0, pp.z + fo);
+        a = [gc[0], gc[1] + (fs + 10) / 2];
+      }
       var name = TITLES[k];
       c.font = A.font(fs, 800);
       var tw = c.measureText(name).width;
-      var mk = marks[k];
+      var mk = marks[k] || (V2 && closedOf(k) ? "closed" : null);
       var h = fs + 10, w = tw + h + 12 + (mk ? h * 0.55 : 0);
       if (focusKey === k) {
         w *= 1.08;
       }
       return { k: k, ax: a[0], ay: a[1], w: w, h: h, tw: tw, x: a[0] - w / 2, y: a[1] - h, mk: mk };
     });
+    // v2: kilitli binaların etiketi genel görünümde gizli (yakınlaşınca ya da odakta görünür)
+    if (V2)
+      items = items.filter(function (it) {
+        return !(it.mk === "closed" && zk < 0.3 && focusKey !== it.k);
+      });
     items.sort(function (a, b) {
       return b.ay - a.ay;
     });
     var placed = [];
+    if (V2) {
+      declutter(items, placed, fs);
+      items = [];
+    }
     items.forEach(function (it) {
       for (var pass = 0; pass < 6; pass++) {
         var hit = null;
@@ -5827,11 +8062,55 @@
       return a.ay - b.ay;
     });
     placed.forEach(function (it) {
+      if (V2 && it.x > -it.w && it.x < W) it.x = A.clamp(it.x, 4, Math.max(4, W - it.w - 4));
       if (it.x > W + 10 || it.x + it.w < -10 || it.y > H + 10 || it.y + it.h < -10) return;
       drawPill(c, it, fs);
       labelRects.push(it);
     });
     c.restore();
+  }
+  /**
+   * v2 etiket yerleşimi: her etiket kendi çapasına en yakın boş yeri arar
+   * (yerinde, yukarı/aşağı kaydırılmış, hafif yana); bulamazsa yalnız rozetli
+   * kısa hap olur (adı yakınlaşınca/odakta görünür). Hiçbir hap çakışmaz.
+   */
+  function declutter(items, placed, fs) {
+    var free = function (x, y, w, h) {
+      if (x < 2 || x + w > W - 2) return false;
+      for (var j = 0; j < placed.length; j++) {
+        var o = placed[j];
+        if (x < o.x + o.w + 3 && x + w + 3 > o.x && y < o.y + o.h + 3 && y + h + 3 > o.y) return false;
+      }
+      return true;
+    };
+    var tryPlace = function (it) {
+      var st = it.h + 3, x0 = A.clamp(it.x, 4, Math.max(4, W - it.w - 4));
+      var dys = [0, -st, st, -2 * st, 2 * st, -3 * st];
+      var dxs = [0, -it.w * 0.35, it.w * 0.35];
+      for (var a = 0; a < dys.length; a++)
+        for (var b = 0; b < dxs.length; b++) {
+          var x = x0 + dxs[b], y = it.y + dys[a];
+          if (free(x, y, it.w, it.h)) {
+            it.x = x;
+            it.y = y;
+            return true;
+          }
+        }
+      return false;
+    };
+    items.forEach(function (it) {
+      if (focusKey === it.k || !tryPlace(it)) {
+        if (focusKey !== it.k) {
+          // kısa hap: yalnız aşama dairesi (+ rozet)
+          var cx = it.x + it.w / 2;
+          it.compact = true;
+          it.w = it.h + (it.mk ? it.h * 0.55 : 0) + 2;
+          it.x = cx - it.w / 2;
+          if (!tryPlace(it)) return;
+        }
+      }
+      placed.push(it);
+    });
   }
   var pillCache = {}, pillCount = 0;
   function drawPill(c, it, fs) {
@@ -5850,7 +8129,7 @@
       c.fillStyle = "#FFFFFF";
       c.fill();
     }
-    var key = [k, lvOf(k), mk || "", fs.toFixed(1), focusKey === k ? 1 : 0, kit.primary].join("|");
+    var key = [k, lvOf(k), mk || "", fs.toFixed(1), focusKey === k ? 1 : 0, kit.primary, it.compact ? 1 : 0].join("|");
     var pc = pillCache[key];
     if (!pc) {
       if (pillCount > 200) {
@@ -5882,7 +8161,7 @@
     c.textBaseline = "middle";
     var k = it.k, lv = lvOf(k), mk = it.mk, focus = focusKey === k;
     var x = it.x, y = it.y, w = it.w, h = it.h;
-    c.globalAlpha = mk === "lock" ? 0.82 : 1;
+    c.globalAlpha = mk === "lock" ? 0.82 : mk === "closed" ? 0.72 : 1;
     // gölge + hap
     A.roundRect(c, x, y + 2.5, w, h, h / 2);
     c.fillStyle = "rgba(10,8,40,0.35)";
@@ -5907,7 +8186,7 @@
     c.fillText(String(lv), cx, cy + 0.5);
     c.font = A.font(fs, 800);
     c.fillStyle = "#FFFFFF";
-    c.fillText(TITLES[k], x + h + 2 + it.tw / 2, cy + 0.5);
+    if (!it.compact) c.fillText(TITLES[k], x + h + 2 + it.tw / 2, cy + 0.5);
     c.globalAlpha = 1;
     // rozet
     if (mk) {
@@ -5956,7 +8235,9 @@
   /* ═══════════════════════ komutlar ═══════════════════════ */
 
   function command(cmd) {
-    if (cmd.type === "city") {
+    if (cmd.type === "city2") applyCity2(cmd);
+    else if (cmd.type === "build") playBuild(cmd.key);
+    else if (cmd.type === "city" && !V2) {
       if (cmd.kit && cmd.kit.primary) kit = { primary: hex(cmd.kit.primary, "#5B3DF5"), secondary: hex(cmd.kit.secondary, "#FFFFFF") };
       if (cmd.marks && typeof cmd.marks === "object") marks = cmd.marks;
       if (cmd.tier) tierTitle = String(cmd.tier);
@@ -6048,7 +8329,8 @@
     var d = drag;
     drag = null;
     if (!d || d.moved || pinch) return;
-    var best = hitTest(p.x, p.y);
+    var best = V2 ? hitTest2(p.x, p.y) : hitTest(p.x, p.y);
+    if (best && best.slot) return tapSlot(best.slot);
     if (best) {
       A.sound("tap");
       A.haptic("light");
@@ -6084,6 +8366,56 @@
       if (!(Math.abs(g.x) <= P.w / 2 + 1 && Math.abs(g.z) <= P.d / 2 + 1)) best = "tribun";
     }
     return best;
+  }
+  /** v2: yuvalar (yerleştirme / yerleşik yapı), etiketler, bina parçaları. */
+  function hitTest2(px, py) {
+    if (place2 || lms.length) {
+      var q = hitSlot(px, py);
+      if (q && (place2 || lmAt(q.id))) return { slot: q };
+    }
+    for (var i = labelRects.length - 1; i >= 0; i--) {
+      var r = labelRects[i];
+      if (px >= r.x - 4 && px <= r.x + r.w + 4 && py >= r.y - 4 && py <= r.y + r.h + 4) return r.k;
+    }
+    var Z = cam.zoom, best = null, bd = -1e9;
+    KEYS2.forEach(function (k) {
+      var parts = k === "stadyum" ? [{ x: 0, z: 0 }] : PARTS2[k];
+      parts.forEach(function (part) {
+        var R = k === "stadyum" ? 25 : 21;
+        var m = k === "stadyum" ? metaFor(k) : partMeta(k, part, lvOf(k));
+        var Ht = m ? Math.max(3, (-m.v0 - R * 0.5) / HY) : 8;
+        var u = (px - W / 2) / Z + (cam.tx - cam.tz) - (part.x - part.z);
+        var vs = 2 * ((py - H * 0.5) / Z + (cam.tx + cam.tz) * 0.5 - cam.lift * HY - (part.x + part.z) * 0.5);
+        var lim = 2 * R - Math.abs(u);
+        if (lim < 0) return;
+        if (vs + 2 * Ht * HY < -lim || vs > lim) return;
+        var dep = part.x + part.z;
+        if (dep > bd) {
+          bd = dep;
+          best = k;
+        }
+      });
+    });
+    return best;
+  }
+  function tapSlot(q) {
+    var l = lmAt(q.id);
+    if (place2 && !l) {
+      if (q.r >= grid2.open) {
+        A.haptic("light");
+        return;
+      }
+      ghost2 = q.id;
+      A.sound("tap");
+      A.haptic("light");
+      A.send("slot", { slot: q.id, id: null });
+      return;
+    }
+    if (l) {
+      A.sound("tap");
+      A.haptic("light");
+      A.send("slot", { slot: q.id, id: l.id });
+    }
   }
   // iki parmak (yakınlaştır) ve tekerlek: çekirdek tek işaretçi izler, burada dokunuşlar ayrıca okunur
   (function () {
@@ -6176,8 +8508,9 @@
       cam.zoom = camGoal.zoom;
       cam.lift = camGoal.lift;
     }
-    if (focusKey && focusKey !== "saha" && focusKey !== "tribun") camGoal.lift = focusLift(focusKey);
+    if (focusKey && !isStad(focusKey) && focusKey !== "landmarks") camGoal.lift = focusLift(focusKey);
     stepMatch(dt);
+    stepKicks(dt);
     stepTraffic(dt);
     stepConstruction(dt);
     stepParty(dt);
@@ -6205,6 +8538,10 @@
     G.P = W2S;
     G.s = cam.zoom;
     G.lw = A.clamp(0.3 * cam.zoom, 0.9, 3.4);
+    if (V2) {
+      drawPlaza(c);
+      drawSlotsOverlay(c);
+    }
     drawFocusRing(c);
     drawWorld(c);
     if (TH.night > 0.3) {
@@ -6252,8 +8589,46 @@
           themeOverride = t;
           themeCheck = 0;
         },
-        hit: hitTest,
+        hit: function (x, y) {
+          return V2 ? hitTest2(x, y) : hitTest(x, y);
+        },
         project: W2S,
+        /** Önizleme: bir yapının sprite tuvali (k birim, lv basamak, s ölçek). */
+        spriteOf: function (k, lv, s, part) {
+          return makeSprite("dbg:" + k + ":" + lv + (part || ""), s || 3, function () {
+            if (k.indexOf("lm:") === 0) return lmBuildFor(k.slice(3), "sus")();
+            if (k === "stadyum")
+              return (function () {
+                var m = STAD_MAP[lv];
+                SVF = svFlags(lv);
+                try {
+                  buildSahaG(m[0], m[1]);
+                  buildTribun(m[1], m[0], "B");
+                  buildSahaI(m[0], m[1]);
+                  buildTribun(m[1], m[0], "F");
+                } finally {
+                  SVF = null;
+                }
+              })();
+            if (BUILD2[k] && (V2 || !BUILD[k])) {
+              if (lv === 0 && k !== "halisaha") return part === "c" ? closedPlot(OPENS2[k]) : emptyPlot();
+              return BUILD2[k](lv, part);
+            }
+            BUILD[k](lv);
+          }).cv;
+        },
+        labels: function () {
+          return labelRects.map(function (r) {
+            return { k: r.k, x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h), compact: !!r.compact };
+          });
+        },
+        slotScreen: function (id) {
+          var q = parseSlot(id), p = slotPos(q.r, q.c);
+          return W2S(p.x, 0, p.z);
+        },
+        v2: function () {
+          return { ver: spriteVer, base: baseLayer && baseLayer.key, on: V2, st: st2, rung: rung2, grid: grid2, place: place2, ghost: ghost2, landmarks: lms.length, kicks: kicks.map(function (k) { return [k.ox, k.oz, k.m.players.length, k.m.players[0] && Math.round(k.m.players[0].x)]; }) };
+        },
       };
     },
   };
