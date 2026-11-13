@@ -190,11 +190,16 @@ export const puzzleKeys = {
 };
 
 export const getPuzzleMe = () => get<PuzzleMe>("/api/puzzle/me", undefined, { retry: false });
+/**
+ * Seviyeyi başlatır. `play`: tek kullanımlık oyun jetonu; kazanç yalnız bu
+ * jetonla yazılır (sunucu en kısa süreye ve günlük kazanç sınırına da bakar,
+ * `wins_left`: bugün kalan kazanç hakkı). Eski sunucu ikisini de göndermez.
+ */
 export const startLevel = (game: PuzzleGameKey, level: number) =>
-  post<{ ok: true; level: number; profile: PuzzleProfile }>(`/api/puzzle/${game}/start`, { level }, { retry: false });
+  post<{ ok: true; level: number; play?: string; wins_left?: number; profile: PuzzleProfile }>(`/api/puzzle/${game}/start`, { level }, { retry: false });
 export const finishLevel = (
   game: PuzzleGameKey,
-  body: { level: number; won: boolean; stars: number; boosters_used: Record<string, number> }
+  body: { level: number; won: boolean; stars: number; boosters_used: Record<string, number>; play?: string }
 ) => post<FinishResponse>(`/api/puzzle/${game}/finish`, body, { retry: false });
 export const buyItem = (item: string, game?: PuzzleGameKey | null) =>
   post<{ item: string; profile: PuzzleProfile }>("/api/puzzle/shop", game ? { item, game } : { item });
