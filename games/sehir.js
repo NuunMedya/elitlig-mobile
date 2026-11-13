@@ -2253,6 +2253,7 @@
   /** Stadyum kasesi (5: açık, 6: çatılı, 7: çift katlı Elit Arena). */
   function bowl(lv, P, B) {
     var pro = P.w >= 28, hw = P.w / 2 + (pro ? 3 : 1.8), hd = P.d / 2 + (pro ? 3 : 1.8);
+    var natS = !!(SVF && SVF.nat); // yüzler sonradan çizilir: bayrağı şimdi yakala
     var lower = lv >= 7 ? 4 : lv >= 6 ? 7 : 6;
     var step = 0.9, rise = 0.55;
     var D1 = lower * step, top1 = lower * rise;
@@ -2269,7 +2270,7 @@
         g.addColorStop(1, K("#A8B1CF"));
         cc.fillStyle = g;
         cc.fillRect(0, y, FW, 0.6);
-        cc.fillStyle = night ? lit(kit.primary, 0.25) : K(dk("#8A93B8", 0.2));
+        cc.fillStyle = natS ? (night ? "#FF4D5E" : K("#E30A17")) : night ? lit(kit.primary, 0.25) : K(dk("#8A93B8", 0.2));
         cc.fillRect(0, y + 0.6, FW, 0.3);
       }
     };
@@ -2328,14 +2329,21 @@
           outerFace(cc, FW, FH);
           if (lv >= 7) {
             cc.save();
-            cc.fillStyle = TH.night > 0.3 ? "rgba(20,16,67,0.5)" : "rgba(27,22,72,0.18)";
+            var natF = natS;
+            cc.fillStyle = natF ? K("#E30A17") : TH.night > 0.3 ? "rgba(20,16,67,0.5)" : "rgba(27,22,72,0.18)";
             cc.fillRect(FW * 0.12, FH * 0.18, FW * 0.76, FH * 0.36);
-            ftext(cc, "ELİTLİG ARENA", FW / 2, FH * 0.37, FH * 0.28, TH.night > 0.3 ? "#FFFFFF" : K("#FFFFFF"), FW * 0.72);
+            ftext(cc, natF ? "ULUSAL STADYUM" : "ELİTLİG ARENA", FW / 2, FH * 0.37, FH * 0.28, TH.night > 0.3 ? "#FFFFFF" : K("#FFFFFF"), FW * 0.72);
             cc.restore();
           }
         } : null,
         fR: side === "E" ? outerFace : null,
       });
+      if (SVF && SVF.smart) {
+        // AKILLI STADYUM: cephe tepesinde ışıklı LED şerit (gol olunca renk değiştirir)
+        var led = SVF.nat ? "#FF2E3F" : "#22D3EE";
+        var lb = { N: [0, -fo - 0.1, L + 0.4, 0.8], S: [0, fo + 0.1, L + 0.4, 0.8], W: [-fo - 0.1, 0, 0.8, L + 0.4], E: [fo + 0.1, 0, 0.8, L + 0.4] }[side];
+        box(lb[0], lb[1], lb[2], lb[3], facadeH - 2.2, 1.6, led, { depth: base + (backS ? -0.9 : 1.1), noShadow: true, gloss: false, top: lit(led, 0.3) });
+      }
     }
     if (B) {
       corner([-1, -1], -200);
@@ -2418,6 +2426,48 @@
           });
         });
       }
+    }
+    if (SVF && SVF.smart && !B) {
+      // akıllı turnikeler (ön köşe girişlerinde)
+      [[-1, 1], [1, -1]].forEach(function (q) {
+        var tx = q[0] > 0 ? hw + Dt + 2.2 : -hw * 0.5, tz = q[1] > 0 ? hd + Dt + 2.2 : -hd * 0.5;
+        for (var i = 0; i < 4; i++) box(tx + (q[0] < 0 ? i * 1.2 : 0), tz + (q[0] > 0 ? i * 1.2 : 0), 0.6, 0.6, 0, 1.3, "#2B2F6E", { noShadow: true, top: SVF.nat ? "#FF4D5E" : "#22D3EE", depth: 120 + i * 0.01 });
+      });
+    }
+    if (SVF && SVF.roof && !B) {
+      // AÇILIR ÇATI: iki kayar panel yarı kapalı; ortada açık şerit, kenarlarda raylar
+      var py = facadeH + 0.6, gap = hd * 0.42, rin = hd + 0.5;
+      [-1, 1].forEach(function (sd) {
+        var z0 = sd * gap, z1 = sd * (rin + Dt * 0.5);
+        box(0, (z0 + z1) / 2, hw * 2 + Dt, Math.abs(z1 - z0), py, 0.5, "#DCE3F5", {
+          depth: 150 + sd,
+          noShadow: true,
+          fT: function (cc, FW, FH) {
+            cc.strokeStyle = rgba("#8E9AC4", 0.7);
+            cc.lineWidth = 0.18;
+            for (var t = 2; t < FW; t += 3.2) {
+              cc.beginPath();
+              cc.moveTo(t, 0);
+              cc.lineTo(t, FH);
+              cc.stroke();
+            }
+            cc.fillStyle = TH.night > 0.3 ? lit(kit.primary, 0.3) : K(kit.primary);
+            cc.fillRect(0, sd < 0 ? FH - 0.5 : 0, FW, 0.5);
+          },
+        });
+      });
+      [-1, 1].forEach(function (sx) {
+        box(sx * (hw + Dt * 0.5), 0, 0.8, hd * 2 + Dt * 2, py - 0.1, 0.5, "#5B6385", { depth: 149 + sx * 0.1, noShadow: true });
+      });
+    }
+    if (SVF && SVF.nat && !B) {
+      // ULUSAL STADYUM: ön cephe boyunca ay yıldızlı bayraklar
+      [-0.6, -0.2, 0.2, 0.6].forEach(function (u) {
+        turkFlag(u * hw * 2, hd + Dt + 2.5, facadeH * 0.7);
+      });
+      [-0.4, 0.2].forEach(function (u) {
+        turkFlag(hw + Dt + 2.5, u * hd * 2, facadeH * 0.7);
+      });
     }
     if (lv >= 7 && !B && !(SVF && SVF.noArch)) {
       // WEMBLEY KEMERİ: stadyumun üstünden geçen dev beyaz kemer + çatıya inen kablolar
@@ -2914,6 +2964,7 @@
       return;
     }
     if (lv === 3) {
+      var sg3 = XV.sign || "KULÜP MAĞAZASI";
       paved();
       box(0, -4, 12, 9, 0, 4.2, "#FFFFFF", {
         fL: function (cc, FW, FH) {
@@ -2938,7 +2989,7 @@
       box(0, -4, 12.4, 9.4, 4.2, 0.5, kit.primary, {
         noShadow: true,
         fL: function (cc, FW, FH) {
-          ftext(cc, "KULÜP MAĞAZASI", FW / 2, FH / 2, 0.42, K(kit.secondary), FW * 0.8);
+          ftext(cc, sg3, FW / 2, FH / 2, 0.42, K(kit.secondary), FW * 0.8);
         },
       });
       // tente
@@ -4367,7 +4418,7 @@
 
 
   /* ═══════════════════════ KULÜP ŞEHRİ 2.0: binalar ═══════════════════════
-   * 12 bina, toplam 92 aşama (elitlig-server constants/city2.js). Her aşama
+   * 12 bina, toplam 137 aşama (elitlig-server constants/city2.js, Şehir 2.1). Her aşama
    * ayrı bir görünüm; eski birim kurucuları uygun düştüğü aşamalarda yeniden
    * kullanılır (XV bayraklarıyla küçük farklar), aradaki aşamalar yeni çizim.
    * Halısaha iki hücreye yayılır: A (sahalar) ve B (salonlar, 7. aşamadan). */
@@ -4530,14 +4581,21 @@
   /* ─────────────── HALISAHA ─────────────── */
 
   var HS = { w: 16, d: 10, p: [[-10, -12.2], [-10, 0.6], [-10, 13.4]], t: [11.5, 11.5] };
-  /** A hücresinin içeriği hangi aşamada değişir (7, 8, 10'da değişmez). */
+  /** A hücresinin içeriği hangi aşamada değişir (7'de yalnız B değişir). */
   function hsEffA(st) {
-    return st === 7 || st === 8 ? 6 : st === 10 ? 9 : st;
+    return st === 7 ? 6 : st;
   }
+  /** B hücresi 7'de açılır; 11'de (kampüs A'da büyür) değişmez. */
   function hsEffB(st) {
-    return st < 7 ? 0 : st;
+    return st < 7 ? 0 : st === 11 ? 10 : st;
+  }
+  /** Şehir 2.1 aşaması → eski (12 aşamalı) çizim sırası: 11 kampüs araya girdi, 14 yeni. */
+  function hsOld(st) {
+    return st <= 10 ? st : st === 11 ? 10 : st === 12 ? 11 : 12;
   }
   function hsA(st) {
+    var camp = st >= 11, nat = st >= 14;
+    st = hsOld(st);
     if (st <= 1) {
       // BOŞ ARSA: tozlu toprak, taşlardan kaleler
       pad(0, 0, 40, 40, "#D8B07A", {
@@ -4618,7 +4676,22 @@
         fR: winFace({ ww: 1.4, wh: 1.4, gx: 0.9, gy: 1.3, top: 1, bot: 3, glass: "#8FD3FF" }),
       });
       roofCap(12.5, -12, 11, 10, 17, "#E3E6F4");
-      crestS(12.5, -12, 18.6, 1.4);
+      if (nat) {
+        // ULUSAL MERKEZ: çatıda ay yıldızlı bayrak, cephede kırmızı-beyaz şerit
+        box(12.5, -6.9, 11.2, 0.3, 13.4, 1.4, "#E30A17", { noShadow: true, fL: signFace("ULUSAL MERKEZ", "#E30A17", "#FFFFFF", 0.7, 0.9, 1) });
+        turkFlag(9, -14, 24);
+      } else crestS(12.5, -12, 18.6, 1.4);
+    } else if (camp) {
+      // SPORCU YURDU (kampüs): üç katlı, balkonlu
+      box(12.5, -12, 11, 9, 0, 9.6, "#FFF4E2", {
+        fL: both(winFace({ ww: 1.3, wh: 1.3, gx: 0.9, gy: 1.6, top: 1.6, bot: 0.6, glass: "#8FD3FF" }), signFace("SPORCU YURDU", "#16A34A", "#FFFFFF", 0.65, 0.85, 0.8)),
+        fR: winFace({ ww: 1.3, wh: 1.3, gx: 0.9, gy: 1.6, top: 1.6, bot: 0.6, glass: "#8FD3FF" }),
+      });
+      for (var bf = 0; bf < 2; bf++) box(12.5, -7.2, 11, 0.8, 3.4 + bf * 2.9, 0.2, "#16A34A", { noShadow: true, depth: 5.4 + bf * 0.01 });
+      roofCap(12.5, -12, 11, 9, 9.6, "#16A34A");
+      [[9, -14.5], [15, -14.5]].forEach(function (q) {
+        box(q[0], q[1], 2.4, 1.6, 10, 0.9, "#9FD8FF", { noShadow: true, depth: 30 });
+      });
     } else if (st >= 5) {
       // SOYUNMA + DUŞ
       box(12.5, -12, 10, 8, 0, 3.6, "#FFF1DE", {
@@ -4676,7 +4749,7 @@
       table(14.5, 5.5);
       umbrella(12.5, 6.5, 2.4, 1.6, "#FFFFFF", "#E2574C");
     }
-    if (st >= 12) {
+    if (st >= 12 || camp) {
       // PERFORMANS LAB (camdan küp)
       box(13.5, 15, 8, 7, 0, 6, "#BFF3FF", {
         rawL: null,
@@ -4708,8 +4781,47 @@
       tree(-8, 18, 0.8);
       bench(-12, 16, true, 3);
     }
+    if (st >= 8 && !nat) {
+      // ANTRENMAN TESİSİ: koridorda savunma duvarı mankenleri + koni slalomu
+      [1.6, 2.8, 4, 5.2].forEach(function (x) {
+        box(x, 6, 0.8, 0.4, 0, 1.8, "#FFD43B", { noShadow: true, top: "#F59E0B" });
+      });
+      [1, 2.6, 4.2, 5.8].forEach(function (x, i) {
+        cone(x, 11.5 + (i % 2) * 0.8);
+      });
+    }
+    if (st >= 10 && !nat)
+      // TURNUVA: yol kenarında turnuva panosu
+      billboard(3.4, 15.6, 0.6, 5, 1.3, "TURNUVA", "#141043", "#FFD43B", { glow: true });
+    if (camp && !nat) {
+      // kampüs kapısı + çim bakım aracı
+      [-1, 1].forEach(function (sx) {
+        box(4 + sx * 3.2, 19, 0.6, 0.6, 0, 4.2, "#E3E6F4", { noShadow: true });
+      });
+      box(4, 19, 7.6, 0.6, 4.2, 1.2, "#16A34A", { noShadow: true, fL: signFace("FUTBOL KAMPÜSÜ", "#16A34A", "#FFFFFF", 0.6, 0.95, 0.9) });
+      box(3, 8.5, 2.2, 1.4, 0, 1.1, "#F59E0B", { noShadow: true, fL: function (cc, FW, FH) { cc.fillStyle = K("#3A3F72"); cc.fillRect(0.3, 0.2, 0.8, 0.5); } });
+    }
+    if (nat) {
+      // ULUSAL FUTBOL MERKEZİ: kırmızı kapı, ay yıldızlı bayrak sırası, şeref salonu
+      [-1, 1].forEach(function (sx) {
+        box(4 + sx * 3.6, 19, 0.8, 0.8, 0, 5, "#FFFFFF", { noShadow: true });
+      });
+      box(4, 19, 8.6, 0.8, 5, 1.4, "#E30A17", { noShadow: true, fL: signFace("ULUSAL FUTBOL MERKEZİ", "#E30A17", "#FFFFFF", 0.7, 0.95, 1) });
+      [-0.5, 3.5, 7.5].forEach(function (x) {
+        turkFlag(x - 9, 19.5, 9);
+      });
+      box(3, 8.5, 5, 4, 0, 3.4, "#FFF7E0", {
+        fL: function (cc, FW, FH) {
+          for (var i = 0; i < 3; i++) shirtAt(cc, 0.9 + i * 1.6, 1.9, 1.1, i === 1 ? "#FFFFFF" : "#E30A17", i === 1 ? "#E30A17" : "#FFFFFF", ["10", "1", "9"][i]);
+          fsign(cc, FW / 2, 0.45, FW - 0.6, 0.6, "ŞEREF SALONU", "#B8860B", "#FFFFFF", true);
+        },
+      });
+      dome(3, 8.5, 1.6, 3.4, "#FFC93C", { ribs: true });
+    }
   }
   function hsB(st) {
+    var nat = st >= 14;
+    st = hsOld(st);
     if (st < 7) {
       // genişleme arsası: çayır, birkaç ağaç
       lawn();
@@ -4740,7 +4852,11 @@
           g.addColorStop(1, TH.night > 0.5 ? "#8B5CF6" : K(dk(kit.primary, 0.25)));
           cc.fillStyle = g;
           cc.fillRect(0, 1.2, FW, 1.4);
-          ftext(cc, "ELİT ARENA", FW / 2, 1.95, 1, "#FFFFFF", FW * 0.7);
+          if (nat) {
+            cc.fillStyle = K("#E30A17");
+            cc.fillRect(0, 1.2, FW, 1.4);
+          }
+          ftext(cc, nat ? "ULUSAL ARENA" : "ELİT ARENA", FW / 2, 1.95, 1, "#FFFFFF", FW * 0.7);
           windowsGrid(cc, FW, FH, { ww: 2.2, wh: 3.4, gx: 0.5, top: 4.2, rows: 1, glass: "#9FE0FF" });
         },
         fR: winFace({ ww: 2, wh: 3.4, gx: 0.6, top: 4.2, rows: 1, glass: "#9FE0FF" }),
@@ -4793,7 +4909,7 @@
     // ön sol: 7-8 mini saha (çocuklar), 9+ KAPALI SAHA (şişme kubbe)
     if (st >= 9) {
       vaultX(-7, 10, 22, 6.2, 0, st >= 12 ? "#F7F9FF" : "#F2F4FF", { rib: 2.75, ribCol: "#C9D1EC", cap: "#E3E6F4", lit: "#D6F5FF" });
-      billboard(-7, 16.8, 0.3, 8, 1.1, st >= 12 ? "KAPALI SAHA · ARENA" : "KAPALI SAHA", kit.primary, kit.secondary, { posts: false, glow: true });
+      billboard(-7, 16.8, 0.3, 8, 1.1, nat ? "KAPALI TAM SAHA" : st >= 12 ? "KAPALI SAHA · ARENA" : "KAPALI SAHA", nat ? "#E30A17" : kit.primary, nat ? "#FFFFFF" : kit.secondary, { posts: false, glow: true });
     } else {
       fiveSide(-7, 9, 14, 9, "mini", { gw: 2.4, gh: 1.3, fence: true, fh: 1.4, seed: 11 });
       [[-14, 15], [-11, 15], [-8, 15], [-5, 15]].forEach(function (q, i) {
@@ -4806,12 +4922,16 @@
       fiveSide(tx, tz, 15, 9, st >= 11 ? "hybrid" : "turf2", { flood: true, fl: 9, seed: 21 });
       for (var r = 0; r < 3; r++)
         (function (r) {
-          box(tx, tz - 6.2 - r * 0.9, 15, 0.9, 0, (r + 1) * 0.5, "#D5D8EA", { top: dk(kit.primary, 0.3), noShadow: true, gloss: false, depth: tx + tz - 30 + (2 - r) * 0.01 });
+          box(tx, tz - 6.2 - r * 0.9, 15, 0.9, 0, (r + 1) * 0.5, "#D5D8EA", { top: nat ? "#C81E2B" : dk(kit.primary, 0.3), noShadow: true, gloss: false, depth: tx + tz - 30 + (2 - r) * 0.01 });
           body(tx + tz - 30 + (2 - r) * 0.01 + 0.001, function () {
             crowdRow(G.c, true, tx - 7.2, tx + 7.2, tz - 6.2 - r * 0.9, (r + 1) * 0.5, 90 + r, 0.7);
           });
         })(r);
-      box(tx, tz - 9.2, 15.6, 0.4, 0, 2.6, "#4A4F86", { depth: tx + tz - 40, noShadow: true });
+      box(tx, tz - 9.2, 15.6, 0.4, 0, 2.6, nat ? "#E30A17" : "#4A4F86", { depth: tx + tz - 40, noShadow: true, fL: nat ? signFace("★ MİLLİ TAKIM SAHASI ★", "#E30A17", "#FFFFFF", 1.3, 0.8, 1) : null });
+      if (nat)
+        [-6, 6].forEach(function (dx) {
+          turkFlag(tx + dx, tz - 10, 8);
+        });
       // skorbord
       box(tx + 9.6, tz - 2, 0.4, 5, 2.4, 2.6, "#141043", {
         depth: tx + tz + 5,
@@ -4836,12 +4956,17 @@
   /* ─────────────── STADYUM ─────────────── */
 
   /** Aşama → eski stadyum çizimi: [saha, tribün, bayraklar]. */
-  var STAD_MAP = [null, [4, 1, ""], [4, 2, ""], [4, 3, ""], [4, 4, ""], [5, 5, "nf"], [5, 5, ""], [6, 6, "ns"], [6, 7, "na nv ns"], [7, 7, "na"], [7, 7, ""]];
+  /** sm: akıllı stadyum (LED çatı şeridi, turnike), rf: açılır çatı, nat: ulusal stadyum. */
+  var STAD_MAP = [null, [4, 1, ""], [4, 2, ""], [4, 3, ""], [4, 4, ""], [5, 5, "nf"], [5, 5, ""], [6, 6, "ns"], [6, 7, "na nv ns"], [6, 7, "na nv ns sm"], [7, 7, "na sm"], [7, 7, "na sm rf"], [7, 7, "sm"], [7, 7, "sm nat"]];
+  var STAD_N = STAD_MAP.length - 1;
   var SVF = null; // etkin stadyum aşamasının bayrakları (kurulum sırasında)
   function svFlags(sv) {
     if (sv == null) return null;
-    var f = (STAD_MAP[sv] && STAD_MAP[sv][2]) || "";
-    return { v2: true, noFlood: f.indexOf("nf") >= 0, noScreens: f.indexOf("ns") >= 0, noArch: f.indexOf("na") >= 0, noVip: f.indexOf("nv") >= 0 };
+    var f = " " + ((STAD_MAP[sv] && STAD_MAP[sv][2]) || "") + " ";
+    var has = function (t) {
+      return f.indexOf(" " + t + " ") >= 0;
+    };
+    return { v2: true, noFlood: has("nf"), noScreens: has("ns"), noArch: has("na"), noVip: has("nv"), smart: has("sm"), roof: has("rf"), nat: has("nat") };
   }
 
   /* ─────────────── KULÜP BİNASI ─────────────── */
@@ -4906,7 +5031,8 @@
           clockFace(cc, FW / 2, 2.2, 1.3);
         },
       });
-      pyramid(x, z, 4.6, 4.6, h + 9, 4, "#1E3A8A", { depth: x + z + 0.6, noShadow: true });
+      if (tower === "gold") dome(x, z, 2.4, h + 9, "#FFC93C", { ribs: true, depth: x + z + 0.6 });
+      else pyramid(x, z, 4.6, 4.6, h + 9, 4, "#1E3A8A", { depth: x + z + 0.6, noShadow: true });
     }
   }
   function clockFace(cc, u, v, r) {
@@ -4933,9 +5059,67 @@
     if (part === "B") return hsB(st);
     hsA(st);
   };
+  /** Genel merkez meydanı: kulüp renkli alt blok, çeşme havuzu, bayraklar. */
+  function hqPodium(sign) {
+    paved("#EEE9F8");
+    box(0, -6, 22, 12, 0, 5, "#F7F5FF", {
+      fL: function (cc, FW, FH) {
+        cc.fillStyle = TH.night > 0.3 ? lit(kit.primary, 0.2) : K(kit.primary);
+        cc.fillRect(0, 0.3, FW, 0.6);
+        A.roundRect(cc, 1, 1.6, FW - 2, FH - 1.6, 0.2);
+        cc.fillStyle = TH.night > 0.5 ? "#FFE2A8" : K("#8FD3FF");
+        cc.fill();
+        fsign(cc, FW / 2, 2.4, 9, 1.1, sign || "ELİTLİG KULÜBÜ", kit.primary, kit.secondary, true);
+      },
+    });
+  }
+  function hqFlags(pool0) {
+    if (pool0 !== false) {
+      pool(0, 7, 9, 4, "#38BDF8");
+      anchor({ t: "fountain", x: 0, y: 1, z: 7 });
+    }
+    [-10, -7, 7, 10].forEach(function (x, i) {
+      flagpole(x, 9, 7, i % 2 ? kit.secondary : kit.primary, i % 2 ? kit.primary : kit.secondary);
+    });
+  }
+  /** Akıllı bina: çatıda güneş panelleri + anten; cephede veri ekranı. */
+  function smartKit(x, z, y, w) {
+    for (var i = 0; i < 3; i++) box(x - w / 2 + 1.6 + i * ((w - 3.2) / 2), z + 1.4, 2.4, 1.6, y, 0.5, "#1E3A8A", { noShadow: true, top: "#3B5BDB", depth: 40 + i * 0.01 });
+    cyl(x + w / 2 - 1, z - 1.5, 0.15, y, 4, "#5B6385", { noShadow: true, depth: 41 });
+    anchor({ t: "beacon", x: x + w / 2 - 1, y: y + 4, z: z - 1.5 });
+  }
   BUILD2.kulup = function (st) {
     if (st <= 4) return oldB("kulup", st);
     if (st === 5) {
+      // KULÜP PLAZASI: iki katlı bina önünde taraftar meydanı
+      oldB("kulup", 4);
+      flat(function () {
+        topDo(0.34, function (c) {
+          c.fillStyle = K(lit(kit.primary, 0.55));
+          c.beginPath();
+          c.ellipse(0, 11, 7, 4.5, 0, 0, Math.PI * 2);
+          c.fill();
+          c.strokeStyle = K(kit.primary);
+          c.lineWidth = 0.4;
+          c.stroke();
+        });
+      });
+      // arma anıtı
+      box(0, 11, 2.2, 2.2, 0, 2.2, "#DCD8E8", { fL: function (cc, FW, FH) { cc.fillStyle = K("#C9A227"); cc.fillRect(0.4, FH * 0.4, FW - 0.8, 0.4); } });
+      crestS(0, 11, 3.2, 1.6);
+      // bilet gişeleri
+      [-13, -9].forEach(function (x) {
+        box(x, 9, 3, 2.4, 0, 2.6, "#FFFFFF", { fL: both(function (cc, FW, FH) { win(cc, 0.5, 0.9, FW - 1, 1, true); }, signFace("BİLET", kit.primary, kit.secondary, 0.35, 0.9, 0.55)) });
+        roofCap(x, 9, 3, 2.4, 2.6, kit.primary);
+      });
+      // meydan ekranı
+      box(12, 8, 0.5, 6, 2.6, 3.6, "#1B1648", { fR: screenFace });
+      [5.6, 10.4].forEach(function (z) {
+        box(12, z, 0.35, 0.35, 0, 2.6, "#8A90B5", { noShadow: true });
+      });
+      return;
+    }
+    if (st === 6) {
       // YÖNETİM BİNASI
       paved("#EEE9F8");
       adminBlock(-2, -7, 18, 10, 13);
@@ -4954,7 +5138,7 @@
       bush(-8, 12, 1);
       return;
     }
-    if (st === 6) {
+    if (st === 7) {
       // KUPA MÜZESİ + yönetim binası
       paved("#EEE9F8");
       adminBlock(-5, -9, 16, 9, 13);
@@ -4966,73 +5150,332 @@
       tree(-16, 16, 0.8);
       return;
     }
-    oldB("kulup", 6);
-    if (st >= 8) {
-      // en üst katta kupa müzesi (altın taç) + müze pavyonu
-      box(6, -6, 7.4, 6.4, 26.6, 2.8, "#FFD86B", {
-        noShadow: true,
-        depth: 30,
-        fL: function (cc, FW, FH) {
-          win(cc, 0.4, 0.4, FW - 0.8, FH - 0.8, true, "#FFE9A8");
-          ftext(cc, "MÜZE", FW / 2, FH / 2, FH * 0.45, "#7C2D12", FW * 0.8);
-        },
-        fR: function (cc, FW, FH) {
-          win(cc, 0.4, 0.4, FW - 0.8, FH - 0.8, true, "#FFE9A8");
-        },
-      });
-      dome(6, -6, 2.4, 29.4, "#FFC93C", { ribs: true, depth: 31 });
-      anchor({ t: "glow", x: 6, y: 28, z: -3, col: "#FFD98A" });
-      museumPav(-12, 10, 0.8);
+    if (st === 8 || st === 9) {
+      // MODERN GENEL MERKEZ: tek orta boy cam blok (9: akıllı bina — LED cephe, güneş paneli, anten)
+      hqPodium(st === 9 ? "AKILLI MERKEZ" : null);
+      glassTower(-3, -8, 11, 7, 5, 13, st === 9 ? "#4F7FE0" : "#5AA2E8");
+      crestS(-3, -8, 19.6, 2.2);
+      if (st === 9) {
+        // LED medya şeridi + veri odası ekranları
+        box(-3, -4.3, 11.2, 0.3, 9, 1.4, kit.primary, { noShadow: true, depth: 30, fL: function (cc, FW, FH) { screenFace(cc, FW, FH); ftext(cc, "● VERİ", FW * 0.2, FH / 2, FH * 0.55, "#7FE3FF", FW * 0.3); } });
+        smartKit(-3, -8, 18.6, 11);
+        box(9, -6, 6, 8, 5, 0.4, "#141043", { noShadow: true, depth: 20, top: "#2A2F6E" });
+        [[7.5, -8], [10.5, -8], [7.5, -4.5], [10.5, -4.5]].forEach(function (q) {
+          box(q[0], q[1], 1.8, 1.2, 5.4, 0.4, "#1E3A8A", { noShadow: true, top: "#3B5BDB", depth: 21 });
+        });
+      } else {
+        box(9, -6, 6, 8, 5, 3, "#F2F4FF", { noShadow: true, depth: 20, fL: winFace({ ww: 1.2, wh: 1.4, top: 0.8, rows: 1, glass: "#8FD3FF" }), fR: winFace({ ww: 1.2, wh: 1.4, top: 0.8, rows: 1, glass: "#8FD3FF" }) });
+      }
+      hqFlags();
+      tree(-17, 14, 0.9);
+      tree(17, 15, 0.9);
+      return;
     }
+    if (st >= 11) {
+      // KULÜP GÖKDELENİ: tek, ince, çok yüksek kule + rezidans; 12: KULÜP KAMPÜSÜ
+      hqPodium(st >= 12 ? "KULÜP KAMPÜSÜ" : null);
+      glassTower(-2, -7, 9, 8, 5, 46, "#3F86E8");
+      box(-2, -7, 9.6, 8.6, 34, 1.4, kit.primary, { noShadow: true, depth: 30, fL: screenFace, fR: screenFace });
+      crestS(-2, -2.6, 24, 2.6);
+      anchor({ t: "glow", x: -2, y: 26, z: -2.6, col: "#FFD98A" });
+      // rezidans: balkonlu
+      box(10, -4, 6, 7, 5, 11, "#F7F5FF", {
+        depth: 25,
+        fL: winFace({ ww: 1.2, wh: 1.2, gx: 0.8, gy: 1.2, top: 0.8, bot: 0.6, glass: "#8FD3FF" }),
+        fR: winFace({ ww: 1.2, wh: 1.2, gx: 0.8, gy: 1.2, top: 0.8, bot: 0.6, glass: "#8FD3FF" }),
+      });
+      for (var bf = 0; bf < 4; bf++) box(10, -0.3, 6.2, 0.6, 7.3 + bf * 2.4, 0.18, kit.primary, { noShadow: true, depth: 26 + bf * 0.01 });
+      roofCap(10, -4, 6, 7, 16, "#E3E6F4");
+      if (st >= 12) {
+        // KAMPÜS: efsaneler yolu (yıldızlı), kupa kubbesi, tarih galerisi
+        flat(function () {
+          topDo(0.34, function (c) {
+            c.fillStyle = K("#2B2F5E");
+            c.fillRect(-2, 1, 4, 18);
+            c.fillStyle = "#FFD43B";
+            for (var z = 2.5; z < 19; z += 2.5) {
+              c.beginPath();
+              for (var k = 0; k < 10; k++) {
+                var a = (k / 10) * Math.PI * 2 - Math.PI / 2, rr = k % 2 ? 0.35 : 0.8;
+                c.lineTo(Math.cos(a) * rr, z + Math.sin(a) * rr);
+              }
+              c.closePath();
+              c.fill();
+            }
+          });
+        });
+        museumPav(-11.5, 10, 0.8);
+        box(11.5, 10, 8, 5, 0, 4, "#FFF7E0", {
+          fL: function (cc, FW, FH) {
+            for (var i = 0; i < 4; i++) shirtAt(cc, 1 + i * 1.9, 2.2, 1.2, i % 2 ? kit.secondary : kit.primary, i % 2 ? kit.primary : kit.secondary, ["7", "10", "9", "1"][i]);
+            fsign(cc, FW / 2, 0.5, FW - 0.8, 0.65, "TARİH GALERİSİ", "#7C2D12", "#FFD43B", true);
+          },
+          fR: winFace({ ww: 1, wh: 1.6, top: 1.2, rows: 1, glass: "#FFE9A8" }),
+        });
+        roofCap(11.5, 10, 8, 5, 4, "#C9A227");
+        [-15, 15].forEach(function (x, i) {
+          flagpole(x, 17, 8, i ? kit.secondary : kit.primary, i ? kit.primary : kit.secondary);
+        });
+      } else {
+        hqFlags();
+        tree(-17, 14, 0.9);
+        tree(17, 15, 0.9);
+      }
+      return;
+    }
+    // 10: CAM KULELİ GENEL MERKEZ (eski çizim: iki kule + gök köprüsü) + kupa müzesi tacı
+    oldB("kulup", 6);
+    // en üst katta kupa müzesi (altın taç) + müze pavyonu
+    box(6, -6, 7.4, 6.4, 26.6, 2.8, "#FFD86B", {
+      noShadow: true,
+      depth: 30,
+      fL: function (cc, FW, FH) {
+        win(cc, 0.4, 0.4, FW - 0.8, FH - 0.8, true, "#FFE9A8");
+        ftext(cc, "MÜZE", FW / 2, FH / 2, FH * 0.45, "#7C2D12", FW * 0.8);
+      },
+      fR: function (cc, FW, FH) {
+        win(cc, 0.4, 0.4, FW - 0.8, FH - 0.8, true, "#FFE9A8");
+      },
+    });
+    dome(6, -6, 2.4, 29.4, "#FFC93C", { ribs: true, depth: 31 });
+    anchor({ t: "glow", x: 6, y: 28, z: -3, col: "#FFD98A" });
+    museumPav(-12, 10, 0.8);
   };
   BUILD2.stadyum = function () {};
+  /** Takım yemekhanesi: uzun salon, uzun masalar, ışık zinciri. */
+  function messHall() {
+        // TAKIM YEMEKHANESİ: uzun salon, uzun masalar
+    paved();
+    gable(0, -7, 22, 9, 0, 4.4, 2.6, "#FBE7CF", "#B45309", {
+      fL: function (cc, FW, FH) {
+        windowsGrid(cc, FW, FH, { ww: 1.8, wh: 1.6, gx: 0.8, top: 1.6, rows: 1, glass: "#FFE3A8", litK: 0.9, skip: function (r, k, R, Cn) { return k === Math.floor(Cn / 2); } });
+        A.roundRect(cc, FW / 2 - 1, FH - 2.5, 2, 2.5, 0.2);
+        cc.fillStyle = K("#7A3E10");
+        cc.fill();
+        fsign(cc, FW / 2, 0.6, 7, 0.8, "YEMEKHANE", "#B45309", "#FFFFFF", true);
+      },
+      fR: winFace({ ww: 1.6, wh: 1.6, top: 1.6, rows: 1, glass: "#FFE3A8" }),
+    });
+    cyl(6, -9, 0.5, 6.5, 1.6, "#A9AEC6", { noShadow: true });
+    anchor({ t: "steam", x: 6, y: 8.3, z: -9 });
+    [2, 7].forEach(function (z) {
+      box(-1, z, 12, 1.4, 0.75, 0.15, "#E0A562", { noShadow: true });
+      box(-1, z - 1.2, 12, 0.5, 0.42, 0.12, "#C98A4B", { noShadow: true });
+      box(-1, z + 1.2, 12, 0.5, 0.42, 0.12, "#C98A4B", { noShadow: true });
+    });
+    stringLights(-8, 10.5, 8, 10.5, 3.2, 10);
+    [-8, 8].forEach(function (x) {
+      cyl(x, 10.5, 0.15, 0, 3.2, "#5B6385", { noShadow: true });
+    });
+    tree(-17, -16, 1);
+    tree(17, -15, 1);
+    tree(16, 14, 0.8);
+  }
+  /** Teras restoran: kulüp restoranının çatısında şemsiyeli teras. */
+  function roofTerrace() {
+        // TERAS RESTORAN: çatı terası + şemsiyeler
+    box(0, -6, 18.4, 9.4, 8.6, 0.15, "#D9925A", { noShadow: true, depth: -5.5, gloss: false });
+    box(0, -6, 18.6, 9.6, 8.75, 0.9, "#BFE6FF", { noShadow: true, alpha: 0.35, depth: -5.4, gloss: false, noLine: true });
+    [-6, 0, 6].forEach(function (x, i) {
+      umbrella(x, -6, 2.4, 1.5, i % 2 ? "#FFFFFF" : kit.primary, i % 2 ? kit.primary : "#FFFFFF", 8.6);
+    });
+    billboard(13, 10, 0.4, 5, 1.2, "TERAS", "#B45309", "#FFFFFF", { glow: true });
+  }
+  /** Restoranlar sokağı: önde üç tenteli dükkân (kebapçı, balıkçı, tatlıcı) + ışık zinciri. */
+  function foodStreet(z) {
+    [["KEBAP", "#C2410C", -12.5], ["BALIK", "#0369A1", -6.5], ["TATLI", "#DB2777", -0.5]].forEach(function (q) {
+      gable(q[2], z, 5, 3.6, 0, 2.8, 1.4, "#FFF1DC", q[1], {
+        fL: function (cc, FW, FH) {
+          A.roundRect(cc, 0.5, 1.1, FW - 1, 1.2, 0.15);
+          cc.fillStyle = TH.night > 0.5 ? "#FFD98A" : K("#7A3E10");
+          cc.fill();
+          fsign(cc, FW / 2, 0.5, FW - 0.6, 0.7, q[0], q[1], "#FFFFFF", true);
+        },
+      });
+      box(q[2], z + 2.2, 5, 0.9, 1.9, 0.18, q[1], { noShadow: true });
+    });
+    if (z < 15) {
+      stringLights(-15.5, z - 2.6, 2.5, z - 2.6, 3.4, 10);
+      [-15.5, 2.5].forEach(function (x) {
+        cyl(x, z - 2.6, 0.15, 0, 3.4, "#5B6385", { noShadow: true });
+      });
+    }
+  }
   BUILD2.restoran = function (st) {
     if (st <= 4) return oldB("kantin", st);
-    if (st === 5) {
-      // TAKIM YEMEKHANESİ: uzun salon, uzun masalar
+    if (st <= 6) {
+      // 5: TAKIM YEMEKHANESİ; 6: + BESLENME MERKEZİ (sera, toparlanma barı)
       paved();
-      gable(0, -7, 22, 9, 0, 4.4, 2.6, "#FBE7CF", "#B45309", {
-        fL: function (cc, FW, FH) {
-          windowsGrid(cc, FW, FH, { ww: 1.8, wh: 1.6, gx: 0.8, top: 1.6, rows: 1, glass: "#FFE3A8", litK: 0.9, skip: function (r, k, R, Cn) { return k === Math.floor(Cn / 2); } });
-          A.roundRect(cc, FW / 2 - 1, FH - 2.5, 2, 2.5, 0.2);
-          cc.fillStyle = K("#7A3E10");
-          cc.fill();
-          fsign(cc, FW / 2, 0.6, 7, 0.8, "YEMEKHANE", "#B45309", "#FFFFFF", true);
-        },
-        fR: winFace({ ww: 1.6, wh: 1.6, top: 1.6, rows: 1, glass: "#FFE3A8" }),
-      });
-      cyl(6, -9, 0.5, 6.5, 1.6, "#A9AEC6", { noShadow: true });
-      anchor({ t: "steam", x: 6, y: 8.3, z: -9 });
-      [2, 7].forEach(function (z) {
-        box(-1, z, 12, 1.4, 0.75, 0.15, "#E0A562", { noShadow: true });
-        box(-1, z - 1.2, 12, 0.5, 0.42, 0.12, "#C98A4B", { noShadow: true });
-        box(-1, z + 1.2, 12, 0.5, 0.42, 0.12, "#C98A4B", { noShadow: true });
-      });
-      stringLights(-8, 10.5, 8, 10.5, 3.2, 10);
-      [-8, 8].forEach(function (x) {
-        cyl(x, 10.5, 0.15, 0, 3.2, "#5B6385", { noShadow: true });
-      });
-      tree(-17, -16, 1);
-      tree(17, -15, 1);
-      tree(16, 14, 0.8);
+      messHall();
+      if (st === 6) {
+        vaultX(12.5, 2, 7, 2.6, 0, "#C9F5D2", { alpha: 0.85, rib: 1.4, lit: "#FFF2C4", cap: "#86E3A0" });
+        for (var i = 0; i < 3; i++) bush(10.5 + i * 2, 2, 0.5, "#22C55E");
+        box(13, 9.5, 4, 3, 0, 2.6, "#FFFFFF", {
+          fL: both(function (cc, FW, FH) {
+            ["#F97316", "#22C55E", "#E11D48"].forEach(function (col, k) {
+              cc.fillStyle = K(col);
+              A.roundRect(cc, 0.6 + k * 1.1, 1.2, 0.6, 1, 0.2);
+              cc.fill();
+            });
+          }, signFace("SMOOTHIE", "#16A34A", "#FFFFFF", 0.45, 0.95, 0.6)),
+        });
+        roofCap(13, 9.5, 4, 3, 2.6, "#16A34A");
+        billboard(-12, 14, 0.4, 6.5, 1.1, "BESLENME MERKEZİ", "#16A34A", "#FFFFFF", { glow: true });
+      }
       return;
     }
-    if (st === 6) return oldB("kantin", 5);
-    if (st === 7) {
-      // TERAS RESTORAN: çatı terası + şemsiyeler
+    if (st <= 10) {
+      // 7: KULÜP RESTORANI; 8: + restoranlar sokağı; 9: + teras; 10: + gurme mutfak
       oldB("kantin", 5);
-      box(0, -6, 18.4, 9.4, 8.6, 0.15, "#D9925A", { noShadow: true, depth: -5.5, gloss: false });
-      box(0, -6, 18.6, 9.6, 8.75, 0.9, "#BFE6FF", { noShadow: true, alpha: 0.35, depth: -5.4, gloss: false, noLine: true });
-      [-6, 0, 6].forEach(function (x, i) {
-        umbrella(x, -6, 2.4, 1.5, i % 2 ? "#FFFFFF" : kit.primary, i % 2 ? kit.primary : "#FFFFFF", 8.6);
-      });
-      billboard(13, 10, 0.4, 5, 1.2, "TERAS", "#B45309", "#FFFFFF", { glow: true });
+      if (st >= 8) foodStreet(14);
+      if (st >= 9) roofTerrace();
+      if (st >= 10) {
+        box(8, 14, 7, 5, 0, 4, "#2A2F55", {
+          fL: both(winFace({ ww: 1.8, wh: 2, gx: 0.6, top: 1.4, rows: 1, glass: "#FFD98A", litK: 1 }), signFace("GURME MUTFAK", "#141043", "#FFD43B", 0.6, 0.8, 0.8)),
+          fR: winFace({ ww: 1.4, wh: 2, top: 1.4, rows: 1, glass: "#FFD98A", litK: 1 }),
+        });
+        roofCap(8, 14, 7, 5, 4, "#B45309");
+        // taş fırın bacası
+        cyl(10, 13, 0.6, 4.4, 2.4, "#B8A99A", { noShadow: true });
+        anchor({ t: "steam", x: 10, y: 7, z: 13 });
+        anchor({ t: "glow", x: 8, y: 2, z: 16.5, col: "#FFB347" });
+      }
       return;
     }
+    // 11: ŞEF RESTORANI; 12: + GASTRONOMİ MERKEZİ (çatıda panorama restoranı, aşçılık okulu, ödül yıldızı)
     oldB("kantin", 6);
+    foodStreet(16.4);
+    if (st >= 12) {
+      box(-3, -8, 12, 7, 7.5, 3.4, "#BFE6FF", {
+        noShadow: true,
+        depth: 10,
+        alpha: 0.95,
+        fL: both(winFace({ ww: 1.6, wh: 2.2, gx: 0.3, top: 0.6, rows: 1, glass: "#FFE3A8", litK: 1 }), signFace("PANORAMA", "#B45309", "#FFFFFF", 0.35, 0.6, 0.55)),
+        fR: winFace({ ww: 1.6, wh: 2.2, gx: 0.3, top: 0.6, rows: 1, glass: "#FFE3A8", litK: 1 }),
+      });
+      roofCap(-3, -8, 12, 7, 10.9, "#B45309");
+      extBill(6, -6, 3, 15);
+      body(30, function () {
+        var c = G.c, p = G.P(6, 13, -6), s = G.s, R = 2 * s;
+        c.beginPath();
+        for (var k = 0; k < 10; k++) {
+          var an = (k / 10) * Math.PI * 2 - Math.PI / 2, rr = k % 2 ? R * 0.45 : R;
+          c.lineTo(p[0] + Math.cos(an) * rr, p[1] + Math.sin(an) * rr);
+        }
+        c.closePath();
+        c.fillStyle = K("#FFC93C");
+        c.fill();
+        outline(c);
+      });
+      cyl(6, -6, 0.2, 7.5, 3.6, "#8A90B5", { noShadow: true, depth: 12 });
+      anchor({ t: "glow", x: 6, y: 13, z: -6, col: "#FFD98A" });
+      billboard(12, 9, 0.3, 8, 1.2, "GASTRONOMİ MERKEZİ", "#7C2D12", "#FFD43B", { glow: true });
+    }
   };
+  /** Mağaza zinciri: şube kioskları (renkli tabelalı) — sol arka sırada. */
+  function shopKiosks() {
+    [["AVM", "#E11D48", -11], ["HAVALİMANI", "#0284C7", -5.5], ["İSTASYON", "#F59E0B", 0]].forEach(function (q) {
+      box(-14, q[2], 4, 4, 0, 3, "#FFFFFF", {
+        fL: both(function (cc, FW, FH) {
+          A.roundRect(cc, 0.5, 1.2, FW - 1, FH - 1.4, 0.2);
+          cc.fillStyle = TH.night > 0.5 ? "#FFE3A8" : K("#CFEAFF");
+          cc.fill();
+          shirtAt(cc, FW / 2, 2.2, 1, kit.primary, kit.secondary);
+        }, signFace(q[0], q[1], "#FFFFFF", 0.5, 0.95, 0.7)),
+        fR: function (cc, FW, FH) {
+          cc.fillStyle = K(q[1]);
+          cc.fillRect(0, 0.2, FW, 0.6);
+        },
+      });
+      roofCap(-14, q[2], 4, 4, 3, q[1]);
+    });
+  }
+  /** Mobil mağaza tırı (deplasmanda satış). */
+  function shopTruck(x, z) {
+    box(x - 4.2, z, 2.2, 2.6, 0.5, 2.4, "#E9ECF8", { fR: function (cc, FW, FH) { win(cc, 0.3, 0.3, FW - 0.6, 0.9, true); } });
+    box(x + 0.8, z, 7.6, 2.8, 0.5, 3, kit.primary, { fL: function (cc, FW, FH) { ftext(cc, "MOBİL MAĞAZA", FW / 2, FH / 2, 0.8, K(kit.secondary), FW * 0.85); } });
+    [-4, -1, 3].forEach(function (dx) {
+      cyl(x + dx, z + 1.3, 0.5, 0, 0.5, "#2B2F5E", { noShadow: true });
+    });
+  }
   BUILD2.magaza = function (st) {
-    if (st <= 3) return oldB("magaza", st);
+    if (st <= 1) {
+      // MAĞAZA KULÜBESİ: tahta kulübe, dikiş makinesi, raf, manken
+      lawn(false);
+      pad(0, 2, 16, 13, PAVE, { th: 0.3, fn: tiles(1.5), r: 3 });
+      gable(-1, -2, 7, 4.6, 0, 2.8, 1.6, "#C98A4B", "#8A5426", {
+        fL: function (cc, FW, FH) {
+          cc.strokeStyle = rgba("#6B3A1E", 0.45);
+          cc.lineWidth = 0.08;
+          for (var u = 0.6; u < FW; u += 0.6) {
+            cc.beginPath();
+            cc.moveTo(u, 0);
+            cc.lineTo(u, FH);
+            cc.stroke();
+          }
+          // açık kepenk: içeride raf ve katlanmış formalar
+          cc.fillStyle = K("#4A2A14");
+          cc.fillRect(0.8, 0.7, FW - 1.6, FH - 0.7);
+          for (var r = 0; r < 2; r++) {
+            cc.fillStyle = K("#E0A562");
+            cc.fillRect(1, 1.2 + r * 0.8, FW - 2, 0.12);
+            for (var i = 0; i < 6; i++) {
+              cc.fillStyle = K(i % 2 ? kit.secondary : kit.primary);
+              cc.fillRect(1.2 + i * 0.75, 0.75 + r * 0.8, 0.55, 0.45);
+            }
+          }
+        },
+        fR: function (cc, FW, FH) {
+          cc.strokeStyle = rgba("#6B3A1E", 0.45);
+          cc.lineWidth = 0.08;
+          for (var v = 0.4; v < FH; v += 0.4) {
+            cc.beginPath();
+            cc.moveTo(0, v);
+            cc.lineTo(FW, v);
+            cc.stroke();
+          }
+        },
+      });
+      // tezgâh + dikiş makinesi
+      box(-1, 2.2, 4, 1.4, 0.8, 0.15, "#E0A562");
+      [[-2.8, 1.7], [0.8, 1.7], [-2.8, 2.7], [0.8, 2.7]].forEach(function (q) {
+        box(q[0], q[1], 0.15, 0.15, 0, 0.8, "#8A5426", { noShadow: true });
+      });
+      box(-1.8, 2.2, 1.4, 0.6, 0.95, 0.35, "#1B1648", { noShadow: true });
+      box(-2.3, 2.2, 0.35, 0.6, 1.3, 0.6, "#1B1648", { noShadow: true });
+      box(-1.6, 2.2, 1, 0.4, 1.75, 0.25, "#1B1648", { noShadow: true });
+      cyl(-0.6, 2.2, 0.3, 0.95, 0.1, kit.primary, { noShadow: true });
+      // manken (formalı)
+      [4.2, 6].forEach(function (x, i) {
+        cyl(x, 2, 0.08, 0, 1.2, "#5B6385", { noShadow: true });
+        box(x, 2, 1.1, 0.6, 1.2, 1.3, i ? kit.secondary : kit.primary, { noShadow: true, top: i ? kit.primary : kit.secondary });
+        dome(x, 2, 0.32, 2.55, "#E9DCC9", { hk: 1.4 });
+      });
+      billboard(4.8, 6.2, 0.4, 3, 1, "FORMA", kit.primary, kit.secondary);
+      tree(-14, -13, 1);
+      tree(14, -12, 0.9);
+      tree(14, 12, 0.8);
+      return;
+    }
+    if (st === 2) return oldB("magaza", 2);
+    if (st === 3) {
+      // CADDE DÜKKÂNI: vitrinli dükkân + kaldırım, sokak lambaları
+      oldB("magaza", 3, { sign: "CADDE DÜKKÂNI" });
+      flat(function () {
+        topDo(0.34, function (c) {
+          c.fillStyle = K("#C6CAE0");
+          c.fillRect(-13, 8, 26, 3);
+          c.strokeStyle = K("#9AA3C7");
+          c.lineWidth = 0.15;
+          c.strokeRect(-13, 8, 26, 3);
+        });
+      });
+      [-8, 2, 10].forEach(function (x) {
+        lampS(x, 10);
+      });
+      bench(-3, 10, true, 3);
+      return;
+    }
     if (st === 4) {
       // KULÜP MAĞAZASI: vitrinli tek katlı mağaza
       paved();
@@ -5060,37 +5503,89 @@
       return;
     }
     if (st === 5) return oldB("magaza", 4);
-    if (st >= 8) return oldB("magaza", 5);
-    oldB("magaza", 4);
-    // BÜYÜK MAĞAZA: yan kanat
-    box(13.5, -2, 7, 12, 0, 5.4, "#ECEAF8", {
-      fL: function (cc, FW, FH) {
-        A.roundRect(cc, 0.5, 1.4, FW - 1, FH - 1.6, 0.2);
-        cc.fillStyle = TH.night > 0.5 ? "#FFE3A8" : K("#CFEAFF");
-        cc.fill();
-        shirtAt(cc, FW / 2, 2.6, 1.5, kit.primary, kit.secondary, "9");
-      },
-      fR: winFace({ ww: 2.2, wh: 3, gx: 0.6, top: 1.4, rows: 1, glass: "#CFEAFF" }),
-    });
-    roofCap(13.5, -2, 7, 12, 5.4, kit.primary);
-    if (st >= 7) {
-      // FORMA BASKI MERKEZİ: testere çatılı atölye
-      box(-11, 9, 12, 7, 0, 4, "#E9ECF8", {
+    if (st <= 10) {
+      // 6: MAĞAZA ZİNCİRİ — taraftar mağazası + şube kioskları + mobil tır
+      oldB("magaza", 4);
+      shopKiosks();
+      if (st <= 7) shopTruck(9, 13);
+      if (st === 6) return;
+      // BÜYÜK MAĞAZA: yan kanat
+      box(13.5, -2, 7, 12, 0, 5.4, "#ECEAF8", {
         fL: function (cc, FW, FH) {
-          windowsGrid(cc, FW, FH, { ww: 1.4, wh: 1.2, gx: 0.8, top: 1.6, rows: 1 });
-          fsign(cc, FW / 2, 0.6, 9, 0.8, "FORMA BASKI", "#1B1648", "#FFD43B", true);
+          A.roundRect(cc, 0.5, 1.4, FW - 1, FH - 1.6, 0.2);
+          cc.fillStyle = TH.night > 0.5 ? "#FFE3A8" : K("#CFEAFF");
+          cc.fill();
+          shirtAt(cc, FW / 2, 2.6, 1.5, kit.primary, kit.secondary, "9");
         },
+        fR: winFace({ ww: 2.2, wh: 3, gx: 0.6, top: 1.4, rows: 1, glass: "#CFEAFF" }),
       });
-      for (var i = 0; i < 4; i++) box(-15.5 + i * 3, 9, 3, 7, 4, 1.4, i % 2 ? "#B9C2E0" : "#9FD8FF", { noShadow: true, depth: -2 + i * 0.01 });
-      cyl(-6.5, 7, 0.4, 4, 2.6, "#A9AEC6", { noShadow: true });
-      anchor({ t: "steam", x: -6.5, y: 7, z: 7 });
-      body(30, function () {
-        var p = G.P(-11, 9.5, 10);
-        shirtAt(G.c, p[0], p[1], 3.2 * G.s, kit.primary, kit.secondary, "10");
+      roofCap(13.5, -2, 7, 12, 5.4, kit.primary);
+      if (st === 8 || st === 9) {
+        // TASARIM VE LİSANS MERKEZİ: cam stüdyo, çatıda dev kalem
+        box(9.5, 12, 8, 5, 0, 4.6, "#E8F7FF", {
+          fL: both(winFace({ ww: 1.6, wh: 2.6, gx: 0.3, top: 1.4, rows: 1, glass: "#9FE0FF", litK: 0.9 }), signFace("TASARIM · LİSANS", "#141043", "#FFD43B", 0.55, 0.92, 0.75)),
+          fR: winFace({ ww: 1.4, wh: 2.6, top: 1.4, rows: 1, glass: "#9FE0FF" }),
+        });
+        roofCap(9.5, 12, 8, 5, 4.6, "#141043");
+        box(9.5, 12, 6, 0.8, 5.1, 0.8, "#FFD43B", { noShadow: true, depth: 30, fL: function (cc, FW, FH) { cc.fillStyle = K("#F59E0B"); cc.fillRect(FW - 1.2, 0, 1.2, FH); cc.fillStyle = K("#1B1648"); cc.fillRect(FW - 0.3, 0.2, 0.3, FH - 0.4); cc.fillStyle = K("#FF8FA3"); cc.fillRect(0, 0, 0.8, FH); } });
+      }
+      if (st >= 10) {
+        // ONLINE MAĞAZA VE LOJİSTİK ÜSSÜ: depo, rampa kapıları, koliler, kargo arabası
+        box(9.5, 12, 9, 5.5, 0, 5, "#DDE2F4", {
+          fL: function (cc, FW, FH) {
+            for (var i = 0; i < 3; i++) {
+              cc.fillStyle = K("#8A93B8");
+              cc.fillRect(0.6 + i * 2.8, FH - 2.6, 2.2, 2.6);
+              cc.strokeStyle = rgba(NAVY, 0.35);
+              cc.lineWidth = 0.08;
+              for (var v = FH - 2.4; v < FH; v += 0.4) {
+                cc.beginPath();
+                cc.moveTo(0.6 + i * 2.8, v);
+                cc.lineTo(2.8 + i * 2.8, v);
+                cc.stroke();
+              }
+            }
+            fsign(cc, FW / 2, 0.8, FW - 1, 0.9, "LOJİSTİK ÜSSÜ", kit.primary, kit.secondary, true);
+          },
+          fR: winFace({ ww: 1.2, wh: 0.8, top: 0.8, rows: 1 }),
+        });
+        roofCap(9.5, 12, 9, 5.5, 5, kit.primary);
+        [[4, 16.4], [5.3, 16.6], [4.6, 17.6]].forEach(function (q, i) {
+          box(q[0], q[1], 1, 1, i === 2 ? 1 : 0, 1, "#C98A4B", { noShadow: i === 2, top: "#E0A562" });
+        });
+        carS(14.5, 17, true, "#FFFFFF");
+      }
+      if (st >= 9) {
+      // FORMA BASKI MERKEZİ: testere çatılı atölye
+        box(-11, 9, 12, 7, 0, 4, "#E9ECF8", {
+          fL: function (cc, FW, FH) {
+            windowsGrid(cc, FW, FH, { ww: 1.4, wh: 1.2, gx: 0.8, top: 1.6, rows: 1 });
+            fsign(cc, FW / 2, 0.6, 9, 0.8, "FORMA BASKI", "#1B1648", "#FFD43B", true);
+          },
+        });
+        for (var i = 0; i < 4; i++) box(-15.5 + i * 3, 9, 3, 7, 4, 1.4, i % 2 ? "#B9C2E0" : "#9FD8FF", { noShadow: true, depth: -2 + i * 0.01 });
+        cyl(-6.5, 7, 0.4, 4, 2.6, "#A9AEC6", { noShadow: true });
+        anchor({ t: "steam", x: -6.5, y: 7, z: 7 });
+        body(30, function () {
+          var p = G.P(-11, 9.5, 10);
+          shirtAt(G.c, p[0], p[1], 3.2 * G.s, kit.primary, kit.secondary, "10");
+        });
+        extBill(-11, 10, 4, 12);
+      } else tree(-16, 12, 0.9);
+      return;
+    }
+    // 11: MEGASTORE; 12: DÜNYA MAĞAZASI — çatı kafe, deneyim alanı (sanal penaltı), dünya tabelası
+    oldB("magaza", 5);
+    if (st >= 12) {
+      [[3, -9], [6.5, -9], [3, -3.5], [6.5, -3.5]].forEach(function (q, i) {
+        umbrella(q[0], q[1], 2.2, 1.3, i % 2 ? "#FFFFFF" : kit.primary, i % 2 ? kit.primary : "#FFFFFF", 10);
       });
-      extBill(-11, 10, 4, 12);
-    } else {
-      tree(-16, 12, 0.9);
+      // deneyim alanı: çim + kale + penaltı noktası
+      pad(10.5, 11.5, 8, 6, "#4CC86A", { th: 0.3, r: 1 });
+      goalS(13.8, 11.5, -1, 3, 1.6, true, true);
+      billboard(10.5, 14.8, 0.2, 6, 0.9, "SANAL PENALTI", "#141043", "#22D3EE", { glow: true, posts: false });
+      globeS(-13, 10, 1.2, 2.6);
+      billboard(-13, 14.2, 0.2, 8, 1.1, "DÜNYA MAĞAZASI", kit.primary, kit.secondary, { glow: true, posts: false });
     }
   };
   BUILD2.akademi = function (st) {
@@ -5106,8 +5601,19 @@
       return;
     }
     if (st === 4) return oldB("akademi", 3);
-    if (st <= 6) {
+    if (st <= 8) {
       oldB("akademi", 3);
+      // 5: YETENEK MERKEZİ — seçme çadırı, numaralı koniler, tabela
+      pyramid(-14, -7, 4.6, 4.6, 0, 3.4, "#FFFFFF", { stripe: "#2FAE4E" });
+      box(-14, -4.9, 1.6, 0.3, 0, 1.6, "#2FAE4E", { noShadow: true });
+      box(-11.2, -7, 0.3, 3.6, 0.6, 1, "#2FAE4E", { noShadow: true, fR: signFace("SEÇME", "#2FAE4E", "#FFFFFF", 0.5, 0.9, 0.8) });
+      if (st === 5) {
+        [-6, -3, 0, 3, 6].forEach(function (x) {
+          cone(x, 15.5);
+        });
+        billboard(12, -6, 1.2, 5, 1.4, "YETENEK MERKEZİ", "#1D4ED8", "#FFFFFF", { glow: true });
+        return;
+      }
       // ANTRENÖR OFİSİ (konteyner)
       box(15, -5, 5, 8, 0, 3, "#FFFFFF", {
         fR: function (cc, FW, FH) {
@@ -5121,7 +5627,7 @@
         },
       });
       roofCap(15, -5, 5, 8, 3, "#2FAE4E");
-      if (st === 6) {
+      if (st >= 7) {
         // U-17 / U-19: iki sıra tribün + ışıklar
         for (var r = 0; r < 2; r++)
           (function (r) {
@@ -5135,10 +5641,34 @@
         });
         billboard(-16, 14, 1.2, 4.4, 1.6, "U-19", "#2FAE4E", "#FFFFFF", { glow: true });
       }
+      if (st >= 8) {
+        // BÖLGE AKADEMİLERİ: ilçe haritası panosu + servis minibüsleri
+        busS(-7, 17.5, true, true);
+        busS(1, 17.5, true, true);
+        box(16.5, 5, 0.4, 6.5, 1.2, 4, "#FFFFFF", {
+          fR: function (cc, FW, FH) {
+            cc.fillStyle = K("#D9F99D");
+            cc.fillRect(0.2, 0.2, FW - 0.4, FH - 0.4);
+            cc.strokeStyle = K("#65A30D");
+            cc.lineWidth = 0.1;
+            cc.strokeRect(1, 0.8, FW - 2, FH - 1.6);
+            cc.fillStyle = "#E11D48";
+            [[1.6, 1.2], [3.4, 2.6], [5, 1.4], [2.4, 3.2], [4.6, 3.3]].forEach(function (q) {
+              cc.beginPath();
+              cc.arc(q[0], q[1], 0.25, 0, Math.PI * 2);
+              cc.fill();
+            });
+            ftext(cc, "BÖLGE OKULLARI", FW / 2, 0.45, 0.45, "#1B1648", FW * 0.9);
+          },
+        });
+        [-2.6, 2.6].forEach(function (dz) {
+          box(16.5, 5 + dz, 0.25, 0.25, 0, 1.2, "#8A90B5", { noShadow: true });
+        });
+      }
       return;
     }
-    oldB("akademi", 4, st === 7 ? { noDorm: true } : null);
-    if (st === 7) {
+    oldB("akademi", 4, st === 9 ? { noDorm: true } : null);
+    if (st === 9) {
       // AKADEMİ OKULU: yurt yerine sınıf bloğu
       box(14, -12, 8, 8, 0, 7, "#FFF6D8", {
         fL: winFace({ ww: 1.2, wh: 1.4, gx: 0.8, gy: 1, top: 0.8, bot: 0.8 }),
@@ -5146,66 +5676,386 @@
       });
       roofCap(14, -12, 8, 8, 7, "#2FAE4E");
       billboard(14, -7.8, 7.2, 4, 0.9, "OKUL", "#1D4ED8", "#FFFFFF", { posts: false, glow: true });
-    }
-  };
-  BUILD2.ulasim = function (st) {
-    oldB("ulasim", st);
-  };
-  BUILD2.saglik = function (st) {
-    if (st <= 3) return oldB("saglik", st);
-    if (st === 4) {
-      // MASAJ + BUZ HAVUZU + sauna
-      oldB("saglik", 3);
-      pool(11, 4, 4, 3, "#BDEBFF");
-      pool(11, 9, 4, 3, "#BDEBFF");
-      box(11, 6.5, 0.4, 0.4, 0, 0.1, "#FFFFFF", { noShadow: true });
-      box(-11, 8, 5, 4, 0, 2.6, "#C98A4B", {
-        fL: function (cc, FW, FH) {
-          cc.strokeStyle = rgba("#6B3A1E", 0.4);
-          cc.lineWidth = 0.08;
-          for (var y = 0.3; y < FH; y += 0.35) {
-            cc.beginPath();
-            cc.moveTo(0, y);
-            cc.lineTo(FW, y);
-            cc.stroke();
-          }
-          fsign(cc, FW / 2, 0.55, 3.6, 0.6, "SAUNA", "#7A3E10", "#FFFFFF", true);
-        },
-      });
-      roofCap(-11, 8, 5, 4, 2.6, "#7A3E10");
-      anchor({ t: "steam", x: -10, y: 3.5, z: 7 });
       return;
     }
-    if (st === 5) return oldB("saglik", 4);
-    if (st <= 7) {
-      oldB("saglik", 4);
-      // SPOR TIP: laboratuvar kanadı
-      box(10, -12, 9, 7, 0, 9, "#FFFFFF", {
-        fL: both(winFace({ ww: 1.2, wh: 1.3, gx: 0.6, gy: 1, top: 1.6, bot: 0.8, glass: "#9FE0FF" }), signFace("LAB", "#0EA5E9", "#FFFFFF", 0.7, 0.45, 0.8)),
-        fR: winFace({ ww: 1.2, wh: 1.3, gx: 0.6, gy: 1, top: 1.6, bot: 0.8, glass: "#9FE0FF" }),
+    if (st >= 11) {
+      // ULUSLARARASI AKADEMİ: bayrak sırası, dünya küresi, dil okulu tabelası
+      ["#1D4ED8", "#E11D48", "#FACC15", "#16A34A", "#F97316", "#7C3AED", "#0EA5E9"].forEach(function (col, i) {
+        flagpole(-16 + i * 3.4, 18.5, 6, col, i % 2 ? "#FFFFFF" : null);
       });
-      roofCap(10, -12, 9, 7, 9, "#0EA5E9");
-      if (st === 7) {
+      globeS(15.5, 6.5, 1.2, 2);
+      billboard(14, -7.6, 18.6, 6, 1, "INTERNATIONAL", "#141043", "#FFD43B", { posts: false, glow: true });
+    }
+    if (st >= 12) {
+      // ELİT AKADEMİ KAMPÜSÜ: altyapı stadyumu (karşı tribün), lise tabelası, mezunlar duvarı
+      for (var r = 0; r < 3; r++)
+        (function (r) {
+          box(-4, 15.2 + r * 0.9, 22, 0.9, 0, (r + 1) * 0.5, "#D5D8EA", { top: dk("#2FAE4E", 0.25), noShadow: true, gloss: false, depth: 11 + r * 0.01 });
+          body(11 + r * 0.01 + 0.001, function () {
+            crowdRow(G.c, true, -14.5, 6.5, 15.2 + r * 0.9, (r + 1) * 0.5, 120 + r, 0.5);
+          });
+        })(r);
+      billboard(-6, -12.2, 6.4, 13, 1.3, "ELİT AKADEMİ KAMPÜSÜ", "#2FAE4E", "#FFFFFF", { posts: false, glow: true });
+      box(13, 11.5, 0.5, 5, 0, 2.6, "#FFF7E0", {
+        fR: function (cc, FW, FH) {
+          for (var i = 0; i < 3; i++) shirtAt(cc, 0.9 + i * 1.6, 1.5, 1, i % 2 ? kit.secondary : kit.primary, i % 2 ? kit.primary : kit.secondary);
+          fsign(cc, FW / 2, 0.35, FW - 0.4, 0.5, "MEZUNLAR", "#2FAE4E", "#FFFFFF", true);
+        },
+      });
+    }
+  };
+  /** Katlı otopark: n kat, araçlar, çatı tabelası, köşe kolonları. */
+  function parkGarage(x, z, w, d, n) {
+    for (var f = 0; f < n; f++) {
+      box(x, z, w, d, f * 3, 0.4, "#C6CAE0", { depth: x + z + f * 0.1 });
+      if (f < n - 1)
+        for (var i = 0; i < Math.floor(w / 2.6); i++) {
+          if ((f + i) % 3 === 2) continue;
+          box(x - w / 2 + 1.6 + i * 2.6, z, 1.8, 3.6, f * 3 + 0.4, 1.2, CAR_COLS[(f * 3 + i) % CAR_COLS.length], { noShadow: true, depth: x + z + f * 0.1 + 0.01 });
+        }
+    }
+    box(x, z, w + 0.4, d + 0.4, (n - 1) * 3, 0.7, kit.primary, { depth: x + z + 1, fL: function (cc, FW, FH) { ftext(cc, "P", FW / 2, FH / 2, 0.7, "#FFFFFF"); } });
+    [[-1, -1], [1, 1], [-1, 1], [1, -1]].forEach(function (q) {
+      box(x + q[0] * (w / 2 - 0.3), z + q[1] * (d / 2 - 0.3), 0.5, 0.5, 0, (n - 1) * 3, "#9AA3C7", { noShadow: true, depth: x + z + (q[0] + q[1]) * (w / 2) });
+    });
+    // tabela kulesi
+    box(x + w / 2 - 1, z + d / 2 + 0.6, 1.4, 0.4, 0, (n - 1) * 3 + 3, "#2563EB", { noShadow: true, fL: function (cc, FW, FH) { ftext(cc, "P", FW / 2, 1, 1, "#FFFFFF"); } });
+  }
+  /** Tramvay rayları (z boyunca sabit, x ekseninde) + isteğe bağlı vagon. */
+  function tramLine(z, x0, x1, car) {
+    flat(function () {
+      topDo(0.36, function (c) {
+        c.fillStyle = K("#9AA3C7");
+        c.fillRect(x0, z - 1.6, x1 - x0, 3.2);
+        c.strokeStyle = K("#5B6385");
+        c.lineWidth = 0.25;
+        [-0.8, 0.8].forEach(function (dz) {
+          c.beginPath();
+          c.moveTo(x0, z + dz);
+          c.lineTo(x1, z + dz);
+          c.stroke();
+        });
+        c.strokeStyle = rgba("#5B6385", 0.5);
+        c.lineWidth = 0.18;
+        for (var x = x0 + 0.5; x < x1; x += 1.2) {
+          c.beginPath();
+          c.moveTo(x, z - 1.2);
+          c.lineTo(x, z + 1.2);
+          c.stroke();
+        }
+      });
+    });
+    if (car != null) {
+      [car - 4.4, car + 4.4].forEach(function (cx, i) {
+        box(cx, z, 8.4, 2.4, 0.5, 2.8, i ? "#F7F5FF" : kit.primary, {
+          fL: function (cc, FW, FH) {
+            cc.fillStyle = K(i ? kit.primary : "#FFFFFF");
+            cc.fillRect(0, FH - 0.8, FW, 0.35);
+            for (var u = 0.6; u < FW - 1; u += 1.6) {
+              cc.fillStyle = TH.night > 0.5 ? "#FFE3A8" : K("#9FD8FF");
+              cc.fillRect(u, 0.5, 1.1, 1);
+            }
+          },
+          fR: function (cc, FW, FH) {
+            cc.fillStyle = TH.night > 0.5 ? "#FFE3A8" : K("#9FD8FF");
+            cc.fillRect(0.3, 0.4, FW - 0.6, 1.1);
+          },
+        });
+      });
+      cyl(car, z, 0.08, 3.3, 1.4, "#3A3F72", { noShadow: true });
+    }
+  }
+  /** Takım uçağı (kulüp renklerinde), x ekseni boyunca. */
+  function teamPlane(x, z) {
+    box(x - 0.5, z, 2.4, 12, 1.9, 0.2, "#DDE2F4", { depth: x + z + 0.5 });
+    box(x + 5, z, 1.2, 5, 2.3, 0.2, "#E9ECF8", { noShadow: true, depth: x + z + 0.6 });
+    box(x, z, 13, 2, 1, 2, "#FFFFFF", {
+      depth: x + z + 0.4,
+      fL: function (cc, FW, FH) {
+        cc.fillStyle = K(kit.primary);
+        cc.fillRect(0, FH * 0.6, FW, FH * 0.25);
+        for (var u = 1.2; u < FW - 2; u += 0.9) {
+          cc.fillStyle = K("#4A4F86");
+          cc.fillRect(u, FH * 0.25, 0.4, 0.35);
+        }
+        cc.fillStyle = K("#1B1648");
+        cc.fillRect(0.2, FH * 0.2, 0.9, 0.5);
+      },
+    });
+    box(x + 5.6, z, 1.8, 0.3, 3, 2.6, kit.primary, { noShadow: true, depth: x + z + 0.7 });
+    [x - 4.5, x].forEach(function (wx, i) {
+      cyl(wx, z + (i ? 0 : 0), 0.25, 0, 1, "#3A3F72", { noShadow: true });
+    });
+  }
+  function metroTotem(x, z) {
+    box(x, z, 0.5, 0.5, 0, 6, "#9AA3C7", { noShadow: true });
+    extBill(x, z, 2, 9);
+    body(x + 0.5, function () {
+      var c = G.c, p = G.P(x, 7.4, z), s = G.s;
+      c.beginPath();
+      c.arc(p[0], p[1], 1.4 * s, 0, Math.PI * 2);
+      c.fillStyle = TH.night > 0.3 ? "#FF3B4E" : K("#DC2626");
+      c.fill();
+      outline(c);
+      c.fillStyle = "#FFFFFF";
+      c.font = A.font(1.9 * s, 900);
+      c.textAlign = "center";
+      c.textBaseline = "middle";
+      c.fillText("M", p[0], p[1] + 0.1 * s);
+    });
+    anchor({ t: "glow", x: x, y: 7.4, z: z, col: "#FF3B4E" });
+  }
+  BUILD2.ulasim = function (st) {
+    if (st <= 3) return oldB("ulasim", st);
+    if (st === 4) {
+      // TARAFTAR OTOBÜS HATTI: kulüp renkli şerit, otobüs, durak tabelaları
+      oldB("ulasim", 3);
+      flat(function () {
+        topDo(0.37, function (c) {
+          c.fillStyle = K(lit(kit.primary, 0.35));
+          c.fillRect(-18, 13.2, 36, 3.6);
+          c.fillStyle = "#FFFFFF";
+          c.font = A.font(1.4, 900);
+          c.textAlign = "center";
+          c.textBaseline = "middle";
+          c.fillText("OTOBÜS", 10, 15);
+        });
+      });
+      busS(-7, 15, true);
+      billboard(-14, 12, 2, 3.6, 1, "RİNG", kit.primary, kit.secondary, { glow: true });
+      return;
+    }
+    if (st <= 6) return oldB("ulasim", st - 1);
+    if (st <= 8) {
+      // 7: KATLI OTOPARK (şarj istasyonları, bisiklet katı); 8: + TRAMVAY HATTI
+      paved("#4E5679");
+      parkGarage(8, -8, 16, 12, 5);
+      [-15, -12, -9].forEach(function (x) {
+        box(x, -11, 1, 0.8, 0, 1.8, "#22C55E", { fL: function (cc, FW, FH) { cc.fillStyle = "#DCFCE7"; cc.fillRect(0.15, 0.3, FW - 0.3, 0.6); } });
+        carS(x, -8, false, CAR_COLS[(x + 30) % CAR_COLS.length]);
+      });
+      billboard(-12, -4.4, 0.4, 5.5, 0.9, "ŞARJ ⚡", "#16A34A", "#FFFFFF", { posts: false });
+      busS(-6, 4, true);
+      for (var i = 0; i < 4; i++) bikeS(4 + i * 1.5, 4, ["#FF4D5E", "#3B82F6", "#22C55E", "#FFD43B"][i]);
+      if (st === 8) {
+        tramLine(14.5, -19, 19, -3);
+        box(10, 11.6, 6, 1.6, 0, 0.3, "#C6CAE0", { noShadow: true });
+        box(10, 11.6, 6.4, 2, 3, 0.3, kit.primary, { noShadow: true });
+        [7.4, 12.6].forEach(function (x) {
+          box(x, 11.2, 0.25, 0.25, 0, 3, "#9AA3C7", { noShadow: true });
+        });
+        billboard(15, 11.6, 0.5, 3.8, 1, "TRAMVAY", "#DC2626", "#FFFFFF", { posts: true });
+      } else {
+        busShelter(8, 12);
+        tree(-17, 16, 0.9);
+      }
+      return;
+    }
+    if (st === 9) {
+      // METRO İSTASYONU (eski çizim) + tramvay hattı
+      oldB("ulasim", 6);
+      tramLine(17, -13, 19, 12);
+      return;
+    }
+    // 10: KULÜP HAVA TERMİNALİ — hangar, takım uçağı, özel terminal, metro bağlantısı
+    paved("#DADFEA");
+    flat(function () {
+      topDo(0.36, function (c) {
+        c.fillStyle = K("#5A6285");
+        c.fillRect(-19, -3, 26, 13);
+        c.strokeStyle = "#FFD43B";
+        c.lineWidth = 0.3;
+        c.setLineDash([1.2, 0.9]);
+        c.beginPath();
+        c.moveTo(-19, 4);
+        c.lineTo(7, 4);
+        c.stroke();
+        c.setLineDash([]);
+      });
+    });
+    vaultX(-7, -10, 20, 6, 0, "#C6CAE0", { rib: 2.4, ribCol: "#9AA3C7", cap: "#AEB4C8" });
+    billboard(-7, -3.6, 5.6, 7, 1.1, "HANGAR", kit.primary, kit.secondary, { posts: false });
+    teamPlane(-7, 4);
+    parkGarage(11, -9, 12, 11, 4);
+    box(12, 6, 9, 6, 0, 5, "#E8F7FF", {
+      fL: both(winFace({ ww: 1.6, wh: 2.6, gx: 0.3, top: 1.4, rows: 1, glass: "#9FE0FF", litK: 0.9 }), signFace("ÖZEL TERMİNAL", "#141043", "#FFD43B", 0.6, 0.92, 0.8)),
+      fR: winFace({ ww: 1.4, wh: 2.6, top: 1.4, rows: 1, glass: "#9FE0FF" }),
+    });
+    roofCap(12, 6, 9, 6, 5, "#E3E6F4");
+    cyl(15, 4.5, 0.9, 5.4, 4, "#F2F4FF", { noShadow: true, top: "#9FE0FF" });
+    anchor({ t: "beacon", x: 15, y: 9.6, z: 4.5 });
+    metroTotem(4, 13);
+    tramLine(17, -19, 19, -8);
+  };
+  /** Masaj odası önü: buz (5'te sıcak-soğuk) havuzları + sauna. */
+  function saunaPools(hot) {
+      // MASAJ + BUZ HAVUZU + sauna
+    pool(11, 4, 4, 3, hot ? "#FFB08A" : "#BDEBFF");
+    pool(11, 9, 4, 3, "#BDEBFF");
+    box(11, 6.5, 0.4, 0.4, 0, 0.1, "#FFFFFF", { noShadow: true });
+    box(-11, 8, 5, 4, 0, 2.6, "#C98A4B", {
+      fL: function (cc, FW, FH) {
+        cc.strokeStyle = rgba("#6B3A1E", 0.4);
+        cc.lineWidth = 0.08;
+        for (var y = 0.3; y < FH; y += 0.35) {
+          cc.beginPath();
+          cc.moveTo(0, y);
+          cc.lineTo(FW, y);
+          cc.stroke();
+        }
+        fsign(cc, FW / 2, 0.55, 3.6, 0.6, "SAUNA", "#7A3E10", "#FFFFFF", true);
+      },
+    });
+    roofCap(-11, 8, 5, 4, 2.6, "#7A3E10");
+    anchor({ t: "steam", x: -10, y: 3.5, z: 7 });
+  }
+  /** Biyomekanik laboratuvarı: hareket kameralı cam salon + ölçüm koşu şeridi. */
+  function bioLab() {
+    box(3, 12, 9, 5, 0, 4.2, "#E8F7FF", {
+      fL: both(winFace({ ww: 1.6, wh: 2.4, gx: 0.3, top: 1.4, rows: 1, glass: "#9FE0FF", litK: 0.9 }), signFace("BİYOMEKANİK", "#0EA5E9", "#FFFFFF", 0.6, 0.9, 0.8)),
+      fR: winFace({ ww: 1.4, wh: 2.4, top: 1.4, rows: 1, glass: "#9FE0FF" }),
+    });
+    roofCap(3, 12, 9, 5, 4.2, "#0EA5E9");
+    [[-0.8, 10], [6.8, 10], [-0.8, 14], [6.8, 14]].forEach(function (q) {
+      box(q[0], q[1], 0.5, 0.5, 4.6, 0.5, "#1B1648", { noShadow: true, depth: 20, top: "#22D3EE" });
+    });
+    flat(function () {
+      topDo(0.34, function (c) {
+        c.fillStyle = K("#E2574C");
+        c.fillRect(-14, 16, 20, 2);
+        c.strokeStyle = "#FFFFFF";
+        c.lineWidth = 0.15;
+        for (var x = -12; x < 6; x += 4) {
+          c.beginPath();
+          c.moveTo(x, 16);
+          c.lineTo(x, 18);
+          c.stroke();
+        }
+      });
+    });
+  }
+  BUILD2.saglik = function (st) {
+    if (st <= 3) return oldB("saglik", st);
+    if (st <= 5) {
+      // 4: MASAJ VE BUZ HAVUZU; 5: + REJENERASYON MERKEZİ (sıcak-soğuk havuz, uyku odaları)
+      oldB("saglik", 3);
+      saunaPools(st === 5);
+      if (st === 5) {
+        box(11, -10, 10, 6, 0, 3.6, "#F0FDF4", {
+          fL: both(winFace({ ww: 1.4, wh: 1.2, gx: 0.9, top: 1.6, rows: 1, glass: "#C4B5FD" }), signFace("REJENERASYON", "#16A34A", "#FFFFFF", 0.6, 0.92, 0.75)),
+          fR: winFace({ ww: 1.2, wh: 1.2, top: 1.6, rows: 1, glass: "#C4B5FD" }),
+        });
+        box(11, -10, 10.4, 6.4, 3.6, 0.4, "#4CC86A", { noShadow: true, top: "#5FD47A" });
+        anchor({ t: "steam", x: 11, y: 1, z: 4 });
+      }
+      return;
+    }
+    if (st === 6) return oldB("saglik", 4);
+    if (st <= 10) {
+      oldB("saglik", 4);
+      // 7: BİYOMEKANİK; 8: + SPOR TIP (lab kanadı); 9: + GÖRÜNTÜLEME (MR); 10: + KRİYO VE OKSİJEN
+      bioLab();
+      if (st >= 8) {
+      // SPOR TIP: laboratuvar kanadı
+        box(10, -12, 9, 7, 0, 9, "#FFFFFF", {
+          fL: both(winFace({ ww: 1.2, wh: 1.3, gx: 0.6, gy: 1, top: 1.6, bot: 0.8, glass: "#9FE0FF" }), signFace("LAB", "#0EA5E9", "#FFFFFF", 0.7, 0.45, 0.8)),
+          fR: winFace({ ww: 1.2, wh: 1.3, gx: 0.6, gy: 1, top: 1.6, bot: 0.8, glass: "#9FE0FF" }),
+        });
+        roofCap(10, -12, 9, 7, 9, "#0EA5E9");
+      }
+      if (st >= 9) {
         // GÖRÜNTÜLEME: MR pavyonu (yuvarlak)
-        cyl(-11, 10, 4, 0, 5, "#EAF3FF", {
+        cyl(12.5, 11.5, 3.2, 0, 5, "#EAF3FF", {
           fS: function (c, b, t, rx, ry) {
             c.fillStyle = TH.night > 0.5 ? "rgba(255,217,138,0.8)" : "rgba(143,211,255,0.85)";
             c.fillRect(b[0] - rx, t[1] + (b[1] - t[1]) * 0.35, rx * 2, (b[1] - t[1]) * 0.25);
           },
           top: "#0EA5E9",
         });
-        billboard(-11, 14.6, 0.2, 5, 1, "MR · ULTRASON", "#0EA5E9", "#FFFFFF", { posts: false, glow: true });
+        billboard(12.5, 15, 0.2, 5, 1, "MR · ULTRASON", "#0EA5E9", "#FFFFFF", { posts: false, glow: true });
         anchor({ t: "beacon", x: 10, y: 9.6, z: -12 });
+      }
+      if (st >= 10) {
+        cyl(8.6, 17, 1.3, 0, 3.6, "#E0F2FE", {
+          top: "#BAE6FD",
+          fS: function (c, b2, t, rx) {
+            c.fillStyle = "rgba(125,211,252,0.6)";
+            c.fillRect(b2[0] - rx, t[1] + (b2[1] - t[1]) * 0.3, rx * 2, (b2[1] - t[1]) * 0.15);
+          },
+        });
+        anchor({ t: "steam", x: 8.6, y: 4, z: 17 });
+        vaultX(15.5, 17.5, 4, 1.3, 0.3, "#FFFFFF", { rib: 1.1, ribCol: "#7DD3FC", cap: "#E0F2FE" });
+        billboard(16.5, 8.2, 0.3, 4, 1, "KRİYO · O₂", "#0284C7", "#FFFFFF", { posts: true, glow: true });
       }
       return;
     }
     oldB("saglik", 5);
+    if (st >= 12) {
+      // ELİT SAĞLIK KAMPÜSÜ: araştırma birimi, olimpik rehab havuzu, poliklinik
+      box(11.5, 12, 6, 6, 0, 8, "#FFFFFF", {
+        fL: both(winFace({ ww: 1.1, wh: 1.2, gx: 0.6, gy: 1, top: 1.8, bot: 0.6, glass: "#9FE0FF" }), signFace("ARAŞTIRMA", "#0EA5E9", "#FFFFFF", 0.7, 0.9, 0.8)),
+        fR: winFace({ ww: 1.1, wh: 1.2, gx: 0.6, gy: 1, top: 1.8, bot: 0.6, glass: "#9FE0FF" }),
+      });
+      roofCap(11.5, 12, 6, 6, 8, "#0EA5E9");
+      pool(-2, 15.5, 14, 3.4, "#38BDF8");
+      flat(function () {
+        topDo(0.45, function (c) {
+          c.strokeStyle = "rgba(255,255,255,0.8)";
+          c.lineWidth = 0.12;
+          for (var z = 14.6; z < 17; z += 0.85) {
+            c.beginPath();
+            c.moveTo(-8.6, z);
+            c.lineTo(4.6, z);
+            c.stroke();
+          }
+        });
+      });
+      [-15, 15].forEach(function (x) {
+        flagpole(x, -15, 9, "#0EA5E9", "#FFFFFF");
+      });
+      billboard(-12, 4.5, 6, 6, 1.1, "SAĞLIK KAMPÜSÜ", "#0EA5E9", "#FFFFFF", { posts: false, glow: true });
+    }
   };
   BUILD2.tv = function (st) {
-    if (st <= 4) return oldB("medya", st);
-    if (st === 5) {
-      // STÜDYO
+    if (st <= 2) return oldB("medya", st);
+    if (st === 3) {
+      // RADYO VE PODCAST STÜDYOSU: küçük kabin, YAYINDA ışığı, anten direği
+      lawn();
+      pad(0, 0, 18, 15, PAVE, { th: 0.3, fn: tiles(1.5), r: 3 });
+      box(-1, -3, 9, 6, 0, 3.6, "#2A2F55", {
+        fL: function (cc, FW, FH) {
+          win(cc, 0.8, 1.2, 3.2, 1.5, true, "#FFD98A");
+          A.roundRect(cc, FW - 2.4, FH - 2.5, 1.5, 2.5, 0.2);
+          cc.fillStyle = K("#4A4F86");
+          cc.fill();
+          fsign(cc, FW / 2, 0.5, FW - 1, 0.7, "RADYO · PODCAST", "#E11D48", "#FFFFFF", true);
+        },
+        fR: function (cc, FW, FH) {
+          win(cc, FW / 2 - 1, 1.2, 2, 1.3, true, "#FFD98A");
+        },
+      });
+      roofCap(-1, -3, 9, 6, 3.6, "#E11D48");
+      // YAYINDA ışığı
+      box(-3, 0.1, 2.6, 0.3, 3.9, 0.9, "#E11D48", { noShadow: true, fL: signFace("YAYINDA", "#E11D48", "#FFFFFF", 0.45, 0.95, 0.8) });
+      anchor({ t: "glow", x: -3, y: 4.3, z: 0.3, col: "#FF4D5E" });
+      latticeS(6, -6, 9, 0.9);
+      anchor({ t: "beacon", x: 6, y: 9, z: -6 });
+      // dış masa: iki mikrofon
+      box(1, 4, 3, 1.4, 0.8, 0.15, "#E0A562");
+      [0.2, 1.8].forEach(function (x) {
+        cyl(x, 4, 0.08, 0.95, 0.6, "#1B1648", { noShadow: true });
+        dome(x, 4, 0.22, 1.5, "#3A3F72", { hk: 1.2 });
+      });
+      box(1, 4, 0.2, 0.2, 0, 0.8, "#8A5426", { noShadow: true });
+      tree(-15, -13, 1);
+      tree(14, 12, 0.9);
+      return;
+    }
+    if (st <= 5) return oldB("medya", st - 1);
+    if (st <= 7) {
+      // 6: STÜDYO; 7: + DİJİTAL YAYIN PLATFORMU (dev telefon ekranı, sunucu dolapları)
       paved();
+        // STÜDYO
       box(-3, -5, 15, 10, 0, 7, "#2A2F55", {
         fL: function (cc, FW, FH) {
           windowsGrid(cc, FW, FH, { ww: 2.4, wh: 1.6, gx: 0.8, top: 4, rows: 1, glass: "#9FD8FF" });
@@ -5227,28 +6077,144 @@
       busS(7, 8, true, true);
       tree(-16, 12, 1);
       tree(-16, -15, 1);
+      if (st === 7) {
+        box(-3, 4.5, 4.4, 0.6, 0.4, 7.6, "#141043", {
+          fL: function (cc, FW, FH) {
+            A.roundRect(cc, 0.25, 0.3, FW - 0.5, FH - 0.6, 0.5);
+            var g = cc.createLinearGradient(0, 0, 0, FH);
+            g.addColorStop(0, K(kit.primary));
+            g.addColorStop(1, "#22D3EE");
+            cc.fillStyle = g;
+            cc.fill();
+            ftext(cc, "ELİTLİG+", FW / 2, 1.3, 0.75, "#FFFFFF", FW * 0.85);
+            cc.beginPath();
+            cc.moveTo(FW / 2 - 0.6, FH / 2 - 0.8);
+            cc.lineTo(FW / 2 + 0.8, FH / 2);
+            cc.lineTo(FW / 2 - 0.6, FH / 2 + 0.8);
+            cc.closePath();
+            cc.fillStyle = "#FFFFFF";
+            cc.fill();
+            ftext(cc, "CANLI", FW / 2, FH - 1.2, 0.6, "#FFFFFF", FW * 0.8);
+          },
+        });
+        [0, 1.6, 3.2].forEach(function (dx) {
+          box(1.5 + dx, 3, 1.2, 1.2, 0, 2.6, "#1B1648", { fL: function (cc, FW, FH) { for (var y = 0.3; y < FH - 0.2; y += 0.45) { cc.fillStyle = SP.rnd() < 0.5 ? "#22D3EE" : "#4ADE80"; cc.fillRect(0.2, y, 0.25, 0.15); } } });
+        });
+      }
       return;
     }
     oldB("medya", 5);
-    if (st >= 7) {
+    if (st >= 9) {
+      // MEDYA MERKEZİ: cam kanat
+      box(10.5, 10.5, 7, 6, 0, 9, "#BFE6FF", {
+        fL: both(winFace({ ww: 1.6, wh: 1.8, gx: 0.3, gy: 0.6, top: 2, bot: 0.4, glass: "#7CC7FF", litK: 0.8 }), signFace("MEDYA MERKEZİ", "#141043", "#FFD43B", 0.8, 0.95, 0.9)),
+        fR: winFace({ ww: 1.6, wh: 1.8, gx: 0.3, gy: 0.6, top: 2, bot: 0.4, glass: "#7CC7FF", litK: 0.8 }),
+      });
+      roofCap(10.5, 10.5, 7, 6, 9, kit.primary);
+    }
+    if (st >= 10) {
       // UYDU YAYIN MERKEZİ: büyük çanak çiftliği
       [[-15.5, -9], [-15.5, -2], [-15.5, 5]].forEach(function (q, i) {
         box(q[0], q[1], 2.4, 2.4, 0, 1.2, "#C6CAE0", { noShadow: true });
         dishS(q[0], q[1], 1.6, 3, -0.9 + i * 0.3);
       });
       anchor({ t: "beacon", x: -15.5, y: 5.5, z: -2 });
+      dishS(10.5, 10.5, 9.8, 2, -0.6);
+    }
+    if (st >= 11) {
+      // ULUSLARARASI MEDYA KAMPÜSÜ: küre, ülke bayrakları
+      globeS(3, 15, 1, 1.9);
+      ["#1D4ED8", "#E11D48", "#FACC15", "#16A34A", "#F97316"].forEach(function (col, i) {
+        flagpole(-15 + i * 3, 17, 6, col, i % 2 ? "#FFFFFF" : null);
+      });
+      billboard(-4, 0.6, 10.7, 10, 1.2, "INTERNATIONAL MEDIA", "#141043", "#22D3EE", { posts: false, glow: true });
     }
   };
+  /** Ahşap bungalov (kamp köyü / tatil köyü villası). */
+  function bungalow(x, z, roof, w) {
+    w = w || 4.4;
+    gable(x, z, w, 3.6, 0, 2.4, 1.5, "#E9C89B", roof, {
+      fL: function (cc, FW, FH) {
+        cc.strokeStyle = rgba("#8A5426", 0.35);
+        cc.lineWidth = 0.07;
+        for (var y = 0.35; y < FH; y += 0.35) {
+          cc.beginPath();
+          cc.moveTo(0, y);
+          cc.lineTo(FW, y);
+          cc.stroke();
+        }
+        win(cc, 0.5, 0.7, 1.1, 0.9, true);
+        A.roundRect(cc, FW - 1.6, FH - 1.9, 1, 1.9, 0.15);
+        cc.fillStyle = K("#6B3A1E");
+        cc.fill();
+      },
+    });
+  }
+  /** Yüksek irtifa kampı: karlı dağ, çam ağaçları, hipoksi odası. */
+  function altitudeCamp() {
+    pyramid(14.5, -14, 6, 6, 0, 9, "#8C9A82");
+    pyramid(14.5, -14, 2.4, 2.4, 5.4, 3.6, "#FFFFFF", { noShadow: true, depth: 2 });
+    [[11.5, -17], [17, -10], [11.5, -11.5]].forEach(function (q) {
+      tree(q[0], q[1], 0.75, "#2F7D4F");
+    });
+    box(13.5, 3.5, 5, 3.4, 0, 3, "#F2F4FF", {
+      fL: both(function (cc, FW, FH) { win(cc, 0.5, 1.1, 1.2, 1, true, "#C4B5FD"); }, signFace("İRTİFA ODASI", "#4338CA", "#FFFFFF", 0.5, 0.95, 0.65)),
+      fR: function (cc, FW, FH) {
+        ftext(cc, "2.000 m", FW / 2, FH / 2 + 0.3, 0.7, "#4338CA", FW * 0.9);
+      },
+    });
+    roofCap(13.5, 3.5, 5, 3.4, 3, "#4338CA");
+  }
   BUILD2.otel = function (st) {
-    if (st <= 4) return oldB("kamp", st);
-    if (st === 6) return oldB("kamp", 5);
-    // SPA'LI KAMP OTELİ
-    oldB("kamp", 4);
-    vaultX(-11, 11, 9, 3, 0, "#BFE6FF", { alpha: 0.85, rib: 1.8, lit: "#FFD590", cap: "#9FD8FF" });
-    cyl(12, 11, 2.2, 0, 0.6, "#F2F0FA", { top: "#5FE0F5" });
-    anchor({ t: "steam", x: 12, y: 1, z: 11 });
-    anchor({ t: "steam", x: -11, y: 3.4, z: 11 });
-    billboard(-11, 15, 0.3, 4, 1, "SPA", "#0F766E", "#FFFFFF", { posts: false, glow: true });
+    if (st <= 2) return oldB("kamp", st);
+    if (st === 3) {
+      // KAMP KÖYÜ: pansiyon + ahşap bungalovlar + kamp ateşi
+      oldB("kamp", 2);
+      bungalow(-11.5, 2, "#2F7D4F");
+      bungalow(12, 1, "#B5523A");
+      bungalow(-9, 9.5, "#1D4ED8");
+      [0, 1, 2, 3].forEach(function (k) {
+        box(1 + Math.cos(k) * 0.6, 9 + Math.sin(k) * 0.6, 1.4, 0.3, 0, 0.3, "#8A5426", { noShadow: true });
+      });
+      anchor({ t: "fire", x: 1, y: 0.6, z: 9 });
+      billboard(12, 9, 0.6, 4.6, 1, "KAMP KÖYÜ", "#2F7D4F", "#FFFFFF", {});
+      return;
+    }
+    if (st <= 5) return oldB("kamp", st - 1);
+    if (st <= 8) {
+      // 6: YÜKSEK İRTİFA KAMPI; 7: + SPA; 8: + TERMAL HAVUZLAR
+      oldB("kamp", 4);
+      altitudeCamp();
+      if (st === 6) return;
+      vaultX(-11, 11, 9, 3, 0, "#BFE6FF", { alpha: 0.85, rib: 1.8, lit: "#FFD590", cap: "#9FD8FF" });
+      cyl(12, 11, 2.2, 0, 0.6, "#F2F0FA", { top: "#5FE0F5" });
+      anchor({ t: "steam", x: 12, y: 1, z: 11 });
+      anchor({ t: "steam", x: -11, y: 3.4, z: 11 });
+      billboard(-11, 15, 0.3, 4, 1, "SPA", "#0F766E", "#FFFFFF", { posts: false, glow: true });
+      if (st === 8) {
+        // TERMAL: basamaklı traverten havuzlar, buhar
+        [[-1.5, 1.4], [3.2, 1], [7.9, 0.6]].forEach(function (q, i) {
+          box(q[0], 13, 4.4, 3.6, 0, q[1], "#F5EFE6", { top: i % 2 ? "#FFC79A" : "#FFB07A", depth: 13 + q[0] - i * 0.01 });
+          anchor({ t: "steam", x: q[0], y: q[1] + 0.4, z: 13 });
+        });
+        billboard(3.2, 15.3, 0.2, 5, 0.9, "TERMAL", "#C2410C", "#FFFFFF", { posts: false, glow: true });
+      }
+      return;
+    }
+    oldB("kamp", 5);
+    if (st >= 10) {
+      // ELİT KAMP VE TATİL KÖYÜ: önde renkli villalar, tahta iskele yolu, tabela
+      flat(function () {
+        topDo(0.34, function (c) {
+          c.fillStyle = K("#D9925A");
+          c.fillRect(-16, 15.4, 32, 1.6);
+        });
+      });
+      [["#0F766E", -11], ["#E2574C", -4], [kit.primary, 3], ["#F59E0B", 10]].forEach(function (q) {
+        bungalow(q[1], 12.6, q[0], 5);
+      });
+      billboard(13, 4.5, 12.6, 8, 1.2, "TATİL KÖYÜ", "#0F766E", "#FFD43B", { posts: false, glow: true });
+    }
   };
   BUILD2.universite = function (st) {
     if (st <= 1) {
@@ -5299,6 +6265,9 @@
       tree(-16, 13, 0.8);
       return;
     }
+    // Şehir 2.1: 5 enstitü, 7 yüksek lisans, 9 uluslararası, 10 FBÜ araya/sona girdi → eski çizim sırası
+    var ens = st >= 5, grad = st >= 7, intl = st >= 9, fbu = st >= 10;
+    st = st <= 4 ? st : st <= 7 ? (st === 5 ? 4 : 5) : 6;
     paved(st >= 5 ? "#ECEFF5" : null);
     if (st >= 5)
       flat(function () {
@@ -5316,6 +6285,16 @@
           c.stroke();
         });
       });
+    if (grad) {
+      // YÜKSEK LİSANS: üç katlı tuğla lisansüstü binası (seminer salonunun yerinde)
+      gable(12, -11, 10, 8, 0, 9, 2.6, "#E7A77E", "#7C2D12", {
+        fL: function (cc, FW, FH) {
+          windowsGrid(cc, FW, FH, { ww: 1.2, wh: 1.4, gx: 0.8, gy: 1.4, top: 1.6, bot: 0.6, glass: "#9FD8FF" });
+          fsign(cc, FW / 2, 0.6, 7.5, 0.75, "LİSANSÜSTÜ", "#7C2D12", "#FFFFFF", true);
+        },
+        fR: winFace({ ww: 1.2, wh: 1.4, gx: 0.8, gy: 1.4, top: 1.6, bot: 0.6, glass: "#9FD8FF" }),
+      });
+    } else
     // SEMİNER SALONU
     gable(12, -11, 10, 8, 0, 4.4, 2.4, "#F6D7B0", "#9A3412", {
       fL: function (cc, FW, FH) {
@@ -5326,7 +6305,7 @@
         fsign(cc, FW / 2, 0.55, 7, 0.7, "SEMİNER", "#9A3412", "#FFFFFF", true);
       },
     });
-    if (st >= 3) facultyBlock(-6, -10, 18, 9, st >= 6 ? 12 : 9.5, st >= 6 ? "ELİTLİG ÜNİVERSİTESİ" : "SPOR BİLİMLERİ", "#FFF3DF", st >= 6);
+    if (st >= 3) facultyBlock(-6, -10, 18, 9, st >= 6 ? 12 : 9.5, fbu ? "FUTBOL BİLİMLERİ ÜNİ." : st >= 6 ? "ELİTLİG ÜNİVERSİTESİ" : "SPOR BİLİMLERİ", "#FFF3DF", st >= 6 && (fbu ? "gold" : true));
     else {
       bench(-6, -6, true, 4);
       tree(-8, -12, 1.1);
@@ -5345,11 +6324,19 @@
         fR: winFace({ ww: 1.2, wh: 2.4, top: 1.6, rows: 1, glass: "#9FD8FF" }),
       });
       gable(-12, 7, 11, 8, 6, 0.01, 2, "#F4F1FA", "#C9C3DD", { depth: -4.9, over: 0.3 });
-      box(12, 3, 7, 7, 0, 5.5, "#BFF3FF", {
-        fL: both(winFace({ ww: 1.4, wh: 1.4, gx: 0.4, gy: 0.5, top: 1.4, bot: 0.4, glass: "#7FE3FF", litK: 0.9 }), signFace("LAB", "#141043", "#22D3EE", 0.6, 0.6, 0.7)),
+      var lh = ens ? 9 : 5.5;
+      box(12, 3, 7, 7, 0, lh, "#BFF3FF", {
+        fL: both(winFace({ ww: 1.4, wh: 1.4, gx: 0.4, gy: 0.5, top: 1.4, bot: 0.4, glass: "#7FE3FF", litK: 0.9 }), signFace(ens ? "ENSTİTÜ" : "LAB", "#141043", "#22D3EE", 0.6, 0.75, 0.7)),
         fR: winFace({ ww: 1.4, wh: 1.4, gx: 0.4, gy: 0.5, top: 1.4, bot: 0.4, glass: "#7FE3FF", litK: 0.9 }),
       });
-      roofCap(12, 3, 7, 7, 5.5, "#E3E6F4");
+      roofCap(12, 3, 7, 7, lh, "#E3E6F4");
+      if (ens) {
+        // ARAŞTIRMA ENSTİTÜSÜ: çatıda gözlem kubbesi + anten
+        cyl(12, 3, 2.4, lh + 0.4, 1, "#E9ECF8", { noShadow: true, depth: 30 });
+        dome(12, 3, 2.4, lh + 1.4, "#C9D1EC", { ribs: true, depth: 31 });
+        cyl(14.2, 1, 0.12, lh + 0.4, 3.4, "#5B6385", { noShadow: true, depth: 32 });
+        anchor({ t: "beacon", x: 14.2, y: lh + 3.8, z: 1 });
+      }
     } else {
       tree(-13, 8, 1);
       tree(12, 4, 0.9);
@@ -5376,6 +6363,22 @@
     if (st >= 6) {
       turkFlag(-16, -2, 9);
       flagpole(-16, 1.5, 7, kit.primary, kit.secondary);
+    }
+    if (intl) {
+      // ULUSLARARASI KAMPÜS: avludaki küre + ülke bayrakları sırası
+      globeS(16.5, 9, 0.9, 1.5);
+      billboard(10, 17.4, 7.9, 8, 1.2, "INTERNATIONAL", "#141043", "#FFD43B", { posts: false, glow: true });
+      ["#1D4ED8", "#E11D48", "#FACC15", "#16A34A", "#F97316"].forEach(function (col, i) {
+        flagpole(-16 + i * 2.6, 18.5, 6, col, i % 2 ? "#FFFFFF" : null);
+      });
+    }
+    if (fbu) {
+      // FUTBOL BİLİMLERİ ÜNİVERSİTESİ: anıtsal kapı
+      [-1, 1].forEach(function (sx) {
+        box(-1 + sx * 3.4, 18.6, 1, 1, 0, 5.4, "#FFF3DF", { top: "#C9A227" });
+      });
+      box(-1, 18.6, 8.2, 1, 5.4, 1.4, "#1E3A8A", { fL: signFace("FUTBOL BİLİMLERİ", "#1E3A8A", "#FFD43B", 0.7, 0.95, 1) });
+      crestS(-1, 18.6, 7.2, 1.1);
     }
   };
   BUILD2.scout = function (st) {
@@ -5439,7 +6442,10 @@
       tree(14, 13, 0.8);
       return;
     }
-    // 3+: gözlemciler binası (4'te veri merkezi, 5'te Avrupa merkezi)
+    // 3+: gözlemciler binası (6'da veri merkezi, 7'de yapay zekâ, 8'de Avrupa merkezi).
+    // Şehir 2.1: 4 Güney Amerika, 5 Afrika, 7 yapay zekâ, 9 dünya ağı araya/sona girdi → eski çizim sırası
+    var ga = st >= 4, af = st >= 5, ai = st === 7, world = st >= 9;
+    st = st <= 3 ? st : st <= 5 ? 3 : st <= 7 ? 4 : 5;
     var flags = ["#1D4ED8", "#E11D48", "#FACC15", "#16A34A", "#F97316"];
     if (st === 3) {
       box(-3, -7, 15, 9, 0, 7, "#F2F4FF", {
@@ -5463,7 +6469,7 @@
             cc.lineTo(1 + i * 2.6, FH - 0.5);
             cc.stroke();
           }
-          fsign(cc, FW / 2, 0.6, 9, 0.8, st >= 5 ? "AVRUPA SCOUT MERKEZİ" : "VERİ MERKEZİ", "#141043", "#22D3EE", true);
+          fsign(cc, FW / 2, 0.6, 9, 0.8, world ? "DÜNYA SCOUT AĞI" : st >= 5 ? "AVRUPA SCOUT MERKEZİ" : ai ? "YAPAY ZEKÂ MERKEZİ" : "VERİ MERKEZİ", "#141043", ai ? "#E879F9" : "#22D3EE", true);
         },
         fR: function (cc, FW, FH) {
           for (var y = 1.6; y < FH - 0.4; y += 1.6) {
@@ -5480,6 +6486,13 @@
       });
       cyl(4, -10, 0.15, top, 5, "#5B6385", { noShadow: true, depth: 21 });
       anchor({ t: "beacon", x: 4, y: top + 5, z: -10 });
+      if (ai) {
+        // YAPAY ZEKÂ: çatıda parlayan sinir ağı küresi + mor LED kuşak
+        cyl(-3, -5, 2.6, top, 0.6, "#2A2F6E", { noShadow: true, depth: 22 });
+        dome(-3, -5, 2.4, top + 0.6, "#C084FC", { ribs: true, depth: 23 });
+        anchor({ t: "glow", x: -3, y: top + 2, z: -5, col: "#E879F9" });
+        box(-3, -1.9, 17.2, 0.3, 4.2, 0.8, "#A855F7", { noShadow: true, depth: 25, gloss: false });
+      }
     }
     if (st >= 5) {
       globeS(10, 7, 1.4, 3.4);
@@ -5507,12 +6520,39 @@
         box(11, 4 + dz, 0.25, 0.25, 0, 1.2, "#8A90B5", { noShadow: true });
       });
     }
-    flags.forEach(function (col, i) {
+    if (ga) {
+      // GÜNEY AMERİKA OFİSİ (yeşil-sarı) + palmiye
+      box(12.5, -11, 6, 5, 0, 4, "#FFFFFF", {
+        fL: both(function (cc, FW, FH) { cc.fillStyle = K("#16A34A"); cc.fillRect(0, FH - 0.7, FW, 0.7); win(cc, 0.8, 1.4, 1.6, 1.1, true); win(cc, FW - 2.4, 1.4, 1.6, 1.1, true); }, signFace("G. AMERİKA", "#16A34A", "#FACC15", 0.55, 0.9, 0.75)),
+        fR: function (cc, FW, FH) { win(cc, FW / 2 - 0.8, 1.4, 1.6, 1.1, true); },
+      });
+      roofCap(12.5, -11, 6, 5, 4, "#FACC15");
+      palm(16.5, -7.5, 0.7);
+    }
+    if (af) {
+      // AFRİKA GÖZLEM AĞI: turuncu ofis + sazdan saçaklı gölgelik + çanak
+      box(13.5, -2.5, 6, 4, 0, 3.4, "#FDE7C8", {
+        fL: both(function (cc, FW, FH) { win(cc, 0.6, 1.3, 1.4, 1, true); }, signFace("AFRİKA", "#C2410C", "#FFFFFF", 0.5, 0.8, 0.7)),
+        fR: function (cc, FW, FH) { cc.fillStyle = K("#C2410C"); cc.fillRect(0, FH - 0.6, FW, 0.6); },
+      });
+      pyramid(13.5, -2.5, 6.8, 4.8, 3.4, 1.6, "#D4A55A", { noShadow: true });
+      dishS(16.6, -0.2, 1.4, 1, -0.7);
+    }
+    var fl = world ? flags.concat(["#7C3AED", "#0EA5E9", "#DB2777"]) : flags;
+    fl.forEach(function (col, i) {
       flagpole(-14 + i * 2.6, 10 + (i % 2) * 0.3, st >= 5 ? 8 : 6.5, col, i % 2 ? "#FFFFFF" : null);
     });
+    if (world) {
+      // DÜNYA SCOUT AĞI: uydu çanakları dizisi
+      [[14.5, 12.5, 2], [10.5, 15.5, 1.5], [16, 6.5, 1.4]].forEach(function (q) {
+        box(q[0], q[1], 2.2, 2.2, 0, 1, "#C6CAE0", { noShadow: true });
+        dishS(q[0], q[1], 1.6, q[2], -0.7);
+      });
+      anchor({ t: "beacon", x: 14.5, y: 5, z: 12.5 });
+    }
     tree(16, -15, 1);
     tree(-17, -15, 1);
-    if (st < 5) tree(15, 15, 0.8);
+    if (st < 5 && !world) tree(15, 15, 0.8);
   };
 
   /* ═══════════════════════ KULÜP ŞEHRİ 2.0: sembol yapılar ═══════════════════════
@@ -5928,7 +6968,7 @@
     halisaha: "Halısaha", kulup: "Kulüp binası", stadyum: "Stadyum", restoran: "Restoran", magaza: "Mağaza", akademi: "Akademi",
     ulasim: "Ulaşım", saglik: "Sağlık", tv: "Kulüp TV", universite: "Üniversite", otel: "Kamp oteli", scout: "Scout merkezi",
   };
-  var MAX2 = { halisaha: 12, kulup: 8, stadyum: 10, restoran: 8, magaza: 8, akademi: 8, ulasim: 6, saglik: 8, tv: 7, universite: 6, otel: 6, scout: 5 };
+  var MAX2 = { halisaha: 14, kulup: 12, stadyum: 13, restoran: 12, magaza: 12, akademi: 12, ulasim: 10, saglik: 12, tv: 11, universite: 10, otel: 10, scout: 9 };
   var OPENS2 = { halisaha: 1, kulup: 3, stadyum: 5, restoran: 5, magaza: 6, akademi: 7, ulasim: 8, saglik: 9, tv: 11, universite: 13, otel: 14, scout: 16 };
   var CELL2 = {
     stadyum: [0, 0], halisaha: [-1, 0], kulup: [0, -1], restoran: [-1, 1], magaza: [0, 1], saglik: [1, -1], tv: [1, 0],
@@ -6010,7 +7050,7 @@
   }
   /** Stadyum aşaması → eski çizimin (saha, tribün) basamakları. */
   function stadSync() {
-    var m = STAD_MAP[Math.min(st2.stadyum || 0, 10)];
+    var m = STAD_MAP[Math.min(st2.stadyum || 0, STAD_N)];
     levels.saha = m ? m[0] : 0;
     levels.tribun = m ? m[1] : 0;
   }
@@ -6246,8 +7286,8 @@
   }
   /** Kuyruk noktaları (arsa merkezine göre) aşama başına. */
   var QUEUE2 = {
-    restoran: [null, [2, 2.6], [0, 4.4], [0, 2.6], [0, 2.4], [0, 3], [-3, 9], [-3, 9], [0, 15]],
-    magaza: [null, [0, 4.2], [0, 2.4], [-1, 2.4], [0, 0.6], [0, 2.6], [0, 2.6], [0, 2.6], [5, 11]],
+    restoran: [null, [2, 2.6], [0, 4.4], [0, 2.6], [0, 2.4], [0, 3], [0, 3], [-3, 9], [3, 9], [3, 9], [3, 9], [4.5, 14.5], [4.5, 14.5]],
+    magaza: [null, [-1, 4.6], [0, 2.4], [-1, 2.4], [0, 0.6], [0, 2.6], [0, 2.6], [0, 2.6], [0, 2.6], [0, 2.6], [0, 2.6], [5, 11], [5.2, 10]],
   };
   function life2(list) {
     kickEntries(list);
@@ -6263,7 +7303,7 @@
     // akademi: top peşinde çocuklar
     var lk = lvOf("akademi");
     if (lk >= 1 && !isBuilding("akademi")) {
-      var pk = PLOTS2.akademi, cx = pk.x + (lk >= 7 ? -4 : 0), cz = pk.z + (lk >= 4 ? 6 : 2), nk = Math.min(4 + lk * 2, 14);
+      var pk = PLOTS2.akademi, cx = pk.x + (lk >= 9 ? -4 : 0), cz = pk.z + (lk >= 4 ? 6 : 2), nk = Math.min(4 + lk * 2, 14);
       var bx = cx + Math.cos(A.time * 0.7) * 5, bz = cz + Math.sin(A.time * 0.9) * 3;
       for (var k2 = 0; k2 < nk; k2++) {
         var a2 = A.time * (0.5 + (k2 % 3) * 0.13) + k2 * 1.7;
@@ -6941,7 +7981,7 @@
       if (Math.abs(car.pos) > EDGE + 6) cars[i] = newCar(false);
     });
     busV.on = lvOf("ulasim") >= 3;
-    busV.mini = lvOf("ulasim") < 5;
+    busV.mini = lvOf("ulasim") < 6;
     busV.pos += busV.dir * 6 * dt;
     if (Math.abs(busV.pos) > EDGE + 8) {
       var nb = newCar(false);
@@ -7565,7 +8605,7 @@
       blitSprite(c, s.f, 0, 0);
       return;
     }
-    var ov = Math.min(con.from, 10), om = STAD_MAP[ov];
+    var ov = Math.min(con.from, STAD_N), om = STAD_MAP[ov];
     var nu = sv ? stadiumSprites(levels.saha, levels.tribun, sv) : null;
     var old = ov && cs.old.a > 0 ? stadiumSprites(om[0], om[1], ov) : null;
     drawScaffold(c, false);
@@ -7673,7 +8713,7 @@
       G.lw = A.clamp(0.3 * cam.zoom, 0.9, 3.4);
       list[i].fn(c);
     }
-    if (lvOf("ulasim") >= 6) drawTrain(c);
+    if (lvOf("ulasim") >= 9) drawTrain(c);
   }
   function drawWorld2(c) {
     var setG = function () {
@@ -7714,7 +8754,7 @@
       setG();
       list[i].fn(c);
     }
-    if (lvOf("ulasim") >= 6) drawTrain(c);
+    if (lvOf("ulasim") >= 9) drawTrain(c);
   }
   /** Ön kenarda yükseltilmiş metro hattı ve tren. */
   function drawTrain(c) {
