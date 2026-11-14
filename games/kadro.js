@@ -61,10 +61,11 @@
  *   · Yıldız: kazanınca kale anındaki kadro / PAR (üretecin kusursuz kapı
  *     seçimiyle hesapladığı kadro): ≥ %65 → 3★, ≥ %35 → 2★, altı 1★;
  *     reklamla devam edildiyse 1★.
- *   · Güçlendiriciler (config.boosters ya da canlı {type:"booster", key}):
- *     kalkan (ilk zararlı temas kayıpsız) · takviye (+5 oyuncu) · dev_top
- *     (cebe 1 DEV TOP).
- *   · Kadro tükenirse {type:"fail", level, canContinue}; RN {type:"continue"}
+ *   · Güçlendiriciler (sunucu anahtarları; config.boosters ya da canlı
+ *     {type:"booster", key}): kalkan (sıradaki zararlı temas — grup, çubuk,
+ *     baraj, kaleci şutu — kayıpsız) · takviye (+5 oyuncu). dev_top (cebe 1
+ *     DEV TOP) oyunda tanımlı ama sunucu kataloğunda yok.
+ *   · Kadro tükenirse {type:"fail", level, canContinue, revive}; RN {type:"continue"}
  *     gönderirse küçük bir kadroyla sürer (bölüm başına bir kez), {type:"giveUp"}
  *     ya da FAIL_WAIT sn (oyun saati; duraklatınca durur) yanıt gelmezse `over`.
  */
@@ -654,13 +655,17 @@
       },
     });
   }
-  /** Reklamla devam: küçük bir kadro, yakındaki tehlike temizlenir, kısa koruma. */
+  /** Devamda gelen kadro (fail mesajında RN'ye de bildirilir: "+N oyuncu"). */
+  function reviveCount() {
+    return A.clamp(Math.round(maxN * 0.25), 5, 40);
+  }
+  /** Reklamla devam: küçük bir kadro, yakındaki tehlike temizlenir, kalkan. */
   function revive(extra) {
     if (state !== "failwait") return;
     contUsed = true;
     state = "play";
     stateT = 0;
-    var want = extra && +extra.squad > 0 ? Math.min(60, Math.round(+extra.squad)) : A.clamp(Math.round(maxN * 0.25), 5, 40);
+    var want = extra && +extra.squad > 0 ? Math.min(60, Math.round(+extra.squad)) : reviveCount();
     n = 0;
     mem = [];
     gain(want);
@@ -1221,7 +1226,7 @@
       speed = 0;
       if (stateT > 1.3 && levelMode) {
         // bölüm modu: önce "devam?" sorusu (bölüm başına bir kez)
-        A.send("fail", { level: level, canContinue: !contUsed });
+        A.send("fail", { level: level, canContinue: !contUsed, revive: reviveCount() });
         if (contUsed) finishLevel(false);
         else {
           state = "failwait";

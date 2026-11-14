@@ -77,7 +77,15 @@ export function kadroBot(A) {
   if (!next) return;
   if (next.type === "gate") {
     if (next.hide && next.z - d.z > 10) d.setTarget(0);
-    else d.setTarget(d.apply(d.n, next.left) >= d.apply(d.n, next.right) ? -2.2 : 2.2);
+    else {
+      let l = next.left, r = next.right;
+      if (next.swap) {
+        // değişken kapı: varış anındaki yerleşimi öngör
+        const arr = d.stageT + (next.z - d.z) / Math.max(1, d.speed);
+        if ((Math.floor(arr / next.swap + next.swph) % 2 === 1) !== next.flipped) [l, r] = [r, l];
+      }
+      d.setTarget(d.apply(d.n, l) >= d.apply(d.n, r) ? -2.2 : 2.2);
+    }
   } else if (next.type === "rivals" && !next.full) {
     const cx = (next.x0 + next.x1) / 2;
     d.setTarget(cx > 0 ? -3.4 : 3.4);

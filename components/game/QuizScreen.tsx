@@ -82,7 +82,7 @@ import {
 } from "@/lib/game/quiz/questions";
 import { CARTOON } from "@/lib/game/cartoon";
 import { QUIZ, QUIZ_LETTER_TONES, QUIZ_TONES, QUIZ_TRIPLE_TONES, type QuizToneName } from "@/lib/game/quizPalette";
-import { withOfflineCache } from "@/lib/offline/cache";
+import { isOfflineCacheMiss, withOfflineCache } from "@/lib/offline/cache";
 import type { LifeGameKey } from "@/lib/puzzle/api";
 import { useGameLives } from "@/lib/puzzle/useGameLives";
 import { LivesSheet } from "@/components/gamehome/HomeSheets";
@@ -544,7 +544,7 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
               city={city}
               onPickCity={() => setPickerOpen(true)}
               loading={!cityLoaded || poolQuery.isLoading}
-              error={poolQuery.isError}
+              error={poolQuery.isError ? (isOfflineCacheMiss(poolQuery.error) ? "İnternet gerekli · soruları bir kez çevrimiçi yükle" : "Sorular yüklenemedi · tekrar dene") : null}
               enough={enough}
               onRetry={() => void poolQuery.refetch()}
               onStart={() => void start()}
@@ -784,7 +784,8 @@ function SetupCard({
   city: QuizCity;
   onPickCity: () => void;
   loading: boolean;
-  error: boolean;
+  /** Hata metni (yoksa null). */
+  error: string | null;
   enough: boolean;
   onRetry: () => void;
   onStart: () => void;
@@ -854,7 +855,7 @@ function SetupCard({
             <Touchable feedback="button" onPress={onRetry} style={[styles.notice, styles.noticeBad]} accessibilityRole="button" accessibilityLabel="Tekrar dene">
               <Ionicons name="cloud-offline" size={16} color={CARTOON.redLip} />
               <Text style={styles.noticeText} {...textScale.dense}>
-                Sorular yüklenemedi · tekrar dene
+                {error}
               </Text>
             </Touchable>
           ) : !loading && !enough ? (
@@ -879,7 +880,7 @@ function SetupCard({
             tone="green"
             size="lg"
             loading={loading}
-            disabled={!enough || error}
+            disabled={!enough || Boolean(error)}
             onPress={() => onStart()}
             style={styles.stretch}
             accessibilityLabel={loading ? "Sorular hazırlanıyor" : "Başla"}
