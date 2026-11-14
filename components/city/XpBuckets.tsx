@@ -138,7 +138,7 @@ function WeeklyXp({ xp, now }: { xp: CityXp; now: number }) {
             </Text>
             <Text style={[styles.bucketXp, c.xp ? null : styles.bucketEmpty]} {...textScale.badge}>
               {fmt(c.xp)}
-              <Text style={styles.bucketUnit}> XP · {fmt(Math.floor(c.xp / Math.max(1, xp.per_star)))}★</Text>
+              <Text style={styles.bucketUnit}> XP · {fmt(Math.floor(c.xp / Math.max(1, xp.per_star)))} yıldız</Text>
             </Text>
             <View style={styles.bar}>
               {c.xp > 0 ? (
