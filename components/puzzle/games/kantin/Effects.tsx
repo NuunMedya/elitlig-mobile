@@ -1,7 +1,8 @@
 /**
  * Kantin efektleri — hepsi SONLU Animated dizileri (useNativeDriver) ve
- * bitince `onDone(id)` ile kendini kaldırır: uçan ürün, servis edilen tabak,
- * ayrılan taraftar, bahşiş jetonu, konfeti patlaması, metin patlaması.
+ * bitince `onDone(id)` ile kendini kaldırır: uçan ürün (yay çizerek, dönerek),
+ * servis damgası (kocaman yeşil onay), şok halkası, ayrılan taraftar, bahşiş
+ * jetonu, konfeti patlaması, metin patlaması.
  */
 
 import React, { memo, useEffect, useRef } from "react";
@@ -12,6 +13,8 @@ import { fonts, radius, space, textScale, type } from "@/theme";
 import { softShadow, toonShadow } from "../soyunma/CartoonKit";
 
 import { FanFigure } from "./Fan";
+import Ionicons from "@expo/vector-icons/Ionicons";
+
 import { CoinIcon, ProductIcon } from "./ProductIcon";
 
 export interface Pt {
@@ -21,7 +24,8 @@ export interface Pt {
 
 export type Fx =
   | { id: number; kind: "fly"; p: number; uid: number; from: Pt; to: Pt; size: number; toSize: number; delay: number }
-  | { id: number; kind: "serve"; at: Pt; to: Pt; items: number[]; width: number; delay: number }
+  | { id: number; kind: "stamp"; at: Pt; size: number; delay: number }
+  | { id: number; kind: "ring"; at: Pt; size: number; color: "good" | "gold" | "bad"; delay: number }
   | { id: number; kind: "leave"; at: Pt; size: number; jersey: number; face: number; vip: boolean; angry: boolean; delay: number }
   | { id: number; kind: "coin"; from: Pt; to: Pt; delay: number }
   | { id: number; kind: "burst"; at: Pt; delay: number }
@@ -47,14 +51,16 @@ function useRun(duration: number, delay: number, onDone: () => void, easing = Ea
 }
 
 const Flyer = memo(function Flyer({ fx, onDone }: { fx: Extract<Fx, { kind: "fly" }>; onDone: Done }) {
-  const t = useRun(270, fx.delay, () => onDone(fx.id), Easing.inOut(Easing.quad));
-  const lift = Math.min(fx.from.y, fx.to.y) - 34;
+  const t = useRun(320, fx.delay, () => onDone(fx.id), Easing.inOut(Easing.quad));
+  const lift = Math.min(fx.from.y, fx.to.y) - 44;
+  const spin = fx.to.x >= fx.from.x ? 1 : -1;
   const half = fx.size / 2;
   const style = {
     transform: [
       { translateX: t.interpolate({ inputRange: [0, 1], outputRange: [fx.from.x - half, fx.to.x - half] }) },
       { translateY: t.interpolate({ inputRange: [0, 0.5, 1], outputRange: [fx.from.y - half, lift - half, fx.to.y - half] }) },
-      { scale: t.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 1.08, fx.toSize / fx.size] }) },
+      { scale: t.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 1.18, fx.toSize / fx.size] }) },
+      { rotate: t.interpolate({ inputRange: [0, 0.5, 1], outputRange: ["0deg", `${spin * 14}deg`, "0deg"] }) },
     ],
     opacity: t.interpolate({ inputRange: [0, 0.02, 1], outputRange: [0, 1, 1] }),
   };
@@ -65,28 +71,40 @@ const Flyer = memo(function Flyer({ fx, onDone }: { fx: Extract<Fx, { kind: "fly
   );
 });
 
-const ServeGhost = memo(function ServeGhost({ fx, onDone }: { fx: Extract<Fx, { kind: "serve" }>; onDone: Done }) {
-  const t = useRun(420, fx.delay, () => onDone(fx.id), Easing.in(Easing.back(1.4)));
-  const w = fx.width;
-  const h = w * 0.42;
-  const icon = Math.min(22, (w - 14) / Math.max(1, fx.items.length));
+/** Servis damgası: balonun ortasında büyüyüp sönen kocaman yeşil onay. */
+const Stamp = memo(function Stamp({ fx, onDone }: { fx: Extract<Fx, { kind: "stamp" }>; onDone: Done }) {
+  const t = useRun(720, fx.delay, () => onDone(fx.id), Easing.out(Easing.cubic));
+  const size = fx.size;
   const style = {
+    opacity: t.interpolate({ inputRange: [0, 0.08, 0.7, 1], outputRange: [0, 1, 1, 0] }),
     transform: [
-      { translateX: t.interpolate({ inputRange: [0, 1], outputRange: [fx.at.x - w / 2, fx.to.x - w / 2] }) },
-      { translateY: t.interpolate({ inputRange: [0, 1], outputRange: [fx.at.y - h / 2, fx.to.y - h / 2] }) },
-      { scale: t.interpolate({ inputRange: [0, 0.25, 1], outputRange: [1, 1.08, 0.45] }) },
+      { translateX: fx.at.x - size / 2 },
+      { translateY: t.interpolate({ inputRange: [0, 0.7, 1], outputRange: [fx.at.y - size / 2, fx.at.y - size / 2, fx.at.y - size / 2 - 18] }) },
+      { scale: t.interpolate({ inputRange: [0, 0.18, 0.3, 1], outputRange: [0.3, 1.25, 1, 1] }) },
+      { rotate: t.interpolate({ inputRange: [0, 0.18, 0.3, 1], outputRange: ["-18deg", "6deg", "0deg", "0deg"] }) },
     ],
-    opacity: t.interpolate({ inputRange: [0, 0.8, 1], outputRange: [1, 1, 0] }),
   };
   return (
-    <Animated.View pointerEvents="none" style={[styles.abs, { width: w, height: h }, style]}>
-      <View style={[styles.ghostPlate, { borderRadius: h / 2 }]}>
-        {fx.items.map((p, i) => (
-          <ProductIcon key={i} p={p} size={icon} />
-        ))}
-      </View>
+    <Animated.View pointerEvents="none" style={[styles.abs, styles.stamp, { width: size, height: size, borderRadius: size / 2 }, style]}>
+      <Ionicons name="checkmark" size={Math.round(size * 0.7)} color={S.white} />
     </Animated.View>
   );
+});
+
+/** Şok halkası: noktadan genişleyerek sönen halka (servis, uyarı). */
+const Ring = memo(function Ring({ fx, onDone }: { fx: Extract<Fx, { kind: "ring" }>; onDone: Done }) {
+  const t = useRun(560, fx.delay, () => onDone(fx.id), Easing.out(Easing.quad));
+  const size = fx.size;
+  const color = fx.color === "good" ? S.served : fx.color === "gold" ? S.coin : S.danger;
+  const style = {
+    opacity: t.interpolate({ inputRange: [0, 0.1, 1], outputRange: [0, 0.9, 0] }),
+    transform: [
+      { translateX: fx.at.x - size / 2 },
+      { translateY: fx.at.y - size / 2 },
+      { scale: t.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1.4] }) },
+    ],
+  };
+  return <Animated.View pointerEvents="none" style={[styles.abs, { width: size, height: size, borderRadius: size / 2, borderWidth: 5, borderColor: color }, style]} />;
 });
 
 const LeavingFan = memo(function LeavingFan({ fx, onDone }: { fx: Extract<Fx, { kind: "leave" }>; onDone: Done }) {
@@ -127,10 +145,10 @@ const CoinFly = memo(function CoinFly({ fx, onDone }: { fx: Extract<Fx, { kind: 
   );
 });
 
-const BURST_N = 8;
+const BURST_N = 12;
 const BURST_DIRS = Array.from({ length: BURST_N }, (_, i) => {
   const a = (i / BURST_N) * Math.PI * 2;
-  const r = 26 + (i % 3) * 6;
+  const r = 30 + (i % 3) * 9;
   return { dx: Math.cos(a) * r, dy: Math.sin(a) * r - 8, color: kantinConfetti[i % kantinConfetti.length], s: 4 + (i % 2) * 2 };
 });
 
@@ -164,7 +182,7 @@ const Burst = memo(function Burst({ fx, onDone }: { fx: Extract<Fx, { kind: "bur
 
 const FloatText = memo(function FloatText({ fx, onDone }: { fx: Extract<Fx, { kind: "text" }>; onDone: Done }) {
   const t = useRun(fx.big ? 1050 : 850, fx.delay, () => onDone(fx.id));
-  const color = fx.tone === "danger" ? S.danger : fx.tone === "warn" ? S.vipDeep : fx.tone === "gold" ? S.coinEdge : S.check;
+  const color = fx.tone === "danger" ? S.danger : fx.tone === "warn" ? S.vipDeep : fx.tone === "gold" ? S.coinEdge : S.servedDeep;
   const style = {
     opacity: t.interpolate({ inputRange: [0, 0.1, 0.75, 1], outputRange: [0, 1, 1, 0] }),
     transform: [
@@ -193,8 +211,10 @@ export const FxLayer = memo(function FxLayer({ fx, onDone }: { fx: Fx[]; onDone:
         switch (f.kind) {
           case "fly":
             return <Flyer key={f.id} fx={f} onDone={onDone} />;
-          case "serve":
-            return <ServeGhost key={f.id} fx={f} onDone={onDone} />;
+          case "stamp":
+            return <Stamp key={f.id} fx={f} onDone={onDone} />;
+          case "ring":
+            return <Ring key={f.id} fx={f} onDone={onDone} />;
           case "leave":
             return <LeavingFan key={f.id} fx={f} onDone={onDone} />;
           case "coin":
@@ -211,13 +231,12 @@ export const FxLayer = memo(function FxLayer({ fx, onDone }: { fx: Fx[]; onDone:
 
 const styles = StyleSheet.create({
   abs: { position: "absolute", left: 0, top: 0 },
-  ghostPlate: {
-    flex: 1,
-    flexDirection: "row",
+  stamp: {
     alignItems: "center",
     justifyContent: "center",
-    gap: 2,
-    backgroundColor: S.plate,
+    backgroundColor: S.servedDeep,
+    borderWidth: 4,
+    borderColor: S.white,
     ...softShadow,
   },
   textBox: { width: 220, alignItems: "center" },
@@ -225,6 +244,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     paddingVertical: space.xxs,
     borderRadius: radius.pill,
+    borderWidth: 2,
+    borderColor: S.white,
     maxWidth: 220,
     ...softShadow,
   },

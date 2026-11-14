@@ -1,7 +1,9 @@
 /**
  * Elit Üçlü efektleri — hepsi SONLU, tek Animated.Value ile sürülen, yerel
- * sürücülü küçük parçalar: parçacık patlaması, füze ışını, Röveşata halkası,
- * tahta parlaması, kombo metni ve hedef sayacına uçan simge.
+ * sürücülü küçük parçalar: parçacık patlaması (renkli kırıklar + yıldızlar),
+ * iki yöne uçan füzeler ve iz ışınları, Röveşata şok dalgası, Altın Top
+ * ışınları, hedefe uçan dron, tahta parlaması, kombo metni ve hedef sayacına
+ * uçan simge.
  *
  * Her efekt bağlanınca kendi animasyonunu bir kez oynatır; listeden toplu
  * olarak (adım bitince) kaldırılır.
@@ -12,6 +14,8 @@ import React, { useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
 import { radius, textScale, type } from "@/theme";
 import { UCLU_BOARD } from "@/lib/puzzle/ucluPalette";
+import type { UcluGoalType } from "@/lib/puzzle/levels/uclu";
+import { GoalIcon } from "./GoalIcon";
 import { PieceGlyph } from "./Piece";
 
 export type Fx =
@@ -64,6 +68,36 @@ export type Fx =
     }
   | {
       id: number;
+      kind: "rocket";
+      dir: "row" | "col";
+      x: number;
+      y: number;
+      /** Eksen boyunca tahtanın başı ve sonu (kök koordinat). */
+      lo: number;
+      hi: number;
+      size: number;
+      delay: number;
+    }
+  | {
+      id: number;
+      kind: "drone";
+      x: number;
+      y: number;
+      tx: number;
+      ty: number;
+      size: number;
+      delay: number;
+    }
+  | { id: number; kind: "shock"; x: number; y: number; size: number }
+  | {
+      id: number;
+      kind: "rays";
+      x: number;
+      y: number;
+      targets: { x: number; y: number }[];
+    }
+  | {
+      id: number;
       kind: "banner";
       x: number;
       y: number;
@@ -75,10 +109,10 @@ export type Fx =
 type IconName = keyof typeof Ionicons.glyphMap;
 /** Kimliksiz efekt (birleşim türünde her üyeden ayrı ayrı `id` düşülür). */
 export type FxInput = Fx extends infer T ? (T extends Fx ? Omit<T, "id"> : never) : never;
-export type FlyGlyph = { piece: number } | { trophy: true } | { icon: IconName; color: string };
+export type FlyGlyph = { piece: number } | { trophy: true } | { cone: true } | { goal: UcluGoalType };
 
 /** Konfeti kırıkları: sekiz yöne, hafif düzensiz açılarla savrulur. */
-const ANGLES = [-90, -30, 30, 90, 150, 210].map((a) => (a * Math.PI) / 180);
+const ANGLES = [-90, -45, 0, 45, 90, 135, 180, 225].map((a) => (a * Math.PI) / 180);
 
 /**
  * Patlama (sade): kısa beyaz flaş, topun renginde genişleyen halka ve altı
@@ -191,6 +225,185 @@ function Burst({ x, y, color, size, big }: { x: number; y: number; color: string
                     }),
                   },
                 ],
+              },
+            ]}
+          />
+        );
+      })}
+      {big
+        ? [0, 1, 2].map((k) => {
+            const a = ((k * 120 + 30) * Math.PI) / 180;
+            const st = size * 0.34;
+            return (
+              <Animated.View
+                key={`s${k}`}
+                style={[
+                  styles.abs,
+                  {
+                    left: -st / 2,
+                    top: -st / 2,
+                    opacity: t.interpolate({ inputRange: [0, 0.2, 0.8, 1], outputRange: [0, 1, 1, 0] }),
+                    transform: [
+                      { translateX: t.interpolate({ inputRange: [0, 1], outputRange: [0, Math.cos(a) * reach * 1.3] }) },
+                      { translateY: t.interpolate({ inputRange: [0, 1], outputRange: [0, Math.sin(a) * reach * 1.3] }) },
+                      { rotate: t.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] }) },
+                      { scale: t.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0.3, 1.2, 0.5] }) },
+                    ],
+                  },
+                ]}
+              >
+                <Ionicons name="star" size={st} color={UCLU_BOARD.comboGold} />
+              </Animated.View>
+            );
+          })
+        : null}
+    </View>
+  );
+}
+
+/** İki yöne fırlayan füzeler; arkalarında tahtanın kenarına dek uzayan ışık izi. */
+function RocketFx({ dir, x, y, lo, hi, size, delay }: { dir: "row" | "col"; x: number; y: number; lo: number; hi: number; size: number; delay: number }) {
+  const t = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(t, { toValue: 1, duration: 420, delay, easing: Easing.in(Easing.quad), useNativeDriver: true }).start();
+  }, [t, delay]);
+  const row = dir === "row";
+  const origin = row ? x : y;
+  const thick = size * 0.42;
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {[-1, 1].map((side) => {
+        const end = side < 0 ? lo : hi;
+        const dist = end - origin;
+        const L = Math.max(1, Math.abs(dist));
+        const grow = t.interpolate({ inputRange: [0, 1], outputRange: [0.001, 1] });
+        // Ölçek ortadan yapılır; iz, kaynağa yapışık kalsın diye kaydırılır.
+        const shift = t.interpolate({ inputRange: [0, 1], outputRange: [side > 0 ? -L / 2 : L / 2, 0] });
+        const fade = t.interpolate({ inputRange: [0, 0.75, 1], outputRange: [0.95, 0.85, 0] });
+        const trailBox = row
+          ? { left: side > 0 ? x : x - L, top: y - thick / 2, width: L, height: thick }
+          : { left: x - thick / 2, top: side > 0 ? y : y - L, width: thick, height: L };
+        const fly = t.interpolate({ inputRange: [0, 1], outputRange: [0, dist + side * size * 0.6] });
+        return (
+          <React.Fragment key={side}>
+            <Animated.View
+              style={[
+                styles.trail,
+                trailBox,
+                { borderRadius: thick / 2, opacity: fade, transform: row ? [{ translateX: shift }, { scaleX: grow }] : [{ translateY: shift }, { scaleY: grow }] },
+              ]}
+            >
+              <View style={[styles.beamCore, row ? { height: thick * 0.35 } : { width: thick * 0.35 }]} />
+            </Animated.View>
+            <Animated.View
+              style={[
+                styles.abs,
+                {
+                  left: x - size / 2,
+                  top: y - size / 2,
+                  transform: [row ? { translateX: fly } : { translateY: fly }, { rotate: row ? (side > 0 ? "0deg" : "180deg") : side > 0 ? "0deg" : "180deg" }],
+                },
+              ]}
+            >
+              <PieceGlyph kind="gem" color={-1} special={row ? "h" : "v"} size={size} />
+            </Animated.View>
+          </React.Fragment>
+        );
+      })}
+    </View>
+  );
+}
+
+/** Dron: kalkış yerinden hedefe yay çizerek uçar, pervaneleri titrer. */
+function DroneFx({ x, y, tx, ty, size, delay }: { x: number; y: number; tx: number; ty: number; size: number; delay: number }) {
+  const t = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(t, { toValue: 1, duration: 440, delay, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }).start();
+  }, [t, delay]);
+  const lift = Math.max(size * 1.2, Math.abs(tx - x) * 0.25 + Math.abs(ty - y) * 0.15);
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.abs,
+        {
+          left: x - size / 2,
+          top: y - size / 2,
+          opacity: t.interpolate({ inputRange: [0, 0.9, 1], outputRange: [1, 1, 0] }),
+          transform: [
+            { translateX: t.interpolate({ inputRange: [0, 1], outputRange: [0, tx - x] }) },
+            { translateY: t.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, Math.min(0, ty - y) * 0.4 - lift, ty - y] }) },
+            { rotate: t.interpolate({ inputRange: [0, 0.25, 0.5, 0.75, 1], outputRange: ["0deg", "-14deg", "10deg", "-8deg", "0deg"] }) },
+            { scale: t.interpolate({ inputRange: [0, 0.4, 1], outputRange: [1, 1.35, 0.9] }) },
+          ],
+        },
+      ]}
+    >
+      <PieceGlyph kind="gem" color={-1} special="drone" size={size} />
+    </Animated.View>
+  );
+}
+
+/** Röveşata şok dalgası: dolu sıcak daire + genişleyen kalın halka. */
+function Shock({ x, y, size }: { x: number; y: number; size: number }) {
+  const t = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(t, { toValue: 1, duration: 520, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [t]);
+  const box = { left: x - size / 2, top: y - size / 2, width: size, height: size, borderRadius: size / 2 };
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <Animated.View
+        style={[
+          styles.abs,
+          box,
+          {
+            backgroundColor: UCLU_BOARD.shock,
+            opacity: t.interpolate({ inputRange: [0, 0.15, 1], outputRange: [0, 1, 0] }),
+            transform: [{ scale: t.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) }],
+          },
+        ]}
+      />
+      <Animated.View
+        style={[
+          styles.shockRing,
+          box,
+          {
+            opacity: t.interpolate({ inputRange: [0, 0.6, 1], outputRange: [1, 0.7, 0] }),
+            transform: [{ scale: t.interpolate({ inputRange: [0, 1], outputRange: [0.2, 1.25] }) }],
+          },
+        ]}
+      />
+    </View>
+  );
+}
+
+/** Altın Top ışınları: merkezden her hedefe uzanan parlak çizgiler. */
+function Rays({ x, y, targets }: { x: number; y: number; targets: { x: number; y: number }[] }) {
+  const t = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(t, { toValue: 1, duration: 560, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+  }, [t]);
+  const opacity = t.interpolate({ inputRange: [0, 0.15, 0.7, 1], outputRange: [0, 1, 0.9, 0] });
+  const thin = t.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0.4, 1.3, 0.3] });
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {targets.map((q, i) => {
+        const dx = q.x - x;
+        const dy = q.y - y;
+        const len = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+        const ang = `${(Math.atan2(dy, dx) * 180) / Math.PI}deg`;
+        return (
+          <Animated.View
+            key={i}
+            style={[
+              styles.ray,
+              {
+                left: x + dx / 2 - len / 2,
+                top: y + dy / 2 - 2.5,
+                width: len,
+                opacity,
+                transform: [{ rotate: ang }, { scaleY: thin }],
               },
             ]}
           />
@@ -357,7 +570,10 @@ function ComboText({ x, y, text, big }: { x: number; y: number; text: string; bi
         },
       ]}
     >
-      <Text style={[big ? styles.comboBig : styles.combo]} {...textScale.badge} numberOfLines={1}>
+      <Text style={[big ? styles.comboBig : styles.combo, styles.comboBack]} {...textScale.badge} numberOfLines={1}>
+        {text}
+      </Text>
+      <Text style={[big ? styles.comboBig : styles.combo, styles.comboFront]} {...textScale.badge} numberOfLines={1}>
         {text}
       </Text>
     </Animated.View>
@@ -406,8 +622,10 @@ function FlyToken({ x, y, tx, ty, size, glyph, delay }: { x: number; y: number; 
         <PieceGlyph kind="gem" color={glyph.piece} special="none" size={size} />
       ) : "trophy" in glyph ? (
         <PieceGlyph kind="trophy" color={-1} special="none" size={size} />
+      ) : "cone" in glyph ? (
+        <PieceGlyph kind="cone" color={-1} special="none" size={size} />
       ) : (
-        <Ionicons name={glyph.icon} size={size} color={glyph.color} />
+        <GoalIcon type={glyph.goal} color={-1} size={size} />
       )}
     </Animated.View>
   );
@@ -451,6 +669,14 @@ function FxViewBase({ fx }: { fx: Fx }) {
       return <ComboText x={fx.x} y={fx.y} text={fx.text} big={fx.big} />;
     case "fly":
       return <FlyToken x={fx.x} y={fx.y} tx={fx.tx} ty={fx.ty} size={fx.size} glyph={fx.glyph} delay={fx.delay} />;
+    case "rocket":
+      return <RocketFx dir={fx.dir} x={fx.x} y={fx.y} lo={fx.lo} hi={fx.hi} size={fx.size} delay={fx.delay} />;
+    case "drone":
+      return <DroneFx x={fx.x} y={fx.y} tx={fx.tx} ty={fx.ty} size={fx.size} delay={fx.delay} />;
+    case "shock":
+      return <Shock x={fx.x} y={fx.y} size={fx.size} />;
+    case "rays":
+      return <Rays x={fx.x} y={fx.y} targets={fx.targets} />;
     case "banner":
       return <Banner x={fx.x} y={fx.y} w={fx.w} text={fx.text} icon={fx.icon} />;
   }
@@ -498,7 +724,30 @@ const styles = StyleSheet.create({
     backgroundColor: UCLU_BOARD.flash,
     borderRadius: radius.lg,
   },
-  textWrap: { position: "absolute", width: 280, alignItems: "center" },
+  textWrap: { position: "absolute", width: 280, height: 64, alignItems: "center", justifyContent: "center" },
+  comboBack: { position: "absolute", color: UCLU_BOARD.comboDeep, transform: [{ translateY: 3 }], textShadowColor: UCLU_BOARD.comboInk, textShadowRadius: 1 },
+  comboFront: { position: "absolute", color: UCLU_BOARD.comboGold, textShadowColor: UCLU_BOARD.comboInk, textShadowRadius: 2, textShadowOffset: { width: 0, height: 1 } },
+  trail: {
+    position: "absolute",
+    backgroundColor: UCLU_BOARD.beam,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: UCLU_BOARD.beam,
+    shadowOpacity: 0.9,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  shockRing: { position: "absolute", borderWidth: 8, borderColor: UCLU_BOARD.comboWarm },
+  ray: {
+    position: "absolute",
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: UCLU_BOARD.ballBeam,
+    shadowColor: UCLU_BOARD.gold,
+    shadowOpacity: 0.9,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
+  },
   combo: {
     ...type.scoreLg,
     color: UCLU_BOARD.comboText,

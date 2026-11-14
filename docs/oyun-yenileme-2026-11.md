@@ -113,6 +113,51 @@ kazanılan bölümler 1/2/3 basamağa çıkar; bir sonraki bölüm başında
 ücretsiz güçlendiriciler verilir (sunucu `start` yanıtında
 `streak_boosters`); kaybedince seri sıfırlanır.
 
+### Güçlendirici anahtarları (sunucu `rules.BOOSTERS`; mobil AYNEN bu anahtarları kullanır)
+
+| Oyun | Anahtar | Başlık | Fiyat |
+| --- | --- | --- | --- |
+| penalti | `nisan` | Nişangâh | 100 |
+| penalti | `ek_sut` | Ek Şut | 120 |
+| kadro | `kalkan` | Kalkan | 120 |
+| kadro | `takviye` | Takviye +5 | 100 |
+| savunma | `gunes` | Güneş Paketi | 100 |
+| savunma | `duvar` | Ek Stoper | 120 |
+
+Her yeni anahtardan başlangıçta 2 tane vardır; mağazada `<anahtar>_3` paketi
+(fiyat × 3 − 40). Seri hediyesi oyunun anahtarlarını katalog sırasıyla verir:
+1. basamak ilk anahtar, 2. basamak ilk iki, 3. basamak her birinden 1 (en çok 3).
+`start` yanıtındaki `streak_boosters` ÜCRETSİZDİR: istemci kullanınca
+`finish.boosters_used`'a yazabilir; sunucu önce ücretsiz olanlardan düşer.
+
+### Sunucu sabitleri (Ekonomi v3; değişirse burası güncellenir)
+
+- `ECONOMY_V3_FROM` = `2026-11-15T21:00:00Z` (İstanbul 16 Kasım 00:00).
+- Rekor yıldızı (slalom, sektir, seri, kimbu, tahmin): k. eşik `birim × k^1.5`
+  (birim `city.ARENA_STAR_UNIT`), değeri `1 + floor((k−1)/4)`, en çok 30 eşik
+  (R ≤ 128). Önceki en iyi eski satırları da kapsar. Ödenmeyen kısım (tavan)
+  borç olarak sonraki birim üstü turlarda ödenir. Katılım: rekor değilse,
+  skor ≥ birim ve ≥ en iyinin %50'si → 1★, oyun başına günde 2.
+- Tavanlar: satır 10, oyun/gün 15, toplam/gün 30.
+- Günün Testi: skor eşikleri 10 · 36 · 62 · 88 · 114 (≈ 1/3/5/7/9 doğru) → 1–5★,
+  UTC günü başına ilk doğrulanmış skor.
+- `levelBonus(l)` = `min(4, floor(min(l,300)/100) + (l % 10 == 0 ? 1 : 0))`;
+  yalnız v3 sonrası ilk kazançta kaydedilen tabandan (o anki geçilmiş bölüm)
+  SONRAKİ bölümlere (geriye dönük prim yok).
+- Hediyeler: yıldız sandığı her 40 bölüm yıldızında (150 jeton + 2 güçlendirici),
+  bölüm sandığı her 10. bölümün ilk geçişinde (50 jeton + 1 güçlendirici; eski
+  "kupa maçı" +50 jetonuna ek).
+- Reklam günlük hakları: `life` 5 (eski ad-life ile aynı sayaç), `double_coins` 8
+  (kazançtan sonra 30 dk içinde, kazanç başına 1), `booster` 3, `spin` 1;
+  en az 12 sn izleme, jeton 10 dk geçerli.
+- `/api/puzzle/me` → `profile.ads` (`{kind: {left, per_day, seconds}}`),
+  `profile.gifts` (`streaks`, `star_chest {progress, every, opened}`, `level_chest`).
+- Arena skor yanıtı `entry.star_detail: {record, participation, next_record_at, participation_left}`;
+  `POST /api/arena/sessions` yanıtı canlı oyunlarda `lives: {lives, max_lives, next_life_at}`.
+- XP görünümü (`city.xp`): `mode:"weekly"`, `week {key, xp, stars, converts_at, claim_until}`,
+  `claim_week {key, xp, stars, expires_at, last_day} | null`; `pending` /
+  `claimable_stars` = şu an toplanabilir (yalnız Pzt–Çar dolu).
+
 ## 6. Oyun ana sayfası
 
 Her oyunun bir ana sayfası vardır (`/lig-yolu/<oyun>` bölümlüler için,

@@ -199,9 +199,15 @@ async function once<T>(path: string, options: RequestOptions): Promise<T> {
       throw error;
     }
 
+    networkObserver.success?.();
     return payload as T;
   } catch (error) {
-    if (error instanceof ApiError) throw error;
+    if (error instanceof ApiError) {
+      // HTTP yanıtı geldi: bağlantı var (4xx/5xx çevrimdışı değildir).
+      if (error.status > 0) networkObserver.success?.();
+      throw error;
+    }
+    if ((error as Error)?.name !== "AbortError" || !signal?.aborted) networkObserver.offline?.();
     if ((error as Error)?.name === "AbortError") {
       // Çağıran iptal ettiyse hatayı yukarı aynen taşı; React Query bunu sessizce yutar.
       if (signal?.aborted) throw error;
@@ -212,6 +218,17 @@ async function once<T>(path: string, options: RequestOptions): Promise<T> {
     clearTimeout(timer);
     signal?.removeEventListener("abort", abortFromCaller);
   }
+}
+
+/**
+ * Ağ gözlemcisi (lib/offline): her başarılı yanıtta ve yanıtsız (ağ / zaman
+ * aşımı) hatada haber verilir. Çevrimdışı kuyruk böylece bağlantı gelir
+ * gelmez gönderilir; NetInfo gibi yerel modül gerekmez.
+ */
+type NetworkObserver = { success?: () => void; offline?: () => void };
+let networkObserver: NetworkObserver = {};
+export function setNetworkObserver(observer: NetworkObserver) {
+  networkObserver = observer;
 }
 
 /** Uçuştaki aynı GET istekleri tek çağrıya indirilir. */

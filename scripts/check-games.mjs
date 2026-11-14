@@ -20,7 +20,10 @@
  *      aşar; güçler (KALKAN, TURBO, ×2) işini yapar; rakip adı sığmazsa kısalır.
  *      SAVUNMA HATTI: boş saha gol yer; kart ekonomisi (güneş, dolum, kilit);
  *      forvet koridorunu korur, stoper oyalar, pres yavaşlatır, füze 3×3
- *      temizler; dalgalar ilerler, kaptan gelir.
+ *      temizler; dalgalar ilerler, kaptan gelir. 100 bölümün hepsi üretilir ve
+ *      TS ikiziyle (lib/puzzle/levels/savunma.ts) alan alan aynıdır; yenilikler
+ *      oransal ve geç gelir; bölüm modu (güçlendirici, fail/continue/giveUp)
+ *      sözleşmeye uyar; basit bot öğretici bölümleri kazanır.
  *      KADRO KOŞUSU: kapı aritmetiği; kötü kapılar kadroyu bitirir, iyi kapılar
  *      büyütür; rakip yalnız top değince düşer; temas kaybı bire bir görünür;
  *      kaleci düşer, bölüm atlanır.
@@ -29,6 +32,10 @@
  *      vuran okunur; kazanan sıradaki kulübe geçer, kaybeden turnuvayı bitirir.
  *      Doğru güçte top tam nişana gider, güç hatası sapma yapar, rüzgâr
  *      sürükler; jokerler işini yapar; merdivende koşullar zorlaşır.
+ *      BÖLÜM MODU: 150 bölümün hepsi üretilir ve TS ikiziyle
+ *      (lib/puzzle/levels/penalti.ts) birebir aynıdır; yenilik açılmadan
+ *      görünmez, zorluk artar; over/fail/continue/giveUp sözleşmeye uyar;
+ *      baraj ve savunmacı keser, halka golü sayılır; skor sunucu tavanında.
  *   5. BİLGİ YARIŞMALARI (Arena, Kim Bu?, Skor Tahmini): her soru geçerli
  *      (cevap şıklarda, şıklar tekil), zorluk seviyeyle artar, son sorulan
  *      oyuncu/maç hemen tekrar gelmez, maç sonucu doğru okunur, hızlı ve seri
@@ -51,6 +58,9 @@ import {
   toMatches,
   toPlayers,
 } from "../lib/game/quiz/questions.ts";
+import * as TS_SAVUNMA from "../lib/puzzle/levels/savunma.ts";
+import * as TS_PENALTI from "../lib/puzzle/levels/penalti.ts";
+import * as TS_KADRO from "../lib/puzzle/levels/kadro.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const fails = [];
@@ -490,7 +500,7 @@ const pilot = (A) => {
     guarded.dead && mid.defeated === 1 && mid.conceded === 1 && mid.points >= 10 && !open.dead,
     `korunan koridorda rakip ${guarded.dead ? "durduruldu" : "geçti"}, boş koridordan ${mid.conceded} gol`,
   );
-  // Stoper: 2400 can / 100 hasar ≈ 24 sn oyalar (stoper 2. bölümde açılır: serbest yerleştirme)
+  // Stoper: 2400 can / 100 hasar ≈ 24 sn oyalar (stoper 4. bölümde açılır: serbest yerleştirme)
   d.place("stoper", 0, 2, true);
   const eater = d.spawn("hucum", 0, 9);
   let held = 0;
@@ -506,7 +516,7 @@ const pilot = (A) => {
   const db = B.game.debug();
   db.clearQueue();
   db.setEnergy(5000);
-  db.place("pres", 1, 0, true); // 8. bölüm gerekmeden pres'i sınamak için serbest yerleştirme
+  db.place("pres", 1, 0, true); // 52. bölüm gerekmeden pres'i sınamak için serbest yerleştirme
   const slowed = db.spawn("santrfor", 1);
   const free = db.spawn("santrfor", 3);
   runB(9);
@@ -523,12 +533,12 @@ const pilot = (A) => {
   check("savunma: füze 3×3 alanı temizler", near.every((f) => f.dead) && !farLane.dead && !db.units.some((u) => u.type === "fuze"), `${near.filter((f) => f.dead).length}/3 rakip, alan dışındaki ayakta`);
 }
 {
-  // Bölüm: kurulu savunma 2. bölümün dalgalarını temizler, son hücumda kaptan gelir; bölüm
-  // kazanılır (yıldız + kayıt mesajı), sonraki bölümde yeni kart açılır.
+  // Bölüm: kurulu savunma 3. bölümün dalgalarını temizler, son hücumda kaptan gelir (3.
+  // bölümden itibaren); bölüm kazanılır (yıldız + kayıt mesajı), 4. bölümde STOPER açılır.
   const { A, run, log, over } = boot("savunma");
   A.game.start();
   const d = A.game.debug();
-  d.play(2);
+  d.play(3);
   d.setEnergy(5000);
   for (let l = 0; l < 5; l += 1) {
     d.place("forvet", l, 0, true);
@@ -546,12 +556,12 @@ const pilot = (A) => {
   const saved = log.filter((m) => m.type === "store").pop();
   check(
     "savunma: bölüm dalgaları ilerler, kaptan gelir, bölüm kazanılır",
-    maxWave >= 2 && sawBoss && x.lives === 3 && x.points >= 50 + 10 * 5 && x.state === "won" && end && end.stats.won === 1 && end.stats.level === 2 && end.stats.stars === 3,
+    maxWave >= 2 && sawBoss && x.lives === 3 && x.points >= 50 + 10 * 5 && x.state === "won" && end && end.stats.won === 1 && end.stats.level === 3 && end.stats.stars === 3,
     `${maxWave}. dalga, ${x.defeated} rakip durduruldu, ${x.points} puan, hak ${x.lives}, ${end ? end.stats.stars + " yıldız" : "bitmedi"}`,
   );
   check(
     "savunma: ilerleme RN'ye kaydedilir ve geri yüklenir",
-    saved && saved.data.unlocked === 3 && saved.data.stars["2"] === 3 && (() => {
+    saved && saved.data.unlocked === 4 && saved.data.stars["3"] === 3 && (() => {
       const { A: C } = boot("savunma");
       C.game.storeLoaded({ unlocked: 5, stars: { 1: 3, 2: 1, 4: 2 } });
       const p = C.game.debug().progress;
@@ -559,14 +569,155 @@ const pilot = (A) => {
     })(),
     saved ? JSON.stringify(saved.data) : "store mesajı yok",
   );
-  const lockedBefore = !x.usable("fuze");
-  d.play(3);
+  const lockedBefore = !x.usable("stoper");
+  d.play(4);
   const y = A.game.debug();
-  check("savunma: sonraki bölümde yeni kart açılır", lockedBefore && y.usable("fuze") && y.pops.some((p) => p.key === "fuze"), `3. bölüm kartları: ${y.cards().map((c) => c.key).join(", ")}`);
+  check("savunma: sonraki bölümde yeni kart açılır", lockedBefore && y.usable("stoper") && y.pops.some((p) => p.key === "stoper"), `4. bölüm kartları: ${y.cards().map((c) => c.key).join(", ")}`);
   const team = (id, name) => ({ id, name, kit: { primary: "#dc2626", secondary: "#ffffff" } });
   A.game.setRoster({ captain: { id: 5, short: "K. Kaptan", team: team(9, "Bizimkiler") }, rivals: [{ team: team(1, "Birinci Rakip") }, { team: team(2, "İkinci Rakip") }] });
   const r = A.game.debug();
   check("savunma: kaptan ve rakip takımlar kadrodan gelir", r.captain === "K. Kaptan" && /Rakip$/.test(r.rival), `${r.captain} · ${r.wave}. dalga → ${r.rival}`);
+}
+
+/* ── 3b-2) SAVUNMA HATTI: 100 bölüm, TS ikizi, bölüm modu, bot ──────────── */
+
+{
+  // TS ikizi (lib/puzzle/levels/savunma.ts) JS tablosuyla alan alan aynı; 100 bölümün hepsi
+  // üretilir (dalga kuyruğu geçerli, tanıtılmamış rakip yok); yenilikler oransal ve geç gelir.
+  const { A } = boot("savunma");
+  const d = A.game.debug();
+  const sameUnlocks =
+    TS_SAVUNMA.UNLOCKS.length === d.PLAN.length &&
+    TS_SAVUNMA.UNLOCKS.every((u, i) => {
+      const p = d.PLAN[i];
+      const D = u.kind === "unit" ? d.UNITS[u.key] : u.kind === "foe" ? d.FOES[u.key] : d.FEATURES[u.key];
+      return p[0] === u.level && p[1] === u.kind && p[2] === u.key && D && D.name === u.name && D.desc === u.desc;
+    });
+  const fields = ["n", "d", "waves", "lanes", "start", "hp", "boss", "kaptans", "cup", "rain", "mud", "night", "newFoe"];
+  const diffs = [];
+  const bad = [];
+  for (let n = 1; n <= TS_SAVUNMA.LEVEL_COUNT; n += 1) {
+    const js = d.levelInfo(n);
+    const ts = TS_SAVUNMA.savunmaLevel(n);
+    for (const f of fields) if (js[f] !== ts[f]) diffs.push(`${n}.${f}: js ${js[f]} ts ${ts[f]}`);
+    if (JSON.stringify(js.newCards) !== JSON.stringify(ts.newCards) || JSON.stringify(js.news) !== JSON.stringify(ts.news)) diffs.push(`${n}.news`);
+    const g = TS_SAVUNMA.goalSummary(n);
+    if (!g.limit || !g.goals.length) bad.push(`${n}: hedef yok`);
+    // dalgaları kur: her dalga dolu, yalnız tanıtılmış türler; son dalgada kaptan(lar)
+    d.play(n);
+    const x = A.game.debug();
+    for (let w = 1; w <= x.info.waves; w += 1) {
+      x.setWave(w);
+      const q = A.game.debug().queue;
+      const intro = (t) => t === "hucum" || t === "kaptan" || (TS_SAVUNMA.UNLOCKS.find((u) => u.key === t)?.level ?? 1e9) <= n;
+      if (!q.length || !q.every((e) => x.FOES[e.type] && intro(e.type) && e.lane >= 0)) bad.push(`${n}/${w}: kuyruk`);
+      const bosses = q.filter((e) => e.type === "kaptan").length;
+      if (bosses !== (w === x.info.waves ? x.info.kaptans : 0)) bad.push(`${n}/${w}: kaptan ${bosses}`);
+    }
+    if (x.info.mud && Object.keys(x.mudCells(n, x.info.lanes)).length < 2) bad.push(`${n}: çamur`);
+  }
+  check(
+    "savunma: TS bölüm tablosu (lib/puzzle/levels/savunma.ts) oyunla aynı",
+    sameUnlocks && diffs.length === 0 && TS_SAVUNMA.LEVEL_COUNT >= 100 && d.LEVEL_COUNT === TS_SAVUNMA.LEVEL_COUNT,
+    diffs.length ? diffs.slice(0, 4).join(" · ") : `${TS_SAVUNMA.LEVEL_COUNT} bölüm, ${d.PLAN.length} yenilik eşleşti`,
+  );
+  check("savunma: 100 bölümün hepsi üretilir (dalgalar, kaptanlar, çamur)", bad.length === 0, bad.length ? bad.slice(0, 5).join(" · ") : `${TS_SAVUNMA.LEVEL_COUNT} bölüm × dalgalar geçerli`);
+  // Oransal ve geç: ilk 3 bölüm yeniliksiz, aynı bölümde iki yenilik yok, aralar 3–6 bölüm,
+  // bütün oyuncular ve rakipler 90. bölüme kadar gelir; zorluk testereli ama genel olarak artar.
+  const lv = TS_SAVUNMA.UNLOCKS.map((u) => u.level);
+  const gaps = lv.slice(1).map((v, i) => v - lv[i]);
+  const allUnits = d.ORDER.every((k) => d.UNITS[k].unlock <= 90);
+  const allFoes = Object.keys(d.FOES).filter((k) => k !== "kaptan").every((k) => k === "hucum" || lv.includes(TS_SAVUNMA.UNLOCKS.find((u) => u.key === k)?.level));
+  const dAt = (n) => TS_SAVUNMA.savunmaDifficulty(n);
+  const rising = [1, 2, 3, 4, 5, 6, 7, 8, 9].every((k) => dAt(k * 10 + 5) > dAt((k - 1) * 10 + 5)) && dAt(100) > dAt(50) * 1.6;
+  check(
+    "savunma: yenilikler oransal ve geç gelir, zorluk artar",
+    lv[0] >= 4 && new Set(lv).size === lv.length && Math.min(...gaps) >= 3 && Math.max(...gaps) <= 6 && allUnits && allFoes && rising,
+    `ilk ${lv[0]}. bölüm, aralar ${Math.min(...gaps)}–${Math.max(...gaps)}, son ${lv[lv.length - 1]}; zorluk 1:${dAt(1)} · 50:${dAt(50)} · 100:${dAt(100)}`,
+  );
+}
+{
+  // Bölüm modu: config + start doğrudan N. bölümü oynatır (seçim ekranı yok, kayıt yok);
+  // güçlendiriciler; üçüncü golde "fail" → continue (+1 hak, koridor temiz) → giveUp → over.
+  const { A, run, log, over } = boot("savunma");
+  A.game.config({ levelMode: true, level: 13, boosters: ["gunes", "duvar", "bilinmeyen"] });
+  A.game.start();
+  const d = A.game.debug();
+  const info = log.find((m) => m.type === "levelInfo");
+  const walls = d.units.filter((u) => u.type === "stoper").length;
+  check(
+    "savunma: bölüm modu N. bölümü açar, güçlendiriciler uygulanır",
+    d.state === "play" && d.level === 13 && d.energy === d.info.start + 150 && walls === 3 && info && info.level === 13 && /FÜZE/.test(info.tip || ""),
+    `durum ${d.state}, bölüm ${d.level}, güneş ${d.energy} (başlangıç ${d.info.start}), duvar ${walls}, ipucu ${info && info.tip}`,
+  );
+  // canlı güçlendirici
+  const e0 = d.energy;
+  window_cmd(A, { type: "booster", key: "gunes" });
+  const liveSun = A.game.debug().energy === e0 + 150;
+  // savunmasız saha: üçüncü golde bekler
+  d.skipPops();
+  let failMsg = null;
+  for (let i = 0; i < 60 && !failMsg; i += 1) {
+    run(5);
+    failMsg = log.find((m) => m.type === "fail");
+  }
+  const waiting = A.game.debug().state === "await";
+  run(5); // beklerken zaman akmaz, bölüm bitmez
+  const still = A.game.debug().state === "await" && !over();
+  window_cmd(A, { type: "continue" });
+  const resumed = A.game.debug();
+  const cleared = !resumed.foes.some((f) => !f.dead && f.z < 3);
+  // devam hakkı bitti: bir sonraki gol bölümü bitirir (ikinci fail yok)
+  for (let i = 0; i < 80 && !over(); i += 1) run(5);
+  const fails = log.filter((m) => m.type === "fail").length;
+  const end = over();
+  // pes: ayrı bir oyunda fail → giveUp → over
+  const { A: G, run: runG, log: logG, over: overG } = boot("savunma");
+  G.game.config({ levelMode: true, level: 2 });
+  G.game.start();
+  for (let i = 0; i < 60 && !logG.some((m) => m.type === "fail"); i += 1) runG(5);
+  window_cmd(G, { type: "giveUp" });
+  runG(4);
+  const quit = overG();
+  check(
+    "savunma: bölüm modunda devam / pes (fail → continue → giveUp → over)",
+    liveSun && failMsg && failMsg.level === 13 && failMsg.canContinue === true && waiting && still && resumed.state === "play" && resumed.lives === 1 && cleared &&
+      fails === 1 && end && end.stats.won === 0 && end.stats.stars === 0 && end.stats.level === 13 && end.stats.conceded === 4 && !log.some((m) => m.type === "store") &&
+      quit && quit.stats.won === 0 && quit.stats.level === 2,
+    `fail ${fails} kez, devamdan sonra hak ${resumed.lives}, bitiş ${end ? JSON.stringify(end.stats) : "yok"}, pes ${quit ? "→ over" : "yok"}`,
+  );
+  // Eski mod da çalışır: seçim ekranı 20'lik sayfalar, 100 bölüm.
+  const { A: B } = boot("savunma");
+  B.game.storeLoaded({ unlocked: 37, stars: { 36: 2 } });
+  B.game.start();
+  const sl = B.game.debug().selectLayout();
+  check("savunma: eski mod bölüm seçimi sayfalı (100 bölüm)", B.game.debug().state === "select" && sl[0].n === 21 && sl.length === 20 && sl.prev && sl.next, `sayfa ${sl.pageLabel.text}`);
+}
+{
+  // Basit bot (güneşi toplar, taraftar → forvet → stoper → forvet dizer; yalnız açık ve
+  // parası yeten kartlar) ilk bölümleri kazanır: öğretici bölümler gerçekten oynanabilir.
+  const results = [];
+  for (const n of [1, 2, 3, 4, 7, 10]) {
+    const { A, run, over } = boot("savunma");
+    A.game.config({ levelMode: true, level: n });
+    A.game.start();
+    A.game.debug().skipPops();
+    let tick = 0;
+    for (let i = 0; i < 100 && !over(); i += 1)
+      run(4, (arena) => {
+        if (++tick % 12) return;
+        const x = arena.game.debug();
+        if (x.state === "await") arena.game.command({ type: "giveUp" });
+        if (x.state !== "play") return;
+        x.orbs.filter((o) => !o.taken).forEach((o) => x.collect(o));
+        const order = [];
+        for (const [ty, r] of [["taraftar", 0], ["forvet", 1], ["stoper", 5], ["forvet", 2], ["taraftar", 3], ["forvet", 4]]) for (let l = 0; l < x.lanes; l += 1) order.push([ty, l, r]);
+        for (const [ty, l, r] of order) if (x.usable(ty) && x.place(ty, l, r)) break;
+      });
+    const end = over();
+    results.push(`${n}:${end && end.stats.won ? end.stats.stars + "★" : "×"}`);
+  }
+  check("savunma: basit bot ilk bölümleri kazanır", results.every((r) => /★/.test(r)), results.join(" "));
 }
 
 /* ── 3c) KADRO KOŞUSU ────────────────────────────────────────────────────── */
@@ -710,6 +861,137 @@ const squadBot = (A) => {
   );
 }
 
+/* ── 3c') KADRO KOŞUSU · bölüm modu ─────────────────────────────────────────
+ * Tam tarama (250 bölümün hepsi kurulur, bot örnek bölümleri oynar):
+ * scripts/check-kadro-levels.mjs. Burada: TS ↔ JS tablolar, tek bölüm akışı,
+ * güçlendiriciler, "devam?" akışı. */
+
+/** Bölüm modu botu: tanıtım kartını geçer, grubu arkası geçilene dek "sıradaki" sayar. */
+const levelBot = (A) => {
+  const d = A.game.debug();
+  if (d.state === "intro") A.game.down({ x: 100, y: 300 });
+  if (d.state !== "play") return;
+  const next = d.segs.filter((s) => !s.done && s.z > d.z - (s.type === "rivals" ? 1.6 : 0.2)).sort((a, b) => a.z - b.z)[0];
+  if (d.boss && d.boss.shot) d.setTarget(d.boss.shot.x > 0 ? d.boss.shot.x - 3.4 : d.boss.shot.x + 3.4);
+  else if (next && next.type === "gate") d.setTarget(next.hide && next.z - d.z > 10 ? 0 : d.apply(d.n, next.left) >= d.apply(d.n, next.right) ? -2.2 : 2.2);
+  else if (next && next.type === "rivals" && !next.full) d.setTarget((next.x0 + next.x1) / 2 > 0 ? -3.4 : 3.4);
+  else if (next && next.type === "bar") d.setTarget(next.x > 0 ? -3.4 : 3.4);
+};
+function kadroLevel(level, boosters = []) {
+  const b = boot("kadro");
+  b.A.game.configure({ type: "config", levelMode: true, level, boosters });
+  b.A.game.start();
+  return b;
+}
+{
+  const { A } = boot("kadro");
+  const d = A.game.debug();
+  const bad = [];
+  for (let L = 1; L <= 400; L += 1) if (JSON.stringify(d.levelSpec(L)) !== JSON.stringify(TS_KADRO.kadroLevelSpec(L))) bad.push(L);
+  const sameU = JSON.stringify(d.UNLOCKS) === JSON.stringify(TS_KADRO.KADRO_UNLOCKS);
+  check(
+    "kadro: TS bölüm tablosu oyunla aynı (LEVEL_COUNT, UNLOCKS, levelSpec 1–400)",
+    d.LEVEL_COUNT === TS_KADRO.LEVEL_COUNT && d.LEVEL_COUNT >= 250 && sameU && bad.length === 0,
+    `${d.LEVEL_COUNT} bölüm, ${d.UNLOCKS.length} açılış, fark: ${bad.slice(0, 5).join(",") || "yok"}`,
+  );
+  const s1 = d.levelSpec(1), s9 = d.levelSpec(9), s10 = d.levelSpec(10), s15 = d.levelSpec(15), s200 = d.levelSpec(200);
+  check(
+    "kadro: zorluk eğrisi (uzar, sertleşir; 10'lar kupa, 5'ler nefes)",
+    s200.meters > 3 * s1.meters && s200.tough > s9.tough && s9.tough > s1.tough && s10.cup && s10.tough > s9.tough && s15.breather && s15.tough < d.levelSpec(14).tough,
+    `1: ${s1.meters} m ×${s1.tough} · 10 (kupa): ×${s10.tough} · 15 (nefes): ×${s15.tough} · 200: ${s200.meters} m ×${s200.tough}`,
+  );
+}
+{
+  // Bölüm 1: tanıtım kartı → oyun → gol → `over` (won, 1–3★); sonraki bölüme GEÇMEZ.
+  const { A, run, log, over } = kadroLevel(1);
+  const intro = A.game.debug().state === "intro";
+  run(90, levelBot);
+  const end = over();
+  const x = A.game.debug();
+  const info = log.find((m) => m.type === "levelInfo");
+  check(
+    "kadro bölüm modu: bölüm 1 oynanır, over {won, stars} gelir, sonraki bölüme geçilmez",
+    intro && Boolean(info) && info.level === 1 && end && end.stats.won === 1 && end.stats.level === 1 && end.stats.stars >= 1 && end.stats.stars <= 3 && x.level === 1 && log.filter((m) => m.type === "over").length === 1,
+    end ? `${end.stats.stars}★, kadro ${end.stats.kept}/${end.stats.par}, ${end.score} puan` : "over gelmedi",
+  );
+  // Aynı bölüm iki kez kurulunca aynı yol (belirlenimci).
+  const a = kadroLevel(37).A.game.debug(), b2 = kadroLevel(37).A.game.debug();
+  const sig = (q) => JSON.stringify(q.segs.map((s) => [s.type, s.z, s.left, s.right, s.hp, s.look, s.fx]).concat(q.pickups.map((p) => [p.type, p.x, p.z])));
+  check("kadro bölüm modu: aynı bölüm her kurulumda aynı", sig(a) === sig(b2) && a.segs.length > 20, `bölüm 37: ${a.segs.length} dilim, ${a.pickups.length} silah`);
+}
+{
+  // Güçlendiriciler: takviye +5, kalkan ilk teması kayıpsız geçirir.
+  const t = kadroLevel(5, ["takviye"]).A.game.debug();
+  const { A, run } = kadroLevel(5, ["kalkan"]);
+  const d = A.game.debug();
+  d.segs.forEach((s) => (s.type === "gate" || s.type === "bar") && (s.done = true));
+  d.pickups.forEach((p) => (p.gone = true));
+  d.setN(20);
+  const g = d.segs.find((s) => s.type === "rivals");
+  g.hp = g.hp0 = 120;
+  g.x0 = -4.4;
+  g.x1 = 4.4;
+  let lostAtG = null;
+  run(12, (arena) => {
+    const x = arena.game.debug();
+    if (x.state === "intro") arena.game.down({ x: 1, y: 1 });
+    if (lostAtG == null && x.z > g.z + 2) lostAtG = x.lostTotal;
+  });
+  check("kadro bölüm modu: takviye +5, kalkan ilk teması kayıpsız geçirir", t.n === 6 && d.shield === 1 && lostAtG === 0 && A.game.debug().shield === 0, `takviye kadro ${t.n}, kalkanla temas kaybı ${lostAtG}`);
+}
+{
+  // Kadro tükenir → fail {canContinue:true}; continue → küçük kadroyla sürer; ikinci kez → over.
+  const skip = (arena) => arena.game.debug().state === "intro" && arena.game.down({ x: 1, y: 1 });
+  const { A, run, log } = kadroLevel(3);
+  const d = A.game.debug();
+  run(1, skip);
+  d.setN(3);
+  const g = A.game.debug().segs.find((s) => s.type === "rivals");
+  A.game.debug().segs.forEach((s) => s.type === "gate" && (s.done = true));
+  g.hp = g.hp0 = 999;
+  g.x0 = -4.4;
+  g.x1 = 4.4;
+  run(12);
+  const fail1 = log.find((m) => m.type === "fail");
+  const waiting = A.game.debug().state === "failwait";
+  A.game.command({ type: "continue" });
+  const revived = A.game.debug().state === "play" && A.game.debug().n >= 5;
+  A.game.debug().setShield(0); // devamın kalkanı bu denemede kapalı
+  A.game.debug().setN(1);
+  const g2 = A.game.debug().segs.find((s) => s.type === "rivals" && !s.done);
+  if (g2) {
+    g2.hp = g2.hp0 = 999;
+    g2.x0 = -4.4;
+    g2.x1 = 4.4;
+  }
+  A.game.debug().segs.forEach((s) => s.type === "gate" && (s.done = true));
+  run(30);
+  const fails = log.filter((m) => m.type === "fail");
+  const end = log.find((m) => m.type === "over");
+  check(
+    "kadro bölüm modu: tükenince fail → continue ile sürer, ikinci kayıpta over (won 0)",
+    fail1 && fail1.canContinue === true && waiting && revived && fails.length === 2 && fails[1].canContinue === false && end && end.stats.won === 0 && end.stats.stars === 0 && end.stats.continued === 1,
+    `${fails.length} fail, over ${end ? `won ${end.stats.won}` : "yok"}`,
+  );
+  // Yanıt gelmezse (ya da giveUp) bekleme `over` ile biter.
+  const k = kadroLevel(3);
+  k.run(1, skip);
+  k.A.game.debug().setN(1);
+  k.A.game.debug().segs.forEach((s) => s.type === "gate" && (s.done = true));
+  const g3 = k.A.game.debug().segs.find((s) => s.type === "rivals");
+  g3.hp = g3.hp0 = 999;
+  g3.x0 = -4.4;
+  g3.x1 = 4.4;
+  k.run(40);
+  const k2 = kadroLevel(2);
+  k2.A.game.command({ type: "giveUp" });
+  check(
+    "kadro bölüm modu: yanıtsız fail ve giveUp over gönderir",
+    Boolean(k.over()) && k.over().stats.won === 0 && Boolean(k2.over()) && k2.over().stats.won === 0,
+    "bekleme süresi doldu → over; giveUp → over",
+  );
+}
+
 /* ── 3d) KULÜP ŞEHRİ (sahne) ─────────────────────────────────────────────── */
 
 {
@@ -798,6 +1080,7 @@ const penRoster = {
   takers: [{ id: 21, name: "Mert Mavi", short: "M. Mavi", team: { id: 20, name: "Mavi FK", kit: kitB }, attrs: { power: 80, accuracy: 80 }, stats: { goals: 9 } }],
 };
 const corner = () => [(Math.random() < 0.5 ? -1 : 1) * (2.35 + Math.random() * 0.8), 0.35 + Math.random() * 1.5];
+const A_clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
 {
   const { A } = boot("penalti");
@@ -967,6 +1250,173 @@ const corner = () => [(Math.random() < 0.5 ? -1 : 1) * (2.35 + Math.random() * 0
     "penaltı: merdivende zorlaşır (rüzgâr, dar bölge, hızlı güç, titreyen nişan)",
     easy.wind === 0 && Math.abs(hard.wind) > 1 && w(hard.zone) < w(easy.zone) * 0.75 && hard.period < easy.period * 0.85 && hard.sway > easy.sway * 2,
     `bölge ${w(easy.zone).toFixed(2)} → ${w(hard.zone).toFixed(2)} · çubuk ${easy.period.toFixed(2)} → ${hard.period.toFixed(2)} sn · rüzgâr ${easy.wind.toFixed(1)} → ${Math.abs(hard.wind).toFixed(1)} m/sn · titreme ${easy.sway.toFixed(2)} → ${hard.sway.toFixed(2)} m`,
+  );
+}
+
+/* ── 4b) PENALTI · bölüm modu (Lig Yolu) ─────────────────────────────────── */
+
+{
+  // Tablo: JS üreteci ile TS ikizi (lib/puzzle/levels/penalti.ts) bütün bölümlerde birebir aynı.
+  const { A } = boot("penalti");
+  const d = A.game.debug();
+  let diff = 0, first = null;
+  for (let n = 1; n <= TS_PENALTI.LEVEL_COUNT + 50; n += 1) {
+    const a = JSON.stringify(d.levelSpec(n)), b = JSON.stringify(TS_PENALTI.penaltiLevel(n));
+    if (a !== b || d.goalText(d.levelSpec(n)) !== TS_PENALTI.goalText(TS_PENALTI.penaltiLevel(n))) {
+      diff += 1;
+      first = first ?? n;
+    }
+  }
+  const sameTables = JSON.stringify(d.UNLOCKS) === JSON.stringify(TS_PENALTI.UNLOCKS) && d.LEVEL_COUNT === TS_PENALTI.LEVEL_COUNT && d.LEVEL_COUNT >= 150;
+  check("penaltı bölüm: JS tablosu TS ikiziyle aynı", diff === 0 && sameTables, diff ? `${diff} bölüm farklı (ilk ${first})` : `${TS_PENALTI.LEVEL_COUNT}+50 bölüm, ${d.UNLOCKS.length} yenilik aynı`);
+
+  // 150 bölümün hepsi geçerli; yenilik açılmadan görünmez; zorluk artar; boss / nefes düzeni.
+  const at = Object.fromEntries(d.UNLOCKS.map((u) => [u.key, u.level]));
+  const uses = (s) => ({ ruzgar: s.wind > 0, halka: s.goal === "targets", sure: s.clock > 0, savunmaci: s.defenders > 0, ani: s.goal === "sudden", yagmur: s.rain, baraj: !!s.wall, gece: s.night, sis: s.fog, oynak: s.hoopMove > 0, iki_savunmaci: s.defenders > 1, firtina: s.gust, seri: s.goal === "shootout" });
+  let invalid = 0, early = 0, introMissing = 0;
+  const band = (a, b) => {
+    let t = 0;
+    for (let n = a; n <= b; n += 1) t += d.levelSpec(n).diff;
+    return t / (b - a + 1);
+  };
+  for (let n = 1; n <= d.LEVEL_COUNT; n += 1) {
+    const s = d.levelSpec(n);
+    const okGoal = ["score", "targets", "shootout", "sudden"].includes(s.goal);
+    const okNeed = s.goal === "score" || s.goal === "targets" ? s.need >= 1 && s.need <= s.shots : s.need === 0;
+    const okHoops = s.goal !== "targets" || (s.hoops.length === 3 && s.hoops.every((h) => Math.abs(h.x) + h.r < 3.66 + 0.4 && h.y - h.r > 0));
+    if (!okGoal || !okNeed || !okHoops || s.reflex < 50 || s.reflex > 99 || s.zoneK <= 0.3) invalid += 1;
+    const u = uses(s);
+    for (const k of Object.keys(u)) if (u[k] && n < at[k]) early += 1;
+    const un = d.UNLOCKS.find((x) => x.level === n);
+    if (un && un.key in u && !u[un.key]) introMissing += 1;
+    if (n % 10 === 0 && !s.boss) invalid += 1;
+    if (n % 5 === 0 && n % 10 && !s.breather) invalid += 1;
+  }
+  const d1 = band(1, 30), d2 = band(61, 90), d3 = band(121, 150);
+  check(
+    "penaltı bölüm: 150 bölüm geçerli, yenilik vaktinden önce gelmez, zorluk artar",
+    invalid === 0 && early === 0 && introMissing === 0 && d1 < d2 && d2 < d3 && d.levelSpec(45).diff < d.levelSpec(44).diff && d.levelSpec(60).diff > d.levelSpec(59).diff,
+    `geçersiz ${invalid} · erken yenilik ${early} · eksik tanıtım ${introMissing} · ort. zorluk ${d1.toFixed(2)} → ${d2.toFixed(2)} → ${d3.toFixed(2)}`,
+  );
+}
+{
+  // Bölüm modu akışı: yalnız N. bölüm; levelInfo; iyi oyuncu kazanır (over: level/won/stars…),
+  // kaybetmek üzereyken fail → continue +1 şut → giveUp over. Belirlenimci koşullar.
+  const play = (level, aim, power, onFail) => {
+    const box = boot("penalti");
+    box.A.game.command({ type: "config", levelMode: true, level, boosters: [] });
+    box.A.game.start();
+    const bot = penaltyBot(box.A, box.run, { aim, power });
+    const fails = [];
+    bot.until(() => {
+      const st = box.A.game.debug().state;
+      if (st === "fail") {
+        fails.push(box.A.game.debug().lvl.shots);
+        onFail(box.A, fails.length);
+      }
+      return box.A.game.debug().state === "over";
+    }, 80000);
+    return { ...box, fails, end: box.over(), info: box.log.find((m) => m.type === "levelInfo") };
+  };
+  const win = play(1, corner, "iyi", (A) => A.game.command({ type: "giveUp" }));
+  const keys = ["level", "won", "stars", "goals", "shots", "saves", "wins", "perfect", "champion"];
+  const st = win.end && win.end.stats;
+  check(
+    "penaltı bölüm: yalnız N. bölüm oynar, kazanınca over {level, won, stars, …}",
+    Boolean(st) && keys.every((k) => k in st) && st.level === 1 && st.won === 1 && st.stars >= 1 && st.stars <= 3 && st.goals >= 3 && win.info && win.info.goal === "5 şutta 3 gol at" && win.A.game.debug().matchIdx === 0,
+    st ? `bölüm ${st.level}: ${st.goals}/${st.shots} gol, ${st.stars}★, skor ${win.end.score}` : "over yok",
+  );
+  const lose = play(1, () => [5.5, 1.2], "iyi", (A, k) => A.game.command(k === 1 ? { type: "continue" } : { type: "giveUp" }));
+  const lst = lose.end && lose.end.stats;
+  check(
+    "penaltı bölüm: kaybetmek üzereyken fail, devam +1 şut, vazgeçince over",
+    lose.fails.length >= 2 && lose.fails[1] === lose.fails[0] + 1 && Boolean(lst) && lst.won === 0 && lst.stars === 0 && lose.log.some((m) => m.type === "fail" && m.canContinue === true),
+    `fail ${lose.fails.length} kez (şut hakkı ${lose.fails.join(" → ")}) · ${lst ? `${lst.won ? "kazanç" : "kayıp"}, ${lst.goals}/${lst.shots}` : "over yok"}`,
+  );
+  // Belirlenimci: aynı bölüm, aynı atış → aynı rüzgâr ve kaleci kararı (Math.random'dan bağımsız).
+  const cond = (seed) => {
+    const { A, run } = boot("penalti");
+    let s = seed;
+    const real = Math.random;
+    Math.random = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+    A.game.command({ type: "config", levelMode: true, level: 57, boosters: [] });
+    A.game.start();
+    for (let i = 0; i < 2000 && A.game.debug().state !== "aim"; i += 1) run(1 / 60);
+    const e = A.game.debug();
+    Math.random = real;
+    return JSON.stringify([e.cond.wind0, e.cond.windZ, e.kplan]);
+  };
+  check("penaltı bölüm: koşullar belirlenimci (aynı bölüm aynı atış)", cond(3) === cond(99), cond(3).slice(0, 60));
+}
+{
+  // Engeller: baraj ve çizgideki savunmacı önünden geçen topu keser; halka golü sayılır;
+  // güçlendiriciler (nisan: geniş bölge, ek_sut: +1 şut) ve sunucu tavanı.
+  const find = (fn) => {
+    for (let n = 1; n <= 150; n += 1) if (fn(boot("penalti").A.game.debug().levelSpec(n))) return n;
+    return 0;
+  };
+  const shootAt = (level, pick) => {
+    const { A, run } = boot("penalti");
+    A.game.command({ type: "config", levelMode: true, level, boosters: [] });
+    A.game.start();
+    // engelleri durdur: ölçüm konuma bağlı olsun, zamanlamaya değil
+    const L = A.game.debug().level;
+    if (L.wall) L.wall.speed = 0;
+    L.defSpeed = 0;
+    L.hoopMove = 0;
+    let res = null;
+    const bot = penaltyBot(A, run, { aim: (d) => pick(d) });
+    bot.until(() => {
+      const d = A.game.debug();
+      if (d.state === "runup") d.keeper.x = 40; // kaleciyi uzaklaştır: yalnız engel ölçülsün
+      if (d.state === "result" && !res) res = d.lastKick;
+      return res || d.state === "over" || d.state === "fail";
+    }, 30000);
+    return res;
+  };
+  const wallLv = find((s) => s.wall && !s.defenders && !s.wind);
+  const defLv = find((s) => s.defenders === 1 && !s.wall && !s.wind && s.goal !== "targets");
+  const hoopLv = find((s) => s.goal === "targets" && !s.hoopMove && !s.defenders && !s.wall && !s.wind);
+  // barajın arkası: topun z = 1,85'teki x'i ≈ 0,83·hedef — hedefi barajın şu anki yerine göre seç
+  const intoWall = shootAt(wallLv, (d) => [A_clamp(d.obstacles.wall.x / 0.83, -3, 3), 1.0]);
+  const intoDef = shootAt(defLv, (d) => [A_clamp(d.obstacles.defenders[0], -3, 3), 0.8]);
+  const intoHoop = shootAt(hoopLv, (d) => [d.obstacles.hoops[0].x, d.obstacles.hoops[0].y]);
+  check(
+    "penaltı bölüm: baraj ve savunmacı topu keser, halkadan geçen gol sayılır",
+    intoWall && intoWall.result === "baraj" && intoDef && intoDef.result === "savunma" && intoHoop && intoHoop.result === "gol" && intoHoop.tags.includes("HALKA"),
+    `baraj (${wallLv}. bölüm) ${intoWall && intoWall.result} · savunmacı (${defLv}.) ${intoDef && intoDef.result} · halka (${hoopLv}.) ${intoHoop && intoHoop.result} ${intoHoop ? intoHoop.tags.join(",") : ""}`,
+  );
+  const { A } = boot("penalti");
+  A.game.command({ type: "config", levelMode: true, level: 3, boosters: ["ek_sut"] });
+  A.game.start();
+  const before = A.game.debug();
+  for (let i = 0; i < 2000 && A.game.debug().state !== "aim"; i += 1) A.game.update(1 / 60);
+  const z0 = A.game.debug().zoneOf("plase");
+  A.game.command({ type: "booster", key: "nisan" });
+  const z1 = A.game.debug().zoneOf("plase");
+  const w = (z) => z[1] - z[0];
+  // sunucu tavanı (elitlig-server services/arenaPlausibility.js CEILINGS.penalti) ile aynı formül
+  const ceil = (s) => s.goals * 450 + 25 * (s.shots + 10) + 400 * s.wins + 100 * s.wins * Math.max(0, s.wins - 1) + 300 * s.perfect + 1500 * (s.champion ? 1 : 0);
+  let over = 0, maxRatio = 0;
+  for (const lv of [10, 16, 40, 66]) {
+    const box = boot("penalti");
+    box.A.game.command({ type: "config", levelMode: true, level: lv, boosters: ["nisan"] });
+    box.A.game.start();
+    const bot = penaltyBot(box.A, box.run, { aim: corner });
+    bot.until(() => {
+      if (box.A.game.debug().state === "fail") box.A.game.command({ type: "giveUp" });
+      return box.A.game.debug().state === "over";
+    }, 80000);
+    const e = box.over();
+    if (e) {
+      maxRatio = Math.max(maxRatio, e.score / ceil(e.stats));
+      if (e.score > ceil(e.stats)) over += 1;
+    }
+  }
+  check(
+    "penaltı bölüm: güçlendiriciler (ek şut +1, nişan bölgeyi genişletir) ve skor sunucu tavanında",
+    before.lvl.shots === before.level.shots + 1 && w(z1) > w(z0) * 1.2 && A.game.debug().lvl.aimHelp && over === 0,
+    `şut ${before.level.shots} → ${before.lvl.shots} · bölge ${w(z0).toFixed(3)} → ${w(z1).toFixed(3)} · skor/tavan en çok %${Math.round(maxRatio * 100)}`,
   );
 }
 

@@ -64,6 +64,11 @@ export const KANTIN_PRODUCTS = [
   { id: "kumpir", name: "Kumpir", unlock: 15 },
   { id: "kofte", name: "Köfte ekmek", unlock: 20 },
   { id: "sucuklu", name: "Sucuklu tost", unlock: 30 },
+  // 2026-11: ileri seviyelerde menü genişler (35 öncesi seviyeler değişmez).
+  { id: "lahmacun", name: "Lahmacun", unlock: 45 },
+  { id: "kokorec", name: "Kokoreç", unlock: 60 },
+  { id: "limonata", name: "Limonata", unlock: 75 },
+  { id: "dondurma", name: "Dondurma", unlock: 90 },
 ] as const;
 
 export type KantinProductId = (typeof KANTIN_PRODUCTS)[number]["id"];
@@ -412,6 +417,14 @@ const TIPS: Record<number, string> = {
   18: "VIP taraftar! Kendi sabır çubuğu var; bekletirsen kaçar ve süre cezası yersin.",
   25: "Kilitli kutu: üzerindeki sayı kadar sipariş servis edilince açılır.",
   35: "İki katlı yığın: alt kattaki koliler, üst kat boşalınca açılır.",
+  41: "VIP akını: artık aynı maçta iki VIP gelebilir. Altın balonlu siparişleri öne al.",
+  45: "Menüye lahmacun geldi! Yeni ürünü balonda tanı, yığında bul.",
+  55: "Kilitler çoğalıyor: iki kilitli kutu aynı anda. Hangisinin önce açılacağına bak.",
+  60: "Kokoreç tezgâhta! Ürün çeşidi arttıkça bekleme tezgâhını boş tut.",
+  62: "Dört taraftar birden! Balonları soldan sağa tara; ürün ilk uyan tabağa gider.",
+  75: "Limonata ve iki koli: alt kattaki koliler daha geç açılır, tezgâhta yer ayır.",
+  90: "Dondurma sezonu! Menünün tamamı açıldı.",
+  100: "Yüzüncü maç: derbi kalabalığı. Büyük kupa için sakin kal.",
 };
 
 function paramsFor(L: number): Params {

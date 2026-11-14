@@ -407,11 +407,42 @@ export interface CityTier {
   min: number;
 }
 
-/** Bir İstanbul gününün XP kovası: D gününün XP'si D+3 00:00'da yanar. */
+/**
+ * XP kovası. Eski (3 günlük) sunucu: bir İstanbul günü, D+3 00:00'da yanar.
+ * Haftalık sunucu (Ekonomi v3, `CityXp.mode === "weekly"`): bir İstanbul
+ * haftası; `day` = haftanın Pazartesi'si, `claimable` = şu an toplanabilir
+ * (geçen hafta, Pzt–Çar), `opens_at` = yıldıza dönüştüğü an (sonraki Pazartesi).
+ */
 export interface XpBucket {
   day: string;
   xp: number;
   expires_at: string;
+  week?: string;
+  claimable?: boolean;
+  opens_at?: string;
+}
+
+/** Haftalık XP (Ekonomi v3): biriken hafta. */
+export interface XpWeek {
+  /** Haftanın Pazartesi'si (YYYY-MM-DD). */
+  key: string;
+  xp: number;
+  /** Bu XP'nin yıldız karşılığı (10 XP = 1★; Pazartesi toplanabilir olur). */
+  stars: number;
+  /** Yıldıza dönüşeceği an (sonraki Pazartesi 00:00 İstanbul). */
+  converts_at: string;
+  /** Toplanabileceği son an (Perşembe 00:00 İstanbul). */
+  claim_until: string;
+}
+
+/** Haftalık XP (Ekonomi v3): şu an toplanabilir hafta (Pzt–Çar). */
+export interface XpClaimWeek {
+  key: string;
+  xp: number;
+  stars: number;
+  expires_at: string;
+  /** Toplamanın son günü (Çarşamba, YYYY-MM-DD). */
+  last_day: string;
 }
 
 /** Geçmiş XP'nin tek seferlik aktarımı (100 XP = 1 yıldız). */
@@ -426,14 +457,23 @@ export interface XpTransfer {
 
 export interface CityXp {
   per_star: number;
+  /** Şu an TOPLANABİLİR XP (haftalık sunucuda: geçen haftanın, Pzt–Çar). */
   pending: number;
   claimable_stars: number;
   claimed: number;
-  /** Yeni sunucu (3 günlük birikim); eskisinde yok. */
+  /** "weekly": Ekonomi v3 (XP haftalık; Pazartesi dönüşür, 3 gün toplanır). Yoksa 3 günlük kural. */
+  mode?: "weekly";
+  /** Haftalık sunucu: biriken bu hafta. */
+  week?: XpWeek;
+  /** Haftalık sunucu: toplanabilir hafta (yalnız Pzt–Çar). */
+  claim_week?: XpClaimWeek | null;
+  /** Toplama penceresi (gün): eski kuralda kova ömrü, haftalıkta Pzt–Çar = 3. */
   window_days?: number;
-  /** Her zaman 3 canlı gün, eskiden yeniye (önceki gün, dün, bugün). */
+  /**
+   * Eski: 3 canlı gün, eskiden yeniye. Haftalık: [toplanabilir hafta?, bu hafta].
+   */
   buckets?: XpBucket[];
-  /** Sıradaki İstanbul gece yarısında yanacak XP (en eski kova). */
+  /** Sıradaki İstanbul gece yarısında yanacak XP (haftalıkta yalnız Çarşamba dolu). */
   expiring_tomorrow?: number;
   expiring_at?: string | null;
   expired_total?: number;

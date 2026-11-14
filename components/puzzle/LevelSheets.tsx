@@ -20,14 +20,15 @@ import { Animated, Modal, ScrollView, StyleSheet, Text, View, useWindowDimension
 
 import { SparkleBurst, Sunburst } from "@/components/game/Celebration";
 import { Touchable, useReduceMotion } from "@/components/ui";
-import type { PuzzleProfile } from "@/lib/puzzle/api";
+import { ChestIcon, StreakCrowns } from "@/components/gamehome/GameHomeKit";
+import type { FinishReward, PuzzleGift, PuzzleProfile, PuzzleStreak } from "@/lib/puzzle/api";
 import { STAGE_COMMON as S, STAGE_THEMES } from "@/lib/puzzle/stagePalette";
 import type { PuzzleBoosterDef, PuzzleGameKey, PuzzleGameModule } from "@/lib/puzzle/types";
 import { useLifeCountdown } from "@/lib/puzzle/usePuzzle";
 import { colors, fonts, radius, space, textScale, touchSlop, type } from "@/theme";
 
 import { tierOf } from "./LevelMap";
-import { WatchAdForLife } from "./RewardedLife";
+import { RewardedAd, WatchAdForLife } from "./RewardedLife";
 
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
@@ -189,6 +190,7 @@ export function LevelStartSheet({
   busy,
   lives,
   profile,
+  streak,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -202,6 +204,8 @@ export function LevelStartSheet({
   lives: number;
   /** Bu oyunun canları (livesFor) — kalpler ve reklamla can için. */
   profile?: PuzzleProfile;
+  /** Üst üste kazanma serisi (yeni sunucu): taçlar + ücretsiz güçlendirici notu. */
+  streak?: PuzzleStreak | null;
 }) {
   const goal = module.goalSummary(level);
   const pre = module.boosters.filter((b) => b.kind === "pre");
@@ -282,6 +286,19 @@ export function LevelStartSheet({
             ))}
           </View>
         </>
+      ) : null}
+
+      {streak ? (
+        <View style={styles.streakBox}>
+          <StreakCrowns tier={streak.tier} size={28} />
+          <Text style={styles.streakText} {...textScale.dense}>
+            {streak.tier > 0
+              ? `Galibiyet serisi ${streak.tier}. basamak: bu bölüme ${streak.tier} ücretsiz güçlendiriciyle başlarsın.`
+              : streak.next_at != null
+                ? `Üst üste ${streak.next_at} galibiyette ücretsiz güçlendirici kazan.`
+                : "Üst üste kazan, ücretsiz güçlendirici kazan."}
+          </Text>
+        </View>
       ) : null}
 
       <View style={styles.livesBox}>
@@ -368,6 +385,8 @@ export function ResultSheet({
   livesLeft,
   profile,
   game = "uclu",
+  reward,
+  offline,
 }: {
   visible: boolean;
   won: boolean;
@@ -385,7 +404,14 @@ export function ResultSheet({
   /** Kaybedip canı biten oyuncuya "Reklam izle · +1 can" (bu oyunun canı). */
   profile?: PuzzleProfile;
   game?: PuzzleGameKey;
+  /** Sunucu ödülü: hediyeler (sandık açılışı), seri ve reklamla 2× jeton (yeni sunucu). */
+  reward?: FinishReward | null;
+  /** Çevrimdışı bitti: sonuç internet gelince kaydedilecek. */
+  offline?: boolean;
 }) {
+  const [doubled, setDoubled] = React.useState(0);
+  const gifts = reward?.gifts ?? [];
+  const adDouble = reward?.ad_double;
   return (
     <GameCard
       visible={visible}
@@ -396,7 +422,21 @@ export function ResultSheet({
       ribbon={won ? (level % 10 === 0 ? "KUPA SENİN!" : "TEBRİKLER!") : "OLMADI!"}
       footer={
         <View style={styles.footCol}>
-          {!won && livesLeft < 1 && profile?.ad_lives ? <WatchAdForLife profile={profile} /> : null}
+          {!won && livesLeft < 1 && profile?.ads?.life ? (
+            <RewardedAd kind="life" game={game} profile={profile} />
+          ) : !won && livesLeft < 1 && profile?.ad_lives ? (
+            <WatchAdForLife profile={profile} />
+          ) : null}
+          {won && adDouble && !doubled && !offline ? (
+            <RewardedAd
+              kind="double_coins"
+              game={game}
+              profile={profile}
+              rewardText={`2× jeton (+${adDouble.coins})`}
+              requireQuota={false}
+              onRewarded={(res) => setDoubled(res.reward?.coins ?? adDouble.coins)}
+            />
+          ) : null}
           {won ? (
             <GameButton label={`${level + 1}. SEVİYE`} icon="arrow-forward" onPress={onNext} />
           ) : (
@@ -420,7 +460,7 @@ export function ResultSheet({
             ))}
           </View>
           <View style={styles.rewards}>
-            <Reward icon="disc" tint={S.gold} value={`+${coins}`} label="jeton" />
+            <Reward icon="disc" tint={S.gold} value={`+${coins + doubled}`} label={doubled ? "jeton · 2×" : "jeton"} />
             {(starsGained ?? (firstClear ? stars : 0)) > 0 ? <Reward icon="star" tint={S.gold} value={`+${starsGained ?? stars}`} label="şehir yıldızı" /> : null}
           </View>
         </>
@@ -435,8 +475,80 @@ export function ResultSheet({
           <Hearts profile={profile} />
         </View>
       )}
+      {won && reward?.streak ? (
+        <View style={styles.streakBox}>
+          <StreakCrowns tier={reward.streak.tier} size={28} />
+          <Text style={styles.streakText} {...textScale.dense}>
+            {reward.streak.wins} galibiyet serisi{reward.streak.tier > 0 ? ` · sıradaki bölümde ${reward.streak.tier} ücretsiz güçlendirici` : ""}
+          </Text>
+        </View>
+      ) : null}
+      {won && gifts.length ? (
+        <View style={styles.gifts}>
+          {gifts.map((g, i) => (
+            <GiftReveal key={`${g.kind}${i}`} gift={g} index={i} visible={visible} />
+          ))}
+        </View>
+      ) : null}
+      {offline ? (
+        <View style={styles.offline}>
+          <Ionicons name="cloud-offline" size={16} color={S.cardSoft} />
+          <Text style={styles.offlineText} {...textScale.dense}>Çevrimdışı oynadın: sonucun internet gelince kaydedilecek.</Text>
+        </View>
+      ) : null}
       {summary ? <Text style={styles.summary} {...textScale.long}>{summary}</Text> : null}
     </GameCard>
+  );
+}
+
+/** Hediye / sandık açılışı: sandık sallanır, kapak açılır, içindekiler belirir (sonlu animasyon). */
+function GiftReveal({ gift, index, visible }: { gift: PuzzleGift; index: number; visible: boolean }) {
+  const reduce = useReduceMotion();
+  const v = useRef(new Animated.Value(reduce ? 1 : 0)).current;
+  const [open, setOpen] = React.useState(reduce);
+  useEffect(() => {
+    if (!visible) return undefined;
+    if (reduce) {
+      v.setValue(1);
+      setOpen(true);
+      return undefined;
+    }
+    v.setValue(0);
+    setOpen(false);
+    const anim = Animated.sequence([
+      Animated.delay(1400 + index * 500),
+      Animated.timing(v, { toValue: 0.5, duration: 420, useNativeDriver: true }),
+      Animated.spring(v, { toValue: 1, friction: 5, tension: 120, useNativeDriver: true }),
+    ]);
+    const id = setTimeout(() => setOpen(true), 1400 + index * 500 + 420);
+    anim.start();
+    return () => {
+      clearTimeout(id);
+      anim.stop();
+    };
+  }, [index, reduce, v, visible]);
+  const shake = v.interpolate({ inputRange: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 1], outputRange: ["0deg", "-8deg", "8deg", "-6deg", "6deg", "0deg", "0deg"] });
+  const pop = v.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.9, 1, 1.08] });
+  const parts = [
+    gift.coins ? `+${gift.coins} jeton` : "",
+    gift.stars ? `+${gift.stars} yıldız` : "",
+    gift.boosters ? `${Object.values(gift.boosters).reduce((a, b) => a + b, 0)} güçlendirici` : "",
+  ].filter(Boolean);
+  return (
+    <View style={styles.gift} accessibilityLabel={`${gift.title}: ${parts.join(", ")}`}>
+      <Animated.View style={{ transform: [{ rotate: shake }, { scale: pop }] }}>
+        {gift.kind === "streak" ? (
+          <View style={styles.giftCrown}>
+            <Ionicons name="trophy" size={30} color={S.goldDeep} />
+          </View>
+        ) : (
+          <ChestIcon size={54} open={open} />
+        )}
+      </Animated.View>
+      {open ? <SparkleBurst trigger={open ? 1 : 0} radius={36} color={S.gold} /> : null}
+      <Text style={styles.giftTitle} numberOfLines={2} {...textScale.badge}>{gift.title}</Text>
+      <Text style={styles.giftBody} numberOfLines={2} {...textScale.badge}>{open ? parts.join(" · ") || "Hediye" : "Açılıyor…"}</Text>
+    </View>
   );
 }
 
@@ -633,4 +745,13 @@ const styles = StyleSheet.create({
   lostHeart: { width: 88, height: 88, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: S.dangerSoft },
   lostText: { ...type.body, color: S.cardInk, textAlign: "center" },
   summary: { ...type.bodySm, color: S.cardSoft, textAlign: "center" },
+  streakBox: { alignItems: "center", gap: space.xs, padding: space.sm, borderRadius: radius.lg, backgroundColor: S.panel },
+  streakText: { ...type.caption, fontFamily: fonts.semibold, color: S.cardInk, textAlign: "center" },
+  gifts: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: space.sm },
+  gift: { width: 100, alignItems: "center", gap: 2, paddingVertical: space.sm, borderRadius: radius.lg, backgroundColor: S.goldSoft },
+  giftCrown: { width: 54, height: 54, alignItems: "center", justifyContent: "center" },
+  giftTitle: { ...type.micro, fontFamily: fonts.bold, color: S.cardInk, textAlign: "center" },
+  giftBody: { ...type.micro, color: S.goldDeep, textAlign: "center" },
+  offline: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.xs, paddingVertical: space.xs, paddingHorizontal: space.sm, borderRadius: radius.lg, backgroundColor: S.panel },
+  offlineText: { ...type.caption, color: S.cardSoft, flexShrink: 1 },
 });

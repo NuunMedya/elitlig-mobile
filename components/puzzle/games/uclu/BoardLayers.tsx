@@ -1,8 +1,9 @@
 /**
- * Elit Üçlü tahta katmanları: zemin hücresi (çim, çamur, krampon kutusu) ve
- * taşın üstündeki kilit (kar, kale ağı). Hepsi hücre başına memo'lu; yalnız
- * değeri değişen hücre yeniden çizilir. Vuruş alan hücre kısa bir sarsıntıyla
- * tepki verir.
+ * Elit Üçlü tahta katmanları: zemin hücresi (saha karosu, çamur, toprak/çim,
+ * krampon kutusu), taşın üstündeki kilit (buz, kale ağı) ve tahtayı saran
+ * kalın altın-ahşap kasa. Hepsi hücre başına memo'lu; yalnız değeri değişen
+ * hücre yeniden çizilir. Vuruş alan hücre kısa bir sarsıntıyla, çimlenen
+ * hücre "büyüme" sıçramasıyla tepki verir.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -20,9 +21,44 @@ export interface CellViewProps {
   cell: number;
   mud: number;
   crate: number;
+  /** 0 yok, 1 çıplak toprak, 2 çimli. */
+  turf: number;
 }
 
-function Mud({ size, layers }: { size: number; layers: number }) {
+/** Çıplak toprak ya da çimlenmiş hücre (çim hedefi). */
+export function Turf({ size, grown }: { size: number; grown: boolean }) {
+  if (!grown)
+    return (
+      <Svg width={size} height={size} viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
+        <Rect x={3} y={3} width={94} height={94} rx={16} fill={UCLU_BOARD.dirt} stroke={UCLU_BOARD.dirtLo} strokeWidth={2} />
+        <Circle cx={26} cy={30} r={6} fill={UCLU_BOARD.dirtSpot} />
+        <Circle cx={72} cy={70} r={8} fill={UCLU_BOARD.dirtSpot} />
+        <Circle cx={70} cy={26} r={3.5} fill={UCLU_BOARD.dirtLo} />
+        <Circle cx={32} cy={74} r={3} fill={UCLU_BOARD.dirtLo} />
+      </Svg>
+    );
+  return (
+    <Svg width={size} height={size} viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
+      <Defs>
+        <LinearGradient id="ugrass" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={UCLU_BOARD.grassHi} />
+          <Stop offset="1" stopColor={UCLU_BOARD.grass} />
+        </LinearGradient>
+      </Defs>
+      <Rect x={3} y={3} width={94} height={94} rx={16} fill="url(#ugrass)" stroke={UCLU_BOARD.grassLo} strokeWidth={2} />
+      <G stroke={UCLU_BOARD.grassLo} strokeWidth={3} strokeLinecap="round">
+        <Line x1={20} y1={30} x2={24} y2={20} />
+        <Line x1={26} y1={30} x2={27} y2={22} />
+        <Line x1={66} y1={76} x2={70} y2={66} />
+        <Line x1={72} y1={76} x2={73} y2={68} />
+        <Line x1={74} y1={32} x2={77} y2={24} />
+        <Line x1={30} y1={80} x2={33} y2={72} />
+      </G>
+    </Svg>
+  );
+}
+
+export function Mud({ size, layers }: { size: number; layers: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
       <Rect x={5} y={5} width={90} height={90} rx={20} fill={layers >= 2 ? UCLU_BOARD.mudDeep : UCLU_BOARD.mud} stroke={UCLU_BOARD.mudDeep} strokeWidth={1.5} />
@@ -34,7 +70,7 @@ function Mud({ size, layers }: { size: number; layers: number }) {
   );
 }
 
-function Crate({ size, hp }: { size: number; hp: number }) {
+export function Crate({ size, hp }: { size: number; hp: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 100 100">
       <Defs>
@@ -60,13 +96,18 @@ function Crate({ size, hp }: { size: number; hp: number }) {
   );
 }
 
-function CellViewBase({ row, col, cell, mud, crate }: CellViewProps) {
+function CellViewBase({ row, col, cell, mud, crate, turf }: CellViewProps) {
   const shake = useRef(new Animated.Value(0)).current;
-  const prev = useRef({ mud, crate });
+  const grow = useRef(new Animated.Value(1)).current;
+  const prev = useRef({ mud, crate, turf });
 
   useEffect(() => {
     const was = prev.current;
-    prev.current = { mud, crate };
+    prev.current = { mud, crate, turf };
+    if (was.turf !== turf && turf === 2) {
+      grow.setValue(0.4);
+      Animated.spring(grow, { toValue: 1, damping: 7, stiffness: 260, mass: 0.6, useNativeDriver: true }).start();
+    }
     if (was.mud === mud && was.crate === crate) return;
     shake.setValue(0);
     Animated.timing(shake, {
@@ -75,7 +116,7 @@ function CellViewBase({ row, col, cell, mud, crate }: CellViewProps) {
       easing: Easing.linear,
       useNativeDriver: true,
     }).start();
-  }, [mud, crate, shake]);
+  }, [mud, crate, turf, shake, grow]);
 
   const dx = shake.interpolate({
     inputRange: [0, 0.2, 0.4, 0.6, 0.8, 1],
@@ -86,6 +127,7 @@ function CellViewBase({ row, col, cell, mud, crate }: CellViewProps) {
   const check = (row + col) % 2 === 0;
   const ground = stripe ? (check ? UCLU_BOARD.cellA2 : UCLU_BOARD.cellA) : check ? UCLU_BOARD.cellB2 : UCLU_BOARD.cellB;
   const crateSize = Math.round(cell * 0.94);
+  const gap = Math.max(1, Math.round(cell * 0.025));
   return (
     <View
       pointerEvents="none"
@@ -96,10 +138,25 @@ function CellViewBase({ row, col, cell, mud, crate }: CellViewProps) {
           top: row * cell,
           width: cell,
           height: cell,
-          backgroundColor: ground,
         },
       ]}
     >
+      {/* Saha karosu: hafif kabartmalı, aralarında ince oluk (kasa zemini görünür). */}
+      <View
+        style={[
+          styles.tileBg,
+          {
+            margin: gap,
+            borderRadius: cell * 0.16,
+            backgroundColor: ground,
+          },
+        ]}
+      />
+      {turf > 0 ? (
+        <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale: turf === 2 ? grow : 1 }] }]}>
+          <Turf size={cell} grown={turf === 2} />
+        </Animated.View>
+      ) : null}
       {mud > 0 ? <Mud size={cell} layers={mud} /> : null}
       {crate > 0 ? (
         <Animated.View style={[styles.center, { transform: [{ translateX: dx }] }]}>
@@ -147,26 +204,47 @@ export const BoardLight = React.memo(function BoardLight({ size }: { size: numbe
 });
 
 /**
- * Sade tahta çerçevesi: koyu lacivert, yumuşak köşeli zemin ve sahayı saran
- * ince kenar (kalın kontur yok). Çekiç seçiliyken iç kenar vurgu renginde
- * yanar (hedef seçme kipi).
+ * Tahta kasası: kalın, parlak altın-ahşap çerçeve (üstten ışık alan gradyan,
+ * koyu dış kontur, köşelerde perçin), içte koyu çim zemin (karoların arası ve
+ * şekilli tahtanın boşlukları bu renkte görünür). Çekiç seçiliyken iç kenar
+ * vurgu renginde yanar (hedef seçme kipi).
  */
 export const FrameTrim = React.memo(function FrameTrim({ width, height, pad, hammer }: { width: number; height: number; pad: number; hammer: boolean }) {
-  const r = 20;
+  const r = 22;
+  const rivets = [
+    [pad / 2, pad / 2],
+    [width - pad / 2, pad / 2],
+    [pad / 2, height - pad / 2 - 3],
+    [width - pad / 2, height - pad / 2 - 3],
+  ];
   return (
     <Svg width={width} height={height} style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Rect x={0} y={3} width={width} height={height - 3} rx={r} fill={UCLU_BOARD.chromeLip} />
-      <Rect x={0} y={0} width={width} height={height - 3} rx={r} fill={UCLU_BOARD.pitchFrame} />
-      <Rect x={0.5} y={0.5} width={width - 1} height={height - 4} rx={r} fill="none" stroke={UCLU_BOARD.chromeEdge} strokeWidth={1} />
+      <Defs>
+        <LinearGradient id="ufrw" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={UCLU_BOARD.frameWoodHi} />
+          <Stop offset="0.45" stopColor={UCLU_BOARD.frameWood} />
+          <Stop offset="1" stopColor={UCLU_BOARD.frameWoodLo} />
+        </LinearGradient>
+      </Defs>
+      <Rect x={0} y={5} width={width} height={height - 5} rx={r} fill={UCLU_BOARD.chromeLip} />
+      <Rect x={0} y={0} width={width} height={height - 4} rx={r} fill={UCLU_BOARD.frameWoodRim} />
+      <Rect x={2} y={2} width={width - 4} height={height - 8} rx={r - 2} fill="url(#ufrw)" />
+      <Rect x={8} y={4} width={width - 16} height={4} rx={2} fill={UCLU_BOARD.beamCore} fillOpacity={0.45} />
+      {rivets.map(([x, y], i) => (
+        <G key={i}>
+          <Circle cx={x} cy={y} r={3.2} fill={UCLU_BOARD.frameWoodRim} />
+          <Circle cx={x - 0.6} cy={y - 0.6} r={2} fill={UCLU_BOARD.rivet} />
+        </G>
+      ))}
       <Rect
-        x={pad - 1.5}
-        y={pad - 1.5}
-        width={width - pad * 2 + 3}
-        height={height - pad * 2 + 3}
-        rx={8}
-        fill="none"
-        stroke={hammer ? UCLU_BOARD.accent : UCLU_BOARD.pitchEdge}
-        strokeWidth={hammer ? 3 : 1.5}
+        x={pad - 3}
+        y={pad - 3}
+        width={width - pad * 2 + 6}
+        height={height - pad * 2 + 6}
+        rx={12}
+        fill={UCLU_BOARD.frameInset}
+        stroke={hammer ? UCLU_BOARD.accent : UCLU_BOARD.frameWoodRim}
+        strokeWidth={hammer ? 3.5 : 2.5}
       />
     </Svg>
   );
@@ -309,6 +387,7 @@ export const LockView = React.memo(LockViewBase);
 
 const styles = StyleSheet.create({
   cell: { position: "absolute" },
+  tileBg: { ...StyleSheet.absoluteFillObject },
   center: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",

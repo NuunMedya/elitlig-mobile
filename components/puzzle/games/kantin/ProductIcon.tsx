@@ -1,36 +1,48 @@
 /**
- * Kantin ürünleri — react-native-svg ile çizilmiş basit, okunaklı ikonlar
- * (emoji yasak). Hepsi 40×40 görünüm kutusunda; `size` ile ölçeklenir.
+ * Kantin ürünleri — react-native-svg çizimleri (emoji yasak).
+ *
+ * 2026-11 YENİLEMESİ: her ürün 64×64 görünüm kutusunda, koyu sıcak konturlu,
+ * gölgeli ve parlamalı "yapışkan" çizimdir. Ürünler küçük boyda da (22 px)
+ * siluetinden tanınmalı: simit halka, çay ince belli bardak, ayran mavi
+ * şeritli kap, tost üçgen dilim… Renkler lib/puzzle/kantinPalette.ts'tedir.
+ *
+ * Ortak dil: altta yumuşak zemin gölgesi, gövde + kontur, iç gölge (sağ alt),
+ * parlama (sol üst). Kontur kalınlığı sabit (2.4) — ölçek büyüdükçe kalınlaşır,
+ * küçük boyda da kenar kaybolmaz.
  */
 
 import React, { memo } from "react";
-import Svg, { Circle, Ellipse, G, Path, Rect } from "react-native-svg";
+import Svg, { Circle, Defs, Ellipse, G, LinearGradient as SvgLinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg";
 
 import { kantinFood as F, kantinScene as S } from "@/lib/puzzle/kantinPalette";
 import { KANTIN_PRODUCTS } from "@/lib/puzzle/levels/kantin";
 
-const SESAME = Array.from({ length: 10 }, (_, k) => {
-  const a = (k / 10) * Math.PI * 2 + 0.2;
-  return { x: 20 + Math.cos(a) * 12.5, y: 20 + Math.sin(a) * 12.5, r: (a * 180) / Math.PI + 90 };
-});
+const O = F.outline;
+const SW = 2.4;
 
-const KERNELS = (() => {
-  const out: { x: number; y: number }[] = [];
-  for (let row = 0; row < 7; row += 1) {
-    const y = 8 + row * 3.3;
-    const half = row === 0 || row === 6 ? 1 : 2;
-    for (let c = -half; c <= half; c += 1) out.push({ x: 20 + c * 2.9, y });
-  }
-  return out;
-})();
+/** Zemin gölgesi — her ürünün altında. */
+function Ground({ w = 22, y = 57 }: { w?: number; y?: number }) {
+  return <Ellipse cx={32} cy={y} rx={w} ry={4} fill={F.ground} />;
+}
+
+const SESAME = Array.from({ length: 14 }, (_, k) => {
+  const a = (k / 14) * Math.PI * 2 + 0.2;
+  const rr = k % 2 ? 16.5 : 13.5;
+  return { x: 32 + Math.cos(a) * rr, y: 30 + Math.sin(a) * rr * 0.9, r: (a * 180) / Math.PI + 90 };
+});
 
 function Simit() {
   return (
     <G>
-      <Circle cx={20} cy={20} r={12.5} fill="none" stroke={F.crust} strokeWidth={8.5} />
-      <Circle cx={20} cy={20} r={12.5} fill="none" stroke={F.crustLight} strokeWidth={3} opacity={0.7} />
+      <Ground w={22} y={55} />
+      {/* halka: kontur kalın çizgi, üstüne hamur — delik zemini gösterir */}
+      <Ellipse cx={32} cy={30} rx={15.5} ry={14} fill="none" stroke={O} strokeWidth={15 + SW * 2} />
+      <Ellipse cx={32} cy={30} rx={15.5} ry={14} fill="none" stroke={F.crust} strokeWidth={15} />
+      {/* alt gölge ve üst ışık */}
+      <Path d="M14 36 Q20 48 32 49 Q44 48 50 36 Q46 45 32 46 Q18 45 14 36 Z" fill={F.crustDark} opacity={0.55} />
+      <Path d="M15 24 Q20 13 32 12 Q40 12 45 16" stroke={F.crustLight} strokeWidth={4} strokeLinecap="round" fill="none" opacity={0.85} />
       {SESAME.map((s, i) => (
-        <Ellipse key={i} cx={s.x} cy={s.y} rx={1.3} ry={0.7} fill={F.sesame} stroke="none" rotation={s.r} origin={`${s.x}, ${s.y}`} />
+        <Ellipse key={i} cx={s.x} cy={s.y} rx={1.9} ry={1} fill={F.sesame} rotation={s.r} origin={`${s.x}, ${s.y}`} />
       ))}
     </G>
   );
@@ -39,10 +51,15 @@ function Simit() {
 function Ayran() {
   return (
     <G>
-      <Path d="M11 11 H29 L27.2 33 Q27 35 25 35 H15 Q13 35 12.8 33 Z" fill={F.cupWhite} stroke={F.cupEdge} strokeWidth={1.2} />
-      <Path d="M11.9 19 H28.1 L27.5 26 H12.5 Z" fill={F.ayranBlue} />
-      <Path d="M14 22.5 Q17 20.5 20 22.5 T26 22.5" stroke={F.cupWhite} strokeWidth={1.2} fill="none" />
-      <Rect x={9.5} y={8} width={21} height={4.5} rx={1.6} fill={F.foil} stroke={F.foilEdge} strokeWidth={0.8} />
+      <Ground w={15} />
+      <Path d="M16 16 H48 L45 52 Q44.6 56 40.5 56 H23.5 Q19.4 56 19 52 Z" fill={F.cupWhite} stroke={O} strokeWidth={SW} strokeLinejoin="round" />
+      <Path d="M17.4 28 H46.6 L45.6 40 H18.4 Z" fill={F.ayranBlue} />
+      <Path d="M20 34 Q24 31 28 34 T36 34 T44 34" stroke={F.cupWhite} strokeWidth={1.8} fill="none" />
+      <Path d="M40 18 L37.5 53" stroke={F.cupShade} strokeWidth={4} strokeLinecap="round" />
+      <Path d="M22 19 L23.5 50" stroke={F.shine} strokeWidth={2.4} strokeLinecap="round" />
+      {/* folyo kapak */}
+      <Rect x={12.5} y={10} width={39} height={8} rx={3} fill={F.foil} stroke={O} strokeWidth={SW} />
+      <Path d="M17 13 H40" stroke={S.white} strokeWidth={1.8} strokeLinecap="round" opacity={0.9} />
     </G>
   );
 }
@@ -50,10 +67,15 @@ function Ayran() {
 function Tost() {
   return (
     <G>
-      <Path d="M7 17 Q7 8 15 8 Q20 6 25 8 Q33 8 33 17 V31 Q33 34 30 34 H10 Q7 34 7 31 Z" fill={F.crust} />
-      <Path d="M10 17 Q10 11 16 11 Q20 9.5 24 11 Q30 11 30 17 V30 Q30 31 29 31 H11 Q10 31 10 30 Z" fill={F.toast} />
-      <Path d="M12 15 L20 23 M17 12.5 L28 23.5 M12 22 L20 30 M22 27 L27 31" stroke={F.toastDark} strokeWidth={1.7} strokeLinecap="round" opacity={0.75} />
-      <Path d="M29.5 19 Q35 20 33.8 25.5 Q32.6 28 31.2 24.5 Z" fill={F.cheese} />
+      <Ground w={22} />
+      {/* üçgen dilim */}
+      <Path d="M9 50 L32 9 Q34 6 36.5 9 L56 46 Q57.5 51 52 52 H13 Q7 52 9 50 Z" fill={F.crust} stroke={O} strokeWidth={SW} strokeLinejoin="round" />
+      <Path d="M15.5 47 L33 15 L50.5 47 Z" fill={F.toast} />
+      {/* ızgara izleri */}
+      <Path d="M22 41 L36 27 M27 45 L41 31 M33 46 L44 35" stroke={F.toastGrill} strokeWidth={2.6} strokeLinecap="round" opacity={0.8} />
+      {/* eriyen kaşar */}
+      <Path d="M12 49 Q17 55 20 50 Q24 58 28 50 Q33 56 37 50 Q42 56 45 50 Q50 55 54 49 Z" fill={F.cheese} stroke={O} strokeWidth={1.8} strokeLinejoin="round" />
+      <Path d="M24 23 L30 13" stroke={F.crustLight} strokeWidth={2.4} strokeLinecap="round" />
     </G>
   );
 }
@@ -61,31 +83,50 @@ function Tost() {
 function Cay() {
   return (
     <G>
-      <Ellipse cx={20} cy={34} rx={13} ry={3.2} fill={F.cupWhite} stroke={F.cupEdge} strokeWidth={1} />
+      <Ground w={20} />
+      {/* tabak */}
+      <Ellipse cx={32} cy={52} rx={21} ry={5} fill={F.saucer} stroke={O} strokeWidth={SW} />
+      <Ellipse cx={32} cy={51} rx={12} ry={2.2} fill={F.saucerEdge} />
+      {/* ince belli bardak */}
       <Path
-        d="M13 8 H27 Q25 14 24.5 19 Q27.2 25 25.2 31 Q24.6 33 20 33 Q15.4 33 14.8 31 Q12.8 25 15.5 19 Q15 14 13 8 Z"
+        d="M21 15 H43 Q43 22 38.5 29 Q36.5 32 38.5 35 Q44 42 42 50 H22 Q20 42 25.5 35 Q27.5 32 25.5 29 Q21 22 21 15 Z"
         fill={F.glass}
-        stroke={F.glassEdge}
-        strokeWidth={1}
+        stroke={O}
+        strokeWidth={SW}
+        strokeLinejoin="round"
       />
-      <Path
-        d="M14.3 11.5 H25.7 Q24.3 15.5 23.9 19.5 Q26 25 24.3 30.3 Q23.8 32 20 32 Q16.2 32 15.7 30.3 Q14 25 16.1 19.5 Q15.7 15.5 14.3 11.5 Z"
-        fill={F.tea}
-      />
-      <Path d="M16.8 14 Q17.6 17 17.2 21" stroke={F.teaLight} strokeWidth={1.4} strokeLinecap="round" fill="none" />
+      <Path d="M22.6 20 H41.4 Q41 24 38 28.5 Q35.6 32 37.8 35.5 Q42.4 42 40.6 48.5 H23.4 Q21.6 42 26.2 35.5 Q28.4 32 26 28.5 Q23 24 22.6 20 Z" fill={F.tea} />
+      <Path d="M24 21 H40 Q39.5 23.5 38 26" stroke={F.teaLight} strokeWidth={2} strokeLinecap="round" fill="none" />
+      <Path d="M26 38 Q24.5 42 25 46" stroke={F.shine} strokeWidth={2.2} strokeLinecap="round" fill="none" />
+      <Path d="M25 17 Q25 21 27 25" stroke={F.shine} strokeWidth={2} strokeLinecap="round" fill="none" />
+      {/* buhar */}
+      <Path d="M28 11 Q25 7 28 4 M36 11 Q33 7 36 3" stroke={F.steam} strokeWidth={2} strokeLinecap="round" fill="none" />
     </G>
   );
 }
 
+const KERNELS = (() => {
+  const out: { x: number; y: number }[] = [];
+  for (let row = 0; row < 8; row += 1) {
+    const y = 13 + row * 4.2;
+    const half = row === 0 || row === 7 ? 1 : 2;
+    for (let c = -half; c <= half; c += 1) out.push({ x: 32 + c * 3.8, y });
+  }
+  return out;
+})();
+
 function Misir() {
   return (
     <G>
-      <Ellipse cx={20} cy={18} rx={7.2} ry={13} fill={F.corn} />
+      <Ground w={17} />
+      <Ellipse cx={32} cy={31} rx={11} ry={22} fill={F.corn} stroke={O} strokeWidth={SW} />
       {KERNELS.map((k, i) => (
-        <Circle key={i} cx={k.x} cy={k.y} r={1.15} fill={F.cornDark} stroke="none" opacity={0.55} />
+        <Ellipse key={i} cx={k.x} cy={k.y} rx={1.6} ry={1.7} fill={F.cornDark} opacity={0.7} />
       ))}
-      <Path d="M20 37 Q7 32 9 14 Q13 26 20 30 Z" fill={F.husk} />
-      <Path d="M20 37 Q33 32 31 14 Q27 26 20 30 Z" fill={F.huskDark} />
+      <Path d="M26 14 Q24 26 26 44" stroke={F.shine} strokeWidth={2.4} strokeLinecap="round" fill="none" />
+      {/* koçan yaprakları */}
+      <Path d="M32 56 Q14 52 12 30 Q20 42 30 44 Z" fill={F.husk} stroke={O} strokeWidth={SW} strokeLinejoin="round" />
+      <Path d="M32 56 Q50 52 52 30 Q44 42 34 44 Z" fill={F.huskDark} stroke={O} strokeWidth={SW} strokeLinejoin="round" />
     </G>
   );
 }
@@ -93,11 +134,13 @@ function Misir() {
 function Su() {
   return (
     <G>
-      <Path d="M16.5 8 H23.5 L24 11 Q29 13 29 18 V33 Q29 36 26 36 H14 Q11 36 11 33 V18 Q11 13 16 11 Z" fill={F.water} stroke={F.waterEdge} strokeWidth={1.1} />
-      <Rect x={11} y={20} width={18} height={7.5} fill={F.waterLabel} />
-      <Path d="M13 24 Q15.5 22 18 24 T23 24 T28 24" stroke={F.cupWhite} strokeWidth={1.2} fill="none" />
-      <Rect x={15.5} y={3.5} width={9} height={5} rx={1.2} fill={F.waterCap} />
-      <Path d="M14.5 15 V31" stroke={F.cupWhite} strokeWidth={1.6} strokeLinecap="round" opacity={0.7} />
+      <Ground w={13} />
+      <Path d="M24 18 Q24 14 28 13 V9 H36 V13 Q40 14 40 18 V52 Q40 56 36 56 H28 Q24 56 24 52 Z" fill={F.water} stroke={O} strokeWidth={SW} strokeLinejoin="round" />
+      <Rect x={27} y={4} width={10} height={6} rx={1.6} fill={F.waterCap} stroke={O} strokeWidth={SW} />
+      <Rect x={24.8} y={28} width={14.4} height={12} fill={F.waterLabel} />
+      <Path d="M28 34 Q32 31 36 34" stroke={S.white} strokeWidth={1.8} strokeLinecap="round" fill="none" />
+      <Path d="M36 19 V52" stroke={F.waterDeep} strokeWidth={3} strokeLinecap="round" />
+      <Path d="M27.5 19 V26 M27.5 43 V51" stroke={F.shine} strokeWidth={2.2} strokeLinecap="round" />
     </G>
   );
 }
@@ -105,14 +148,17 @@ function Su() {
 function Doner() {
   return (
     <G>
-      <Path d="M9 18 Q10 8 20 8 Q30 8 31 18 Z" fill={F.lavash} />
-      <Path d="M12 17.5 Q13 11 20 11 Q27 11 28 17.5 Z" fill={F.meat} />
-      <Path d="M13 15 q2 -3 4 0 q2 -3 4 0 q2 -3 4 0" stroke={F.lettuce} strokeWidth={2} strokeLinecap="round" fill="none" />
-      <Circle cx={16.5} cy={13} r={1.4} fill={F.tomato} />
-      <Circle cx={24} cy={13.2} r={1.4} fill={F.tomato} />
-      <Path d="M9.5 17.5 H30.5 L22 37 Q20 39 18 37 Z" fill={F.paper} stroke={F.paperEdge} strokeWidth={1} />
-      <Path d="M12.3 23 H27.7" stroke={F.paperStripe} strokeWidth={1.6} opacity={0.8} />
-      <Path d="M14.6 28 H25.4" stroke={F.paperStripe} strokeWidth={1.6} opacity={0.8} />
+      <Ground w={16} />
+      {/* dürüm kağıdı */}
+      <Path d="M20 30 L44 30 L40 56 H24 Z" fill={F.paper} stroke={O} strokeWidth={SW} strokeLinejoin="round" />
+      <Path d="M21.6 38 H42.4 M22.6 45 H41.4" stroke={F.paperStripe} strokeWidth={2.4} />
+      {/* lavaş + içerik */}
+      <Path d="M18 31 Q18 12 32 9 Q46 12 46 31 Z" fill={F.lavash} stroke={O} strokeWidth={SW} strokeLinejoin="round" />
+      <Path d="M22 29 Q23 17 32 15 Q41 17 42 29 Z" fill={F.meat} />
+      <Path d="M24 25 Q28 20 32 22 Q36 19 40 24" stroke={F.meatLight} strokeWidth={2.2} strokeLinecap="round" fill="none" />
+      <Path d="M23 29 Q26 25 29 29 Q32 25 35 29 Q38 25 41 29" fill={F.lettuce} stroke={F.lettuceDark} strokeWidth={1} />
+      <Circle cx={28} cy={20} r={2.2} fill={F.tomato} />
+      <Circle cx={36} cy={22} r={2.2} fill={F.tomato} />
     </G>
   );
 }
@@ -120,11 +166,14 @@ function Doner() {
 function Kola() {
   return (
     <G>
-      <Rect x={11} y={7} width={18} height={28} rx={3} fill={F.cola} />
-      <Path d="M11 22 Q16 17 20 21 T29 19 V24.5 Q24 27.5 20 24.5 T11 26.5 Z" fill={F.cupWhite} />
-      <Rect x={12} y={4.5} width={16} height={4.5} rx={2} fill={F.can} />
-      <Rect x={12} y={33} width={16} height={3.5} rx={1.6} fill={F.can} />
-      <Rect x={14} y={10} width={2.2} height={22} rx={1.1} fill={F.cupWhite} opacity={0.35} />
+      <Ground w={13} />
+      <Path d="M21 14 Q21 10 25 10 H39 Q43 10 43 14 V52 Q43 56 39 56 H25 Q21 56 21 52 Z" fill={F.cola} stroke={O} strokeWidth={SW} />
+      <Rect x={21} y={10} width={22} height={6} rx={2} fill={F.can} stroke={O} strokeWidth={SW} />
+      <Rect x={21} y={50} width={22} height={6} rx={2} fill={F.canDark} stroke={O} strokeWidth={SW} />
+      <Path d="M23 30 Q32 22 41 30 Q32 38 23 30 Z" fill={F.colaLabel} />
+      <Path d="M24 30 Q32 26 40 30" stroke={F.cola} strokeWidth={1.6} fill="none" />
+      <Path d="M37 18 V48" stroke={F.colaDark} strokeWidth={4} strokeLinecap="round" />
+      <Path d="M25.5 19 V27 M25.5 36 V47" stroke={F.shine} strokeWidth={2.4} strokeLinecap="round" />
     </G>
   );
 }
@@ -132,16 +181,15 @@ function Kola() {
 function Gazoz() {
   return (
     <G>
-      <Path
-        d="M17 5 H23 V10 Q23 13 26 15 Q28 17 28 21 V34 Q28 36 26 36 H14 Q12 36 12 34 V21 Q12 17 14 15 Q17 13 17 10 Z"
-        fill={F.gazoz}
-        stroke={F.gazozDark}
-        strokeWidth={1.1}
-      />
-      <Rect x={12} y={22} width={16} height={7.5} fill={F.gazozLabel} />
-      <Circle cx={20} cy={25.7} r={2.3} fill={F.orange} />
-      <Rect x={16} y={2.5} width={8} height={3.6} rx={1.1} fill={F.gazozCap} />
-      <Path d="M15 18 V33" stroke={F.cupWhite} strokeWidth={1.5} strokeLinecap="round" opacity={0.5} />
+      <Ground w={12} />
+      <Path d="M27 13 H37 V20 Q43 24 43 32 V52 Q43 56 39 56 H25 Q21 56 21 52 V32 Q21 24 27 20 Z" fill={F.gazoz} stroke={O} strokeWidth={SW} strokeLinejoin="round" />
+      <Rect x={26} y={7} width={12} height={7} rx={2} fill={F.gazozCap} stroke={O} strokeWidth={SW} />
+      <Rect x={21.6} y={33} width={20.8} height={12} fill={F.gazozLabel} />
+      <Circle cx={32} cy={39} r={3.4} fill={F.orange} />
+      <Path d="M37 24 Q40 28 40 34 V52" stroke={F.gazozDark} strokeWidth={3} strokeLinecap="round" fill="none" />
+      <Circle cx={27} cy={28} r={1.4} fill={F.bubbles} />
+      <Circle cx={30} cy={24} r={1} fill={F.bubbles} />
+      <Circle cx={26} cy={50} r={1.2} fill={F.bubbles} />
     </G>
   );
 }
@@ -149,17 +197,20 @@ function Gazoz() {
 function Kumpir() {
   return (
     <G>
-      <Path d="M5 25 Q8 36 20 36 Q32 36 35 25 L31 22.5 H9 Z" fill={F.foil} stroke={F.foilEdge} strokeWidth={1} />
-      <Ellipse cx={20} cy={20.5} rx={14} ry={9} fill={F.potatoSkin} />
-      <Ellipse cx={20} cy={19.5} rx={11} ry={6.3} fill={F.potato} />
-      <Circle cx={14} cy={18} r={1.6} fill={F.corn} />
-      <Circle cx={17.5} cy={21.5} r={1.6} fill={F.corn} />
-      <Circle cx={24} cy={17} r={1.6} fill={F.corn} />
-      <Circle cx={20.5} cy={16.5} r={1.8} fill={F.sausage} />
-      <Circle cx={26.5} cy={21} r={1.8} fill={F.sausage} />
-      <Rect x={21} y={20} width={3.6} height={1.8} rx={0.9} fill={F.pickle} />
-      <Rect x={12.5} y={21} width={3.4} height={1.8} rx={0.9} fill={F.pickle} />
-      <Circle cx={28} cy={17.5} r={1.2} fill={F.olive} />
+      <Ground w={22} />
+      {/* folyo kayık */}
+      <Path d="M8 38 Q9 54 32 55 Q55 54 56 38 Z" fill={F.foil} stroke={O} strokeWidth={SW} strokeLinejoin="round" />
+      <Path d="M14 44 Q32 50 50 44" stroke={F.foilEdge} strokeWidth={1.6} fill="none" />
+      {/* patates + iç */}
+      <Ellipse cx={32} cy={34} rx={22} ry={12} fill={F.potatoSkin} stroke={O} strokeWidth={SW} />
+      <Ellipse cx={32} cy={32} rx={17} ry={8} fill={F.potato} />
+      <Path d="M18 31 Q22 22 28 26 Q32 20 37 26 Q42 21 46 31" fill={F.potato} stroke={O} strokeWidth={1.6} strokeLinejoin="round" />
+      <Circle cx={24} cy={30} r={2.6} fill={F.pickle} />
+      <Circle cx={31} cy={27} r={2.2} fill={F.sausage} />
+      <Circle cx={38} cy={30} r={2.4} fill={F.olive} />
+      <Circle cx={34} cy={33} r={2} fill={F.cornDark} />
+      <Circle cx={28} cy={34} r={1.8} fill={F.tomato} />
+      <Path d="M21 23 Q24 20 27 22" stroke={F.butter} strokeWidth={2.4} strokeLinecap="round" fill="none" />
     </G>
   );
 }
@@ -167,15 +218,21 @@ function Kumpir() {
 function Kofte() {
   return (
     <G>
-      <Path d="M5 24 Q5 32.5 12 32.5 H28 Q35 32.5 35 24 Z" fill={F.bread} />
-      <Ellipse cx={13} cy={21.5} rx={5} ry={3.2} fill={F.meat} />
-      <Ellipse cx={20} cy={21.5} rx={5} ry={3.2} fill={F.meatDark} />
-      <Ellipse cx={27} cy={21.5} rx={5} ry={3.2} fill={F.meat} />
-      <Path d="M6 24 Q9 21.5 12 24 T18 24 T24 24 T30 24 T34 24" stroke={F.lettuce} strokeWidth={2.4} strokeLinecap="round" fill="none" />
-      <Path d="M6 18 Q8 9 20 9 Q32 9 34 18 Q34 19.5 32 19.5 H8 Q6 19.5 6 18 Z" fill={F.bread} stroke={F.breadDark} strokeWidth={0.8} />
-      <Ellipse cx={14} cy={13.5} rx={1.2} ry={0.6} fill={F.sesame} />
-      <Ellipse cx={20} cy={12} rx={1.2} ry={0.6} fill={F.sesame} />
-      <Ellipse cx={26} cy={13.5} rx={1.2} ry={0.6} fill={F.sesame} />
+      <Ground w={22} />
+      {/* yarım ekmek: alt */}
+      <Path d="M6 38 Q6 50 18 52 H46 Q58 50 58 38 Z" fill={F.bread} stroke={O} strokeWidth={SW} strokeLinejoin="round" />
+      {/* köfteler + marul + domates */}
+      <Path d="M8 37 Q14 32 20 37 Q26 32 32 37 Q38 32 44 37 Q50 32 56 37 Z" fill={F.lettuce} stroke={F.lettuceDark} strokeWidth={1.2} />
+      <Ellipse cx={18} cy={32} rx={8} ry={5} fill={F.meat} stroke={O} strokeWidth={SW} />
+      <Ellipse cx={32} cy={31} rx={8} ry={5} fill={F.meat} stroke={O} strokeWidth={SW} />
+      <Ellipse cx={46} cy={32} rx={8} ry={5} fill={F.meat} stroke={O} strokeWidth={SW} />
+      <Path d="M14 30 Q17 28 20 29 M28 29 Q31 27 34 28 M42 30 Q45 28 48 29" stroke={F.meatLight} strokeWidth={1.8} strokeLinecap="round" fill="none" />
+      {/* üst ekmek */}
+      <Path d="M7 29 Q8 12 32 11 Q56 12 57 29 Q57 27 52 27 H12 Q7 27 7 29 Z" fill={F.breadLight} stroke={O} strokeWidth={SW} strokeLinejoin="round" />
+      <Path d="M15 19 Q24 14 34 15" stroke={F.shine} strokeWidth={2.4} strokeLinecap="round" fill="none" />
+      <Path d="M22 21 L26 19 M34 19 L38 18 M44 21 L47 20" stroke={F.breadDark} strokeWidth={1.8} strokeLinecap="round" />
+      <Circle cx={25} cy={38} r={2.2} fill={F.tomato} />
+      <Circle cx={39} cy={38} r={2.2} fill={F.tomato} />
     </G>
   );
 }
@@ -183,15 +240,96 @@ function Kofte() {
 function Sucuklu() {
   return (
     <G>
-      <Path d="M7 34 V11 Q7 6 12 7.5 Q29 13 33 29.5 Q33.5 34 29 34 Z" fill={F.crust} />
-      <Path d="M10 31 V13 Q10 10.5 12.5 11.3 Q27 16.5 30 29 Q30.2 31 28.5 31 Z" fill={F.toast} />
-      <Circle cx={14.5} cy={19.5} r={3.1} fill={F.sausage} />
-      <Circle cx={14.5} cy={27} r={3.1} fill={F.sausage} />
-      <Circle cx={22} cy={27} r={3.1} fill={F.sausage} />
-      <Circle cx={13.6} cy={18.6} r={0.7} fill={F.sausageDot} />
-      <Circle cx={15.4} cy={27.8} r={0.7} fill={F.sausageDot} />
-      <Circle cx={21.2} cy={26.2} r={0.7} fill={F.sausageDot} />
-      <Path d="M29 22 Q34 23 33.2 27 Q32.2 29 31 26 Z" fill={F.cheese} />
+      <Ground w={22} />
+      {/* kare tost, çapraz kesik */}
+      <Rect x={9} y={11} width={46} height={42} rx={8} fill={F.crust} stroke={O} strokeWidth={SW} />
+      <Rect x={13.5} y={15.5} width={37} height={33} rx={5} fill={F.toast} />
+      <Path d="M14 48 L50 16" stroke={O} strokeWidth={SW} strokeLinecap="round" />
+      <Path d="M18 27 L28 17 M18 40 L38 20 M30 44 L46 28" stroke={F.toastGrill} strokeWidth={2.4} strokeLinecap="round" opacity={0.75} />
+      {/* kenardan taşan sucuk + kaşar */}
+      <Circle cx={55} cy={26} r={6} fill={F.sausage} stroke={O} strokeWidth={SW} />
+      <Circle cx={53.5} cy={25} r={1.2} fill={F.sausageDot} />
+      <Circle cx={56.5} cy={28} r={1.1} fill={F.sausageDot} />
+      <Circle cx={10} cy={38} r={5.5} fill={F.sausage} stroke={O} strokeWidth={SW} />
+      <Circle cx={9} cy={37} r={1.1} fill={F.sausageDot} />
+      <Path d="M24 53 Q26 59 29 53 Q32 58 35 53" fill={F.cheese} stroke={O} strokeWidth={1.6} strokeLinejoin="round" />
+    </G>
+  );
+}
+
+function Lahmacun() {
+  return (
+    <G>
+      <Ground w={24} />
+      <Ellipse cx={32} cy={32} rx={26} ry={22} fill={F.lavash} stroke={O} strokeWidth={SW} />
+      <Ellipse cx={32} cy={31} rx={21} ry={17.5} fill={F.pepper} opacity={0.9} />
+      <Ellipse cx={32} cy={31} rx={21} ry={17.5} fill={F.meatDark} opacity={0.25} />
+      {[
+        [22, 26], [31, 22], [41, 27], [26, 36], [37, 37], [44, 33], [20, 33], [32, 30],
+      ].map(([x, y], i) => (
+        <Circle key={i} cx={x} cy={y} r={1.8} fill={F.meatDark} />
+      ))}
+      <Path d="M24 24 L27 23 M36 40 L39 39 M42 30 L44 28" stroke={F.parsley} strokeWidth={2.4} strokeLinecap="round" />
+      {/* limon dilimi */}
+      <Path d="M40 47 A9 9 0 0 1 56 41 Z" fill={F.lemon} stroke={O} strokeWidth={1.8} strokeLinejoin="round" />
+      <Path d="M13 26 Q17 15 30 12" stroke={F.shine} strokeWidth={2.4} strokeLinecap="round" fill="none" />
+    </G>
+  );
+}
+
+function Kokorec() {
+  return (
+    <G>
+      <Ground w={22} />
+      {/* yarım ekmek arası */}
+      <Path d="M6 36 Q6 50 20 52 H44 Q58 50 58 36 Z" fill={F.bread} stroke={O} strokeWidth={SW} strokeLinejoin="round" />
+      <Path d="M8 34 Q14 26 20 32 Q26 25 32 32 Q38 25 44 32 Q50 26 56 34 Q50 40 32 40 Q14 40 8 34 Z" fill={F.kokorec} stroke={O} strokeWidth={SW} strokeLinejoin="round" />
+      <Path d="M14 33 Q18 30 22 33 M28 32 Q32 29 36 32 M42 33 Q46 30 50 33" stroke={F.kokorecDark} strokeWidth={2} strokeLinecap="round" fill="none" />
+      {[
+        [17, 35], [27, 36], [38, 35], [47, 36],
+      ].map(([x, y], i) => (
+        <Circle key={i} cx={x} cy={y} r={1.6} fill={F.pepper} />
+      ))}
+      <Path d="M7 27 Q9 12 32 11 Q55 12 57 27 Q46 23 32 24 Q18 23 7 27 Z" fill={F.breadLight} stroke={O} strokeWidth={SW} strokeLinejoin="round" />
+      <Path d="M16 18 Q24 14 33 15" stroke={F.shine} strokeWidth={2.4} strokeLinecap="round" fill="none" />
+    </G>
+  );
+}
+
+function Limonata() {
+  return (
+    <G>
+      <Ground w={15} />
+      {/* pipet */}
+      <Path d="M36 22 L44 4 H49" stroke={F.straw} strokeWidth={3.4} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      <Path d="M17 16 H47 L43.5 53 Q43 56 40 56 H24 Q21 56 20.5 53 Z" fill={F.glass} stroke={O} strokeWidth={SW} strokeLinejoin="round" />
+      <Path d="M18.4 24 H45.6 L42.4 52 Q42 54 40 54 H24 Q22 54 21.6 52 Z" fill={F.lemonade} />
+      <Rect x={24} y={30} width={7} height={7} rx={1.6} fill={S.white} opacity={0.75} />
+      <Rect x={33} y={38} width={6} height={6} rx={1.4} fill={S.white} opacity={0.75} />
+      {/* bardak kenarında limon */}
+      <Circle cx={18} cy={17} r={8} fill={F.lemon} stroke={O} strokeWidth={SW} />
+      <Circle cx={18} cy={17} r={5} fill={F.lemonade} />
+      <Path d="M18 12 V22 M13 17 H23 M14.5 13.5 L21.5 20.5" stroke={F.lemonDark} strokeWidth={1.2} />
+      <Path d="M23 27 L25 51" stroke={F.shine} strokeWidth={2.2} strokeLinecap="round" />
+    </G>
+  );
+}
+
+function Dondurma() {
+  return (
+    <G>
+      <Ground w={10} />
+      {/* külah */}
+      <Path d="M20 30 L32 58 L44 30 Z" fill={F.cone} stroke={O} strokeWidth={SW} strokeLinejoin="round" />
+      <Path d="M24 34 L37 47 M28 32 L40 39 M23.5 40 L33 32 M27 47 L39 35" stroke={F.coneDark} strokeWidth={1.6} strokeLinecap="round" />
+      {/* iki top */}
+      <Circle cx={32} cy={27} r={12} fill={F.creamVanilla} stroke={O} strokeWidth={SW} />
+      <Path d="M20 30 Q24 35 27 30 Q31 36 34 30 Q38 35 44 30" fill={F.creamVanilla} stroke={O} strokeWidth={SW} strokeLinejoin="round" />
+      <Circle cx={32} cy={15} r={10} fill={F.creamPink} stroke={O} strokeWidth={SW} />
+      <Path d="M24 17 Q28 21 32 18 Q36 21 40 17" stroke={F.creamPinkDark} strokeWidth={1.8} strokeLinecap="round" fill="none" />
+      <Circle cx={33} cy={5} r={3.4} fill={F.cherry} stroke={O} strokeWidth={1.8} />
+      <Path d="M27 11 Q28 8 31 8" stroke={F.shine} strokeWidth={2.2} strokeLinecap="round" fill="none" />
+      <Path d="M24 25 Q25 22 28 21" stroke={F.shine} strokeWidth={2.2} strokeLinecap="round" fill="none" />
     </G>
   );
 }
@@ -209,26 +347,31 @@ const DRAW: Record<string, () => React.JSX.Element> = {
   kumpir: Kumpir,
   kofte: Kofte,
   sucuklu: Sucuklu,
+  lahmacun: Lahmacun,
+  kokorec: Kokorec,
+  limonata: Limonata,
+  dondurma: Dondurma,
 };
 
 export const ProductIcon = memo(function ProductIcon({ p, size }: { p: number; size: number }) {
-  const Draw = DRAW[KANTIN_PRODUCTS[p]?.id ?? "simit"];
+  const id = KANTIN_PRODUCTS[p]?.id ?? "simit";
+  const Draw = DRAW[id] ?? Simit;
   return (
-    <Svg width={size} height={size} viewBox="-1 -1 42 42">
-      {/* Sade ikon: düz dolgu, yalnız açık renkli parçalar kendi ince kenarını taşır. */}
+    <Svg width={size} height={size} viewBox="0 0 64 64">
       <Draw />
     </Svg>
   );
 });
 
-/** İki katlı yığının kapalı kolisi. */
+/** Kapalı koli — iki katlı yığının alt katı. */
 export const CrateIcon = memo(function CrateIcon({ size }: { size: number }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 40 40">
-      <Rect x={5} y={8} width={30} height={26} rx={3} fill={S.crate} />
-      <Path d="M6.5 17 H33.5 M6.5 25 H33.5" stroke={S.crateDark} strokeWidth={1.4} />
-      <Rect x={17} y={8} width={6} height={26} fill={S.crateTape} />
-      <Rect x={8} y={10.5} width={7} height={2.4} rx={1.2} fill={S.white} opacity={0.55} />
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Rect x={8} y={14} width={48} height={40} rx={5} fill={S.crate} stroke={O} strokeWidth={SW} />
+      <Path d="M8 26 H56" stroke={S.crateDark} strokeWidth={2.4} />
+      <Rect x={27} y={14} width={10} height={40} fill={S.crateTape} />
+      <Path d="M14 34 H22 M14 40 H20 M42 34 H50 M44 40 H50" stroke={S.crateDark} strokeWidth={2.2} strokeLinecap="round" />
+      <Path d="M12 18 H24" stroke={F.shine} strokeWidth={2} strokeLinecap="round" />
     </Svg>
   );
 });
@@ -236,11 +379,35 @@ export const CrateIcon = memo(function CrateIcon({ size }: { size: number }) {
 /** Bahşiş jetonu. */
 export const CoinIcon = memo(function CoinIcon({ size }: { size: number }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 40 40">
-      <Circle cx={20} cy={20} r={17} fill={S.coin} stroke={S.coinEdge} strokeWidth={1.5} />
-      <Circle cx={20} cy={20} r={11} fill="none" stroke={S.coinEdge} strokeWidth={1.6} opacity={0.6} />
-      <Path d="M14 13 Q17 10 21 10.5" stroke={S.coinShine} strokeWidth={2.4} strokeLinecap="round" fill="none" />
-      <Path d="M20 13 L22 18 L27 18.3 L23 21.4 L24.4 26.4 L20 23.6 L15.6 26.4 L17 21.4 L13 18.3 L18 18 Z" fill={S.coinEdge} opacity={0.75} />
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Defs>
+        <RadialGradient id="kcoin" cx="38%" cy="32%" r="70%">
+          <Stop offset="0" stopColor={S.coinShine} />
+          <Stop offset="0.6" stopColor={S.coin} />
+          <Stop offset="1" stopColor={S.coinEdge} />
+        </RadialGradient>
+      </Defs>
+      <Circle cx={32} cy={34} r={26} fill={S.coinEdge} />
+      <Circle cx={32} cy={31} r={26} fill="url(#kcoin)" stroke={O} strokeWidth={SW} />
+      <Circle cx={32} cy={31} r={18} fill="none" stroke={S.coinEdge} strokeWidth={2.4} opacity={0.7} />
+      <Path d="M26 22 V40 M26 31 H37 Q41 31 41 26.5 Q41 22 37 22 H26" stroke={S.coinEdge} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      <Path d="M17 22 Q22 13 32 12" stroke={S.white} strokeWidth={3} strokeLinecap="round" fill="none" opacity={0.75} />
+    </Svg>
+  );
+});
+
+/** Cam parlama katmanı (karo üstü): üstten ışık, altta gölge. */
+export const TileGloss = memo(function TileGloss({ w, h, r }: { w: number; h: number; r: number }) {
+  return (
+    <Svg width={w} height={h} style={{ position: "absolute", left: 0, top: 0 }} pointerEvents="none">
+      <Defs>
+        <SvgLinearGradient id="ktgloss" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={S.white} stopOpacity={0.55} />
+          <Stop offset="0.45" stopColor={S.white} stopOpacity={0} />
+          <Stop offset="1" stopColor={S.ink} stopOpacity={0.07} />
+        </SvgLinearGradient>
+      </Defs>
+      <Rect x={0} y={0} width={w} height={h} rx={r} fill="url(#ktgloss)" />
     </Svg>
   );
 });

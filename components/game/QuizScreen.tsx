@@ -82,6 +82,11 @@ import {
 } from "@/lib/game/quiz/questions";
 import { CARTOON } from "@/lib/game/cartoon";
 import { QUIZ, QUIZ_LETTER_TONES, QUIZ_TONES, QUIZ_TRIPLE_TONES, type QuizToneName } from "@/lib/game/quizPalette";
+import { withOfflineCache } from "@/lib/offline/cache";
+import type { LifeGameKey } from "@/lib/puzzle/api";
+import { useGameLives } from "@/lib/puzzle/useGameLives";
+import { LivesSheet } from "@/components/gamehome/HomeSheets";
+import { OfflinePill } from "@/components/offline/OfflineSync";
 import { useScope } from "@/providers/ScopeProvider";
 import { fonts, haptics, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
@@ -128,14 +133,16 @@ function useQuizPool(source: QuizConfig["source"], city: QuizCity, enabled: bool
     queryKey: ["quiz", source, cityId ?? "tr"],
     enabled,
     staleTime: 15 * 60_000,
-    queryFn: async () => {
-      if (source === "players") {
-        const data = await getPlayerRankings({ cityId }, "topScorers");
-        return { kind: "players", players: toPlayers(data?.players ?? []) };
-      }
-      const rows = await getMatches({ cityId, cityName: city?.label, status: "yayinlanmis", limit: 800, compact: true });
-      return { kind: "matches", matches: toMatches(rows ?? []) };
-    },
+    // Çevrimdışı (sözleşme §7): havuz çevrimiçiyken cihaza yazılır, ağ yokken oradan oynanır.
+    queryFn: () =>
+      withOfflineCache<QuizPool>(`quiz.${source}.${cityId ?? "tr"}`, async () => {
+        if (source === "players") {
+          const data = await getPlayerRankings({ cityId }, "topScorers");
+          return { kind: "players", players: toPlayers(data?.players ?? []) };
+        }
+        const rows = await getMatches({ cityId, cityName: city?.label, status: "yayinlanmis", limit: 800, compact: true });
+        return { kind: "matches", matches: toMatches(rows ?? []) };
+      }),
   });
 }
 
@@ -364,7 +371,7 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
 
   /* Tur bittiğinde skor bir kez gönderilir. */
   const finishedRef = useRef(false);
-  const { finish: finishRun, reset: resetRun } = run;
+  const { finish: finishRun } = run;
   useEffect(() => {
     if (phase === "over" && !finishedRef.current) {
       finishedRef.current = true;
@@ -373,11 +380,23 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
     }
   }, [phase, score, finishRun, correct, asked, bestStreak]);
 
-  const start = () => {
-    if (!pool || !enough) return;
+  const [livesOpen, setLivesOpen] = useState(false);
+  const lives = useGameLives(config.game === "gunun" ? null : (config.game as LifeGameKey));
+  const beginRun = run.begin;
+  const startingRef = useRef(false);
+  const start = async () => {
+    if (!pool || !enough || startingRef.current) return;
+    // Can kapısı (sözleşme §4): can yoksa tur başlamaz.
+    startingRef.current = true;
+    const begun = await beginRun().finally(() => {
+      startingRef.current = false;
+    });
+    if (!begun.ok) {
+      setLivesOpen(true);
+      return;
+    }
     clearTimers();
     finishedRef.current = false;
-    resetRun();
     recent.current = [];
     setScore(0);
     setLives(QUIZ_LIVES);
@@ -527,7 +546,7 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
               error={poolQuery.isError}
               enough={enough}
               onRetry={() => void poolQuery.refetch()}
-              onStart={start}
+              onStart={() => void start()}
             />
           ) : null}
 
@@ -675,7 +694,7 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
               submit={run.submit}
               onRetrySubmit={run.retry}
               onSignIn={() => router.push("/giris")}
-              onRestart={start}
+              onRestart={() => void start()}
               secondary={{ label: "İl değiştir", icon: "location-outline", onPress: () => setPhase("setup") }}
               stars={run.stars}
               onCity={() => router.push("/kulup-sehri")}

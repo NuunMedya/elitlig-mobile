@@ -171,7 +171,7 @@ export function HowSheet({
         <HowRow
           icon="flash"
           title="XP: saha ve görevler"
-          text={`Oyunlar XP vermez. XP gerçek maçlardaki performansından ve haftalık görevlerden gelir: ${xp?.per_star ?? 10} XP = 1 yıldız. "Yıldızları topla" ile havuza aktar.${xp?.buckets?.length ? " Toplanmayan XP en çok 3 gün bekler; sonra yanar (yıldıza dönmez, XP sıralamasında sayılır)." : ""}`}
+          text={`Oyunlar XP vermez. XP gerçek maçlardaki performansından ve haftalık görevlerden gelir: ${xp?.per_star ?? 10} XP = 1 yıldız. "Yıldızları topla" ile havuza aktar.${xp?.buckets?.length ? " XP hafta boyunca (Pzt–Paz) birikir; hafta kapanınca yıldıza çevrilir ve Pazartesi–Çarşamba 3 gün içinde toplanmalıdır. Toplanmayan XP Perşembe yanar (XP sıralamasında sayılır)." : ""}`}
         />
         {byGame.length ? (
           <View style={styles.byGame}>
