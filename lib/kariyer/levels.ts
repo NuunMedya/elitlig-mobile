@@ -80,7 +80,7 @@ export const MOMENT_HINTS: Record<MomentKind, string> = {
   pass: "Koşan arkadaşının ÖNÜNE doğru çek ve bırak. Top oraya vardığında o da orada olmalı.",
   dribble: "Parmağını basılı tutup sağa sola kaydır; savunmacılara çarpmadan çizgiye ulaş.",
   penalty: "Kaleci bir köşeye atlayacak. Direğin dibine sert vur; ortaya vurursan kaleci kalırsa tutar.",
-  freekick: "Baraj önünde! Parmağını EĞRİ çizerek çek: kavis topu barajın yanından döndürür.",
+  freekick: "Baraj önünde! Parmağını EĞRİ çizerek çek: kavis topu barajın yanından döndürür. Kaleci uzak köşeyi tutar; kavisli top onu ters köşede bırakır.",
   header: "Orta geliyor! Top başının üstündeki halkaya girdiğinde ekrana dokun; dokunduğun yöne vurursun.",
 };
 /** An başına kısa kural rozeti (tanıtım kartında). */

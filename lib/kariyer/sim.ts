@@ -246,6 +246,36 @@ export const isGoalKind = (kind: number) => kind === KIND_SHOT || kind === KIND_
 
 /* ───────────────────────────── kurulum (JS) ───────────────────────────── */
 
+/**
+ * FRİKİK AYARLARI (2026-11 denge; scripts/check-kariyer.mjs ile ölçülür).
+ * Hedef: makul çekişlerin basamak 1–2'de ~%80'i, 3–4'te ~%60'ı, 5'te ~%50'si
+ * gol; kavisli köşe çekişi düz çekişten belirgin iyi.
+ */
+const FK = {
+  power: 1.05, // top hızı (× h), şut özelliğiyle artar
+  goalHalf: 0.34, // kale yarı genişliği (× w) …
+  goalShrink: 0.04, // … zorlukla daralma
+  wallShift: 4, // baraj yakın direğe kayması (× unit)
+  wallGap: 5.4, // barajda oyuncu aralığı (× unit)
+  wallAmp: 0.05, // hareketli baraj genliği (× w) …
+  wallAmpD: 0.05, // … zorlukla artış
+  speed: 0.04, // kaleci atılma hızı (× w / sn) …
+  speedD: 0.55, // … zorlukla artış …
+  speedCap: 0.34, // … tavan
+  reach: 5, // kaleci uzanma (× unit) …
+  reachD: 2.5, // … zorlukla artış …
+  reachCap: 7, // … tavan
+  ace: 1.12, // usta kaleci hız çarpanı
+  aceStacked: 1.05, // usta kaleci + hareketli baraj: küçük çarpan
+  aceReach: 1.08, // usta kaleci uzanma çarpanı
+  keeperBias: 0.3, // devriye merkezi: uzak direğe doğru (× goalHalf)
+  patrol: 0.3, // devriye genliği (× goalHalf)
+  screened: 0.15, // top barajı geçmeden tepki hızı çarpanı
+  readD: 0.4, // atlayıştan sonra kavisi okuma payı: zorlukla …
+  readCap: 0.35, // … tavan
+  aceRead: 0.15, // usta kalecinin ek okuma payı
+};
+
 export function createMoment(def: MomentDef, attrs: Attrs, w: number, h: number): MomentState {
   const rnd = rng(def.seed);
   const d = def.difficulty;
@@ -377,21 +407,37 @@ export function createMoment(def: MomentDef, attrs: Attrs, w: number, h: number)
     s.ball.y = h * (0.66 + rnd() * 0.05);
     s.me.x = s.ball.x - unit * 3;
     s.me.y = s.ball.y + unit * 8;
-    s.power = h * (1.05 + a("sut") * 0.6);
-    s.goalHalf = w * (0.33 - d * 0.05);
+    s.power = h * (FK.power + a("sut") * 0.6);
+    s.goalHalf = w * (FK.goalHalf - d * FK.goalShrink);
     setupKeeper();
     // Baraj: topla kale ortası arasındaki yolun yarısında, yakın direğe
     // kaydırılmış — uzak köşe açık kalır, kavis kaleciyi ters köşeye yatırır.
     const wy = s.ball.y + (s.goalY - s.ball.y) * 0.5;
     const k = (wy - s.ball.y) / (s.goalY - s.ball.y);
-    s.wallX = s.ball.x + (s.goalX - s.ball.x) * k + (s.ball.x < w / 2 ? -1 : 1) * unit * 4;
-    s.wallAmp = mods & MOD_WALLMOVE ? w * (0.08 + d * 0.06) : 0;
-    // Kavisli top kalecinin tahminini şaşırtır: frikikte biraz daha geç tepki.
-    s.keeper.a *= 0.85;
+    const far = s.ball.x < w / 2 ? 1 : -1; // uzak direğin yönü
+    s.wallX = s.ball.x + (s.goalX - s.ball.x) * k - far * unit * FK.wallShift;
+    s.wallAmp = mods & MOD_WALLMOVE ? w * (FK.wallAmp + d * FK.wallAmpD) : 0;
+    // FRİKİK KALECİSİ (2026-11 denge): eskiden şut kalecisinin %85'iydi ve
+    // zorlukla sınırsız büyüyordu (hız + uzanma + usta çarpanı). Kale
+    // ağzının tamamını kapattığından üst basamaklarda köşeye giden çekişlerin
+    // çoğu kurtarılıyordu; kavis de düz şuttan iyi değildi. Şimdi:
+    //   - hız ve uzanma tavanlı; usta kaleci hareketli barajla birlikte
+    //     gelirse çarpanı küçülür (iki engel üst üste binmesin),
+    //   - kaleci barajın kapatmadığı UZAK yarıyı tutar (gerçek frikik gibi),
+    //   - baraj görüşünü keser: top barajı geçene kadar ağır tepki verir.
+    // Böylece düz uzak köşe şutu kaleciye gider; barajın yanından kıvrılan
+    // (yakın köşe) ya da kaleciyi ters yatıran kavis tatlı noktadır.
+    const aceK = ace ? (mods & MOD_WALLMOVE ? FK.aceStacked : FK.ace) : 1;
+    s.keeper.a = w * Math.min(FK.speedCap, FK.speed + d * FK.speedD) * aceK;
+    s.keeper.b = unit * Math.min(FK.reachCap, FK.reach + d * FK.reachD - a("sut") * 2.5) * (ace ? FK.aceReach : 1);
+    s.keeper.d = s.goalX + far * s.goalHalf * FK.keeperBias; // devriye merkezi
+    s.keeper.x = s.keeper.d;
+    s.keeper.vx = (rnd() < 0.5 ? -1 : 1) * w * (0.06 + d * 0.1);
+    s.keeperRead = 0; // frikikte: kaleci atlayışa karar verdi mi
     const n = Math.max(2, def.rivals);
     for (let i = 0; i < n; i += 1) {
       const rival = body(0, wy, unit * 3.8);
-      rival.a = (i - (n - 1) / 2) * unit * 6.2; // barajdaki ofset
+      rival.a = (i - (n - 1) / 2) * unit * FK.wallGap; // barajdaki ofset
       rival.x = s.wallX + rival.a;
       rival.d = 2; // baraj oyuncusu
       s.rivals.push(rival);
@@ -566,9 +612,25 @@ function keeperTrack(s: MomentState, dt: number, guess: boolean) {
   const timeToLine = b.vy < 0 ? (s.goalY - b.y) / b.vy : 0;
   const predicted = b.x + b.vx * Math.max(0, timeToLine) + 0.5 * s.windX * timeToLine * timeToLine * 0.6;
   const lim = s.goalHalf - k.r * 0.4;
-  const aim = guess ? s.keeperGuess : predicted;
+  let aim = guess ? s.keeperGuess : predicted;
+  let speed = 1;
+  if (s.kind === KIND_FREEKICK && s.rivals.length > 0) {
+    // Frikik: baraj görüşü keser — top barajı geçene dek kaleci ağır tepki
+    // verir. Geçtiği an topun O ANKİ gidişine atlar (keeperGuess) ve büyük
+    // ölçüde ona bağlı kalır: kavis kaleciyi ters köşede bırakır. Üst
+    // basamaklarda (ve usta kalecide) atlayıştan sonra kavisi kısmen okur.
+    if (b.y > s.rivals[0].y - s.rivals[0].r) speed = FK.screened;
+    else {
+      if (!s.keeperRead) {
+        s.keeperRead = 1;
+        s.keeperGuess = predicted;
+      }
+      const read = Math.min(FK.readCap, s.difficulty * FK.readD) + (s.mods & MOD_ACE ? FK.aceRead : 0);
+      aim = s.keeperGuess + (predicted - s.keeperGuess) * read;
+    }
+  }
   const target = Math.max(s.goalX - lim, Math.min(s.goalX + lim, aim));
-  const step = k.a * dt;
+  const step = k.a * dt * speed;
   if (Math.abs(target - k.x) <= step) k.x = target;
   else k.x += target > k.x ? step : -step;
   // Atlayış göstergesi: hız yönü çizimde gövdeyi yatırır.
@@ -707,12 +769,14 @@ export function stepMoment(s: MomentState, dt: number, touch: TouchInput): boole
     if (s.phase === PHASE_READY) {
       // Kaleci kale ağzında gidip gelir (penaltıda yalnız kıpırdanır).
       k.x += k.vx * dt;
-      const lim = s.kind === KIND_PENALTY ? unit * 3 : s.goalHalf - k.r;
-      if (k.x < s.goalX - lim) {
-        k.x = s.goalX - lim;
+      // Frikikte kaleci uzak yarıda, kendi merkezinin çevresinde kıpırdanır.
+      const mid = s.kind === KIND_FREEKICK ? k.d : s.goalX;
+      const lim = s.kind === KIND_PENALTY ? unit * 3 : s.kind === KIND_FREEKICK ? s.goalHalf * FK.patrol : s.goalHalf - k.r;
+      if (k.x < mid - lim) {
+        k.x = mid - lim;
         k.vx = Math.abs(k.vx);
-      } else if (k.x > s.goalX + lim) {
-        k.x = s.goalX + lim;
+      } else if (k.x > mid + lim) {
+        k.x = mid + lim;
         k.vx = -Math.abs(k.vx);
       }
       s.clock -= dt;
@@ -1192,6 +1256,16 @@ function drawPitch(canvas: SkCanvas, s: MomentState, pal: KariyerPalette) {
   }
 }
 
+/**
+ * Frikik nişan önizlemesinin uzunluğu (benzetim adımı; her adım 2 kare).
+ * İlk basamaklarda yol kaleye kadar görünür; zorluk arttıkça kısalır —
+ * baraj hizası hep görünür, kavisin sonu (ve kaleye varış) ustalık ister.
+ */
+export function aimPreviewSteps(difficulty: number): number {
+  "worklet";
+  return Math.max(8, Math.round(26 - 20 * Math.max(0, Math.min(1, difficulty))));
+}
+
 /** Nişan: parmak çekilirken topun gideceği yol (frikikte kavisli) ve güç. */
 function drawAim(canvas: SkCanvas, s: MomentState, touch: TouchInput, pal: KariyerPalette) {
   "worklet";
@@ -1225,7 +1299,8 @@ function drawAim(canvas: SkCanvas, s: MomentState, touch: TouchInput, pal: Kariy
     let vx = ux * s.power * strength;
     let vy = uy * s.power * strength;
     const dt = 1 / 60;
-    for (let i = 0; i < 26; i += 1) {
+    const steps = aimPreviewSteps(s.difficulty);
+    for (let i = 0; i < steps; i += 1) {
       for (let j = 0; j < 2; j += 1) {
         vx += (s.windX + cx) * dt;
         vy += cy * dt;
