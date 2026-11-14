@@ -251,7 +251,7 @@ export const isGoalKind = (kind: number) => kind === KIND_SHOT || kind === KIND_
  * Hedef: kalecinin uzağına köşeye çekilen şutların basamak 1–2'de ~%80'i,
  * 3–4'te ~%60'ı, 5'te ~%50'si gol.
  */
-export const SHOT = {
+const SHOT = {
   goalHalf: 0.3, // kale yarı genişliği (× w) …
   goalShrink: 0.06, // … zorlukla daralma
   patrol: 0.16, // kalecinin şut öncesi devriye hızı (× w / sn) …
@@ -273,25 +273,25 @@ export const SHOT = {
 };
 
 /** PENALTI AYARLARI (aynı hedef bantlar; direk dibine sert vuruş ödüllenir). */
-export const PEN = {
+const PEN = {
   goalHalf: 0.34, // kale yarı genişliği (× w) …
   goalShrink: 0.04, // … zorlukla daralma
   guess: 0.62, // kalecinin atladığı nokta (× goalHalf)
-  speed: 0.5, // atlayış hızı (× w / sn) …
-  speedD: 0.55, // … zorlukla artış …
-  speedCap: 9, // … tavan
-  reach: 8, // uzanma (× unit) …
+  speed: 0.32, // atlayış hızı (× w / sn) …
+  speedD: 0.9, // … zorlukla artış …
+  speedCap: 0.78, // … tavan
+  reach: 6, // uzanma (× unit) …
   reachD: 3, // … zorlukla artış …
-  reachCap: 99, // … tavan
-  react: 0, // tepki gecikmesi (sn) …
-  reactD: 0, // … zorlukla azalma …
-  reactMin: 0, // … taban
-  read: 0.12, // şutu okuma olasılığı …
-  readD: 0.4, // … zorlukla artış …
-  readCap: 1, // … tavan
-  aceRead: 0.2, // usta kalecinin ek okuma olasılığı
-  ace: 1.25, // usta kaleci hız çarpanı
-  aceReach: 1.15, // usta kaleci uzanma çarpanı
+  reachCap: 8, // … tavan
+  react: 0.12, // tepki gecikmesi (sn) …
+  reactD: 0.06, // … zorlukla azalma …
+  reactMin: 0.05, // … taban
+  read: 0.05, // şutu okuma olasılığı …
+  readD: 0.5, // … zorlukla artış …
+  readCap: 0.28, // … tavan
+  aceRead: 0.1, // usta kalecinin ek okuma olasılığı
+  ace: 1.1, // usta kaleci hız çarpanı
+  aceReach: 1.05, // usta kaleci uzanma çarpanı
 };
 
 /**
@@ -431,9 +431,9 @@ export function createMoment(def: MomentDef, attrs: Attrs, w: number, h: number)
     // `7.5 + 3.5d` ve usta çarpanı ×1.25/×1.15 tavansızdı; tepki süresi de
     // yoktu. Üst basamaklarda kaleci kale ağzının tamamını kapatıyor, kalecinin
     // uzağına çekilen köşe şutları bile çoğunlukla kurtarılıyordu. Şimdi hız
-    // ve uzanma tavanlı, şuttan sonra kısa bir tepki gecikmesi var (sert ve
-    // kalecinin uzağına çekilen şut ödüllenir), devriye daha yavaş (kalecinin
-    // hangi yanda olduğu okunabilir).
+    // ve uzanma tavanlı, şuttan sonra kısa bir tepki gecikmesi var: sert ve
+    // kalecinin uzağına çekilen şut ödüllenir, kalecinin durduğu yana çekilen
+    // şut ise hâlâ kurtarılır.
     s.keeper.vx = Math.sign(s.keeper.vx) * w * (SHOT.patrol + d * SHOT.patrolD);
     s.keeper.a = w * Math.min(SHOT.speedCap, SHOT.speed + d * SHOT.speedD) * (ace ? SHOT.ace : 1);
     s.keeper.b = unit * Math.min(SHOT.reachCap, SHOT.reach + d * SHOT.reachD - a("sut") * 2.5) * (ace ? SHOT.aceReach : 1);
@@ -997,10 +997,16 @@ export function stepMoment(s: MomentState, dt: number, touch: TouchInput): boole
       }
     }
     if (hits(b.x, b.y, b.r, s.mate.x, s.mate.y, s.catchR)) {
-      // Koşunun ileri yarısında buluşan pas "nefis"tir.
-      const dx = b.x - s.mate.x;
-      const dy = b.y - s.mate.y;
-      const close = Math.sqrt(dx * dx + dy * dy) < s.catchR * 0.6;
+      // Koşunun ileri yarısında, tam ayağa (yolun oyuncunun merkezine en
+      // yakın geçişi yakalama yarıçapının %60'ı içinde) gelen pas "nefis"tir.
+      // ESKİDEN topun yakalama çemberine GİRDİĞİ karedeki uzaklık ölçülüyordu;
+      // top bir karede ~10 px ilerlediğinden bu uzaklık hep ≈ catchR çıkıyor,
+      // "nefis pas" pratikte hiç gerçekleşmiyordu (pas puanı 0,72'de kalıyordu).
+      const dx = s.mate.x - b.x;
+      const dy = s.mate.y - b.y;
+      const vl = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+      const miss = vl > 1 ? Math.abs(dx * b.vy - dy * b.vx) / vl : Math.sqrt(dx * dx + dy * dy);
+      const close = miss < s.catchR * 0.6;
       b.vx = 0;
       b.vy = 0;
       b.x = s.mate.x;

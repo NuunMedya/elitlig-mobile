@@ -18,17 +18,21 @@
  *     bölgenin dışına) giden atış. Ek koşullar: şut ve kafada kalecinin ters
  *     yanındaki köşe; kafada iyi zamanlama (pencerenin %60'ı içinde);
  *     frikikte ekrandaki nişan önizlemesi (aimPreviewSteps kadar) baraja
- *     değmemeli — oyuncu baraja giden yolu görür ve seçmez.
+ *     değmemeli — oyuncu baraja giden yolu görür ve seçmez; şutta da
+ *     bırakış anında bir savunmacıya değen yol seçilmez (sonradan araya
+ *     giren savunmacı zamanlama hatasıdır, sayılır).
  *     ORAN = makul çekişlerden gerçek koşulda gol (pasta: isabetli pas) payı.
- *   - Kafa: dokunma zamanı (pencere katları) ve yönü taranır; pas: koşunun
- *     önüne doğru hedefler (başarı = PAS_OK / NEFİS PAS).
+ *   - Kafa: dokunma zamanı (pencere katları) ve yönü taranır. Pas: koşunun
+ *     önleme noktasına (± koşu payı, ± yan) nişan; başarı = PAS_OK / NEFİS
+ *     PAS. Çalım: insan benzeri parmak politikası (bakış mesafesi, tepki
+ *     gecikmesi, karar sıklığı, kayma); başarı = çizgiye ulaşmak.
  *
- * Bantlar (frikik): basamak 1–2 → %74–86, 3–4 → %54–66, 5 → %44–56;
- * basamaklar arasında oran artmamalı (en çok 5 puanlık oynama); frikik
- * penaltı ve kafadan belirgin zor olmamalı ve kafadan en çok 20 puan
- * sapmalı. Tatlı nokta: barajın yanından dolanan belirgin kavis (≥0,5) düz
- * çekişten (≤0,25) en az 8 puan daha çok gol olmalı. Rüzgâr, hareketli
- * baraj, usta kaleci ve baraj+usta bir aradayken oran %40'ın altına inmemeli.
+ * Bantlar: frikik, şut, penaltı → basamak 1–2 %74–86, 3–4 %54–66, 5 %44–56;
+ * kafa, pas, çalım → geniş akıl sağlığı bantları (LOOSE). Her tür için oran
+ * basamaktan basamağa artmamalı (en çok 5 puanlık oynama). Beceri ödülü:
+ * frikikte barajın yanından dolanan kavis, şutta kalecinin uzağı, penaltıda
+ * direk dibine sert vuruş, uymayan çekişten en az 8 puan daha çok gol olmalı.
+ * Engel adaleti: her (an, engel) birleşimi — baraj+usta dahil — en az %35.
  *
  * Çalıştırma: node --experimental-strip-types --no-warnings scripts/check-kariyer.mjs [--verbose]
  */
@@ -185,21 +189,29 @@ function* headerGrid(def, lv) {
 }
 
 function* passGrid(def, lv) {
+  // İnsan koşunun buluşma noktasına nişan alır (topun hızına göre hesaplanan
+  // önleme noktası) ve biraz yanılır: koşu payında ±, yanlara ±.
   const s0 = S.createMoment(def, attrsAt(lv), W, H);
-  for (const at of [0.4, 0.8, 1.3, 1.9])
-    for (const lead of [0.05, 0.15, 0.25, 0.35, 0.45])
-      for (const off of [-0.04, 0, 0.04]) {
-        const p = Math.min(1, s0.runSpeed * at + lead);
-        const tx = s0.runX0 + (s0.runX1 - s0.runX0) * p + off * W;
-        const ty = s0.runY0 + (s0.runY1 - s0.runY0) * p;
-        const dx = tx - s0.ball.x;
-        const dy = ty - s0.ball.y;
+  const at0 = (p) => ({ x: s0.runX0 + (s0.runX1 - s0.runX0) * p, y: s0.runY0 + (s0.runY1 - s0.runY0) * p });
+  for (const at of [0.4, 0.8, 1.3, 1.9]) {
+    let T = 0.5;
+    for (let i = 0; i < 8; i += 1) {
+      const m = at0(Math.min(1, s0.runSpeed * (at + T)));
+      T = Math.hypot(m.x - s0.ball.x, m.y - s0.ball.y) / s0.power;
+    }
+    const pHit = s0.runSpeed * (at + T);
+    for (const dp of [-0.1, -0.05, 0, 0.05, 0.1])
+      for (const off of [-0.03, 0, 0.03]) {
+        const m = at0(Math.min(1, pHit + dp));
+        const dx = m.x + off * W - s0.ball.x;
+        const dy = m.y - s0.ball.y;
         const l = Math.sqrt(dx * dx + dy * dy);
         const len = H * 0.25;
         const sx = W / 2;
         const sy = H * 0.85;
-        yield { at, touch: { down: false, sx, sy, x: sx + (dx / l) * len, y: sy + (dy / l) * len, bx: sx, by: sy }, meta: { a: lead, c: 0, p: 0 } };
+        yield { at, touch: { down: false, sx, sy, x: sx + (dx / l) * len, y: sy + (dy / l) * len, bx: sx, by: sy }, meta: { a: dp, c: 0, p: 0 } };
       }
+  }
 }
 
 const GOOD = (kind, out) => (kind === "pass" ? out === S.OUT_PASS_OK || out === S.OUT_PASS_PERFECT : out === S.OUT_GOAL);
@@ -274,8 +286,8 @@ function measureDribble(def, lv) {
   let good = 0;
   const outs = {};
   const lanes = Array.from({ length: 11 }, (_, i) => W * (0.08 + i * 0.084));
-  for (const look of [0.28, 0.38, 0.48])
-    for (const lag of [0.12, 0.2, 0.3])
+  for (const look of [0.42, 0.52, 0.62])
+    for (const lag of [0.15, 0.22, 0.3])
       for (const every of [0.12, 0.25])
         for (const jitter of [-0.03, 0, 0.03]) {
           const s = S.createMoment(def, attrsAt(lv), W, H);
@@ -382,8 +394,9 @@ const fails = [];
 // Gol anları (frikik, şut, penaltı): hedef bantlar.
 const STRICT = { 1: [0.74, 0.86], 2: [0.74, 0.86], 3: [0.54, 0.66], 4: [0.54, 0.66], 5: [0.44, 0.56] };
 // Kafa, pas, çalım: daha geniş akıl sağlığı bantları (yine zorlaşmalı, ama
-// hiçbir basamakta imkânsız ya da bedava olmamalı).
-const LOOSE = { 1: [0.7, 0.99], 2: [0.7, 0.97], 3: [0.5, 0.9], 4: [0.42, 0.82], 5: [0.36, 0.76] };
+// hiçbir basamakta imkânsız ya da bedava olmamalı). Pas bilerek daha
+// kolaydır: hazırlık anıdır, isabetli pas 0,72 puan, "nefis pas" 1 puan.
+const LOOSE = { 1: [0.7, 0.99], 2: [0.7, 0.98], 3: [0.5, 0.94], 4: [0.42, 0.86], 5: [0.36, 0.8] };
 const band = (kind) => (["freekick", "shot", "penalty"].includes(kind) ? STRICT : LOOSE);
 for (const kind of KINDS) {
   for (const tier of TIERS) {
