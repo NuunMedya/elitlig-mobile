@@ -5,7 +5,8 @@
  *   antrenman  harcanmamış antrenman puanı varsa üç karttan biri seçilir
  *              (puan = kazanılan yıldız; kart özellikleri büyütür)
  *   tanıtım    anın dakikası ve hikâyesi ("23' · Ceza sahası dışında top sende!")
- *   oyun       Skia tuvalinde an oynanır (şut · pas · çalım)
+ *   oyun       Skia tuvalinde an oynanır (şut · pas · çalım · penaltı ·
+ *              frikik · kafa; engeller: rüzgâr, çamur, ofsayt…)
  *   sonuç      "GOL!" / "Kaleci çıkardı" … kısa bir an, sonra sıradaki an
  *   bitiş      an skorlarından maç reytingi → yıldız → çerçeveye bildirilir
  *
@@ -13,6 +14,11 @@
  * durum ilerletilir ve sahne tek bir SkPicture'a kaydedilir. React yalnız
  * evre değişince (an başladı / bitti) yeniden çizer. Parmak hareketi JS'ten
  * paylaşılan değere yazılır; oyun onu bir sonraki karede okur.
+ *
+ * 2026-11 YENİLEMESİ: üstte REYTİNG ÇUBUĞU — 1/2/3 yıldız eşikleri çubuk
+ * üstünde işaretli, her anın skoru çubuğu canlı doldurur; hedef her an
+ * görünür. Tanıtım kartı anın kuralını ("Kavisli çek") ve o andaki engelleri
+ * rozetle söyler; sonuç rozeti anın notunu (0–3 yıldız) gösterir.
  *
  * Yazılar ve düğmeler React Native katmanındadır (tuvalde metin çizilmez).
  * Oyun renkleri lib/kariyer/palette.ts'ten gelir; yerleşim tema tokenlarıyla.
@@ -32,11 +38,14 @@ import {
   ATTR_ICONS,
   ATTR_KEYS,
   ATTR_LABELS,
+  MODS,
   MOMENT_HINTS,
   MOMENT_ICONS,
   MOMENT_LABELS,
+  MOMENT_RULES,
   applyGains,
   generateKariyerLevel,
+  gradeOf,
   overallOf,
   ratingOf,
   starsOf,
@@ -44,10 +53,20 @@ import {
   type Attrs,
   type TrainingCard,
 } from "@/lib/kariyer/levels";
-import { HUD, paletteForTier } from "@/lib/kariyer/palette";
+import { HUD, paletteForTier, uiForTier } from "@/lib/kariyer/palette";
 import { attrsOf, emptySave, identityOf, normalizeSave, type KariyerSave } from "@/lib/kariyer/progress";
 import { useGameSave } from "@/lib/puzzle/saves";
-import { OUTCOME_TEXT, PHASE_OVER, createMoment, drawMoment, emptyTouch, stepMoment, type MomentState } from "@/lib/kariyer/sim";
+import {
+  OUTCOME_TEXT,
+  OUT_GOAL,
+  PHASE_OVER,
+  createMoment,
+  drawMoment,
+  emptyTouch,
+  perpDistance,
+  stepMoment,
+  type MomentState,
+} from "@/lib/kariyer/sim";
 import type { PuzzleGameProps } from "@/lib/puzzle/types";
 import { usePuzzleMe } from "@/lib/puzzle/usePuzzle";
 import { useAuth } from "@/providers/AuthProvider";
@@ -67,7 +86,10 @@ const glyph = (name: string) => name as keyof typeof Ionicons.glyphMap;
 
 /** HUD satır yükseklikleri (sabit: tuval yüksekliği ölçüm beklemeden hesaplanır). */
 const ROW1_H = 56;
-const ROW2_H = 34;
+const ROW2_H = 46;
+/** Reyting çubuğunun ölçeği. */
+const R_MIN = 4;
+const R_MAX = 10;
 
 export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, boosterStock, useBooster, onFinish, paused }: PuzzleGameProps) {
   const auth = useAuth();
@@ -81,6 +103,7 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
 
   const def = useMemo(() => generateKariyerLevel(level, identity.line ?? "FWD"), [level, identity.line]);
   const pal = useMemo(() => paletteForTier(def.tier), [def.tier]);
+  const ui = useMemo(() => uiForTier(def.tier), [def.tier]);
 
   /* — Gelişim — */
   // Hesaba bağlı kayıt (lib/puzzle/saves): sunucu yanıtı gelene dek beklenir —
@@ -111,6 +134,9 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
   const [outcome, setOutcome] = useState(0);
   const [lastScore, setLastScore] = useState(0);
   const finished = useRef(false);
+  /** Bu maçta atılan goller (sonuç koduyla sayılır). */
+  const goalsRef = useRef(0);
+  const [goals, setGoals] = useState(0);
 
   useEffect(() => {
     if (stage !== "loading" || !save || !identityReady || !puzzleReady) return;
@@ -126,6 +152,7 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
   const serial = useSharedValue(0);
 
   const onMomentEnd = useCallback((score: number, code: number) => {
+    if (code === OUT_GOAL) haptics.goal();
     setLastScore(score);
     setOutcome(code);
     setStage("result");
@@ -195,7 +222,7 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
           finished.current = true;
           const rating = ratingOf(next);
           const stars = starsOf(rating, def);
-          const goals = next.filter((value, i) => def.moments[i].kind === "shot" && value >= 1).length;
+          const goals = goalsRef.current;
           onFinish({
             won: stars > 0,
             stars,
@@ -211,13 +238,27 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
     [def, onFinish, scores],
   );
 
+  // Gol sayacı: yalnız sonuç kesinleşince (ikinci şans geri sayımı bozmasın).
+  const countGoal = useCallback(
+    (score: number) => {
+      if (outcome === OUT_GOAL && score >= 1) {
+        goalsRef.current += 1;
+        setGoals(goalsRef.current);
+      }
+    },
+    [outcome],
+  );
+
   useEffect(() => {
     if (stage !== "result" || paused) return;
     // Kötü biten anda "İkinci şans" için biraz daha uzun beklenir.
     const canRetry = lastScore < RETRY_BELOW && (boosterStock.ikinci_sans ?? 0) > 0;
-    const timer = setTimeout(() => advance(lastScore), canRetry ? 2600 : 1100);
+    const timer = setTimeout(() => {
+      countGoal(lastScore);
+      advance(lastScore);
+    }, canRetry ? 2600 : 1300);
     return () => clearTimeout(timer);
-  }, [advance, boosterStock.ikinci_sans, lastScore, paused, stage]);
+  }, [advance, boosterStock.ikinci_sans, countGoal, lastScore, paused, stage]);
 
   // Sonuç rozeti: ezilip-gerilen çizgi film "pop"u (sonlu yay).
   const toastPop = useRef(new Animated.Value(1)).current;
@@ -254,7 +295,10 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
     [save, totalStars, writeKariyer],
   );
 
-  /* — Parmak: çekiş başı ve ucu paylaşılan değere yazılır — */
+  /* — Parmak: çekiş başı, ucu ve yolun en çok büküldüğü nokta (frikik
+     kavisi) paylaşılan değere yazılır. Kavis noktası: her harekette önceki
+     uç ile saklı nokta yeni kirişe göre kıyaslanır, uzak olan kalır. — */
+  const prevPoint = useRef({ x: 0, y: 0 });
   const responder = useMemo(
     () =>
       PanResponder.create({
@@ -262,12 +306,21 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
         onMoveShouldSetPanResponder: () => true,
         onPanResponderGrant: (event) => {
           const { locationX, locationY } = event.nativeEvent;
-          touch.value = { down: true, x: locationX, y: locationY, sx: locationX, sy: locationY, up: touch.value.up };
+          prevPoint.current = { x: locationX, y: locationY };
+          const cur = touch.value;
+          touch.value = { down: true, x: locationX, y: locationY, sx: locationX, sy: locationY, bx: locationX, by: locationY, up: cur.up, taps: cur.taps + 1 };
         },
         onPanResponderMove: (event, gesture) => {
           const current = touch.value;
           // Bitiş noktası başlangıç + sürükleme: alt görünüm değişse de tutarlı.
-          touch.value = { down: true, x: current.sx + gesture.dx, y: current.sy + gesture.dy, sx: current.sx, sy: current.sy, up: current.up };
+          const x = current.sx + gesture.dx;
+          const y = current.sy + gesture.dy;
+          const prev = prevPoint.current;
+          const devB = Math.abs(perpDistance(current.sx, current.sy, x, y, current.bx, current.by));
+          const devP = Math.abs(perpDistance(current.sx, current.sy, x, y, prev.x, prev.y));
+          const bulge = devP > devB ? prev : { x: current.bx, y: current.by };
+          prevPoint.current = { x, y };
+          touch.value = { ...current, down: true, x, y, bx: bulge.x, by: bulge.y };
         },
         onPanResponderRelease: () => {
           const current = touch.value;
@@ -306,6 +359,14 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
             {def.tierName} · {def.matchNo}. maç · {def.opponent}
           </Text>
         </View>
+        {goals > 0 ? (
+          <View style={styles.goalsChip} accessibilityLabel={`${goals} gol`}>
+            <Ionicons name="football" size={13} color={KIT.cardInk} />
+            <Text style={styles.goalsText} {...textScale.badge}>
+              {goals}
+            </Text>
+          </View>
+        ) : null}
         <View style={styles.dots}>
           {def.moments.map((item, i) => {
             const done = i < scores.length;
@@ -326,35 +387,28 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
         </View>
       </View>
 
-      {/* ÖZELLİKLER: nötr çipler + 99 üzerinden dolum çubuğu */}
+      {/* HEDEF: reyting çubuğu (yıldız eşikleri işaretli) + özellikler */}
       {!compact ? (
-        <View style={[styles.attrs, { height: ROW2_H }]}>
-          {ATTR_KEYS.map((key) => (
-            <View key={key} style={styles.attr} accessibilityLabel={`${ATTR_LABELS[key]} ${attrs[key]}`}>
-              <View style={styles.attrTop}>
-                <Ionicons name={glyph(ATTR_ICONS[key])} size={12} color={KIT.textSoft} />
-                {width >= 360 ? (
-                  <Text style={styles.attrLabel} numberOfLines={1} {...textScale.badge}>
-                    {ATTR_LABELS[key]}
-                  </Text>
-                ) : null}
-                <Text style={styles.attrValue} {...textScale.badge}>
+        <View style={[styles.goalRow, { height: ROW2_H }]}>
+          <RatingMeter rating={liveRating} pass={def.pass} star2={def.star2} star3={def.star3} accent={ui.accent} />
+          <View style={styles.attrMini} accessibilityLabel={ATTR_KEYS.map((key) => `${ATTR_LABELS[key]} ${attrs[key]}`).join(", ")}>
+            {ATTR_KEYS.map((key) => (
+              <View key={key} style={styles.attrMiniItem}>
+                <Ionicons name={glyph(ATTR_ICONS[key])} size={11} color={KIT.textSoft} />
+                <Text style={styles.attrMiniValue} {...textScale.badge}>
                   {attrs[key]}
                 </Text>
               </View>
-              <View style={styles.attrTrack}>
-                <View style={[styles.attrFill, { width: `${Math.max(4, Math.min(100, Math.round((attrs[key] / 99) * 100)))}%` }]} />
+            ))}
+            {boots ? (
+              <View style={styles.attrMiniItem}>
+                <Ionicons name="flash" size={11} color={KIT.star} />
+                <Text style={styles.attrMiniValue} {...textScale.badge}>
+                  +{BOOT_BONUS}
+                </Text>
               </View>
-            </View>
-          ))}
-          {liveRating != null || boots ? (
-            <View style={styles.ratingChip} accessibilityLabel={liveRating != null ? `Reyting ${liveRating.toFixed(1)}` : "Yeni kramponlar etkin"}>
-              <Ionicons name={liveRating != null ? "star" : "flash"} size={13} color={KIT.star} />
-              <Text style={styles.ratingText} {...textScale.badge}>
-                {liveRating != null ? liveRating.toFixed(1).replace(".", ",") : `+${BOOT_BONUS}`}
-              </Text>
-            </View>
-          ) : null}
+            ) : null}
+          </View>
         </View>
       ) : null}
 
@@ -451,12 +505,29 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
               <Ionicons name={glyph(MOMENT_ICONS[moment.kind])} size={13} color={HUD.text} />
               <Text style={styles.overline} {...textScale.badge}>
                 {MOMENT_LABELS[moment.kind].toLocaleUpperCase("tr-TR")}
-                {def.cup && index === 0 ? " · KUPA MAÇI" : ""} · {index + 1}/{def.moments.length}
+                {def.cup && index === 0 ? " · KUPA MAÇI" : ""}
+                {def.breather && index === 0 ? " · NEFES MAÇI" : ""} · {index + 1}/{def.moments.length}
               </Text>
             </View>
             <Text style={styles.overlayTitle} {...textScale.dense}>
               {moment.story}
             </Text>
+            <View style={styles.tagRow}>
+              <View style={[styles.ruleChip, { backgroundColor: ui.accent }]}>
+                <Ionicons name="hand-left" size={13} color={ui.ink} />
+                <Text style={[styles.ruleText, { color: ui.ink }]} {...textScale.badge}>
+                  {MOMENT_RULES[moment.kind]}
+                </Text>
+              </View>
+              {MODS.filter((mod) => moment.mods & mod.bit).map((mod) => (
+                <View key={mod.key} style={styles.modChip}>
+                  <Ionicons name={glyph(mod.icon)} size={13} color={HUD.gold} />
+                  <Text style={styles.modText} {...textScale.badge}>
+                    {mod.key === "ruzgar" ? `${mod.label} ${moment.wind > 0 ? "→" : "←"}` : mod.label}
+                  </Text>
+                </View>
+              ))}
+            </View>
             <Text style={styles.overlayHint} {...textScale.long}>
               {index === 0 && def.tip ? def.tip : MOMENT_HINTS[moment.kind]}
             </Text>
@@ -491,6 +562,14 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
               <Text style={styles.toastText} {...textScale.dense}>
                 {result.title}
               </Text>
+              <View style={styles.gradeRow} accessibilityLabel={`${gradeOf(lastScore).label}, ${gradeOf(lastScore).stars} yıldız`}>
+                {[1, 2, 3].map((n) => (
+                  <Ionicons key={n} name="star" size={18} color={n <= gradeOf(lastScore).stars ? HUD.gold : HUD.starOff} />
+                ))}
+                <Text style={styles.gradeText} {...textScale.badge}>
+                  {gradeOf(lastScore).label}
+                </Text>
+              </View>
             </Animated.View>
             {canRetry ? (
               <Button3D tone="green" height={52} wiggle onPress={retry} accessibilityLabel={`İkinci şans, stok ${retryStock}`} badge={<CountBadge value={retryStock} size={24} />} r={26} faceStyle={styles.retryFace}>
@@ -507,8 +586,141 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
   );
 }
 
+/**
+ * Reyting çubuğu: 4,0–10,0 ölçeği; geçme (1★), 2★ ve 3★ eşikleri çubuk
+ * üstünde yıldız işaretiyle durur. Dolum, oynanan anların ortalamasıdır —
+ * oyuncu her an hedefe ne kadar yaklaştığını görür.
+ */
+const RatingMeter = React.memo(function RatingMeter({
+  rating,
+  pass,
+  star2,
+  star3,
+  accent,
+}: {
+  rating: number | null;
+  pass: number;
+  star2: number;
+  star3: number;
+  accent: string;
+}) {
+  const pct = (value: number) => `${Math.max(0, Math.min(100, ((value - R_MIN) / (R_MAX - R_MIN)) * 100))}%` as const;
+  const fill = useRef(new Animated.Value(0)).current;
+  const value = rating ?? R_MIN;
+  useEffect(() => {
+    Animated.spring(fill, { toValue: (value - R_MIN) / (R_MAX - R_MIN), damping: 14, stiffness: 120, mass: 0.8, useNativeDriver: false }).start();
+  }, [fill, value]);
+  const earned = rating == null ? 0 : rating >= star3 ? 3 : rating >= star2 ? 2 : rating >= pass ? 1 : 0;
+  return (
+    <View
+      style={styles.meter}
+      accessibilityLabel={`Reyting ${rating != null ? rating.toFixed(1).replace(".", ",") : "henüz yok"}. Hedef ${pass.toFixed(1).replace(".", ",")}`}
+    >
+      <View style={styles.meterHead}>
+        <Text style={styles.meterLabel} {...textScale.badge}>
+          REYTİNG
+        </Text>
+        <Text style={styles.meterValue} {...textScale.badge}>
+          {rating != null ? rating.toFixed(1).replace(".", ",") : "–"}
+        </Text>
+        <Text style={styles.meterGoal} numberOfLines={1} {...textScale.badge}>
+          hedef {pass.toFixed(1).replace(".", ",")}
+        </Text>
+      </View>
+      <View style={styles.meterTrack}>
+        <Animated.View
+          style={[
+            styles.meterFill,
+            { backgroundColor: earned > 0 ? KIT.accent : accent, width: fill.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }) },
+          ]}
+        />
+        {[pass, star2, star3].map((mark, i) => (
+          <View key={i} style={[styles.meterMark, { left: pct(mark) }]}>
+            <View style={styles.meterTick} />
+            <View style={[styles.meterStar, earned > i ? styles.meterStarOn : null]}>
+              <Ionicons name="star" size={10} color={earned > i ? KIT.cardInk : HUD.text} />
+            </View>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+});
+
 const styles = StyleSheet.create({
   root: { alignSelf: "center", gap: space.sm },
+  goalRow: { flexDirection: "row", gap: space.xs, alignItems: "stretch" },
+  meter: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.md,
+    backgroundColor: KIT.panel,
+  },
+  meterHead: { flexDirection: "row", alignItems: "baseline", gap: space.xs },
+  meterLabel: { ...type.nano, fontFamily: fonts.bold, color: HUD.muted },
+  meterValue: { ...type.scoreXs, color: HUD.text },
+  meterGoal: { ...type.nano, fontFamily: fonts.semibold, color: HUD.muted, marginLeft: "auto" },
+  meterTrack: { height: 8, borderRadius: radius.pill, backgroundColor: KIT.track, marginRight: 8 },
+  meterFill: { height: 8, borderRadius: radius.pill },
+  meterMark: { position: "absolute", top: -5, width: 0, alignItems: "center" },
+  meterTick: { width: 2, height: 18, backgroundColor: HUD.text, opacity: 0.55 },
+  meterStar: {
+    position: "absolute",
+    top: 1,
+    width: 16,
+    height: 16,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: KIT.panelLip,
+    borderWidth: 1,
+    borderColor: HUD.glassBorder,
+  },
+  meterStarOn: { backgroundColor: KIT.star, borderColor: KIT.star },
+  attrMini: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    width: 104,
+    alignContent: "center",
+    justifyContent: "center",
+    columnGap: space.xs,
+    rowGap: 2,
+    paddingHorizontal: space.xs,
+    borderRadius: radius.md,
+    backgroundColor: KIT.panel,
+  },
+  attrMiniItem: { flexDirection: "row", alignItems: "center", gap: 2, minWidth: 40 },
+  attrMiniValue: { ...type.numSmStrong, fontFamily: fonts.bold, color: HUD.text },
+  goalsChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    height: 26,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.pill,
+    backgroundColor: KIT.star,
+  },
+  goalsText: { ...type.scoreXs, color: KIT.cardInk },
+  tagRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: space.xs },
+  ruleChip: { flexDirection: "row", alignItems: "center", gap: 4, height: 26, paddingHorizontal: space.md, borderRadius: radius.pill },
+  ruleText: { ...type.labelSm, fontFamily: fonts.bold },
+  modChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    height: 26,
+    paddingHorizontal: space.md,
+    borderRadius: radius.pill,
+    backgroundColor: KIT.glass,
+    borderWidth: 1,
+    borderColor: HUD.gold,
+  },
+  modText: { ...type.labelSm, fontFamily: fonts.bold, color: HUD.text },
+  gradeRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 2, marginTop: 2 },
+  gradeText: { ...type.labelSm, fontFamily: fonts.bold, color: HUD.text, marginLeft: 4 },
   toastBurst: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
 
   hud: {
@@ -666,6 +878,7 @@ const styles = StyleSheet.create({
 
   toastWrap: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", gap: space.lg },
   toast: {
+    alignItems: "center",
     paddingHorizontal: space.xxl,
     paddingVertical: space.md,
     borderRadius: radius.xl,
