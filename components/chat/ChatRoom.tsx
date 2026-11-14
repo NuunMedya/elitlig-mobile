@@ -33,7 +33,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { AttachPreviewSheet, AttachSheet, type AttachMode, type AttachPick, type ContentKey } from "@/components/chat/AttachSheet";
+import { AttachPreviewSheet, AttachSheet, SHEET_SWAP_MS, type AttachMode, type AttachPick, type ContentKey } from "@/components/chat/AttachSheet";
 import { AttendanceCard, CallChip, MatchOfferBubble, NotificationCard, SystemChip } from "@/components/chat/ChatBubbles";
 import { ChatHeader, SelectionHeader, type HeaderAction } from "@/components/chat/ChatHeader";
 import { Composer } from "@/components/chat/Composer";
@@ -978,7 +978,7 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
             if (files.length) setPicked(files);
           })
           .catch((error: unknown) => toast.show({ message: errorMessage(error), tone: "danger" }));
-      }, 320);
+      }, SHEET_SWAP_MS);
     },
     [toast],
   );
@@ -1423,7 +1423,7 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
         onSendPoll={canWrite && !admin ? onSendPoll : undefined}
         onPick={onPick}
         contentKeys={contentKeys}
-        onContent={(key) => setTimeout(() => setContent(key), 260)}
+        onContent={(key) => setTimeout(() => setContent(key), SHEET_SWAP_MS)}
       />
       <AttachPreviewSheet files={picked} onClose={() => setPicked(null)} onSend={(files, caption) => void sendFiles(files, caption)} />
       <MatchesSheet visible={content === "matches"} title={conversation.title} onClose={() => setContent(null)} onSend={(body) => sendContent(sendContentMatches(conversationId, body), "Maç programı gönderildi.")} />

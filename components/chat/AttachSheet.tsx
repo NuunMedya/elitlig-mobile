@@ -12,8 +12,8 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
-import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Image, Keyboard, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { BottomSheet, Button, Input, ListRow, Touchable, errorMessage } from "@/components/chat/kit";
 import { getVenues, type ChatConversation, type ChatLocationMeta, type ChatVenue } from "@/lib/api/chat";
@@ -23,6 +23,15 @@ import { IconTile, Reveal, useToast, type IconTileTone } from "@/components/ui";
 import { layout, radius, space, textScale, type } from "@/theme";
 
 export type AttachMode = "menu" | "location" | "poll" | null;
+
+/**
+ * Bir alt sayfadan diğerine (ya da sistem seçicisine) geçerken beklenen süre.
+ * NEDEN: menü sayfası kapanırken (çıkış animasyonu + Modal'ın iOS'ta kapanması)
+ * aynı anda ikinci bir Modal açılırsa iOS yenisini sunamaz; görünmeyen pencere
+ * tüm dokunuşları yutar ve uygulama donmuş gibi kalır (Konum / Anket donması).
+ * Önce menü kapanır, kapanış bitince sıradaki sayfa açılır.
+ */
+export const SHEET_SWAP_MS = 360;
 export type AttachPick = "images" | "camera" | "video";
 export type ContentKey = "matches" | "signup" | "award";
 
@@ -85,6 +94,22 @@ function TileGrid({ tiles }: { tiles: Tile[] }) {
 export function AttachSheet({ mode, onChangeMode, onSendLocation, onSendPoll, onPick, contentKeys, onContent }: AttachSheetProps) {
   const toast = useToast();
   const close = useCallback(() => onChangeMode(null), [onChangeMode]);
+  const swapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (swapTimer.current) clearTimeout(swapTimer.current);
+  }, []);
+  /** Menüyü kapatır, kapanış bitince alt sayfayı açar (bkz. SHEET_SWAP_MS). */
+  const openSub = useCallback(
+    (next: Exclude<AttachMode, "menu" | null>) => {
+      if (swapTimer.current) return;
+      onChangeMode(null);
+      swapTimer.current = setTimeout(() => {
+        swapTimer.current = null;
+        onChangeMode(next);
+      }, SHEET_SWAP_MS);
+    },
+    [onChangeMode],
+  );
   const pick = (kind: AttachPick) => {
     close();
     onPick?.(kind);
@@ -97,8 +122,8 @@ export function AttachSheet({ mode, onChangeMode, onSendLocation, onSendPoll, on
           { key: "video", label: "Video", icon: "videocam" as const, tone: attachTones.video, onPress: () => pick("video") },
         ]
       : []),
-    { key: "location", label: "Konum", icon: "location", tone: attachTones.location, onPress: () => onChangeMode("location") },
-    ...(onSendPoll ? [{ key: "poll", label: "Anket", icon: "stats-chart" as const, tone: attachTones.poll, onPress: () => onChangeMode("poll") }] : []),
+    { key: "location", label: "Konum", icon: "location", tone: attachTones.location, onPress: () => openSub("location") },
+    ...(onSendPoll ? [{ key: "poll", label: "Anket", icon: "stats-chart" as const, tone: attachTones.poll, onPress: () => openSub("poll") }] : []),
   ];
   const contentTiles: Tile[] = (contentKeys ?? []).map((key) => ({
     key,
@@ -243,23 +268,35 @@ function LocationSheet({ visible, onClose, onSend, toastError }: { visible: bool
   const [q, setQ] = useState("");
   const [label, setLabel] = useState("");
   const [busy, setBusy] = useState(false);
+  /** Konum beklenirken sayfa kapatıldıysa sonuç gönderilmez. */
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+  const busyRef = useRef(false);
   const venues = useQuery({ queryKey: ["chat", "venues", q], queryFn: () => getVenues(q), enabled: visible, staleTime: 60_000 });
 
   const shareCurrent = useCallback(async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
+    Keyboard.dismiss();
     try {
+      // getCurrentLocation zaman aşımlıdır (en çok ~10 sn); arayüz bu sırada açık kalır.
       const position = await getCurrentLocation();
+      if (!visibleRef.current) return;
       await onSend({ ...position, label: label.trim() || "Bulunduğum konum" });
       onClose();
     } catch (error) {
-      toastError(error);
+      if (visibleRef.current) toastError(error);
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }, [label, onClose, onSend, toastError]);
 
   const shareVenue = useCallback(
     async (venue: ChatVenue) => {
+      if (busyRef.current) return;
+      busyRef.current = true;
       setBusy(true);
       try {
         await onSend({ venue_public_id: venue.public_id, venue_name: venue.name, address: [venue.address, venue.city].filter(Boolean).join(", ") || null, label: label.trim() || venue.name });
@@ -267,6 +304,7 @@ function LocationSheet({ visible, onClose, onSend, toastError }: { visible: bool
       } catch (error) {
         toastError(error);
       } finally {
+        busyRef.current = false;
         setBusy(false);
       }
     },
@@ -277,7 +315,8 @@ function LocationSheet({ visible, onClose, onSend, toastError }: { visible: bool
     <BottomSheet visible={visible} onClose={onClose} title="Konum paylaş" snap="full">
       <View style={styles.section}>
         <Input label="Etiket (isteğe bağlı)" value={label} onChangeText={setLabel} placeholder="Örn. Maç öncesi buluşma" maxLength={160} />
-        <Button label={busy ? "Konum alınıyor…" : "Bulunduğum konumu paylaş"} icon="locate" onPress={() => void shareCurrent()} loading={busy} fullWidth />
+        <Button label={busy ? "Konum alınıyor…" : "Bulunduğum konumu paylaş"} icon="locate" onPress={() => void shareCurrent()} loading={busy} disabled={busy} fullWidth />
+        {busy ? <Text style={styles.pollHint} {...textScale.dense}>Konumunuz alınıyor; birkaç saniye sürebilir.</Text> : null}
       </View>
       <Text style={styles.sectionTitle} {...textScale.dense}>SAHA KONUMU</Text>
       <View style={styles.section}>

@@ -1,9 +1,17 @@
 /**
  * TRANSFER BORSASI — satılık ve kiralık oyuncu ilanları (routes/transferMarket.js).
  *
- *   BORSA      GET /api/transfer-market/listings   açık ilanlar (tüm üyeler)
- *   İLANLARIM  GET /api/transfer-market/mine       takımın ilanları (başkan)
- *              POST /listings  ·  DELETE /listings/:id
+ *   İLANLAR         GET /api/transfer-market/listings   açık ilanlar (tüm üyeler), sayfalı
+ *   TÜM OYUNCULAR   GET /api/player-database            ilana çıkmamış oyuncular da, sayfalı
+ *   İLANLARIM       GET /api/transfer-market/mine       takımın ilanları (başkan)
+ *                   POST /listings  ·  DELETE /listings/:id
+ *
+ * NEDEN "TÜM OYUNCULAR": borsa yalnız ilana çıkarılmış oyuncuları (ilk 300
+ * ilan) gösteriyordu; başkan ilanda olmayan oyuncuya buradan teklif
+ * veremiyordu ("tüm oyuncular görünmüyor"). Artık iki liste de sunucuda
+ * sayfalanır ve aranır, sonsuz kaydırmayla yüklenir. Teklif verilemeyen
+ * oyuncuda (kendi oyuncun) düğme yerine sunucunun verdiği neden yazar; il
+ * kilidi gereği listenin hangi ille sınırlı olduğu başlıkta söylenir.
  *
  * İlana teklif, normal transfer teklifi akışıyla verilir (/takimim/teklif-ver);
  * düğme satırın sağındadır (OfferCta), alt sayfada da tekrarlanır.
@@ -16,9 +24,9 @@
  * değerinin altındaysa ▼ yeşil ("fırsat"), üstündeyse ▲ kırmızı.
  */
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter, type Href } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -39,6 +47,7 @@ import {
   ScreenHeader,
   SegmentedControl,
   Skeleton,
+  SkeletonListFooter,
   SkeletonListRow,
   TeamLogo,
   Touchable,
@@ -48,6 +57,7 @@ import {
   type SegmentedItem,
 } from "@/components/ui";
 import { getTeamRoster } from "@/lib/api/team";
+import { DATABASE_ERRORS, searchPlayerDatabase, type DatabasePlayer } from "@/lib/api/club/playerDatabase";
 import {
   closeListing,
   createListing,
@@ -62,10 +72,18 @@ import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
 
-type Segment = "borsa" | "ilanlarim";
+type Segment = "borsa" | "oyuncular" | "ilanlarim";
 type TypeFilter = "all" | TransferType;
 
-const fold = (value: string) => value.toLocaleLowerCase("tr-TR").trim();
+/** Yazarken her harfte istek atılmasın: 400 ms gecikmeli arama terimi. */
+function useDebounced(value: string, ms = 400) {
+  const [debounced, setDebounced] = useState(value.trim());
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value.trim()), ms);
+    return () => clearTimeout(timer);
+  }, [ms, value]);
+  return debounced;
+}
 
 const TYPE_ITEMS: SegmentedItem<TypeFilter>[] = [
   { key: "all", label: "Tümü" },
@@ -124,9 +142,14 @@ export default function TransferMarketScreen() {
   // Takım yetkisi web ile aynı kaynaktan (panel/me) — bkz. useTeamAccess.
   const access = useTeamAccess();
   const isPresident = access.canManage;
-  const [segment, setSegment] = useState<Segment>(params.bolum === "ilanlarim" ? "ilanlarim" : "borsa");
+  const [segment, setSegment] = useState<Segment>(
+    params.bolum === "ilanlarim" ? "ilanlarim" : params.bolum === "oyuncular" ? "oyuncular" : "borsa",
+  );
+  /** İlanlarda bulunamayan aramayı "Tüm oyuncular"a taşır. */
+  const [carry, setCarry] = useState("");
   const segments: SegmentedItem<Segment>[] = [
-    { key: "borsa", label: "Borsa" },
+    { key: "borsa", label: "İlanlar" },
+    { key: "oyuncular", label: "Tüm oyuncular" },
     ...(isPresident ? [{ key: "ilanlarim" as const, label: "İlanlarım" }] : []),
   ];
 
@@ -141,15 +164,23 @@ export default function TransferMarketScreen() {
         scrollY={scrollY}
         actions={isPresident ? [{ icon: "paper-plane-outline", onPress: () => router.push("/takimim/transfer" as Href), accessibilityLabel: "Transfer yönetimi" }] : undefined}
       />
-      {segments.length > 1 ? (
-        <View style={styles.segment}>
-          <SegmentedControl items={segments} value={segment} onChange={setSegment} />
-        </View>
-      ) : null}
+      <View style={styles.segment}>
+        <SegmentedControl items={segments} value={segment} onChange={setSegment} />
+      </View>
       {segment === "ilanlarim" && isPresident ? (
         <MyListings scrollProps={scrollProps} />
+      ) : segment === "oyuncular" ? (
+        <AllPlayers key={carry} scrollProps={scrollProps} canOffer={isPresident} initialSearch={carry} />
       ) : (
-        <Market scrollProps={scrollProps} canOffer={isPresident} ownTeamId={access.teamId} />
+        <Market
+          scrollProps={scrollProps}
+          canOffer={isPresident}
+          ownTeamId={access.teamId}
+          onBrowseAll={(term) => {
+            setCarry(term.trim());
+            setSegment("oyuncular");
+          }}
+        />
       )}
     </SafeAreaView>
   );
@@ -159,30 +190,45 @@ type ScrollProps = ReturnType<typeof useHeaderScroll>["scrollProps"];
 
 /* ═══════════════════════════════ BORSA ═══════════════════════════════ */
 
-function Market({ scrollProps, canOffer, ownTeamId }: { scrollProps: ScrollProps; canOffer: boolean; ownTeamId: number | null }) {
+function Market({
+  scrollProps,
+  canOffer,
+  ownTeamId,
+  onBrowseAll,
+}: {
+  scrollProps: ScrollProps;
+  canOffer: boolean;
+  ownTeamId: number | null;
+  onBrowseAll: (term: string) => void;
+}) {
   const router = useRouter();
   const [filter, setFilter] = useState<TypeFilter>("all");
   const [term, setTerm] = useState("");
+  const search = useDebounced(term);
   const [picked, setPicked] = useState<Listing | null>(null);
 
-  const query = useQuery({ queryKey: ["transfer-market", "listings"], queryFn: () => getListings(), staleTime: 60_000 });
-  const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching });
+  // Sayfalı + sunucuda arama: eskiden ilk 300 ilan çekilip bellekte süzülüyordu.
+  const query = useInfiniteQuery({
+    queryKey: ["transfer-market", "listings", filter, search],
+    queryFn: ({ pageParam }) => getListings({ type: filter === "all" ? undefined : filter, q: search, page: pageParam, limit: 20 }),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.hasNextPage ? last.page + 1 : undefined),
+    staleTime: 60_000,
+    placeholderData: (previous) => previous,
+  });
+  const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching && !query.isFetchingNextPage });
 
-  const items = useMemo(() => {
-    const needle = fold(term);
-    return (query.data?.items ?? []).filter(
-      (item) =>
-        (filter === "all" || item.listing_type === filter) &&
-        (!needle || fold(`${item.player.name ?? ""} ${item.team.name ?? ""}`).includes(needle)),
-    );
-  }, [filter, query.data, term]);
+  const items = useMemo(() => query.data?.pages.flatMap((page) => page.items) ?? [], [query.data]);
 
   if (query.isLoading) return <MarketSkeleton />;
   if (query.isError && !query.data) return <ErrorState error={query.error} onRetry={query.refetch} />;
 
-  const all = query.data?.items ?? [];
-  const saleCount = all.filter((item) => item.listing_type === "sale").length;
-  const loanCount = all.filter((item) => item.listing_type === "loan").length;
+  const firstPage = query.data?.pages[0];
+  const totalItems = firstPage?.totalItems ?? items.length;
+  const counts = firstPage?.counts;
+  const saleCount = counts?.sale ?? items.filter((item) => item.listing_type === "sale").length;
+  const loanCount = counts?.loan ?? items.filter((item) => item.listing_type === "loan").length;
+  const allCount = counts?.total ?? saleCount + loanCount;
 
   const own = picked ? picked.is_mine || (ownTeamId != null && picked.team.id === ownTeamId) : false;
 
@@ -196,27 +242,43 @@ function Market({ scrollProps, canOffer, ownTeamId }: { scrollProps: ScrollProps
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         ItemSeparatorComponent={Gap}
+        onEndReachedThreshold={0.4}
+        onEndReached={() => {
+          if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage();
+        }}
+        ListFooterComponent={query.isFetchingNextPage ? <SkeletonListFooter /> : null}
         ListHeaderComponent={
           <View style={styles.header}>
             <MetricGrid columns={3}>
-              <MetricTile label="İlan" value={String(all.length)} icon="storefront" tone="brand" />
+              <MetricTile label="İlan" value={String(allCount)} icon="storefront" tone="brand" />
               <MetricTile label="Satılık" value={String(saleCount)} icon="pricetag" tone="warn" onPress={() => setFilter(filter === "sale" ? "all" : "sale")} />
               <MetricTile label="Kiralık" value={String(loanCount)} icon="repeat" tone="accent" onPress={() => setFilter(filter === "loan" ? "all" : "loan")} />
             </MetricGrid>
             <Input variant="search" leadingIcon="search" size="sm" value={term} onChangeText={setTerm} placeholder="Oyuncu ya da takım ara" autoCorrect={false} />
             <SegmentedControl items={TYPE_ITEMS} value={filter} onChange={setFilter} />
             <Text style={styles.resultText} {...textScale.dense}>
-              {`${items.length} ilan${filter !== "all" || term ? " · süzgeçli" : ""}`}
+              {`${totalItems} ilan${filter !== "all" || search ? " · süzgeçli" : ""}`}
             </Text>
+            <Touchable
+              feedback="row"
+              onPress={() => onBrowseAll(term)}
+              accessibilityRole="button"
+              accessibilityLabel="Tüm oyuncular listesini aç"
+              style={styles.browseAll}
+            >
+              <Text style={styles.browseAllText} {...textScale.dense}>
+                {canOffer ? "Aradığın oyuncu ilanda değil mi? Tüm oyuncular listesinden teklif ver." : "İlana çıkmamış oyuncular için Tüm oyuncular listesine bak."}
+              </Text>
+            </Touchable>
           </View>
         }
         ListEmptyComponent={
           <EmptyState
             icon="storefront-outline"
             title="İlan yok"
-            body="Şu an bu süzgece uyan açık ilan bulunmuyor."
+            body="Şu an bu süzgece uyan açık ilan bulunmuyor. İlanda olmayan oyuncular Tüm oyuncular listesinde."
             variant="inline"
-            action={filter !== "all" || term ? { label: "Süzgeci temizle", onPress: () => { setFilter("all"); setTerm(""); } } : undefined}
+            action={{ label: search ? `"${search}" için tüm oyuncularda ara` : "Tüm oyuncuları göster", onPress: () => onBrowseAll(term) }}
           />
         }
         renderItem={({ item, index }) => {
@@ -279,6 +341,154 @@ function Market({ scrollProps, canOffer, ownTeamId }: { scrollProps: ScrollProps
     </>
   );
 }
+
+/* ═══════════════════════════════ TÜM OYUNCULAR ═══════════════════════════════ */
+
+/**
+ * İlana çıkmamış oyuncular dahil, üyenin görebildiği tüm oyuncular
+ * (GET /api/player-database). Sunucuda sayfalanır ve aranır; liste sonuna
+ * gelince sıradaki sayfa yüklenir. Teklif kararı sunucunun
+ * `canReceiveOffer / activeOfferPublicId / offerBlockedReason` alanlarından
+ * gelir; istemci kural uydurmaz.
+ */
+function AllPlayers({ scrollProps, canOffer, initialSearch }: { scrollProps: ScrollProps; canOffer: boolean; initialSearch: string }) {
+  const router = useRouter();
+  const [term, setTerm] = useState(initialSearch);
+  const search = useDebounced(term);
+
+  const query = useInfiniteQuery({
+    queryKey: ["transfer-market", "players", search],
+    queryFn: ({ pageParam }) => searchPlayerDatabase({ search, sort: "name:ASC", page: pageParam, limit: 20 }),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.hasNextPage ? last.page + 1 : undefined),
+    staleTime: 60_000,
+    retry: false,
+    placeholderData: (previous) => previous,
+  });
+  const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching && !query.isFetchingNextPage });
+  const items = useMemo(() => query.data?.pages.flatMap((page) => page.items) ?? [], [query.data]);
+
+  const errorCode = query.error instanceof ApiError ? query.error.code : undefined;
+  if (errorCode === "MEMBER_CITY_REQUIRED") {
+    return (
+      <EmptyState
+        icon="location-outline"
+        title="İl bilgin eksik"
+        body={DATABASE_ERRORS.MEMBER_CITY_REQUIRED}
+        action={{ label: "Hesabımı düzenle", onPress: () => router.push("/hesabim") }}
+      />
+    );
+  }
+  if (query.isLoading) return <MarketSkeleton />;
+  if (query.isError && !query.data) return <ErrorState error={query.error} onRetry={query.refetch} />;
+
+  const firstPage = query.data?.pages[0];
+  const total = firstPage?.totalItems ?? items.length;
+  const scope = firstPage?.scope;
+
+  return (
+    <FlatList
+      {...scrollProps}
+      data={items}
+      keyExtractor={(item) => String(item.id)}
+      refreshControl={refresh.control}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+      ItemSeparatorComponent={Gap}
+      onEndReachedThreshold={0.4}
+      onEndReached={() => {
+        if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage();
+      }}
+      ListFooterComponent={query.isFetchingNextPage ? <SkeletonListFooter /> : null}
+      ListHeaderComponent={
+        <View style={styles.header}>
+          <Input variant="search" leadingIcon="search" size="sm" value={term} onChangeText={setTerm} placeholder="Oyuncu adı ara" autoCorrect={false} />
+          <Text style={styles.resultText} {...textScale.dense}>
+            {`${total} oyuncu${search ? " · aramaya uyan" : ""}${scope?.locked && scope.cityName ? ` · ${scope.cityName}` : ""}`}
+          </Text>
+          {scope?.locked ? (
+            <Text style={styles.scopeNote} {...textScale.long}>
+              {`İl kuralı gereği yalnız kayıtlı olduğun ildeki${scope.cityName ? ` (${scope.cityName})` : ""} oyuncular listelenir.`}
+            </Text>
+          ) : null}
+        </View>
+      }
+      ListEmptyComponent={
+        <EmptyState
+          icon="search-outline"
+          title="Eşleşen oyuncu yok"
+          body={search ? "Farklı bir ad dene." : "Listelenecek oyuncu bulunmuyor."}
+          variant="inline"
+          action={search ? { label: "Aramayı temizle", onPress: () => setTerm("") } : undefined}
+        />
+      }
+      renderItem={({ item, index }) => (
+        <Reveal index={index} limit={6} distance={8}>
+          <PlayerRow player={item} canOffer={canOffer} onOpen={() => router.push(`/oyuncu/${item.id}`)} />
+        </Reveal>
+      )}
+    />
+  );
+}
+
+const PlayerRow = React.memo(function PlayerRow({ player, canOffer, onOpen }: { player: DatabasePlayer; canOffer: boolean; onOpen: () => void }) {
+  const market = player.marketValue != null ? Number(player.marketValue) : null;
+  const facts = [player.position, player.age != null ? `${player.age} yaş` : null, shortFee(market && market > 0 ? market : null)].filter(Boolean).join(" · ");
+  const blocked = player.isOwnPlayer ? (player.offerBlockedReason ?? "Kendi oyuncunuz; teklif verilemez.") : null;
+
+  let action: React.ReactNode = null;
+  if (canOffer) {
+    action = blocked ? (
+      <Text style={styles.blocked} {...textScale.dense}>
+        {`Bu oyuncuya teklif verilemez: ${blocked}`}
+      </Text>
+    ) : (
+      <OfferCta
+        layout="compact"
+        playerId={player.id}
+        playerName={player.displayName}
+        playerTeamId={player.teamId}
+        activeOfferId={player.activeOfferPublicId ?? (player.canReceiveOffer === undefined ? undefined : null)}
+      />
+    );
+  }
+
+  return (
+    <Touchable
+      onPress={onOpen}
+      feedback="card"
+      accessibilityRole="button"
+      accessibilityLabel={[player.displayName, player.position, player.teamName ?? "Serbest"].filter(Boolean).join(", ")}
+      style={[styles.card, player.isOwnPlayer && styles.cardMine]}
+    >
+      {player.isOwnPlayer ? <View style={styles.mineStripe} /> : null}
+      <View style={styles.cardTop}>
+        <Avatar name={player.displayName} image={mediaUrl(player.profileImage)} size={46} />
+        <View style={styles.cardIdentity}>
+          <Text style={styles.cardName} numberOfLines={1} {...textScale.dense}>
+            {player.displayName}
+          </Text>
+          {facts ? (
+            <Text style={styles.cardFacts} numberOfLines={1} {...textScale.dense}>
+              {facts}
+            </Text>
+          ) : null}
+        </View>
+        {player.isFreeAgent ? <Badge label="Serbest" tone="win" size="sm" /> : null}
+      </View>
+      {player.teamName ? (
+        <View style={styles.teamRow}>
+          <TeamLogo name={player.teamName} logo={mediaUrl(player.teamLogo)} size={20} />
+          <Text style={styles.teamName} numberOfLines={1} {...textScale.dense}>
+            {player.teamName}
+          </Text>
+          {player.isOwnPlayer ? <Badge label="Kadronda" tone="brand" size="xs" /> : null}
+        </View>
+      ) : null}
+      {action ? <View style={styles.cardFooter}>{action}</View> : null}
+    </Touchable>
+  );
+});
 
 function Gap() {
   return <View style={styles.gap} />;
@@ -616,6 +826,10 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: layout.screenPadding, paddingBottom: space.giant },
   header: { gap: space.md, paddingVertical: space.md },
   resultText: { ...type.caption, color: colors.textTertiary },
+  scopeNote: { ...type.caption, color: colors.textSecondary },
+  browseAll: { paddingVertical: space.xs },
+  browseAllText: { ...type.caption, color: colors.accentText },
+  blocked: { ...type.caption, color: colors.textTertiary },
   gap: { height: space.md },
 
   /* Piyasa kartı */
