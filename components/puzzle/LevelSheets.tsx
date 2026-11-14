@@ -221,7 +221,11 @@ export function LevelStartSheet({
       footer={
         lives < 1 ? (
           <View style={styles.footCol}>
-            {profile?.ad_lives ? <WatchAdForLife profile={profile} size="lg" /> : null}
+            {profile?.ads?.life ? (
+              <RewardedAd kind="life" game={module.key} profile={profile} size="lg" variant="primary" />
+            ) : profile?.ad_lives ? (
+              <WatchAdForLife profile={profile} size="lg" />
+            ) : null}
             <GameButton label="CANIN KALMADI" icon="heart-dislike" onPress={onPlay} disabled tone="danger" />
           </View>
         ) : (

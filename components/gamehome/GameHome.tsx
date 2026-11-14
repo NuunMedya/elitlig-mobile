@@ -18,7 +18,7 @@
 
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -78,7 +78,8 @@ export function GameHome({ title, livesGame, background, eventBar, play, rules, 
   const lives = useGameLives(livesGame);
   const [sheet, setSheet] = useState<null | "lives" | "settings" | "rules" | "ads" | "spin" | "gift" | "streak">(null);
   const [topH, setTopH] = useState(0);
-  const [botH, setBotH] = useState(0);
+  // Ölçüler ref'te de tutulur: iki onLayout aynı karede gelince eski değer okunmasın.
+  const sizes = useRef({ top: 0, bottom: 0 });
 
   // Oyun ana sayfasına girince bekleyen çevrimdışı sonuçlar gönderilir.
   useFocusEffect(
@@ -133,8 +134,9 @@ export function GameHome({ title, livesGame, background, eventBar, play, rules, 
         pointerEvents="box-none"
         onLayout={(e) => {
           const h = e.nativeEvent.layout.height;
+          sizes.current.top = h;
           setTopH(h);
-          onInsets?.(h, botH);
+          onInsets?.(h, sizes.current.bottom);
         }}
       >
         <LinearGradient colors={GH.scrimTop} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} pointerEvents="none" />
@@ -173,8 +175,8 @@ export function GameHome({ title, livesGame, background, eventBar, play, rules, 
         pointerEvents="box-none"
         onLayout={(e) => {
           const h = e.nativeEvent.layout.height;
-          setBotH(h);
-          onInsets?.(topH, h);
+          sizes.current.bottom = h;
+          onInsets?.(sizes.current.top, h);
         }}
       >
         <LinearGradient colors={GH.scrimBottom} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} pointerEvents="none" />

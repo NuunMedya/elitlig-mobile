@@ -205,10 +205,11 @@ export const PlayButton = React.memo(function PlayButton({
   const fill = difficulty === "super" ? GH.playSuper : difficulty === "hard" ? GH.playHard : GH.play;
   const lip = difficulty === "super" ? GH.playSuperLip : difficulty === "hard" ? GH.playHardLip : GH.playLip;
   const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.035] });
+  const tagFill = difficulty === "super" ? GH.superHard : GH.hard;
   return (
     <Animated.View style={[styles.playWrap, { transform: [{ scale }] }]}>
       {difficulty ? (
-        <LinearGradient colors={difficulty === "super" ? GH.superHard : GH.hard} start={LEFT} end={RIGHT} style={styles.diffTag}>
+        <LinearGradient colors={tagFill} start={LEFT} end={RIGHT} style={styles.diffTag}>
           <Ionicons name={difficulty === "super" ? "skull" : "flame"} size={14} color={GH.white} />
           <Text style={styles.diffText} {...textScale.badge}>{difficulty === "super" ? "SÜPER ZOR" : "ZOR"}</Text>
         </LinearGradient>
