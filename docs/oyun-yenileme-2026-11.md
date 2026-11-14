@@ -121,3 +121,49 @@ can (sayaç) · yıldız · ayarlar; altında etkinlik/sandık çubuğu; yanlard
 yuvarlak düğmeler (günlük hediye, reklamla ödül, güçlendirici mağazası,
 sıralama, seri, kurallar); ortada büyük yeşil "Bölüm N" (ya da "Oyna ·
 Rekor X") düğmesi; harita/yol bunun arkasında ya da altında.
+
+## 7. Çevrimdışı oyun (internet yokken oyna, ilk bağlantıda kaydet)
+
+WebView oyunları (`games/*.js`) uygulamanın İÇİNDE paketlidir
+(`lib/game/web/games.generated.ts`, satır içi HTML); ağdan hiçbir şey
+yüklemez. Çevrimdışı oynamayı engelleyen yalnız sunucu çağrılarıdır. Kural:
+**sunucuya ulaşılamıyorsa oyun yine başlar; sonuç cihazdaki kuyruğa yazılır
+ve bağlantı gelince gönderilir.**
+
+İstemci (`lib/offline/`):
+- `isOfflineError(e)`: ağ hatası / zaman aşımı (HTTP yanıtı yok). 4xx/5xx
+  çevrimdışı DEĞİLDİR (ör. 409 NO_LIVES gerçek bir rettir).
+- Yerel ayna: son bilinen `PuzzleMe` (ilerleme, can, jeton, güçlendirici)
+  AsyncStorage'da hesap başına saklanır; çevrimdışıyken harita, can sayacı
+  (30 dk kuralı yerelde işler) ve bölüm kilidi bu aynadan okunur ve
+  kuyruktaki sonuçlarla iyimser güncellenir.
+- Kuyruk (`elitlig.offline.queue.v1.<userId>`): her olay bir `id` (uuid),
+  `kind` (`level` | `arena`), `startedAt`, `finishedAt` (cihaz saati, ms),
+  `durationMs` (monotonik ölçüm) taşır.
+  · `level`: `{game, level, won, stars, score, boosters_used}`
+  · `arena`: `{game, score, stats, v}`
+- Gönderim: uygulama öne gelince, her başarılı API yanıtından sonra ve
+  oyun merkezine girildiğinde `POST /api/puzzle/sync {events:[…]}` tek
+  istekte. Sunucu her olay için `{id, status:"ok"|"dup"|"rejected", reason}`
+  döner; ok/dup/rejected olanlar kuyruktan silinir, ağ hatasında kalır.
+- Çevrimdışıyken başlangıçta sunucu oturumu/jetonu yoktur; bu normaldir.
+- Bilgi yarışmaları: soru havuzu çevrimiçiyken cihaza önbelleklenir;
+  çevrimdışı tur önbellekten oynanır. Günün Testi bugünün soruları
+  önbellekteyse oynanır, yoksa "internet gerekli" der.
+- Misafir: kuyruk yok; yerel rekor ve yerel can (zaten cihazda).
+
+Sunucu (`POST /api/puzzle/sync`, idempotent):
+- Olay `id`'si kayıtlıysa `dup` (tekrar ödül yok). Kimlikler profil JSON'unda
+  sınırlı bir halkada ya da küçük bir tabloda tutulur.
+- Olaylar `finishedAt` sırasıyla işlenir. `finishedAt` gelecekte ya da 14
+  günden eskiyse `rejected`.
+- `level`: bölüm `cleared+1`'i geçemez (sırayla işlenince çevrimdışı açılan
+  ardışık bölümler kabul edilir); `durationMs ≥ PLAY.minMs`; günlük kazanç
+  sınırı **sunucunun alış gününe** göre sayılır (geçmişe tarihleyip tavanı
+  aşmak olmaz); kayıp 1 can düşer (can 0'sa yine kaydedilir, eksiye inmez).
+- `arena`: makullük (istatistik tavanı + `durationMs` ile saniye başı hız)
+  geçerse doğrulanmış sayılır; yıldızı ve günlük tavanı **alış anına** göre
+  hesaplanır (`created_at` = sunucu zamanı; `played_at` ayrıca saklanabilir).
+  Can, çevrimdışı turda düşülmez (zaten cihazda düşüldü).
+- Yanıt: güncel `profile`, `games` ve toplam kazanılan yıldız/jeton özeti
+  (istemci "Çevrimdışı oyunların kaydedildi: +12★" gösterir).
