@@ -41,6 +41,10 @@ export type GameCommand =
   | { type: "build"; key: string }
   | { type: "focus"; key: string | null }
   | { type: "celebrate" }
+  /** Tam ekran şehir: üst HUD ve alt panelin kapladığı css px (kamera görünen alanı ortalar). */
+  | { type: "view"; top: number; bottom: number }
+  /** Şehir: binada kıvılcım + konfeti + yükselen yazı (ara adım, EL toplama, bakım, EL yükseltmesi). */
+  | { type: "pop"; key: string; text?: string; color?: string }
   | {
       type: "config";
       sound?: boolean;
@@ -67,7 +71,7 @@ interface Props {
   game: WebGameKey;
   onReady?: () => void;
   onOver?: (payload: GameOverPayload) => void;
-  /** Oyuna özgü diğer mesajlar (Kulüp Şehri: {type:"tap", key}). */
+  /** Oyuna özgü diğer mesajlar (Kulüp Şehri: {type:"tap", key} · {type:"tapEmpty"} · {type:"slot", slot, id}). */
   onEvent?: (message: Record<string, unknown>) => void;
   /** Kabuğun arka planı (şehir gündüz gök mavisiyle açılır). */
   background?: string;

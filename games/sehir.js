@@ -28,7 +28,13 @@
  *                  focus      null | <bina> | "landmarks"
  *                ArenaCmd({ type:"build", key })  (o binanın inşaat animasyonu)
  *                Aşama iki ileti arasında yükselirse inşaat kendiliğinden oynar.
+ *                ArenaCmd({ type:"view", top, bottom })  (tam ekran şehir: üst HUD ve
+ *                  alt panel/dock'un kapladığı css px; kamera görünen alanı ortalar,
+ *                  odak yakınlığı bu alana göre hesaplanır)
+ *                ArenaCmd({ type:"pop", key, text?, color? })  (o binada kıvılcım +
+ *                  konfeti + yükselen yazı: ara adım, EL toplama, bakım, EL yükseltmesi)
  *   sahne → RN : { type:"tap", key }  (12 bina anahtarından biri)
+ *                { type:"tapEmpty" }  (boş zemine dokunuldu: RN bina panelini kapatır)
  *                { type:"slot", slot:"r2c5", id:null | <landmark id> }
  *
  * ÇİZİM: düz Canvas 2D, 2:1 İZOMETRİK. Savunma Hattı ailesinin "flat vector"
@@ -171,21 +177,40 @@
 
   /* ─────────────────────────── kamera ─────────────────────────── */
 
-  var cam = { tx: 0, tz: 0, zoom: 1, lift: 6 };
-  var camGoal = { tx: 0, tz: 0, zoom: 1, lift: 6 };
+  var cam = { tx: 0, tz: 0, zoom: 1, lift: 6, cy: 0 };
+  var camGoal = { tx: 0, tz: 0, zoom: 1, lift: 6, cy: 0 };
   var homeZoom = 1;
+  /** Tam ekran şehir: üst HUD ve alt panelin kapladığı css px ({type:"view"}). */
+  var view = { top: 0, bottom: 0 };
+  /** Görünen (HUD/panel dışı) yükseklik; yakınlık bu alana göre hesaplanır. */
+  function viewH() {
+    return Math.max(H * 0.36, H - view.top - view.bottom);
+  }
+  /** Görünen alanın merkezinin ekran merkezinden kayması (css px). */
+  function viewCy() {
+    var vh = viewH();
+    return view.top + vh / 2 - H / 2;
+  }
+  function setView(top, bottom) {
+    view.top = A.clamp(Number(top) || 0, 0, H * 0.4);
+    view.bottom = A.clamp(Number(bottom) || 0, 0, H * 0.62);
+    computeHome();
+    camGoal.cy = viewCy();
+    camGoal.zoom = focusKey ? focusZoom(focusKey) : homeZoom;
+  }
   var focusKey = null;
   var drag = null, pinch = null;
   var ZMAX = 9;
 
   function computeHome() {
-    homeZoom = A.clamp(Math.min(W / 292, H / 318), 0.4, 4);
+    homeZoom = A.clamp(Math.min(W / 292, viewH() / 318), 0.4, 4);
   }
   function focusZoom(key) {
-    if (key === "landmarks") return A.clamp(Math.min(W / 84, H / 70), 0.8, ZMAX);
-    if (V2 && key === "halisaha") return A.clamp(Math.min(W / 96, H / 84), 0.8, ZMAX);
-    if (isStad(key)) return A.clamp(Math.min(W / 80, H / 74), 0.8, ZMAX);
-    return A.clamp(Math.min(W / 66, H / 60), 0.8, ZMAX);
+    var VH = viewH();
+    if (key === "landmarks") return A.clamp(Math.min(W / 84, VH / 70), 0.8, ZMAX);
+    if (V2 && key === "halisaha") return A.clamp(Math.min(W / 96, VH / 84), 0.8, ZMAX);
+    if (isStad(key)) return A.clamp(Math.min(W / 80, VH / 74), 0.8, ZMAX);
+    return A.clamp(Math.min(W / 66, VH / 60), 0.8, ZMAX);
   }
   function setFocus(key) {
     var p = V2 ? (key === "landmarks" ? { x: LMD.x, z: LMD.z } : key === "halisaha" ? { x: CC[-1] + 1, z: -11 } : PLOTS[key]) : PLOTS[key];
@@ -206,13 +231,13 @@
   /** Dünya → ekran (css px). */
   function W2S(x, y, z) {
     var Z = cam.zoom;
-    return [W / 2 + (x - z - (cam.tx - cam.tz)) * Z, H * 0.5 + ((x + z - cam.tx - cam.tz) * 0.5 - (y - cam.lift) * HY) * Z];
+    return [W / 2 + (x - z - (cam.tx - cam.tz)) * Z, H * 0.5 + cam.cy + ((x + z - cam.tx - cam.tz) * 0.5 - (y - cam.lift) * HY) * Z];
   }
   /** Ekran → zemin (y = h düzlemi). */
   function S2W(px, py, h) {
     var Z = cam.zoom;
     var u = (px - W / 2) / Z + (cam.tx - cam.tz);
-    var v = 2 * ((py - H * 0.5) / Z + ((h || 0) - cam.lift) * HY) + cam.tx + cam.tz;
+    var v = 2 * ((py - H * 0.5 - cam.cy) / Z + ((h || 0) - cam.lift) * HY) + cam.tx + cam.tz;
     return { x: (u + v) / 2, z: (v - u) / 2 };
   }
 
@@ -9285,6 +9310,8 @@
       received = true;
       if (cmd.focus !== undefined) setFocus(cmd.focus);
     } else if (cmd.type === "focus") setFocus(cmd.key);
+    else if (cmd.type === "view") setView(cmd.top, cmd.bottom);
+    else if (cmd.type === "pop") popAt(cmd.key, cmd.text, cmd.color);
     else if (cmd.type === "theme") {
       themeOverride = cmd.theme || null;
     }
@@ -9305,6 +9332,26 @@
       startConstruction(changed[0].key, changed[0].from, changed[0].to);
       setFocus(changed[0].key);
     }
+  }
+  /**
+   * { type:"pop", key, text?, color? }: binada küçük kutlama (ara adım, EL
+   * toplama, bakım, EL yükseltmesi): kıvılcım, konfeti ve yükselen yazı.
+   */
+  function popAt(key, text, color) {
+    var p = key === "landmarks" ? { x: LMD.x, z: LMD.z } : PLOTS[key];
+    if (!p) return;
+    var col = typeof color === "string" && /^#[0-9a-fA-F]{3,8}$/.test(color) ? color : "#FFD43B";
+    var top = V2 ? 10 : 8;
+    if (!A.reduceMotion) {
+      for (var i = 0; i < 26; i++) addSpark(p.x + A.rand(-2, 2), top, p.z + A.rand(-2, 2), i % 3 ? col : "#FFFFFF", 11);
+      for (var j = 0; j < 18; j++) addConf(p.x + A.rand(-3, 3), top + 2, p.z + A.rand(-3, 3), 7);
+    }
+    if (text) {
+      var s = W2S(p.x, top + 6, p.z);
+      A.floatText(String(text).slice(0, 18), A.clamp(s[0], 40, W - 40), A.clamp(s[1], view.top + 30, H - view.bottom - 10), col, 24);
+    }
+    A.sound("coin");
+    A.haptic("success");
   }
   function celebrate() {
     party = A.time;
@@ -9376,6 +9423,8 @@
       A.haptic("light");
       setFocus(best);
       A.send("tap", { key: best });
+    } else if (V2 && !place2) {
+      A.send("tapEmpty");
     }
   }
   function hitTest(px, py) {
@@ -9390,7 +9439,7 @@
       var m = metaFor(k, lvOf(k));
       var Ht = m ? Math.max(3, (-m.v0 - R * 0.5) / HY) : 8;
       var u = (px - W / 2) / Z + (cam.tx - cam.tz) - (p.x - p.z);
-      var vs = 2 * ((py - H * 0.5) / Z + (cam.tx + cam.tz) * 0.5 - cam.lift * HY - (p.x + p.z) * 0.5);
+      var vs = 2 * ((py - H * 0.5 - cam.cy) / Z + (cam.tx + cam.tz) * 0.5 - cam.lift * HY - (p.x + p.z) * 0.5);
       var lim = 2 * R - Math.abs(u);
       if (lim < 0) return;
       var s0 = vs, s1 = vs + 2 * Ht * HY;
@@ -9425,7 +9474,7 @@
         var m = k === "stadyum" ? metaFor(k) : partMeta(k, part, lvOf(k));
         var Ht = m ? Math.max(3, (-m.v0 - R * 0.5) / HY) : 8;
         var u = (px - W / 2) / Z + (cam.tx - cam.tz) - (part.x - part.z);
-        var vs = 2 * ((py - H * 0.5) / Z + (cam.tx + cam.tz) * 0.5 - cam.lift * HY - (part.x + part.z) * 0.5);
+        var vs = 2 * ((py - H * 0.5 - cam.cy) / Z + (cam.tx + cam.tz) * 0.5 - cam.lift * HY - (part.x + part.z) * 0.5);
         var lim = 2 * R - Math.abs(u);
         if (lim < 0) return;
         if (vs + 2 * Ht * HY < -lim || vs > lim) return;
@@ -9501,7 +9550,7 @@
 
   var baseLayer = null;
   function paintBase() {
-    var key = [cam.tx.toFixed(3), cam.tz.toFixed(3), cam.zoom.toFixed(4), cam.lift.toFixed(3), TH.key, W, H, spriteVer].join(",");
+    var key = [cam.tx.toFixed(3), cam.tz.toFixed(3), cam.zoom.toFixed(4), cam.lift.toFixed(3), cam.cy.toFixed(2), TH.key, W, H, spriteVer].join(",");
     if (baseLayer && baseLayer.key === key) return baseLayer;
     if (!baseLayer || baseLayer.w !== W || baseLayer.h !== H) baseLayer = A.layer(W, H);
     baseLayer.key = key;
@@ -9527,8 +9576,10 @@
     H = h;
     computeHome();
     bgLayer = null;
+    camGoal.cy = viewCy();
     if (first) {
       cam.zoom = camGoal.zoom = homeZoom;
+      cam.cy = camGoal.cy;
     }
     if (focusKey) camGoal.zoom = focusZoom(focusKey);
     else camGoal.zoom = homeZoom;
@@ -9540,10 +9591,12 @@
     cam.tx += (camGoal.tx - cam.tx) * k;
     cam.tz += (camGoal.tz - cam.tz) * k;
     cam.lift += (camGoal.lift - cam.lift) * k;
+    cam.cy += (camGoal.cy - cam.cy) * k;
     cam.zoom = Math.exp(Math.log(cam.zoom) + (Math.log(camGoal.zoom) - Math.log(cam.zoom)) * k);
     // hedefe çok yaklaşınca otur (zemin katmanı yeniden çizilmesin)
-    if (Math.abs(cam.tx - camGoal.tx) < 0.02 && Math.abs(cam.tz - camGoal.tz) < 0.02 && Math.abs(cam.zoom / camGoal.zoom - 1) < 0.002 && Math.abs(cam.lift - camGoal.lift) < 0.02) {
+    if (Math.abs(cam.tx - camGoal.tx) < 0.02 && Math.abs(cam.tz - camGoal.tz) < 0.02 && Math.abs(cam.zoom / camGoal.zoom - 1) < 0.002 && Math.abs(cam.lift - camGoal.lift) < 0.02 && Math.abs(cam.cy - camGoal.cy) < 0.3) {
       cam.tx = camGoal.tx;
+      cam.cy = camGoal.cy;
       cam.tz = camGoal.tz;
       cam.zoom = camGoal.zoom;
       cam.lift = camGoal.lift;
@@ -9620,6 +9673,7 @@
         gl: true,
         cam: cam,
         focus: camGoal,
+        view: view,
         construct: con && con.key,
         match: match && match.players.length,
         theme: TH.key,

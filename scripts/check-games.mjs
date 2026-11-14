@@ -1006,6 +1006,27 @@ function kadroLevel(level, boosters = []) {
   check("kulüp şehri: seviyeleri alır, odaklanır, kutlar", d.levels.saha === 3 && d.levels.kantin === 2 && d.levels.bilinmeyen === undefined && d.focus.tx === 0, `saha ${d.levels.saha}, kafeterya ${d.levels.kantin}`);
 }
 
+{
+  // Tam ekran şehir: görünür alan (üst HUD + alt panel) kamerayı kaydırır; "pop" çökmez.
+  const { A, run } = boot("sehir");
+  window_cmd(A, { type: "city2", buildings: { halisaha: 2, kulup: 1 }, rung: 3, marks: {}, landmarks: [], grid: { cols: 8, rows: 8, open_rows: 2 }, place: null });
+  run(1);
+  const before = A.game.debug().cam.zoom;
+  window_cmd(A, { type: "view", top: 90, bottom: 300 });
+  window_cmd(A, { type: "focus", key: "kulup" });
+  window_cmd(A, { type: "pop", key: "kulup", text: "+120 EL", color: "#5EEAD4" });
+  window_cmd(A, { type: "pop", key: "yok" });
+  run(3);
+  const d = A.game.debug();
+  const cy1 = d.cam.cy;
+  const shifted = cy1 < 0 && d.view.bottom === 300;
+  window_cmd(A, { type: "view", top: 90, bottom: 120 });
+  window_cmd(A, { type: "focus", key: null });
+  run(3);
+  const d2 = A.game.debug();
+  check("kulüp şehri: görünür alan ve bina kutlaması", shifted && Number.isFinite(before) && d2.focus.tx === 0 && Math.abs(d2.cam.cy - d2.focus.cy) < 0.5, `cy ${cy1.toFixed(1)} → ${d2.cam.cy.toFixed(1)}`);
+}
+
 /* ── 4) PENALTI ──────────────────────────────────────────────────────────── */
 
 /**
