@@ -247,6 +247,54 @@ export const isGoalKind = (kind: number) => kind === KIND_SHOT || kind === KIND_
 /* ───────────────────────────── kurulum (JS) ───────────────────────────── */
 
 /**
+ * ŞUT AYARLARI (2026-11 denge; scripts/check-kariyer.mjs ile ölçülür).
+ * Hedef: kalecinin uzağına köşeye çekilen şutların basamak 1–2'de ~%80'i,
+ * 3–4'te ~%60'ı, 5'te ~%50'si gol.
+ */
+export const SHOT = {
+  goalHalf: 0.3, // kale yarı genişliği (× w) …
+  goalShrink: 0.06, // … zorlukla daralma
+  patrol: 0.16, // kalecinin şut öncesi devriye hızı (× w / sn) …
+  patrolD: 0.3, // … zorlukla artış
+  speed: 0.3, // kaleci atılma hızı (× w / sn) …
+  speedD: 0.33, // … zorlukla artış …
+  speedCap: 0.46, // … tavan
+  reach: 6.5, // kaleci uzanma (× unit) …
+  reachD: 2, // … zorlukla artış …
+  reachCap: 8, // … tavan
+  react: 0.11, // tepki gecikmesi (sn) …
+  reactD: 0.03, // … zorlukla azalma …
+  reactMin: 0.05, // … taban
+  ace: 1.08, // usta kaleci hız çarpanı
+  aceReach: 1.05, // usta kaleci uzanma çarpanı
+  aceReact: 1, // usta kaleci tepki çarpanı
+  rival: 0.12, // savunmacı devriye hızı (× w / sn) …
+  rivalD: 0.22, // … zorlukla artış
+};
+
+/** PENALTI AYARLARI (aynı hedef bantlar; direk dibine sert vuruş ödüllenir). */
+export const PEN = {
+  goalHalf: 0.34, // kale yarı genişliği (× w) …
+  goalShrink: 0.04, // … zorlukla daralma
+  guess: 0.62, // kalecinin atladığı nokta (× goalHalf)
+  speed: 0.5, // atlayış hızı (× w / sn) …
+  speedD: 0.55, // … zorlukla artış …
+  speedCap: 9, // … tavan
+  reach: 8, // uzanma (× unit) …
+  reachD: 3, // … zorlukla artış …
+  reachCap: 99, // … tavan
+  react: 0, // tepki gecikmesi (sn) …
+  reactD: 0, // … zorlukla azalma …
+  reactMin: 0, // … taban
+  read: 0.12, // şutu okuma olasılığı …
+  readD: 0.4, // … zorlukla artış …
+  readCap: 1, // … tavan
+  aceRead: 0.2, // usta kalecinin ek okuma olasılığı
+  ace: 1.25, // usta kaleci hız çarpanı
+  aceReach: 1.15, // usta kaleci uzanma çarpanı
+};
+
+/**
  * FRİKİK AYARLARI (2026-11 denge; scripts/check-kariyer.mjs ile ölçülür).
  * Hedef: makul çekişlerin basamak 1–2'de ~%80'i, 3–4'te ~%60'ı, 5'te ~%50'si
  * gol; kavisli köşe çekişi düz çekişten belirgin iyi.
@@ -377,16 +425,28 @@ export function createMoment(def: MomentDef, attrs: Attrs, w: number, h: number)
     s.me.x = s.ball.x - unit * 2;
     s.me.y = s.ball.y + unit * 7;
     s.power = h * (1.15 + a("sut") * 0.75);
+    s.goalHalf = w * (SHOT.goalHalf - d * SHOT.goalShrink);
     setupKeeper();
+    // ŞUT KALECİSİ (2026-11 denge): eskiden hız `0.34 + 0.4d`, uzanma
+    // `7.5 + 3.5d` ve usta çarpanı ×1.25/×1.15 tavansızdı; tepki süresi de
+    // yoktu. Üst basamaklarda kaleci kale ağzının tamamını kapatıyor, kalecinin
+    // uzağına çekilen köşe şutları bile çoğunlukla kurtarılıyordu. Şimdi hız
+    // ve uzanma tavanlı, şuttan sonra kısa bir tepki gecikmesi var (sert ve
+    // kalecinin uzağına çekilen şut ödüllenir), devriye daha yavaş (kalecinin
+    // hangi yanda olduğu okunabilir).
+    s.keeper.vx = Math.sign(s.keeper.vx) * w * (SHOT.patrol + d * SHOT.patrolD);
+    s.keeper.a = w * Math.min(SHOT.speedCap, SHOT.speed + d * SHOT.speedD) * (ace ? SHOT.ace : 1);
+    s.keeper.b = unit * Math.min(SHOT.reachCap, SHOT.reach + d * SHOT.reachD - a("sut") * 2.5) * (ace ? SHOT.aceReach : 1);
+    s.keeper.d = Math.max(SHOT.reactMin, SHOT.react - d * SHOT.reactD) * (ace ? SHOT.aceReact : 1); // tepki gecikmesi (sn)
     for (let i = 0; i < def.rivals; i += 1) {
       const rival = body(w * (0.3 + rnd() * 0.4), h * (0.38 + i * 0.1 + rnd() * 0.04), unit * 4.6);
-      rival.vx = (rnd() < 0.5 ? -1 : 1) * w * (0.12 + d * 0.22 + rnd() * 0.05);
+      rival.vx = (rnd() < 0.5 ? -1 : 1) * w * (SHOT.rival + d * SHOT.rivalD + rnd() * 0.05);
       rival.a = w * 0.16;
       rival.b = w * 0.84;
       s.rivals.push(rival);
     }
   } else if (kind === KIND_PENALTY) {
-    s.goalHalf = w * (0.34 - d * 0.04);
+    s.goalHalf = w * (PEN.goalHalf - d * PEN.goalShrink);
     s.goalY = h * 0.21;
     s.ball.x = w / 2;
     s.ball.y = s.goalY + h * 0.4;
@@ -397,11 +457,18 @@ export function createMoment(def: MomentDef, attrs: Attrs, w: number, h: number)
     s.clockMax = 6;
     setupKeeper();
     s.keeper.vx = w * 0.05; // çizgide hafif kıpırdanma
-    s.keeper.a = w * (0.5 + d * 0.55) * (ace ? 1.25 : 1); // atlayış hızı
-    s.keeper.b = unit * (8 + d * 3 - a("sut") * 2) * (ace ? 1.15 : 1);
+    // PENALTI KALECİSİ (2026-11 denge): eskiden doğru tahmin edilen köşede
+    // uzanma bölgesi köşenin tamamını kapatıyordu (direk dibi bile kurtulurdu)
+    // ve şutu "okuma" olasılığı `0.12 + 0.4d (+0.2 usta)` sınırsız büyüyordu;
+    // okuyan kaleci her şutu çıkarıyordu. Şimdi atlayış hızı / uzanma tavanlı,
+    // vuruştan sonra tepki gecikmesi var, okuma olasılığı tavanlı. Direğin
+    // dibine sert vuruş, kaleci doğru köşeye atlasa da çoğunlukla gol olur.
+    s.keeper.a = w * Math.min(PEN.speedCap, PEN.speed + d * PEN.speedD) * (ace ? PEN.ace : 1); // atlayış hızı
+    s.keeper.b = unit * Math.min(PEN.reachCap, PEN.reach + d * PEN.reachD - a("sut") * 2) * (ace ? PEN.aceReach : 1);
+    s.keeper.d = Math.max(PEN.reactMin, PEN.react - d * PEN.reactD); // tepki gecikmesi (sn)
     const side = Math.floor(rnd() * 3) - 1;
-    s.keeperGuess = s.goalX + side * s.goalHalf * 0.62;
-    s.keeperRead = rnd() < 0.12 + d * 0.4 + ace * 0.2 ? 1 : 0;
+    s.keeperGuess = s.goalX + side * s.goalHalf * PEN.guess;
+    s.keeperRead = rnd() < Math.min(PEN.readCap, PEN.read + d * PEN.readD) + ace * PEN.aceRead ? 1 : 0;
   } else if (kind === KIND_FREEKICK) {
     s.ball.x = w * (0.3 + rnd() * 0.4);
     s.ball.y = h * (0.66 + rnd() * 0.05);
@@ -609,6 +676,12 @@ function keeperTrack(s: MomentState, dt: number, guess: boolean) {
   "worklet";
   const k = s.keeper;
   const b = s.ball;
+  // Şut ve penaltıda kaleci vuruştan sonra kısa bir an kıpırdayamaz (tepki).
+  if ((s.kind === KIND_SHOT || s.kind === KIND_PENALTY) && k.d > 0) {
+    k.d -= dt;
+    k.c = 0;
+    return;
+  }
   const timeToLine = b.vy < 0 ? (s.goalY - b.y) / b.vy : 0;
   const predicted = b.x + b.vx * Math.max(0, timeToLine) + 0.5 * s.windX * timeToLine * timeToLine * 0.6;
   const lim = s.goalHalf - k.r * 0.4;

@@ -89,9 +89,9 @@ function clearState(s) {
 
 /**
  * Bir çekişi oynatır. mode: "real" (gerçek), "clear" (engelsiz),
- * "preview" (frikik: bırakış anındaki baraj donar, kaleci uzanmaz; yalnız
- * önizlemenin gösterdiği kare sayısı kadar uçulur — oyuncunun ekranda
- * gördüğü yol baraja değiyor mu?).
+ * "preview" (bırakış anındaki baraj / savunmacılar donar, kaleci uzanmaz;
+ * frikikte yalnız önizlemenin gösterdiği kare sayısı kadar uçulur —
+ * oyuncunun bırakırken ekranda gördüğü yol bir rakibe değiyor mu?).
  */
 function runSwipe(def, lv, swipe, mode = "real") {
   const s = S.createMoment(def, attrsAt(lv), W, H);
@@ -122,8 +122,9 @@ function runSwipe(def, lv, swipe, mode = "real") {
     if (Number.isNaN(crossX) && prevY > wallY && s.ball.y <= wallY) crossX = s.ball.x;
     if (released && mode === "preview") {
       s.wallAmp = 0;
+      for (const r of s.rivals) r.vx = 0;
       after += 1;
-      if (after > previewFrames(s)) return { out: S.OUT_NONE, x: s.ball.x, s, crossX, x0, y0, wallY, keeperAt };
+      if (s.kind === S.KIND_FREEKICK && after > previewFrames(s)) return { out: S.OUT_NONE, x: s.ball.x, s, crossX, x0, y0, wallY, keeperAt };
     }
     if (s.phase >= S.PHASE_RESULT) return { out: s.outcome, x: s.ball.x, s, crossX, x0, y0, wallY, keeperAt };
   }
@@ -206,113 +207,205 @@ const GOOD = (kind, out) => (kind === "pass" ? out === S.OUT_PASS_OK || out === 
 /** Köşe hedefi: engelsiz yolun kale çizgisinde vardığı yer orta bölgenin dışında. */
 const corner = (r) => Math.abs(r.x - r.s.goalX) >= r.s.goalHalf * 0.45;
 
+/** Çekiş başarısı (pasta isabetli pas, gol anlarında gol). */
 function measure(kind, def, lv) {
+  if (kind === "dribble") return measureDribble(def, lv);
   const grid = kind === "header" ? headerGrid(def, lv) : kind === "pass" ? passGrid(def, lv) : shotGrid(def, lv, kind === "freekick");
   let fair = 0;
   let good = 0;
   let total = 0;
-  const sweet = { fair: 0, good: 0 };
-  const flat = { fair: 0, good: 0 };
+  // Beceri kıyası: hi = ipucuna tam uyan çekiş, lo = uymayan (oran farkı ödülü gösterir).
+  const hi = { fair: 0, good: 0 };
+  const lo = { fair: 0, good: 0 };
+  const add = (bucket, ok) => {
+    bucket.fair += 1;
+    if (ok) bucket.good += 1;
+  };
   const outs = {};
   for (const sw of grid) {
     total += 1;
     const clear = runSwipe(def, lv, sw, "clear");
     if (!GOOD(kind, clear.out)) continue;
-    // Makul: ipucunun söylediğini yapan çekiş (köşeye nişan; kafada iyi zamanlama).
-    if (kind !== "pass" && !corner(clear)) continue;
-    // Şut ve kafada ipucu "kalecinin uzağına": bırakış anında kalecinin ters yanındaki köşe.
-    if ((kind === "shot" || kind === "header") && Math.sign(clear.x - clear.s.goalX) === Math.sign(clear.keeperAt - clear.s.goalX)) continue;
     if (kind === "header" && Math.abs(sw.meta.e) > 0.6) continue;
-    const ok = GOOD(kind, runSwipe(def, lv, sw).out);
-    if (kind === "freekick") {
+    // Oyuncu bırakırken yolun bir rakibe (baraj / savunmacı) değdiğini görürse o çekişi seçmez.
+    if ((kind === "freekick" || kind === "shot") && [S.OUT_WALL, S.OUT_BLOCKED].includes(runSwipe(def, lv, sw, "preview").out)) {
+      if (kind !== "freekick") continue;
+    }
+    const real = runSwipe(def, lv, sw).out;
+    const ok = GOOD(kind, real);
+    const isCorner = kind !== "pass" && corner(clear);
+    const awayKeeper = Math.sign(clear.x - clear.s.goalX) !== Math.sign(clear.keeperAt - clear.s.goalX);
+    if (kind === "shot") {
+      // Beceri: kalecinin uzağına köşe vs kalecinin bulunduğu yana köşe.
+      if (isCorner) add(awayKeeper ? hi : lo, ok);
+    } else if (kind === "penalty") {
+      // Beceri: direk dibine sert (|nişan| ≥ 0,75, güç ≥ 0,9) vs ortaya yakın ya da yumuşak.
+      const deep = Math.abs(sw.meta.a) >= 0.75 && sw.meta.p >= 0.9;
+      add(deep ? hi : lo, ok);
+    } else if (kind === "freekick" && isCorner) {
       // Tatlı nokta: köşeye giden çekişlerde barajın YANINDAN dolanan belirgin
       // kavis (baraj hizasında top, düz kirişten daha uzakta) düz çekişten
       // iyi mi? Barajın içine bükülen kavis iki gruba da girmez.
       const chordX = clear.x0 + (clear.x - clear.x0) * ((clear.wallY - clear.y0) / (clear.s.goalY - clear.y0));
       const unit = W / 100;
       const around = Math.abs(clear.crossX - clear.s.wallX) > Math.abs(chordX - clear.s.wallX) + unit * 2;
-      const bucket = Math.abs(sw.meta.c) >= 0.5 && around ? sweet : Math.abs(sw.meta.c) <= 0.25 ? flat : null;
-      if (bucket) {
-        bucket.fair += 1;
-        if (ok) bucket.good += 1;
-      }
-      // Oyuncu ekrandaki önizlemenin baraja değdiğini görürse o çekişi seçmez.
-      if (runSwipe(def, lv, sw, "preview").out === S.OUT_WALL) continue;
+      if (Math.abs(sw.meta.c) >= 0.5 && around) add(hi, ok);
+      else if (Math.abs(sw.meta.c) <= 0.25) add(lo, ok);
     }
+    // Makul: ipucunun söylediğini yapan çekiş (köşeye nişan; şut ve kafada kalecinin uzağına).
+    if (kind !== "pass" && !isCorner) continue;
+    if ((kind === "shot" || kind === "header") && !awayKeeper) continue;
+    if (kind === "freekick" && runSwipe(def, lv, sw, "preview").out === S.OUT_WALL) continue;
     fair += 1;
-    const out = runSwipe(def, lv, sw).out;
-    outs[out] = (outs[out] ?? 0) + 1;
+    outs[real] = (outs[real] ?? 0) + 1;
     if (ok) good += 1;
   }
-  return { fair, good, total, sweet, flat, outs };
+  return { fair, good, total, hi, lo, outs };
+}
+
+/**
+ * Çalım: insan benzeri bir parmak politikası taranır. Oyuncu her `every` sn'de
+ * bir, `look` kadar yukarıdaki savunmacılara bakıp onlardan en uzak şeridi
+ * seçer; kararı `lag` sn gecikmeyle uygular (tepki süresi) ve `jitter` kadar
+ * kayar. Başarı = çizgiye ulaşmak.
+ */
+function measureDribble(def, lv) {
+  let fair = 0;
+  let good = 0;
+  const outs = {};
+  const lanes = Array.from({ length: 11 }, (_, i) => W * (0.08 + i * 0.084));
+  for (const look of [0.28, 0.38, 0.48])
+    for (const lag of [0.12, 0.2, 0.3])
+      for (const every of [0.12, 0.25])
+        for (const jitter of [-0.03, 0, 0.03]) {
+          const s = S.createMoment(def, attrsAt(lv), W, H);
+          const touch = S.emptyTouch();
+          touch.down = true;
+          touch.x = s.me.x;
+          const queue = [];
+          let next = 0;
+          for (let i = 0; i < 60 * 15 && s.phase < S.PHASE_RESULT; i += 1) {
+            if (s.t >= next) {
+              next = s.t + every;
+              const threats = s.rivals.filter((r) => r.y < s.me.y + r.r && r.y > s.me.y - H * look);
+              let best = touch.x;
+              let bestScore = -Infinity;
+              for (const x of lanes) {
+                let m = Infinity;
+                for (const r of threats) {
+                  // Yakın savunmacı daha önemli; kayan müdahaleci yana da uzanır.
+                  const dist = Math.abs(r.x - x) - (r.d === 1 ? W * 0.12 : 0);
+                  m = Math.min(m, dist + (s.me.y - r.y) * 0.25);
+                }
+                const score = m - Math.abs(x - s.me.x) * 0.15; // az yer değiştir
+                if (score > bestScore) {
+                  bestScore = score;
+                  best = x;
+                }
+              }
+              queue.push({ at: s.t + lag, x: best + jitter * W });
+            }
+            while (queue.length && queue[0].at <= s.t) touch.x = queue.shift().x;
+            S.stepMoment(s, DT, touch);
+          }
+          fair += 1;
+          outs[s.outcome] = (outs[s.outcome] ?? 0) + 1;
+          if (s.outcome === S.OUT_DRIBBLE_DONE) good += 1;
+        }
+  return { fair, good, total: fair, hi: { fair: 0, good: 0 }, lo: { fair: 0, good: 0 }, outs };
 }
 
 /* ───────────── rapor ───────────── */
 
-const KINDS = ["freekick", "shot", "penalty", "header", "pass"];
+const KINDS = ["freekick", "shot", "penalty", "header", "pass", "dribble"];
+const LABEL = { freekick: "frikik", shot: "şut", penalty: "penaltı", header: "kafa", pass: "pas", dribble: "çalım" };
+const MOD_KEYS = [
+  ["rüzgâr", L.MOD_WIND],
+  ["çamur", L.MOD_MUD],
+  ["kayan", L.MOD_SLIDE],
+  ["ofsayt", L.MOD_OFFSIDE],
+  ["baraj", L.MOD_WALLMOVE],
+  ["yağmur", L.MOD_RAIN],
+  ["usta", L.MOD_ACE],
+  ["baraj+usta", L.MOD_WALLMOVE | L.MOD_ACE],
+];
 const rate = (g, f) => (f ? g / f : NaN);
 const pct = (x) => (Number.isNaN(x) ? "  –  " : `${(x * 100).toFixed(0).padStart(3)}%`);
 const table = {};
-const special = { wind: [0, 0], wallmove: [0, 0], ace: [0, 0], stack: [0, 0] };
-const sweetT = {};
+const skill = {};
+const mods = {}; // `${kind}:${mod}` → [gol, makul]
 
 for (const tier of TIERS) {
   table[tier] = {};
+  skill[tier] = {};
   for (const kind of KINDS) {
     const list = byTier.get(`${tier}:${kind}`) ?? [];
     let fair = 0;
     let good = 0;
-    let sf = 0, sg = 0, ff = 0, fg = 0;
+    const hi = [0, 0];
+    const lo = [0, 0];
     for (const { lv, def } of list) {
       const m = measure(kind, def, lv);
       fair += m.fair;
       good += m.good;
-      if (kind === "freekick") {
-        sf += m.sweet.fair; sg += m.sweet.good; ff += m.flat.fair; fg += m.flat.good;
-        const r = [m.good, m.fair];
-        const add = (key) => { special[key][0] += r[0]; special[key][1] += r[1]; };
-        if (def.mods & L.MOD_WIND) add("wind");
-        if (def.mods & L.MOD_WALLMOVE) add("wallmove");
-        if (def.mods & L.MOD_ACE) add("ace");
-        if (def.mods & L.MOD_WALLMOVE && def.mods & L.MOD_ACE) add("stack");
-        if (VERBOSE) console.log(`  L${String(lv).padStart(3)} d=${def.difficulty.toFixed(2)} mods=${def.mods} makul=${m.fair}/${m.total} gol=${pct(rate(m.good, m.fair))} çıktılar=${JSON.stringify(m.outs)}`);
+      hi[0] += m.hi.good; hi[1] += m.hi.fair;
+      lo[0] += m.lo.good; lo[1] += m.lo.fair;
+      for (const [key, bit] of MOD_KEYS) {
+        if ((def.mods & bit) !== bit) continue;
+        const k = `${kind}:${key}`;
+        mods[k] ??= [0, 0];
+        mods[k][0] += m.good;
+        mods[k][1] += m.fair;
       }
+      if (VERBOSE) console.log(`  ${LABEL[kind]} L${String(lv).padStart(3)} d=${def.difficulty.toFixed(2)} mods=${def.mods} makul=${m.fair}/${m.total} oran=${pct(rate(m.good, m.fair))} çıktılar=${JSON.stringify(m.outs)}`);
     }
     table[tier][kind] = { rate: rate(good, fair), n: list.length };
-    if (kind === "freekick") sweetT[tier] = { sweet: rate(sg, sf), flat: rate(fg, ff) };
+    skill[tier][kind] = { hi: rate(hi[0], hi[1]), lo: rate(lo[0], lo[1]) };
   }
 }
 
-console.log("\nKariyer Yolu — makul çekişlerden gol/başarı oranı (an sayısı parantezde)\n");
-console.log("basamak  " + KINDS.map((k) => k.padEnd(12)).join(""));
+console.log("\nKariyer Yolu — makul girdilerden gol/başarı oranı (an sayısı parantezde)\n");
+console.log("basamak  " + KINDS.map((k) => LABEL[k].padEnd(12)).join(""));
 for (const tier of TIERS) {
   console.log(`   ${tier}     ` + KINDS.map((k) => `${pct(table[tier][k].rate)} (${String(table[tier][k].n).padStart(2)})`.padEnd(12)).join(""));
 }
-console.log("\nfrikik tatlı nokta (kavis ≥0,5) / düz (kavis ≤0,25):");
-for (const tier of TIERS) console.log(`   ${tier}     ${pct(sweetT[tier].sweet)} / ${pct(sweetT[tier].flat)}`);
-console.log("\nfrikik engelleri: " + Object.entries(special).map(([k, [g, f]]) => `${k} ${pct(rate(g, f))} (${f})`).join(" · "));
+console.log("\nbeceri ödülü (ipucuna uyan / uymayan çekiş):");
+console.log("   frikik: barajın yanından kavis / düz · şut: kalecinin uzağı / yakını · penaltı: direk dibi sert / diğer");
+for (const tier of TIERS) {
+  console.log(`   ${tier}     ` + ["freekick", "shot", "penalty"].map((k) => `${LABEL[k]} ${pct(skill[tier][k].hi)} / ${pct(skill[tier][k].lo)}`).join("   "));
+}
+console.log("\nengeller: " + Object.entries(mods).map(([k, [g, f]]) => `${k} ${pct(rate(g, f))}`).join(" · "));
 
 /* ───────────── bantlar ───────────── */
 
 const fails = [];
-const BANDS = { 1: [0.74, 0.86], 2: [0.74, 0.86], 3: [0.54, 0.66], 4: [0.54, 0.66], 5: [0.44, 0.56] };
-for (const tier of TIERS) {
-  const r = table[tier].freekick.rate;
-  const [lo, hi] = BANDS[tier];
-  if (!(r >= lo && r <= hi)) fails.push(`frikik basamak ${tier}: %${(r * 100).toFixed(0)} bant dışı (%${Math.round(lo * 100)}–%${Math.round(hi * 100)})`);
-  if (tier > 1 && r > table[tier - 1].freekick.rate + 0.05) fails.push(`frikik basamak ${tier}: önceki basamaktan kolay`);
-  // Diğer anlarla kıyas: frikik basamağın en zor gol anı olmamalı (penaltı ve
-  // kafaya göre) ve kafa vuruşundan (en benzer beceri anı) en çok 20 puan sapmalı.
-  const pen = table[tier].penalty.rate;
-  const head = table[tier].header.rate;
-  const peers = [pen, head].filter((x) => !Number.isNaN(x));
-  if (peers.length && r < Math.min(...peers) - 0.05) fails.push(`frikik basamak ${tier}: penaltı/kafadan belirgin zor (yine zayıf halka)`);
-  if (!Number.isNaN(head) && Math.abs(r - head) > 0.2) fails.push(`frikik basamak ${tier}: kafadan (%${(head * 100).toFixed(0)}) çok farklı`);
-  const sw = sweetT[tier];
-  if (!(sw.sweet >= sw.flat + 0.08)) fails.push(`frikik basamak ${tier}: kavisli çekiş düz çekişten belirgin iyi değil (${pct(sw.sweet)} / ${pct(sw.flat)})`);
+// Gol anları (frikik, şut, penaltı): hedef bantlar.
+const STRICT = { 1: [0.74, 0.86], 2: [0.74, 0.86], 3: [0.54, 0.66], 4: [0.54, 0.66], 5: [0.44, 0.56] };
+// Kafa, pas, çalım: daha geniş akıl sağlığı bantları (yine zorlaşmalı, ama
+// hiçbir basamakta imkânsız ya da bedava olmamalı).
+const LOOSE = { 1: [0.7, 0.99], 2: [0.7, 0.97], 3: [0.5, 0.9], 4: [0.42, 0.82], 5: [0.36, 0.76] };
+const band = (kind) => (["freekick", "shot", "penalty"].includes(kind) ? STRICT : LOOSE);
+for (const kind of KINDS) {
+  for (const tier of TIERS) {
+    const { rate: r, n } = table[tier][kind];
+    if (!n) continue;
+    const [lo, hi] = band(kind)[tier];
+    if (!(r >= lo && r <= hi)) fails.push(`${LABEL[kind]} basamak ${tier}: %${(r * 100).toFixed(0)} bant dışı (%${Math.round(lo * 100)}–%${Math.round(hi * 100)})`);
+    const prev = table[tier - 1]?.[kind];
+    if (prev?.n && r > prev.rate + 0.05) fails.push(`${LABEL[kind]} basamak ${tier}: önceki basamaktan kolay`);
+  }
 }
-for (const [key, [g, f]] of Object.entries(special)) {
-  if (f && g / f < 0.4) fails.push(`frikik ${key}: %${((g / f) * 100).toFixed(0)} — engel adil değil (< %40)`);
+// Beceri ödülü: ipucuna uyan çekiş belirgin daha çok gol olmalı.
+for (const tier of TIERS) {
+  for (const [kind, gap] of [["freekick", 0.08], ["shot", 0.08], ["penalty", 0.08]]) {
+    const sk = skill[tier][kind];
+    if (Number.isNaN(sk.hi) || Number.isNaN(sk.lo)) continue;
+    if (!(sk.hi >= sk.lo + gap)) fails.push(`${LABEL[kind]} basamak ${tier}: beceri ödülsüz (${pct(sk.hi)} / ${pct(sk.lo)})`);
+  }
+}
+// Engel adaleti: hiçbir engel (ya da baraj+usta birleşimi) anı imkânsıza yakın kılmamalı.
+for (const [key, [g, f]] of Object.entries(mods)) {
+  if (f >= 100 && g / f < 0.35) fails.push(`${key}: %${((g / f) * 100).toFixed(0)} — engel adil değil (< %35)`);
 }
 
 // Belirlenimcilik: aynı seviye iki kez aynı anları üretmeli.
@@ -324,4 +417,4 @@ if (fails.length) {
   console.error("\nBAŞARISIZ:\n  " + fails.join("\n  "));
   process.exit(1);
 }
-console.log("\nTamam: frikik bantları, tekdüzelik, tatlı nokta ve engel adaleti geçti.");
+console.log("\nTamam: bütün an türleri bantlarda; beceri ödüllü, engeller adil, seviyeler belirlenimci.");

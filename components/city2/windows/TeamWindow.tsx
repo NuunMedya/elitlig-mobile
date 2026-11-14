@@ -21,7 +21,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Redirect } from "expo-router";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { LandmarkIcon, SectionTitle, fmt } from "@/components/city2/shared";
+import { LandmarkIcon, SectionTitle, cardStyle, fmt } from "@/components/city2/shared";
 import { ContributionList, DonateCard, LevelList, TeamTile } from "@/components/city2/Team";
 import { Touchable, refreshControlProps, useRefresh } from "@/components/ui";
 import { fmtPct } from "@/lib/puzzle/city2";
@@ -29,6 +29,7 @@ import { CITY2_EL, CITY2_UI, CITY_UI } from "@/lib/puzzle/cityPalette";
 import { useCity2, useCity2Donate, useCity2Team } from "@/lib/puzzle/useCity2";
 import { useCityNav } from "@/components/city2/game/CityNav";
 import { CityWindow } from "@/components/city2/game/CityWindow";
+import { GameBar } from "@/components/city2/game/CityGameKit";
 import { useAuth } from "@/providers/AuthProvider";
 import { fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
 import { CP } from "@/lib/puzzle/cityGamePalette";
@@ -94,9 +95,7 @@ export function TeamWindow() {
                       {fmt(team.progress)}/{fmt(team.next_cost)}
                     </Text>
                   </View>
-                  <View style={styles.track}>
-                    <View style={[styles.fill, { width: `${Math.round(Math.min(1, team.progress / team.next_cost) * 100)}%` as const }]} />
-                  </View>
+                  <GameBar value={team.progress / team.next_cost} tone="el" height={14} />
                 </View>
               ) : (
                 <Text style={styles.heroMeta} {...textScale.dense}>
@@ -210,7 +209,7 @@ const styles = StyleSheet.create({
   heroStatLabel: { ...type.caption, color: CITY2_UI.panelMuted },
   heroRule: { width: hairline, backgroundColor: CITY2_UI.panelEdge },
   heroNote: { ...type.caption, color: CITY2_UI.panelMuted },
-  landmark: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.xl, backgroundColor: CP.surface1, borderWidth: hairline, borderColor: CP.border },
+  landmark: { ...cardStyle, flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md },
   landmarkTitle: { ...type.h4, color: CP.textPrimary },
   landmarkMeta: { ...type.caption, color: CP.textTertiary },
   intro: { ...type.bodySm, color: CP.textSecondary },

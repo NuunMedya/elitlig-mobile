@@ -37,8 +37,8 @@ import { useCityNav } from "@/components/city2/game/CityNav";
 import { CityWindow } from "@/components/city2/game/CityWindow";
 import { useAuth } from "@/providers/AuthProvider";
 import { fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
-import { CP } from "@/lib/puzzle/cityGamePalette";
-import { GameEmpty, GameError, GameLoading } from "@/components/city2/game/GamePaper";
+import { CG, CP } from "@/lib/puzzle/cityGamePalette";
+import { GameEmpty, GameError, GameLoading, GameStatBar } from "@/components/city2/game/GamePaper";
 import { GlossyButton } from "@/components/city2/game/CityGameKit";
 
 const dateText = (iso: string | null) => {
@@ -120,24 +120,16 @@ export function LadderWindow() {
           refreshControl={<RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />}
         >
           {pr && atTop ? <PrestigeCard prestige={pr} crest={city2.crest} busy={prestige.preview.isPending} onStart={startPrestige} /> : null}
-          <View style={styles.summary}>
-            {city2.crest && (city2.crest.frame || city2.crest.prestige_stars > 0) ? (
-              <>
-                <View style={styles.stat}>
-                  <CrestBadge crest={city2.crest} size={34} />
-                  <Text style={styles.statLabel} numberOfLines={1} {...textScale.dense}>
-                    {city2.crest.prestige_stars > 0 ? `${city2.crest.prestige_stars}. prestij` : "arma"}
-                  </Text>
-                </View>
-                <View style={styles.summaryRule} />
-              </>
-            ) : null}
-            <Stat label="gelişim puanı" value={fmt(city2.dev)} />
-            <View style={styles.summaryRule} />
-            <Stat label="kurulu aşama" value={fmt(city2.stages_built)} />
-            <View style={styles.summaryRule} />
-            <Stat label="güzellik" value={fmt(city2.beauty)} />
-          </View>
+          <GameStatBar
+            items={[
+              ...(city2.crest && (city2.crest.frame || city2.crest.prestige_stars > 0)
+                ? [{ key: "crest", value: "", label: city2.crest.prestige_stars > 0 ? `${city2.crest.prestige_stars}. prestij` : "arma", node: <CrestBadge crest={city2.crest} size={30} /> }]
+                : []),
+              { key: "dev", icon: "trending-up" as const, tint: CG.btn.green.fill[0], value: fmt(city2.dev), label: "gelişim puanı" },
+              { key: "stage", icon: "business" as const, tint: CG.btn.blue.fill[0], value: fmt(city2.stages_built), label: "kurulu aşama" },
+              { key: "beauty", icon: "sparkles" as const, tint: CG.side.marks[0], value: fmt(city2.beauty), label: "güzellik" },
+            ]}
+          />
 
           <View>
             {ladder.steps.map((s, i) => (
@@ -190,19 +182,6 @@ export function LadderWindow() {
         }}
       />
     </CityWindow>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statValue} {...textScale.dense}>
-        {value}
-      </Text>
-      <Text style={styles.statLabel} numberOfLines={1} {...textScale.dense}>
-        {label}
-      </Text>
-    </View>
   );
 }
 
@@ -324,11 +303,6 @@ function HistoryRow({ h, steps }: { h: City2History; steps: City2Step[] }) {
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: layout.screenPadding, paddingTop: space.md, paddingBottom: space.giant * 2, gap: space.lg },
-  summary: { ...cardStyle, flexDirection: "row", alignItems: "center", paddingVertical: space.md },
-  summaryRule: { width: hairline, alignSelf: "stretch", backgroundColor: CP.border },
-  stat: { flex: 1, alignItems: "center", gap: 2 },
-  statValue: { ...type.metricSm, color: CP.textPrimary },
-  statLabel: { ...type.caption, color: CP.textTertiary },
 
   rung: { flexDirection: "row", gap: space.md },
   rail: { width: 36, alignItems: "center" },
@@ -341,7 +315,7 @@ const styles = StyleSheet.create({
   rungTitle: { ...type.h3, color: CP.textPrimary, flex: 1 },
   rungTitleLocked: { color: CP.textSecondary },
   rungMeta: { ...type.caption, color: CP.textTertiary },
-  tagNow: { ...type.micro, fontFamily: fonts.bold, color: CP.brandAccent },
+  tagNow: { ...type.micro, fontFamily: fonts.bold, color: CG.btn.gold.ink, paddingHorizontal: space.sm, paddingVertical: 2, borderRadius: radius.pill, overflow: "hidden", backgroundColor: CG.btn.gold.fill[0], borderWidth: 1.5, borderColor: CG.btn.gold.lip },
   nextBox: { gap: space.md },
   reqs: { gap: 3 },
   reqRow: { flexDirection: "row", alignItems: "flex-start", gap: space.xs },

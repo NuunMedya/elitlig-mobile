@@ -51,7 +51,7 @@ import {
 } from "@/lib/puzzle/city2";
 import { CITY2_EL, CITY2_UI, CITY_UI } from "@/lib/puzzle/cityPalette";
 import { useCity2ElHistory } from "@/lib/puzzle/useCity2";
-import { fonts, hairline, isDark, radius, space, textScale, type } from "@/theme";
+import { fonts, hairline, radius, space, textScale, type } from "@/theme";
 
 import { ElCoin } from "./ElCoin";
 import { BuildingIcon, cardStyle } from "./shared";
@@ -64,7 +64,8 @@ export { ElCoin };
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
 /** Açık kartlarda EL vurgusu. */
-const EL_INK = isDark ? CITY2_EL.inkDark : CITY2_EL.ink;
+/** Parşömen iki temada da açık: EL mürekkebi hep koyu ton. */
+const EL_INK = CITY2_EL.ink;
 
 const signed = (n: number, digits = 0) =>
   n > 0 ? `+${fmtEl(n, digits)}` : n < 0 ? `−${fmtEl(-n, digits)}` : "0";

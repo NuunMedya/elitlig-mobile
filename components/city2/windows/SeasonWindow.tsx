@@ -19,17 +19,17 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Redirect } from "expo-router";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { CrestBadge, RewardTiers, SeasonEndSheet, SeasonHistoryList, SeasonParts, TierMedal } from "@/components/city2/Season";
+import { CrestBadge, SeasonEndSheet, SeasonHistoryList, SeasonParts, TierMedal } from "@/components/city2/Season";
 import { SectionTitle, fmt } from "@/components/city2/shared";
 import { useCityNav } from "@/components/city2/game/CityNav";
 import { CityWindow } from "@/components/city2/game/CityWindow";
 import { refreshControlProps, useRefresh } from "@/components/ui";
-import { estimateTier, seasonLeftText, spanText } from "@/lib/puzzle/city2";
+import { estimateTier, seasonLeftText, spanText, type City2Season } from "@/lib/puzzle/city2";
 import { CITY2_UI, CITY_UI } from "@/lib/puzzle/cityPalette";
 import { useCity2, useCity2Season } from "@/lib/puzzle/useCity2";
 import { useAuth } from "@/providers/AuthProvider";
 import { fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
-import { CP } from "@/lib/puzzle/cityGamePalette";
+import { CG, CP } from "@/lib/puzzle/cityGamePalette";
 import { GameButton, GameEmpty, GameError, GameLoading } from "@/components/city2/game/GamePaper";
 
 const TOP = { x: 0.5, y: 0 } as const;
@@ -87,13 +87,21 @@ export function SeasonWindow() {
               </View>
               {cur ? (
                 <>
-                  <View style={styles.heroScore}>
-                    <Text style={styles.heroValue} {...textScale.dense}>
-                      {fmt(cur.score)}
-                    </Text>
-                    <Text style={styles.heroUnit} {...textScale.dense}>
-                      sezon puanı
-                    </Text>
+                  <View style={styles.heroScoreRow}>
+                    <View style={styles.trophyGlow}>
+                      <TierMedal tier={est?.tier ?? null} size={76} />
+                    </View>
+                    <View style={styles.flex}>
+                      <Text style={styles.heroUnit} {...textScale.dense}>
+                        SEZON PUANI
+                      </Text>
+                      <Text style={styles.heroValue} numberOfLines={1} adjustsFontSizeToFit {...textScale.dense}>
+                        {fmt(cur.score)}
+                      </Text>
+                      <Text style={styles.heroUnit} numberOfLines={1} {...textScale.dense}>
+                        {est ? `${est.title} kupasına gidiyorsun` : "100 puanla kupa yarışına gir"}
+                      </Text>
+                    </View>
                   </View>
                   <View style={styles.heroStats}>
                     <HeroStat value={cur.rank != null ? `${fmt(cur.rank)}.` : "—"} label={cur.rank != null && cur.ranked ? `sıra · ${fmt(cur.ranked)} kişi` : "sıra · 100 puanla"} />
@@ -136,8 +144,8 @@ export function SeasonWindow() {
               </>
             ) : null}
 
-            <SectionTitle title="Sezon sonu dilimleri" />
-            <RewardTiers season={season} />
+            <SectionTitle title="Sezon sonu kupaları" />
+            <TrophyShelf season={season} current={est?.tier ?? null} />
 
             {season.history.length ? (
               <>
@@ -152,6 +160,42 @@ export function SeasonWindow() {
       </ScrollView>
       <SeasonEndSheet city2={city2 ? { ...city2, season: season ?? city2.season } : undefined} />
     </CityWindow>
+  );
+}
+
+/** Kupa rafı: sezon sonu dilimleri tahta rafta yan yana (tahmini dilim parlar). */
+function TrophyShelf({ season, current }: { season: City2Season; current: string | null }) {
+  const min = season.rewards[0]?.min_score ?? 100;
+  return (
+    <View style={styles.shelfWrap}>
+      <View style={styles.shelfRow}>
+        {season.rewards.map((r, i) => {
+          const on = r.tier === current;
+          return (
+            <View key={r.tier} style={[styles.cup, on ? styles.cupOn : null]} accessibilityLabel={`${r.title}: ${i === season.rewards.length - 1 || r.top_pct >= 1 ? `${min} puanı geçen herkes` : `ilk yüzde ${Math.round(r.top_pct * 100)}`}`}>
+              {on ? (
+                <View style={styles.cupTag}>
+                  <Text style={styles.cupTagText} {...textScale.badge}>
+                    SENİN
+                  </Text>
+                </View>
+              ) : null}
+              <TierMedal tier={r.tier} size={on ? 58 : 48} />
+              <Text style={styles.cupTitle} numberOfLines={2} {...textScale.dense}>
+                {r.title}
+              </Text>
+              <Text style={styles.cupMeta} numberOfLines={2} {...textScale.dense}>
+                {i === season.rewards.length - 1 || r.top_pct >= 1 ? `${fmt(min)}+ puan` : `İlk %${Math.round(r.top_pct * 100)}`}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+      <LinearGradient colors={CG.wood} start={TOP} end={BOTTOM} style={styles.shelf} />
+      <Text style={styles.shelfNote} {...textScale.long}>
+        Her dilim rozet, arma çerçevesi ve sezon kupası verir; hepsi görünüştür.
+      </Text>
+    </View>
   );
 }
 
@@ -177,7 +221,8 @@ const styles = StyleSheet.create({
   heroRange: { ...type.bodySm, color: CITY2_UI.panelMuted },
   countdown: { flexDirection: "row", alignItems: "center", gap: space.xxs, paddingHorizontal: space.sm, paddingVertical: space.xxs, borderRadius: radius.pill, backgroundColor: CITY2_UI.panelChip },
   countdownText: { ...type.labelXs, fontFamily: fonts.bold, color: CITY_UI.white },
-  heroScore: { flexDirection: "row", alignItems: "baseline", gap: space.sm },
+  heroScoreRow: { flexDirection: "row", alignItems: "center", gap: space.md },
+  trophyGlow: { padding: 6, borderRadius: radius.pill, backgroundColor: CITY2_UI.panelChip },
   heroValue: { ...type.scoreLg, color: CITY_UI.white },
   heroUnit: { ...type.label, color: CITY2_UI.panelMuted },
   heroStats: { flexDirection: "row", alignItems: "center", paddingVertical: space.sm, borderRadius: radius.lg, backgroundColor: CITY2_UI.panelChip },
@@ -187,5 +232,15 @@ const styles = StyleSheet.create({
   heroRule: { width: hairline, alignSelf: "stretch", backgroundColor: CITY2_UI.panelEdge },
   estLine: { flexDirection: "row", alignItems: "center", gap: space.xs },
   heroNote: { ...type.bodySm, color: CITY2_UI.panelMuted },
+  shelfWrap: { gap: 0 },
+  shelfRow: { flexDirection: "row", alignItems: "flex-end", gap: space.xs, paddingHorizontal: space.xs },
+  cup: { flex: 1, alignItems: "center", gap: 3, paddingTop: space.md, paddingBottom: space.sm, paddingHorizontal: space.xxs, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
+  cupOn: { backgroundColor: CP.brandDim },
+  cupTag: { paddingHorizontal: space.xs, paddingVertical: 1, borderRadius: radius.pill, backgroundColor: CP.brandAccent, marginBottom: 2 },
+  cupTagText: { ...type.micro, fontFamily: fonts.bold, color: CP.textOnBrand },
+  cupTitle: { ...type.labelSm, fontFamily: fonts.bold, color: CP.textPrimary, textAlign: "center" },
+  cupMeta: { ...type.caption, color: CP.textTertiary, textAlign: "center" },
+  shelf: { height: 14, borderRadius: radius.sm, borderWidth: 2, borderColor: CG.woodEdge },
+  shelfNote: { ...type.caption, color: CP.textTertiary, textAlign: "center", marginTop: space.xs },
   intro: { ...type.bodySm, color: CP.textSecondary },
 });

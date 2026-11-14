@@ -40,7 +40,7 @@ import {
   type City2YouthPlayer,
 } from "@/lib/puzzle/city2";
 import { CITY2_EL, CITY2_UI, CITY_UI } from "@/lib/puzzle/cityPalette";
-import { fonts, hairline, isDark, radius, space, textScale, type } from "@/theme";
+import { fonts, hairline, radius, space, textScale, type } from "@/theme";
 
 import { ElCoin, useCountUp } from "./ElitLira";
 import { BuildingIcon, cardStyle } from "./shared";
@@ -50,7 +50,8 @@ import { GlossyButton } from "./game/CityGameKit";
 
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
-const EL_INK = isDark ? CITY2_EL.inkDark : CITY2_EL.ink;
+/** Parşömen iki temada da açık: EL mürekkebi hep koyu ton. */
+const EL_INK = CITY2_EL.ink;
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
