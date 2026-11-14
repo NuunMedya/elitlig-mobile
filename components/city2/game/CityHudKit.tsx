@@ -29,6 +29,8 @@ import { BOTTOM, GameBar, GlossyButton, TOP, fmt } from "./CityGameKit";
 type IconName = keyof typeof Ionicons.glyphMap;
 const shadowText = { textShadowColor: CG.inkShadow, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 2 };
 const fmtShort = (n: number) => (n >= 100_000 ? `${Math.floor(n / 1000)}B` : fmt(n));
+/** Jeton hapı "+" da taşır: 10.000 ve üstü kısaltılır ("12,5B") ki dar telefonda kesilmesin. */
+const fmtCoins = (n: number) => (n >= 10_000 ? `${(Math.floor(n / 100) / 10).toLocaleString("tr-TR")}B` : fmt(n));
 
 /* ═══════════════════════ ÜST ŞERİT ═══════════════════════ */
 
@@ -77,9 +79,9 @@ export const CityTopBar = React.memo(function CityTopBar({
         <Ionicons name="chevron-back" size={22} color={GH.white} />
       </Touchable>
       <View style={styles.pills}>
-        <Pill icon={{ name: "star", tint: GH.star }} value={stars != null ? fmtShort(stars) : "–"} label={`${stars ?? 0} yıldız. Yıldız cüzdanını aç`} onPress={onStars} plus />
-        {el != null ? <Pill coin value={fmtEl(el)} label={`${fmtEl(el)} Elit Lira. Kasayı aç`} onPress={onEl} dot={elDot} wide /> : null}
-        <Pill icon={{ name: "disc", tint: GH.coin }} value={coins != null ? fmtShort(coins) : "–"} label={`${coins ?? 0} jeton. Jeton mağazasını aç`} onPress={onCoins} plus />
+        <Pill icon={{ name: "star", tint: GH.star }} value={stars != null ? fmtShort(stars) : "–"} label={`${stars ?? 0} yıldız. Yıldız cüzdanını aç`} onPress={onStars} plus wide />
+        {el != null ? <Pill coin value={fmtEl(el)} label={`${fmtEl(el)} Elit Lira. Kasayı aç`} onPress={onEl} dot={elDot} /> : null}
+        <Pill icon={{ name: "disc", tint: GH.coin }} value={coins != null ? fmtCoins(coins) : "–"} label={`${coins ?? 0} jeton. Jeton mağazasını aç`} onPress={onCoins} plus wide />
       </View>
       <Touchable onPress={onSettings} hitSlop={touchSlop(42)} accessibilityRole="button" accessibilityLabel="Şehir ayarları" style={styles.roundSm} haptic="light">
         <Ionicons name="settings-sharp" size={20} color={GH.white} />
