@@ -41,6 +41,7 @@ export const HUB = {
     quiz: ["#2F80ED", "#1A4FA6"] as [string, string],
     puzzle: ["#FF7AA8", "#C2185B"] as [string, string],
     arcade: ["#FFB547", "#E8650C"] as [string, string],
+    endless: ["#FFE45C", "#E09A00"] as [string, string],
     league: ["#22B33A", "#147A26"] as [string, string],
     board: ["#8B5CF6", "#5A2FC8"] as [string, string],
     career: ["#14B8C4", "#0A7A85"] as [string, string],
