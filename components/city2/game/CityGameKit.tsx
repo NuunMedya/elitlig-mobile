@@ -176,7 +176,7 @@ export function Ribbon({ title, tone = "red", style }: { title: string; tone?: "
       </Svg>
       <LinearGradient colors={fill} start={TOP} end={BOTTOM} style={styles.ribbonBody}>
         <View style={styles.ribbonShine} />
-        <Text style={styles.ribbonText} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
+        <Text style={[styles.ribbonText, title.length > 12 ? styles.ribbonTextLong : null]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} {...textScale.badge}>
           {upper(title)}
         </Text>
       </LinearGradient>
@@ -448,6 +448,8 @@ const styles = StyleSheet.create({
   ribbonBody: { height: 38, borderRadius: radius.sm, paddingHorizontal: space.xl, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: CG.white, overflow: "hidden" },
   ribbonShine: { position: "absolute", top: 3, left: 8, right: 8, height: 10, borderRadius: radius.pill, backgroundColor: CG.shine },
   ribbonText: { ...type.h2, fontFamily: fonts.bold, color: CG.ribbonInk, letterSpacing: 1, ...shadowText },
+  /** Uzun başlık ("Kariyer merdiveni"): her platformda sığsın diye baştan küçük. */
+  ribbonTextLong: { ...type.labelSm, fontFamily: fonts.bold, letterSpacing: 0.3 },
 
   close: { width: 40, height: 44 },
   closeLip: { position: "absolute", top: 4, left: 0, width: 40, height: 40, borderRadius: radius.pill, backgroundColor: CG.btn.red.lip },
