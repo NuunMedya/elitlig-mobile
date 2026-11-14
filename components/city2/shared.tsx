@@ -81,12 +81,15 @@ export function StarCost({ value, muted, style }: { value: number; muted?: boole
   );
 }
 
+const BAR_FILL = { go: CG.barGreen, brand: CG.league } as const;
+
 /** Parlak ilerleme çubuğu (0..1): oyun yeşili ya da lig moru. */
 export function Bar({ value, tone = "go", style }: { value: number; tone?: "go" | "brand"; style?: StyleProp<ViewStyle> }) {
   const v = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+  const fill = BAR_FILL[tone];
   return (
     <View style={[styles.track, style]}>
-      {v > 0 ? <LinearGradient colors={tone === "brand" ? CG.league : CG.barGreen} start={LEFT} end={RIGHT} style={[styles.fill, { width: `${Math.max(4, Math.round(v * 100))}%` as const }]} /> : null}
+      {v > 0 ? <LinearGradient colors={fill} start={LEFT} end={RIGHT} style={[styles.fill, { width: `${Math.max(4, Math.round(v * 100))}%` as const }]} /> : null}
     </View>
   );
 }

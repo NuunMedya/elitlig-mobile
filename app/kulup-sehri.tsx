@@ -24,6 +24,12 @@
  *     aşamalar. Başarıda sahne inşaat (`build`) ya da kıvılcım (`pop`) oynatır.
  *     Boş zemine dokunmak (`tapEmpty`) ya da kapat düğmesi paneli kapatır.
  *
+ *   · Bütün ayrıntılar (lig ilerlemesi, sembol yapılar, EL defteri ve "nasıl
+ *     işler", günlük ödül, jeton mağazası, yıldız rehberi, maç yıldızı)
+ *     karartılmış şehrin üstünde ahşap çerçeveli oyun penceresi olarak açılır
+ *     (game/GameModal, game/GamePaper · GameSheet); başka ekranlarla ortak
+ *     olanlar `variant="game"` ile.
+ *
  * Derin bağlantılar: ?bina=<anahtar> o binanın panelini, ?pencere=<sezon|…>
  * o pencereyi şehrin üstünde açar.
  *
@@ -722,7 +728,7 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
           </View>
         </GameModal>
 
-        {/* ── Ayrıntı pencereleri (alttan) ── */}
+        {/* ── Ayrıntı pencereleri: hepsi şehrin üstünde ahşap çerçeveli oyun penceresi ── */}
         <LeagueWindow
           visible={leagueSheet}
           onClose={() => setLeagueSheet(false)}

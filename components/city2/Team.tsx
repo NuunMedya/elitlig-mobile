@@ -2,7 +2,6 @@
  * KULÜP ŞEHRİ 2.0 · FAZ 5 — TAKIM TESİSİ parçaları.
  *
  *   · TeamTile — tesis karosu.
- *   · TeamCityCard — şehir ekranındaki kısa kart (takımı olmayan üyede çizilmez).
  *   · DonateCard — yıldız ve EL bağışı: günlük tavan, kalan hak, puan karşılığı.
  *   · LevelList — 10 seviyenin bedeli ve adı.
  *   · ContributionList — takım içi katkı sıralaması.
@@ -16,7 +15,7 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { Avatar, Stepper, Touchable } from "@/components/ui";
-import { fmtEl, fmtPct, type City2TeamContribution, type City2TeamFacility, type City2TeamSummary, type City2TeamToday } from "@/lib/puzzle/city2";
+import { fmtEl, fmtPct, type City2TeamContribution, type City2TeamFacility, type City2TeamToday } from "@/lib/puzzle/city2";
 import { CITY2_TEAM, CITY_UI } from "@/lib/puzzle/cityPalette";
 import { fonts, hairline, radius, space, textScale, type } from "@/theme";
 
@@ -42,27 +41,6 @@ export function TeamTile({ size = 44, level }: { size?: number; level?: number }
         </View>
       ) : null}
     </View>
-  );
-}
-
-/** Şehir ekranı: takım tesisi kısa kartı. */
-export function TeamCityCard({ team, onPress }: { team: City2TeamSummary; onPress: () => void }) {
-  const maxed = team.next_cost == null || team.level >= team.max_level;
-  return (
-    <Touchable onPress={onPress} feedback="card" style={styles.cityCard} accessibilityRole="button" accessibilityLabel={`Takım tesisi, ${team.name}, ${team.level}. seviye`}>
-      <TeamTile size={44} level={team.level} />
-      <View style={styles.flex}>
-        <Text style={styles.cityTitle} numberOfLines={1} {...textScale.dense}>
-          {team.name}
-        </Text>
-        <Text style={styles.cityMeta} numberOfLines={1} {...textScale.dense}>
-          {team.level > 0 ? `${team.level}. seviye · ${team.stage_title ?? "Tesis"}` : "Tesis henüz kurulmadı"}
-          {team.el_pct > 0 ? ` · EL +${fmtPct(team.el_pct)}` : ""}
-        </Text>
-        {!maxed ? <Bar value={team.next_cost ? team.progress / team.next_cost : 0} style={styles.cityBar} /> : null}
-      </View>
-      <Ionicons name="chevron-forward" size={18} color={CP.textTertiary} />
-    </Touchable>
   );
 }
 

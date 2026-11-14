@@ -9,13 +9,12 @@
  *
  *   AcademyHero        kadro yuvası, yeni oyuncu sayacı, transfer geliri
  *   OfferCard          teklif kartı (kabul onaylı, ret)
- *   PlayerRow          kadro satırı
+ *   PlayerCard         kadro ızgarasındaki oyuncu kartı (güç, mevki, değer)
  *   PlayerSheet        oyuncu penceresi: değer eğrisi, sakatlık, eylemler
  *   EffectsCard        akademi / üniversite / sağlık / scout etkileri
  *   HistoryCard        satılan, ayrılan, emekli olan oyuncular
  *   AcademyInfoSheet   kurallar + "adım kullanılmasın" anahtarı
  *   TransferCelebration teklif kabulünden sonra kutlama ve EL sayacı
- *   AcademyCityCard    şehir ekranındaki giriş kartı (bekleyen teklif rozeti)
  *   AcademyBuildingSection akademi binası penceresindeki bölüm
  */
 
@@ -42,7 +41,8 @@ import {
 import { CITY2_EL, CITY2_UI, CITY_UI } from "@/lib/puzzle/cityPalette";
 import { fonts, hairline, radius, space, textScale, type } from "@/theme";
 
-import { ElCoin, useCountUp } from "./ElitLira";
+import { ElCoin } from "./ElCoin";
+import { useCountUp } from "./ElitLira";
 import { BuildingIcon, cardStyle } from "./shared";
 import { CP } from "@/lib/puzzle/cityGamePalette";
 import { GameButton, GameSheet } from "./game/GamePaper";
@@ -325,50 +325,6 @@ export function OfferCard({
 }
 
 /* ═════════════════════════ KADRO ═════════════════════════ */
-
-export function PlayerRow({ p, now, onPress }: { p: City2YouthPlayer; now: number; onPress: () => void }) {
-  const trend = trendOf(p);
-  const quality = p.pot > 0 ? Math.min(1, p.ovr / p.pot) : 0;
-  return (
-    <Touchable onPress={onPress} feedback="card" haptic="selection" style={styles.row} accessibilityRole="button" accessibilityLabel={`${p.name}, ${p.age} yaş, değer ${p.value} EL`}>
-      <PlayerAvatar p={p} />
-      <View style={styles.rowTexts}>
-        <Text style={styles.rowName} numberOfLines={1} {...textScale.dense}>
-          {p.name}
-        </Text>
-        <Text style={styles.rowSub} numberOfLines={1} {...textScale.dense}>
-          {[`${p.age} yaş`, p.pos_title].filter(Boolean).join(" · ")}
-        </Text>
-        <View style={styles.rowPills}>
-          {p.source === "self" ? <Pill icon="person" label="Sen" tone="el" /> : null}
-          {p.injured ? <Pill icon="medkit" label={`Sakat · ${untilText(p.injury_until, now) ?? "az sonra"}`} tone="danger" /> : null}
-          {p.offers.length ? <Pill icon="mail-unread" label="Teklif var" tone="brand" /> : null}
-          {p.listed ? <Pill icon="pricetag" label="Listede" /> : null}
-          {!p.injured && !p.offers.length && !p.listed ? (
-            <View style={styles.trend}>
-              <Ionicons name={trend.icon} size={13} color={trend.color} />
-              <Text style={[styles.trendText, { color: trend.color }]} {...textScale.badge}>
-                {trend.label}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-      </View>
-      <View style={styles.rowRight}>
-        <ElAmount value={p.value} />
-        <View style={styles.quality}>
-          <Text style={styles.qualityText} {...textScale.badge}>
-            {p.ovr}
-            <Text style={styles.qualityPot}>/{p.pot}</Text>
-          </Text>
-        </View>
-        <View style={styles.qualityTrack}>
-          <View style={[styles.qualityFill, { width: `${Math.round(quality * 100)}%` as const }]} />
-        </View>
-      </View>
-    </Touchable>
-  );
-}
 
 /**
  * Oyuncu KARTI (kadro ızgarası, iki sütun): mevki renginde parlak üst kısım,
@@ -968,41 +924,6 @@ export function TransferCelebration({ result, playerName, onClose }: { result: (
 }
 
 /* ═════════════════════════ ŞEHİR EKRANI ═════════════════════════ */
-
-export function AcademyCityCard({ academy, onPress }: { academy: City2Academy; onPress: () => void }) {
-  const now = useNow(60_000);
-  const offers = academy.offers.length;
-  const injured = academy.squad.filter((p) => p.injured).length;
-  const sub = [
-    `${academy.slots.used}/${academy.slots.max} oyuncu`,
-    academy.paused ? "bina kurulana dek yeni oyuncu gelmez" : academy.slots.full ? "kadro dolu" : academy.next_intake_at ? `yeni oyuncu ${untilText(academy.next_intake_at, now) ?? "az sonra"}` : null,
-    injured ? `${injured} sakat` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  return (
-    <Touchable onPress={onPress} feedback="card" haptic="selection" style={styles.cityCard} accessibilityRole="button" accessibilityLabel={`Altyapı akademisi, ${sub}${offers ? `, ${offers} bekleyen teklif` : ""}`}>
-      <BuildingIcon buildingKey="akademi" icon="school" size={44} />
-      <View style={styles.flex}>
-        <Text style={styles.cityTitle} numberOfLines={1} {...textScale.dense}>
-          Altyapı akademisi
-        </Text>
-        <Text style={styles.citySub} numberOfLines={2} {...textScale.dense}>
-          {sub}
-        </Text>
-      </View>
-      {offers ? (
-        <View style={styles.offerBadge}>
-          <Ionicons name="mail-unread" size={12} color={CP.textOnBrand} />
-          <Text style={styles.offerBadgeText} {...textScale.badge}>
-            {offers} teklif
-          </Text>
-        </View>
-      ) : null}
-      <Ionicons name="chevron-forward" size={18} color={CP.textTertiary} />
-    </Touchable>
-  );
-}
 
 /** Akademi binası penceresi: kuruluysa özet + "Akademiye git"; değilse ne yapacağını anlatır. */
 export function AcademyBuildingSection({ academy, onOpen }: { academy: City2Academy | null; onOpen: () => void }) {

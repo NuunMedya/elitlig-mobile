@@ -1,7 +1,6 @@
 /**
  * KULÜP ŞEHRİ 2.0 · FAZ 5 — ŞEHİR ZİYARETİ parçaları.
  *
- *   · VisitEntryCard — şehir ekranında "Şehirleri gez" girişi (aldığın alkış).
  *   · VisitCityRow — ziyaret listesindeki şehir satırı.
  *   · VisitPrivacyRow — "Şehrimi ziyarete kapat" anahtarı (ziyaret alanında).
  *
@@ -13,38 +12,13 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { StyleSheet, Text, View } from "react-native";
 
 import { Avatar, Toggle, Touchable } from "@/components/ui";
-import type { City2VisitCard, City2VisitSummary } from "@/lib/puzzle/city2";
+import type { City2VisitCard } from "@/lib/puzzle/city2";
 import { seasonTierStyle } from "@/lib/puzzle/cityPalette";
 import { fonts, hairline, radius, space, textScale, type } from "@/theme";
 
 import { PrestigeStars } from "./Season";
 import { cardStyle, fmt } from "./shared";
 import { CP } from "@/lib/puzzle/cityGamePalette";
-
-export function VisitEntryCard({ visit, onPress }: { visit: City2VisitSummary; onPress: () => void }) {
-  return (
-    <Touchable onPress={onPress} feedback="card" style={styles.entry} accessibilityRole="button" accessibilityLabel={`Şehirleri gez. Şehrin ${visit.applause} alkış aldı`}>
-      <View style={styles.entryIcon}>
-        <Ionicons name="compass" size={22} color={CP.brandAccent} />
-      </View>
-      <View style={styles.flex}>
-        <Text style={styles.entryTitle} {...textScale.dense}>
-          Şehirleri gez
-        </Text>
-        <Text style={styles.entryMeta} numberOfLines={1} {...textScale.dense}>
-          {visit.closed ? "Şehrin ziyarete kapalı" : `Şehrin ${fmt(visit.applause)} alkış aldı${visit.today ? ` · bugün ${fmt(visit.today)}` : ""}`}
-        </Text>
-      </View>
-      <View style={styles.entryChip}>
-        <Ionicons name="hand-left" size={12} color={CP.brandAccent} />
-        <Text style={styles.entryChipText} {...textScale.badge}>
-          Alkışla
-        </Text>
-      </View>
-      <Ionicons name="chevron-forward" size={18} color={CP.textTertiary} />
-    </Touchable>
-  );
-}
 
 export function VisitCityRow({ c, onPress }: { c: City2VisitCard; onPress: () => void }) {
   const framed = Boolean(c.frame);

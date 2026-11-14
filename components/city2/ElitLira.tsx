@@ -8,10 +8,11 @@
  *
  *   ElWallet        bakiye, saatlik/günlük NET, depolar, gider, "Topla"
  *   FormCard        gerçek hayat form çarpanı (oyuncu yolu önde, taraftar yolu)
- *   IncomeSection   bina penceresinde "Gelir": akışlar, depo, yükseltmeler
- *   SupportSection  destek binasının etkisi ("Halısaha gelirine +%4")
  *   ElHistorySheet  sayfalı EL defteri + günlük özet
  *   ElHowSheet      EL nedir (sunucunun `intro` metni)
+ *
+ * Şehrin içinde çizilir: renkler parşömen paletinden (cityGamePalette `CP`),
+ * pencereler ahşap çerçeveli oyun penceresi (game/GamePaper · GameSheet).
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -36,7 +37,6 @@ import {
   incomeOf,
   untilText,
   type City2Building,
-  type City2Care,
   type City2CollectResult,
   type City2El,
   type City2ElDay,
@@ -45,9 +45,6 @@ import {
   type City2FormPath,
   type City2IncomeBuilding,
   type City2LedgerItem,
-  type City2SupportEffect,
-  type City2Upgrade,
-  type City2UpgradeKind,
 } from "@/lib/puzzle/city2";
 import { CITY2_EL, CITY2_UI, CITY_UI } from "@/lib/puzzle/cityPalette";
 import { useCity2ElHistory } from "@/lib/puzzle/useCity2";
@@ -59,7 +56,6 @@ import { CP } from "@/lib/puzzle/cityGamePalette";
 import { GameButton, GameSheet } from "./game/GamePaper";
 import { GlossyButton } from "./game/CityGameKit";
 
-export { ElCoin };
 
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
@@ -75,21 +71,6 @@ const clamp01 = (v: number) =>
 /* ───────────────────────── Küçük parçalar ───────────────────────── */
 
 /** EL jetonu: camgöbeği daire, içinde "EL". */
-/** "120 EL" — açık zeminde EL tutarı. */
-export function ElCost({ value, muted }: { value: number; muted?: boolean }) {
-  return (
-    <View style={styles.cost}>
-      <ElCoin size={16} />
-      <Text
-        style={[styles.costText, muted ? styles.muted : null]}
-        {...textScale.badge}
-      >
-        {fmtEl(value)}
-      </Text>
-    </View>
-  );
-}
-
 /** Hedefe yumuşakça sayan sayı (bir kez; "hareketi azalt"ta doğrudan). */
 export function useCountUp(target: number) {
   const reduce = useReduceMotion();
@@ -687,375 +668,6 @@ export function FormCard({ form }: { form: City2Form }) {
 
 /* ═════════════════════════ BİNA: GELİR ═════════════════════════ */
 
-function UpgradeCard({
-  kind,
-  u,
-  stage,
-  balance,
-  busy,
-  onBuy,
-}: {
-  kind: City2UpgradeKind;
-  u: City2Upgrade;
-  stage: number;
-  balance: number;
-  busy: boolean;
-  onBuy: () => void;
-}) {
-  const next = u.next;
-  const blocked = next?.blocked ?? null;
-  const short = next ? Math.max(0, next.cost - balance) : 0;
-  const off = !next || Boolean(blocked) || short > 0 || busy;
-  return (
-    <View style={styles.upg}>
-      <View style={styles.upgHead}>
-        <View style={styles.upgIcon}>
-          <Ionicons
-            name={kind === "depo" ? "archive" : "people"}
-            size={18}
-            color={EL_INK}
-          />
-        </View>
-        <View style={styles.flex}>
-          <Text style={styles.upgTitle} {...textScale.dense}>
-            {u.title}
-          </Text>
-          <Text style={styles.upgText} numberOfLines={2} {...textScale.long}>
-            {u.text}
-          </Text>
-        </View>
-        <View
-          style={styles.levels}
-          accessibilityLabel={`Seviye ${u.level}/${u.max}`}
-        >
-          {Array.from({ length: u.max }, (_, i) => (
-            <View
-              key={i}
-              style={[styles.levelPip, i < u.level ? styles.levelOn : null]}
-            />
-          ))}
-        </View>
-      </View>
-      {next ? (
-        <View style={styles.upgFoot}>
-          <Text style={styles.upgMeta} numberOfLines={2} {...textScale.dense}>
-            {blocked
-              ? `${blocked.stage ?? next.min_stage}. aşamada açılır (şu an ${stage}. aşama)`
-              : short > 0
-                ? `${next.level}. seviye · ${fmtEl(short)} EL eksik`
-                : `${next.level}. seviye · aşama ${next.min_stage}+`}
-          </Text>
-          <Touchable
-            onPress={onBuy}
-            disabled={off}
-            haptic="success"
-            style={[styles.upgBtn, off ? styles.upgBtnOff : null]}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: off }}
-            accessibilityLabel={`${u.title} ${next.level}. seviye, ${next.cost} EL`}
-          >
-            {busy ? (
-              <ActivityIndicator size="small" color={CITY_UI.white} />
-            ) : (
-              <>
-                {blocked ? (
-                  <Ionicons
-                    name="lock-closed"
-                    size={12}
-                    color={CP.textTertiary}
-                  />
-                ) : (
-                  <ElCoin size={16} />
-                )}
-                <Text
-                  style={[styles.upgBtnText, off ? styles.upgBtnTextOff : null]}
-                  {...textScale.badge}
-                >
-                  {fmtEl(next.cost)}
-                </Text>
-              </>
-            )}
-          </Touchable>
-        </View>
-      ) : (
-        <View style={styles.upgFoot}>
-          <Ionicons name="checkmark-circle" size={15} color={CP.win} />
-          <Text style={styles.upgMeta} {...textScale.dense}>
-            En üst seviye
-          </Text>
-        </View>
-      )}
-    </View>
-  );
-}
-
-/** Şehir 2.1: tesis bakımı satırı (durum çubuğu + "Bakım yap · N★"). */
-export function CareRow({ care, stars, busy, caring, onCare }: { care: City2Care; stars: number; busy: boolean; caring: boolean; onCare: () => void }) {
-  const short = care.cost > stars;
-  const tone = care.pct < care.floor + 15 ? CP.danger : care.low ? CP.warn : CP.win;
-  return (
-    <View style={styles.care}>
-      <View style={styles.careHead}>
-        <Ionicons name="build" size={15} color={tone} />
-        <Text style={styles.careTitle} {...textScale.dense}>
-          Tesis bakımı
-        </Text>
-        <Text style={[styles.carePct, { color: tone }]} {...textScale.badge}>
-          %{care.pct}
-        </Text>
-      </View>
-      <View style={styles.incTrack}>
-        <View style={[styles.careFill, { width: `${Math.max(2, Math.min(100, care.pct))}%` as const, backgroundColor: tone }]} />
-      </View>
-      <Text style={styles.incMeta} {...textScale.long}>
-        Gelir bakım yüzdesiyle çarpılır. Bakım günde %{care.decay_per_day} düşer, en çok %{care.floor}'e iner. Yıldız kazanmak için oyna, bakımı yıldızla yap.
-      </Text>
-      <GameButton
-        label={care.cost > 0 ? (short ? `Bakım · ${care.cost - stars} yıldız eksik` : `Bakım yap · ${care.cost} yıldız`) : "Tesis bakımlı"}
-        icon="construct-outline"
-        size="sm"
-        variant={care.cost > 0 && !short ? "primary" : "secondary"}
-        disabled={care.cost < 1 || short || busy}
-        loading={caring}
-        onPress={onCare}
-      />
-    </View>
-  );
-}
-
-export function IncomeSection({
-  b,
-  inc,
-  el,
-  busy,
-  collecting,
-  onCollect,
-  onUpgrade,
-  stars = 0,
-  caring = false,
-  onCare,
-}: {
-  b: City2Building;
-  inc: City2IncomeBuilding;
-  el: City2El | null;
-  busy: boolean;
-  collecting: boolean;
-  onCollect: () => void;
-  onUpgrade: (kind: City2UpgradeKind) => void;
-  /** Şehir 2.1: kullanılabilir yıldız ve bakım eylemi (eski sunucuda bakım yok). */
-  stars?: number;
-  caring?: boolean;
-  onCare?: () => void;
-}) {
-  const producing = b.open && inc.per_hour > 0;
-  const until = untilText(inc.full_at);
-  const gain =
-    inc.next_stage_per_hour != null
-      ? inc.next_stage_per_hour - inc.per_hour
-      : null;
-  const breakdown = [
-    `taban ${fmtRate(inc.base_per_hour)}`,
-    inc.boost_pct ? `destek +${fmtPct(inc.boost_pct)}` : null,
-    inc.staff_pct ? `personel +${fmtPct(inc.staff_pct)}` : null,
-    inc.prestige_pct ? `prestij +${fmtPct(inc.prestige_pct)}` : null,
-    inc.team_pct ? `takım tesisi +${fmtPct(inc.team_pct)}` : null,
-    `form ${fmtMult(inc.multiplier)}`,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  return (
-    <View style={styles.block}>
-      <View style={styles.blockHead}>
-        <Text style={styles.blockTitle} {...textScale.dense}>
-          Gelir
-        </Text>
-        {producing ? (
-          <View style={styles.cost}>
-            <ElCoin size={16} />
-            <Text style={styles.rateBig} {...textScale.badge}>
-              {fmtRate(inc.per_hour)} EL/saat
-            </Text>
-          </View>
-        ) : null}
-      </View>
-
-      {producing ? (
-        <View style={styles.incCard}>
-          <View style={styles.incStoreHead}>
-            <Text style={styles.incStore} {...textScale.dense}>
-              Depoda {fmtEl(inc.stored)} / {fmtEl(inc.cap)} EL
-            </Text>
-            <Text
-              style={[styles.incStoreMeta, inc.full ? styles.warnText : null]}
-              numberOfLines={1}
-              {...textScale.badge}
-            >
-              {inc.full
-                ? "Dolu · üretim durdu"
-                : until
-                  ? `${until} sonra dolar`
-                  : `${inc.cap_hours} saatlik depo`}
-            </Text>
-          </View>
-          <View style={styles.incTrack}>
-            <View
-              style={[
-                styles.incFill,
-                {
-                  width:
-                    `${Math.round(clamp01(inc.cap ? inc.stored_exact / inc.cap : 0) * 100)}%` as const,
-                },
-                inc.full ? styles.incFillFull : null,
-              ]}
-            />
-          </View>
-          {inc.text ? (
-            <Text style={styles.incText} {...textScale.long}>
-              {inc.text}
-            </Text>
-          ) : null}
-          <GameButton
-            label={
-              inc.collectable > 0
-                ? `Topla · +${fmtEl(inc.collectable)} EL`
-                : "Depo boş"
-            }
-            icon="arrow-down-circle-outline"
-            size="sm"
-            variant={inc.collectable > 0 ? "primary" : "secondary"}
-            disabled={inc.collectable < 1 || busy}
-            loading={collecting}
-            onPress={onCollect}
-          />
-          <Text style={styles.incMeta} {...textScale.dense}>
-            Günde {fmtEl(inc.per_day)} EL · {breakdown}
-            {inc.care && inc.care.pct < 100 ? ` · bakım %${inc.care.pct}` : ""}
-          </Text>
-          {inc.care && onCare ? <CareRow care={inc.care} stars={stars} busy={busy} caring={caring} onCare={onCare} /> : null}
-        </View>
-      ) : (
-        <View style={styles.incCard}>
-          <Text style={styles.incText} {...textScale.long}>
-            {b.open
-              ? "Bu bina henüz gelir getirmiyor: ilk gelir akışı aşama kurulunca başlar."
-              : "Bina açılınca işletme geliri üretmeye başlar."}
-          </Text>
-        </View>
-      )}
-
-      <View style={styles.streams}>
-        {inc.streams.map((s) => (
-          <View key={s.key} style={styles.stream}>
-            <Ionicons
-              name={s.active ? "checkmark-circle" : "lock-closed-outline"}
-              size={16}
-              color={s.active ? CP.win : CP.textTertiary}
-            />
-            <Text
-              style={[styles.streamTitle, s.active ? null : styles.muted]}
-              numberOfLines={1}
-              {...textScale.dense}
-            >
-              {s.title}
-            </Text>
-            <Text
-              style={[styles.streamValue, s.active ? null : styles.muted]}
-              {...textScale.badge}
-            >
-              {s.active
-                ? `${fmtRate(s.base_per_hour)}/sa`
-                : `${s.from}. aşamada`}
-            </Text>
-          </View>
-        ))}
-      </View>
-
-      {inc.next_stage_per_hour != null && gain != null ? (
-        <View style={styles.nextInc}>
-          <Ionicons name="arrow-up-circle" size={16} color={EL_INK} />
-          <Text style={styles.nextIncText} {...textScale.dense}>
-            {b.stage === 0 || !producing ? "Kurulunca" : "Sıradaki aşamayla"}{" "}
-            {fmtRate(inc.next_stage_per_hour)} EL/saat
-            {producing && gain > 0 ? ` (+${fmtRate(gain)})` : ""}
-          </Text>
-        </View>
-      ) : null}
-
-      {b.open ? (
-        <>
-          <Text style={styles.subTitle} {...textScale.dense}>
-            Yükseltmeler · EL ile
-          </Text>
-          {(["depo", "personel"] as const).map((k) =>
-            inc.upgrades[k] ? (
-              <UpgradeCard
-                key={k}
-                kind={k}
-                u={inc.upgrades[k] as City2Upgrade}
-                stage={b.stage}
-                balance={el?.balance ?? 0}
-                busy={busy}
-                onBuy={() => onUpgrade(k)}
-              />
-            ) : null,
-          )}
-          {el ? (
-            <Text style={styles.incMeta} {...textScale.dense}>
-              Kasada {fmtEl(el.balance)} EL · yükseltmeler isteğe bağlıdır,
-              yıldızla ilerlemeyi değiştirmez.
-            </Text>
-          ) : null}
-        </>
-      ) : null}
-    </View>
-  );
-}
-
-export function SupportSection({
-  effect,
-  open,
-  titles,
-}: {
-  effect: City2SupportEffect;
-  open: boolean;
-  titles: Record<string, string>;
-}) {
-  const income = effect.kind === "income";
-  const pct = `${income ? "+" : "−"}${fmtPct(effect.pct)}`;
-  const names = (effect.targets ?? []).map((k) => titles[k] ?? k);
-  const where = !income
-    ? "Giderlerden"
-    : names.length
-      ? `${names.length > 1 ? `${names.slice(0, -1).join(", ")} ve ${names.at(-1)}` : names[0]} gelirine`
-      : "Bütün gelirlere";
-  const now = `${where} ${pct}`;
-  return (
-    <View style={styles.block}>
-      <Text style={styles.blockTitle} {...textScale.dense}>
-        Etki
-      </Text>
-      <View style={styles.effect}>
-        <View style={styles.upgIcon}>
-          <Ionicons
-            name={income ? "trending-up" : "trending-down"}
-            size={18}
-            color={EL_INK}
-          />
-        </View>
-        <View style={styles.flex}>
-          <Text style={styles.effectNow} {...textScale.dense}>
-            {now}
-            {open ? "" : " · bina kapalı"}
-          </Text>
-          <Text style={styles.upgText} {...textScale.long}>
-            {effect.text}
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
-}
-
 /* ═════════════════════════ GEÇMİŞ ═════════════════════════ */
 
 const KIND_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -1460,26 +1072,6 @@ export function ElHowSheet({
         </View>
       ) : null}
     </GameSheet>
-  );
-}
-
-/** Bina satırındaki küçük EL özeti ("2,4/sa" ya da "DOLU"). */
-export function IncomeChip({ inc }: { inc: City2IncomeBuilding }) {
-  if (inc.per_hour <= 0) return null;
-  return (
-    <View style={[styles.chip, inc.full ? styles.chipFull : null]}>
-      {inc.full ? (
-        <Ionicons name="alert-circle" size={11} color={CP.warn} />
-      ) : (
-        <ElCoin size={13} />
-      )}
-      <Text
-        style={[styles.chipText, inc.full ? styles.warnText : null]}
-        {...textScale.badge}
-      >
-        {inc.full ? "DEPO DOLU" : `${fmtRate(inc.per_hour)}/sa`}
-      </Text>
-    </View>
   );
 }
 

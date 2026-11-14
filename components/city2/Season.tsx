@@ -4,9 +4,8 @@
  *   · TierMedal / CrestBadge — sezon dilimi madalyası; arma (sezon çerçevesi +
  *     prestij yıldızları). Yıldızlar Ionicons ile çizilir (sunucunun `stars_text`
  *     karakteri gösterilmez).
- *   · SeasonCard — şehir ekranındaki sezon kartı (sezon öncesi de).
  *   · SeasonParts — puan kırılımı (kalem, birim, tavan, puan).
- *   · SeasonHistoryList, RewardTiers — geçmiş sezonlar ve dilim kuralları.
+ *   · SeasonHistoryList — geçmiş sezonlar.
  *   · SeasonEndSheet — yeni bir sezon dilimi verildiğinde bir kez (cihazda
  *     "görüldü" olarak saklanır).
  *
@@ -19,14 +18,10 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 
-import { Reveal, Touchable } from "@/components/ui";
+import { Reveal } from "@/components/ui";
 import {
   SEASON_TIER_TITLE,
-  estimateTier,
-  seasonLeftText,
-  spanText,
   type City2Crest,
-  type City2Season,
   type City2SeasonHistory,
   type City2SeasonPart,
   type City2State,
@@ -118,82 +113,6 @@ export function CrestChip({ crest }: { crest: City2Crest }) {
 
 /* ───────────────────────── Şehir ekranındaki kart ───────────────────────── */
 
-export function SeasonCard({ season, crest, onPress }: { season: City2Season; crest: City2Crest | null | undefined; onPress: () => void }) {
-  const cur = season.current;
-  const est = estimateTier(season);
-  const last = season.history[0] ?? null;
-  if (!cur) {
-    const pre = season.preseason;
-    return (
-      <Touchable onPress={onPress} feedback="card" style={styles.card} accessibilityRole="button" accessibilityLabel={`${pre?.text ?? "Sezon yakında"}. Sezon ayrıntıları`}>
-        <View style={styles.cardHead}>
-          <TierMedal tier={null} size={44} icon="calendar" />
-          <View style={styles.flex}>
-            <Text style={styles.over} {...textScale.badge}>
-              SEZON
-            </Text>
-            <Text style={styles.cardTitle} numberOfLines={1} {...textScale.dense}>
-              {pre?.text ?? "Sezon yakında başlıyor"}
-            </Text>
-            {pre ? (
-              <Text style={styles.cardMeta} numberOfLines={1} {...textScale.dense}>
-                {pre.season.range_text}
-                {spanText(pre.starts_at) ? ` · ${spanText(pre.starts_at)} sonra` : ""}
-              </Text>
-            ) : null}
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={CP.textTertiary} />
-        </View>
-      </Touchable>
-    );
-  }
-  const maxScore = cur.parts.reduce((a, p) => a + p.max_points, 0);
-  return (
-    <Touchable onPress={onPress} feedback="card" style={styles.card} accessibilityRole="button" accessibilityLabel={`${cur.title}, ${fmt(cur.score)} puan, ${seasonLeftText(cur)} kaldı. Sezon ayrıntıları`}>
-      <View style={styles.cardHead}>
-        <TierMedal tier={est?.tier ?? null} size={44} />
-        <View style={styles.flex}>
-          <Text style={styles.over} {...textScale.badge}>
-            {`${cur.title.toLocaleUpperCase("tr-TR")} · ${cur.name.toLocaleUpperCase("tr-TR")}`}
-          </Text>
-          <View style={styles.scoreLine}>
-            <Text style={styles.score} {...textScale.dense}>
-              {fmt(cur.score)}
-            </Text>
-            <Text style={styles.scoreUnit} {...textScale.dense}>
-              sezon puanı
-            </Text>
-          </View>
-        </View>
-        <View style={styles.left}>
-          <Text style={styles.leftValue} {...textScale.badge}>
-            {seasonLeftText(cur)}
-          </Text>
-          <Text style={styles.leftLabel} {...textScale.badge}>
-            kaldı
-          </Text>
-        </View>
-      </View>
-      <Bar value={maxScore ? cur.score / maxScore : 0} tone="brand" />
-      <View style={styles.cardFoot}>
-        <Text style={styles.cardMeta} numberOfLines={1} {...textScale.dense}>
-          {cur.rank != null && cur.ranked ? `${fmt(cur.rank)}. sıra · ${fmt(cur.ranked)} kişi` : "Sıraya girmek için 100 puan"}
-          {est ? ` · tahmini ${est.title.toLocaleLowerCase("tr-TR")}` : ""}
-        </Text>
-        {crest?.frame || last?.badge ? (
-          <View style={styles.badgeChip}>
-            <TierMedal tier={crest?.frame ?? last?.tier ?? null} size={18} icon="ribbon" />
-            <Text style={styles.badgeChipText} numberOfLines={1} {...textScale.badge}>
-              {`${season.badges.length} rozet`}
-            </Text>
-          </View>
-        ) : null}
-        <Ionicons name="chevron-forward" size={16} color={CP.textTertiary} />
-      </View>
-    </Touchable>
-  );
-}
-
 /* ───────────────────────── Puan kırılımı ───────────────────────── */
 
 const GROUPS: { key: string; title: string; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -260,28 +179,6 @@ export function SeasonParts({ parts }: { parts: City2SeasonPart[] }) {
 }
 
 /* ───────────────────────── Dilimler ve geçmiş ───────────────────────── */
-
-export function RewardTiers({ season }: { season: City2Season }) {
-  const min = season.rewards[0]?.min_score ?? 100;
-  return (
-    <View style={styles.tiers}>
-      {season.rewards.map((r, i) => (
-        <View key={r.tier} style={styles.tierRow}>
-          <TierMedal tier={r.tier} size={34} />
-          <View style={styles.flex}>
-            <Text style={styles.tierTitle} {...textScale.dense}>
-              {r.title}
-            </Text>
-            <Text style={styles.tierMeta} numberOfLines={2} {...textScale.dense}>
-              {i === season.rewards.length - 1 || r.top_pct >= 1 ? `${fmt(min)} puanı geçen herkes` : `İlk %${Math.round(r.top_pct * 100)}`}
-              {" · rozet, arma çerçevesi ve sezon kupası"}
-            </Text>
-          </View>
-        </View>
-      ))}
-    </View>
-  );
-}
 
 export function SeasonHistoryList({ history }: { history: City2SeasonHistory[] }) {
   return (

@@ -7,6 +7,9 @@
  *   · CityDock      alttaki tahta raf: yan karolar + ortada büyük bağlam düğmesi
  *   · BuildingStrip "Binalar" rafı: yatay bina kartları (seviye, rozet, kilit)
  *   · PlaceBar      sembol yapı yerleştirirken alttaki şerit
+ *   · VisitTopBar   ZİYARET (başka üyenin şehri, salt okunur): geri · sahibin
+ *                   arması, adı, il/takım · bütün şehri göster; altında lig
+ *                   şeridi ve güzellik / gelişim / alkış hapları
  *
  * Renkler oyun dünyasınındır: lib/puzzle/cityGamePalette.ts (+ GameHome paleti).
  */
@@ -146,6 +149,81 @@ export const LeagueRibbon = React.memo(function LeagueRibbon({ ladder, onPress, 
       <Touchable onPress={onHome} hitSlop={touchSlop(38)} haptic="light" accessibilityRole="button" accessibilityLabel="Bütün şehri göster" style={styles.homeBtn}>
         <Ionicons name="scan" size={18} color={GH.white} />
       </Touchable>
+    </View>
+  );
+});
+
+/* ═══════════════════════ ZİYARET HUD'U ═══════════════════════ */
+
+export const VisitTopBar = React.memo(function VisitTopBar({
+  onBack,
+  onHome,
+  onInfo,
+  name,
+  sub,
+  crest,
+  prestige,
+  league,
+  stats,
+}: {
+  onBack: () => void;
+  onHome: () => void;
+  onInfo: () => void;
+  name: string;
+  sub: string;
+  /** Sahibin arması (sezon çerçevesi + prestij yıldızları). */
+  crest: React.ReactNode;
+  prestige: React.ReactNode;
+  league: { label: string; title: string; no: number };
+  stats: { key: string; icon: IconName; tint: string; value: string; label: string }[];
+}) {
+  return (
+    <View style={styles.visitWrap}>
+      <View style={styles.topRow}>
+        <Touchable onPress={onBack} hitSlop={touchSlop(42)} accessibilityRole="button" accessibilityLabel="Ziyaretten çık" style={styles.roundSm} haptic="light">
+          <Ionicons name="chevron-back" size={22} color={GH.white} />
+        </Touchable>
+        <Touchable onPress={onInfo} haptic="selection" style={styles.flex} accessibilityRole="button" accessibilityLabel={`${name}, ${sub}. Şehir bilgisini aç`}>
+          <LinearGradient colors={CG.wood} start={TOP} end={BOTTOM} style={styles.plate}>
+            {crest}
+            <View style={styles.flex}>
+              <View style={styles.plateLine}>
+                <Text style={styles.plateName} numberOfLines={1} {...textScale.badge}>
+                  {name}
+                </Text>
+                {prestige}
+              </View>
+              <Text style={styles.plateSub} numberOfLines={1} {...textScale.badge}>
+                {sub}
+              </Text>
+            </View>
+            <Ionicons name="information-circle" size={20} color={CG.paper[0]} />
+          </LinearGradient>
+        </Touchable>
+        <Touchable onPress={onHome} hitSlop={touchSlop(42)} haptic="light" accessibilityRole="button" accessibilityLabel="Bütün şehri göster" style={styles.roundSm}>
+          <Ionicons name="scan" size={18} color={GH.white} />
+        </Touchable>
+      </View>
+      <View style={styles.leagueRow}>
+        <LinearGradient colors={CG.league} start={TOP} end={BOTTOM} style={[styles.leagueFill, styles.visitLeague]} accessibilityLabel={`Lig ${league.label}: ${league.title}`}>
+          <LinearGradient colors={CG.rivet} start={TOP} end={BOTTOM} style={styles.shield}>
+            <Text style={styles.shieldText} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
+              {league.label}
+            </Text>
+          </LinearGradient>
+          <Text style={[styles.leagueTitle, styles.flex]} numberOfLines={1} {...textScale.badge}>
+            {league.title}
+          </Text>
+          <Text style={styles.count} {...textScale.badge}>
+            {`LİG ${league.no}`}
+          </Text>
+        </LinearGradient>
+      </View>
+      <View style={styles.pills}>
+        {stats.map((st) => (
+          <Pill key={st.key} icon={{ name: st.icon, tint: st.tint }} value={st.value} label={`${st.value} ${st.label}`} />
+        ))}
+      </View>
     </View>
   );
 });
@@ -309,6 +387,12 @@ const styles = StyleSheet.create({
   ready: { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: space.sm, height: 26, borderRadius: radius.pill, backgroundColor: CG.btn.green.fill[1], borderWidth: 2, borderColor: GH.white },
   readyText: { ...type.micro, fontFamily: fonts.bold, color: GH.white, letterSpacing: 0.6 },
   count: { ...type.label, fontFamily: fonts.bold, color: GH.white, ...shadowText },
+  visitWrap: { gap: space.sm },
+  plate: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 46, paddingVertical: 4, paddingLeft: 4, paddingRight: space.sm, borderRadius: radius.pill, borderWidth: 2, borderColor: CG.woodEdge },
+  plateLine: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  plateName: { ...type.label, fontFamily: fonts.bold, color: GH.white, flexShrink: 1, ...shadowText },
+  plateSub: { ...type.micro, fontFamily: fonts.bold, color: CG.paper[1] },
+  visitLeague: { flex: 1, height: 40 },
   homeBtn: { width: 42, height: 42, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: GH.pill, borderWidth: 2, borderColor: GH.pillEdge },
 
   dock: { paddingTop: space.md, paddingHorizontal: space.sm },
