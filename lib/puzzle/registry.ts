@@ -3,15 +3,19 @@
  * Yeni oyun: components/puzzle/games/<anahtar>/ + buraya bir satır +
  * sunucu rules.js GAMES/BOOSTERS.
  */
+import { kadroModule } from "@/components/puzzle/games/kadro";
 import { kantinModule } from "@/components/puzzle/games/kantin";
 import { kariyerModule } from "@/components/puzzle/games/kariyer";
+import { penaltiModule } from "@/components/puzzle/games/penalti";
+import { savunmaModule } from "@/components/puzzle/games/savunma";
 import { soyunmaModule } from "@/components/puzzle/games/soyunma";
 import { ucleModule } from "@/components/puzzle/games/ucle";
 import { ucluModule } from "@/components/puzzle/games/uclu";
 
 import type { PuzzleGameKey, PuzzleGameModule } from "./types";
 
-export const PUZZLE_GAMES: readonly PuzzleGameModule[] = [kariyerModule, ucluModule, ucleModule, soyunmaModule, kantinModule];
+// Bölümlü arcade (sözleşme §1): Penaltı, Kadro Koşusu, Savunma Hattı — WebView bölüm modu.
+export const PUZZLE_GAMES: readonly PuzzleGameModule[] = [kariyerModule, ucluModule, ucleModule, soyunmaModule, kantinModule, penaltiModule, kadroModule, savunmaModule];
 
 const BY_KEY = new Map<string, PuzzleGameModule>(PUZZLE_GAMES.map((m) => [m.key, m]));
 
