@@ -52,7 +52,7 @@ export function GameModal({
           accessibilityViewIsModal
           style={{ width: Math.min(420, width - space.lg * 2), maxHeight: height - 110, opacity: pop, transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) }] }}
         >
-          <WoodFrame ribbon={title} onClose={onClose} surface={surface} innerStyle={styles.inner}>
+          <WoodFrame ribbon={title || null} onClose={onClose} surface={surface} innerStyle={title ? styles.inner : styles.innerPlain}>
             <ScrollView style={styles.scroll} contentContainerStyle={styles.body} bounces={false} showsVerticalScrollIndicator={false}>
               {children}
             </ScrollView>
@@ -67,6 +67,7 @@ export function GameModal({
 const styles = StyleSheet.create({
   dim: { flex: 1, backgroundColor: CG.dim, alignItems: "center", justifyContent: "center", paddingVertical: space.xl },
   inner: { paddingTop: space.xl },
+  innerPlain: { paddingTop: space.xxl },
   scroll: { flexGrow: 0, flexShrink: 1 },
   body: { paddingHorizontal: space.md, paddingBottom: space.md, gap: space.sm },
   foot: { paddingHorizontal: space.md, paddingBottom: space.md, gap: space.sm },

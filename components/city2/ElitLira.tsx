@@ -26,13 +26,7 @@ import {
   View,
 } from "react-native";
 
-import { ChunkyButton } from "@/components/city/ChunkyButton";
-import {
-  BottomSheet,
-  Button,
-  Touchable,
-  useReduceMotion,
-} from "@/components/ui";
+import { Touchable, useReduceMotion } from "@/components/ui";
 import {
   firstFullAt,
   fmtEl,
@@ -57,18 +51,15 @@ import {
 } from "@/lib/puzzle/city2";
 import { CITY2_EL, CITY2_UI, CITY_UI } from "@/lib/puzzle/cityPalette";
 import { useCity2ElHistory } from "@/lib/puzzle/useCity2";
-import {
-  colors,
-  fonts,
-  hairline,
-  isDark,
-  radius,
-  space,
-  textScale,
-  type,
-} from "@/theme";
+import { fonts, hairline, isDark, radius, space, textScale, type } from "@/theme";
 
+import { ElCoin } from "./ElCoin";
 import { BuildingIcon, cardStyle } from "./shared";
+import { CP } from "@/lib/puzzle/cityGamePalette";
+import { GameButton, GameSheet } from "./game/GamePaper";
+import { GlossyButton } from "./game/CityGameKit";
+
+export { ElCoin };
 
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
@@ -83,24 +74,6 @@ const clamp01 = (v: number) =>
 /* ───────────────────────── Küçük parçalar ───────────────────────── */
 
 /** EL jetonu: camgöbeği daire, içinde "EL". */
-export function ElCoin({ size = 20 }: { size?: number }) {
-  return (
-    <LinearGradient
-      colors={CITY2_EL.coin}
-      start={TOP}
-      end={BOTTOM}
-      style={[styles.coin, { width: size, height: size }]}
-    >
-      <Text
-        style={[size >= 36 ? styles.coinTextLg : styles.coinText]}
-        {...textScale.badge}
-      >
-        EL
-      </Text>
-    </LinearGradient>
-  );
-}
-
 /** "120 EL" — açık zeminde EL tutarı. */
 export function ElCost({ value, muted }: { value: number; muted?: boolean }) {
   return (
@@ -419,7 +392,7 @@ export function ElWallet({
 
       <View>
         <CollectBurst result={result} burstKey={burstKey} />
-        <ChunkyButton
+        <GlossyButton
           label={
             collecting
               ? "TOPLANIYOR…"
@@ -529,7 +502,7 @@ function PartRow({ p }: { p: City2FormPart }) {
       <Ionicons
         name={PART_ICON[p.key] ?? "ellipse"}
         size={15}
-        color={full ? colors.win : colors.textTertiary}
+        color={full ? CP.win : CP.textTertiary}
       />
       <View style={styles.partTexts}>
         <View style={styles.partHead}>
@@ -606,7 +579,7 @@ export function FormCard({ form }: { form: City2Form }) {
   const player = form.player.available;
   const main: City2FormPath = player ? form.player : form.fan;
   const none = form.path === "none";
-  const tone = none || form.multiplier < 1 ? colors.warn : colors.win;
+  const tone = none || form.multiplier < 1 ? CP.warn : CP.win;
   const showHeadline = player && !form.tip.startsWith(form.headline);
   return (
     <View style={styles.form}>
@@ -615,7 +588,7 @@ export function FormCard({ form }: { form: City2Form }) {
           <Ionicons
             name={player ? "football" : "megaphone"}
             size={20}
-            color={colors.brandAccent}
+            color={CP.brandAccent}
           />
         </View>
         <View style={styles.flex}>
@@ -643,7 +616,7 @@ export function FormCard({ form }: { form: City2Form }) {
 
       {none ? (
         <View style={styles.noneBox}>
-          <Ionicons name="pause-circle" size={18} color={colors.warn} />
+          <Ionicons name="pause-circle" size={18} color={CP.warn} />
           <Text style={styles.noneText} {...textScale.long}>
             Son {form.days} günde gerçek hayatta etkinlik yok: gelirin taban{" "}
             {fmtMult(form.min)} ile üretiliyor.
@@ -662,7 +635,7 @@ export function FormCard({ form }: { form: City2Form }) {
       </View>
 
       <View style={styles.tip}>
-        <Ionicons name="trending-up" size={16} color={colors.brandAccent} />
+        <Ionicons name="trending-up" size={16} color={CP.brandAccent} />
         <Text style={styles.tipText} {...textScale.long}>
           {form.tip}
         </Text>
@@ -681,7 +654,7 @@ export function FormCard({ form }: { form: City2Form }) {
             <Ionicons
               name="megaphone-outline"
               size={15}
-              color={colors.textTertiary}
+              color={CP.textTertiary}
             />
             <Text style={styles.fanText} numberOfLines={1} {...textScale.dense}>
               Taraftar yolu {fmtMult(form.fan.multiplier)} · tavan{" "}
@@ -691,7 +664,7 @@ export function FormCard({ form }: { form: City2Form }) {
             <Ionicons
               name={fanOpen ? "chevron-up" : "chevron-down"}
               size={16}
-              color={colors.textTertiary}
+              color={CP.textTertiary}
             />
           </Touchable>
           {fanOpen ? (
@@ -788,7 +761,7 @@ function UpgradeCard({
                   <Ionicons
                     name="lock-closed"
                     size={12}
-                    color={colors.textTertiary}
+                    color={CP.textTertiary}
                   />
                 ) : (
                   <ElCoin size={16} />
@@ -805,7 +778,7 @@ function UpgradeCard({
         </View>
       ) : (
         <View style={styles.upgFoot}>
-          <Ionicons name="checkmark-circle" size={15} color={colors.win} />
+          <Ionicons name="checkmark-circle" size={15} color={CP.win} />
           <Text style={styles.upgMeta} {...textScale.dense}>
             En üst seviye
           </Text>
@@ -818,7 +791,7 @@ function UpgradeCard({
 /** Şehir 2.1: tesis bakımı satırı (durum çubuğu + "Bakım yap · N★"). */
 export function CareRow({ care, stars, busy, caring, onCare }: { care: City2Care; stars: number; busy: boolean; caring: boolean; onCare: () => void }) {
   const short = care.cost > stars;
-  const tone = care.pct < care.floor + 15 ? colors.danger : care.low ? colors.warn : colors.win;
+  const tone = care.pct < care.floor + 15 ? CP.danger : care.low ? CP.warn : CP.win;
   return (
     <View style={styles.care}>
       <View style={styles.careHead}>
@@ -836,7 +809,7 @@ export function CareRow({ care, stars, busy, caring, onCare }: { care: City2Care
       <Text style={styles.incMeta} {...textScale.long}>
         Gelir bakım yüzdesiyle çarpılır. Bakım günde %{care.decay_per_day} düşer, en çok %{care.floor}'e iner. Yıldız kazanmak için oyna, bakımı yıldızla yap.
       </Text>
-      <Button
+      <GameButton
         label={care.cost > 0 ? (short ? `Bakım · ${care.cost - stars} yıldız eksik` : `Bakım yap · ${care.cost} yıldız`) : "Tesis bakımlı"}
         icon="construct-outline"
         size="sm"
@@ -940,7 +913,7 @@ export function IncomeSection({
               {inc.text}
             </Text>
           ) : null}
-          <Button
+          <GameButton
             label={
               inc.collectable > 0
                 ? `Topla · +${fmtEl(inc.collectable)} EL`
@@ -975,7 +948,7 @@ export function IncomeSection({
             <Ionicons
               name={s.active ? "checkmark-circle" : "lock-closed-outline"}
               size={16}
-              color={s.active ? colors.win : colors.textTertiary}
+              color={s.active ? CP.win : CP.textTertiary}
             />
             <Text
               style={[styles.streamTitle, s.active ? null : styles.muted]}
@@ -1162,7 +1135,7 @@ function LedgerRow({ i, last }: { i: City2LedgerItem; last?: boolean }) {
         <Ionicons
           name={KIND_ICON[i.kind] ?? "ellipse"}
           size={17}
-          color={plus ? EL_INK : colors.textSecondary}
+          color={plus ? EL_INK : CP.textSecondary}
         />
       </View>
       <View style={styles.flex}>
@@ -1290,7 +1263,7 @@ export function ElHistorySheet({
   }, [items]);
   const first = q.data?.pages[0];
   return (
-    <BottomSheet
+    <GameSheet
       visible={visible}
       onClose={onClose}
       title="EL geçmişi"
@@ -1320,7 +1293,7 @@ export function ElHistorySheet({
           Hareketler
         </Text>
         {q.isLoading ? (
-          <ActivityIndicator color={colors.textTertiary} />
+          <ActivityIndicator color={CP.textTertiary} />
         ) : q.isError ? (
           <Text style={styles.incText} {...textScale.long}>
             Geçmiş şu an yüklenemedi. Biraz sonra yeniden dene.
@@ -1353,7 +1326,7 @@ export function ElHistorySheet({
           ))
         )}
         {q.hasNextPage ? (
-          <Button
+          <GameButton
             label="Daha eski hareketler"
             icon="chevron-down"
             variant="secondary"
@@ -1363,7 +1336,7 @@ export function ElHistorySheet({
           />
         ) : null}
       </View>
-    </BottomSheet>
+    </GameSheet>
   );
 }
 
@@ -1454,7 +1427,7 @@ export function ElHowSheet({
       ]
     : [];
   return (
-    <BottomSheet
+    <GameSheet
       visible={visible}
       onClose={onClose}
       title="Elit Lira nedir?"
@@ -1485,7 +1458,7 @@ export function ElHowSheet({
           ))}
         </View>
       ) : null}
-    </BottomSheet>
+    </GameSheet>
   );
 }
 
@@ -1495,7 +1468,7 @@ export function IncomeChip({ inc }: { inc: City2IncomeBuilding }) {
   return (
     <View style={[styles.chip, inc.full ? styles.chipFull : null]}>
       {inc.full ? (
-        <Ionicons name="alert-circle" size={11} color={colors.warn} />
+        <Ionicons name="alert-circle" size={11} color={CP.warn} />
       ) : (
         <ElCoin size={13} />
       )}
@@ -1511,9 +1484,9 @@ export function IncomeChip({ inc }: { inc: City2IncomeBuilding }) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  muted: { color: colors.textTertiary },
+  muted: { color: CP.textTertiary },
   plus: { color: EL_INK },
-  warnText: { color: colors.warn },
+  warnText: { color: CP.warn },
   coin: {
     borderRadius: radius.pill,
     alignItems: "center",
@@ -1529,7 +1502,7 @@ const styles = StyleSheet.create({
   },
   coinTextLg: { ...type.label, fontFamily: fonts.bold, color: CITY_UI.white },
   cost: { flexDirection: "row", alignItems: "center", gap: 4 },
-  costText: { ...type.numSmStrong, color: colors.textPrimary },
+  costText: { ...type.numSmStrong, color: CP.textPrimary },
 
   wallet: {
     borderRadius: radius.xxl,
@@ -1638,37 +1611,37 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.brandDim,
+    backgroundColor: CP.brandDim,
   },
-  formOver: { ...type.overline, color: colors.textTertiary },
-  formTitle: { ...type.h3, color: colors.textPrimary },
+  formOver: { ...type.overline, color: CP.textTertiary },
+  formTitle: { ...type.h3, color: CP.textPrimary },
   formMult: { alignItems: "flex-end" },
   formMultText: { ...type.scoreSm, fontFamily: fonts.bold },
-  formMultSub: { ...type.micro, color: colors.textTertiary, letterSpacing: 0 },
+  formMultSub: { ...type.micro, color: CP.textTertiary, letterSpacing: 0 },
   formHeadline: {
     ...type.bodySm,
     fontFamily: fonts.semibold,
-    color: colors.textPrimary,
+    color: CP.textPrimary,
   },
   gauge: {
     height: 10,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface3,
+    backgroundColor: CP.surface3,
     overflow: "hidden",
   },
   gaugeFill: {
     height: 10,
     borderRadius: radius.pill,
-    backgroundColor: colors.win,
+    backgroundColor: CP.win,
   },
-  gaugeLow: { backgroundColor: colors.warn },
+  gaugeLow: { backgroundColor: CP.warn },
   gaugeTick: {
     position: "absolute",
     top: 0,
     bottom: 0,
     width: 2,
     marginLeft: -1,
-    backgroundColor: colors.surface1,
+    backgroundColor: CP.surface1,
   },
   gaugeCap: {
     position: "absolute",
@@ -1676,44 +1649,44 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: 3,
     marginLeft: -1,
-    backgroundColor: colors.textTertiary,
+    backgroundColor: CP.textTertiary,
   },
   gaugeScale: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginTop: space.xxs,
   },
-  gaugeText: { ...type.micro, color: colors.textTertiary, letterSpacing: 0 },
+  gaugeText: { ...type.micro, color: CP.textTertiary, letterSpacing: 0 },
   noneBox: {
     flexDirection: "row",
     gap: space.sm,
     alignItems: "flex-start",
     padding: space.md,
     borderRadius: radius.lg,
-    backgroundColor: colors.warnDim,
+    backgroundColor: CP.warnDim,
   },
-  noneText: { ...type.bodySm, color: colors.textPrimary, flex: 1 },
+  noneText: { ...type.bodySm, color: CP.textPrimary, flex: 1 },
   parts: { gap: space.sm },
   part: { flexDirection: "row", alignItems: "center", gap: space.sm },
   partTexts: { flex: 1, gap: 3 },
   partHead: { flexDirection: "row", alignItems: "baseline", gap: space.xs },
-  partLabel: { ...type.bodySm, color: colors.textPrimary, flex: 1 },
-  partHave: { ...type.caption, color: colors.textTertiary },
+  partLabel: { ...type.bodySm, color: CP.textPrimary, flex: 1 },
+  partHave: { ...type.caption, color: CP.textTertiary },
   partTrack: {
     height: 5,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface3,
+    backgroundColor: CP.surface3,
     overflow: "hidden",
   },
   partFill: {
     height: 5,
     borderRadius: radius.pill,
-    backgroundColor: colors.brandAccent,
+    backgroundColor: CP.brandAccent,
   },
-  partFillFull: { backgroundColor: colors.win },
+  partFillFull: { backgroundColor: CP.win },
   partValue: {
     ...type.numSmStrong,
-    color: colors.textPrimary,
+    color: CP.textPrimary,
     minWidth: 40,
     textAlign: "right",
   },
@@ -1723,9 +1696,9 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     padding: space.md,
     borderRadius: radius.lg,
-    backgroundColor: colors.brandDim,
+    backgroundColor: CP.brandDim,
   },
-  tipText: { ...type.bodySm, color: colors.textPrimary, flex: 1 },
+  tipText: { ...type.bodySm, color: CP.textPrimary, flex: 1 },
   fanRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1733,9 +1706,9 @@ const styles = StyleSheet.create({
     minHeight: 36,
     borderRadius: radius.md,
   },
-  fanText: { ...type.caption, color: colors.textSecondary, flex: 1 },
+  fanText: { ...type.caption, color: CP.textSecondary, flex: 1 },
   fanParts: { gap: space.sm, paddingTop: space.xs },
-  fanLead: { ...type.caption, color: colors.textTertiary },
+  fanLead: { ...type.caption, color: CP.textTertiary },
 
   block: { gap: space.sm },
   blockHead: {
@@ -1743,8 +1716,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  blockTitle: { ...type.h3, color: colors.textPrimary },
-  subTitle: { ...type.label, color: colors.textSecondary, marginTop: space.xs },
+  blockTitle: { ...type.h3, color: CP.textPrimary },
+  subTitle: { ...type.label, color: CP.textSecondary, marginTop: space.xs },
   rateBig: { ...type.label, fontFamily: fonts.bold, color: EL_INK },
   incCard: { ...cardStyle, padding: space.md, gap: space.sm },
   incStoreHead: {
@@ -1753,23 +1726,23 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: space.sm,
   },
-  incStore: { ...type.labelSm, color: colors.textPrimary },
-  incStoreMeta: { ...type.caption, color: colors.textTertiary, flexShrink: 1 },
+  incStore: { ...type.labelSm, color: CP.textPrimary },
+  incStoreMeta: { ...type.caption, color: CP.textTertiary, flexShrink: 1 },
   incTrack: {
     height: 8,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface3,
+    backgroundColor: CP.surface3,
     overflow: "hidden",
   },
   incFill: { height: 8, borderRadius: radius.pill, backgroundColor: EL_INK },
-  care: { gap: space.xs, paddingTop: space.sm, marginTop: space.xs, borderTopWidth: hairline, borderTopColor: colors.border },
+  care: { gap: space.xs, paddingTop: space.sm, marginTop: space.xs, borderTopWidth: hairline, borderTopColor: CP.border },
   careHead: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  careTitle: { ...type.labelSm, color: colors.textPrimary, flex: 1 },
+  careTitle: { ...type.labelSm, color: CP.textPrimary, flex: 1 },
   carePct: { ...type.numSmStrong },
   careFill: { height: 8, borderRadius: radius.pill },
-  incFillFull: { backgroundColor: colors.warn },
-  incText: { ...type.bodySm, color: colors.textSecondary },
-  incMeta: { ...type.caption, color: colors.textTertiary },
+  incFillFull: { backgroundColor: CP.warn },
+  incText: { ...type.bodySm, color: CP.textSecondary },
+  incMeta: { ...type.caption, color: CP.textTertiary },
   streams: { gap: 2 },
   stream: {
     flexDirection: "row",
@@ -1778,15 +1751,15 @@ const styles = StyleSheet.create({
     minHeight: 34,
     paddingHorizontal: space.sm,
     borderRadius: radius.md,
-    backgroundColor: colors.surface2,
+    backgroundColor: CP.surface2,
   },
-  streamTitle: { ...type.bodySm, color: colors.textPrimary, flex: 1 },
-  streamValue: { ...type.numSmStrong, color: colors.textPrimary },
+  streamTitle: { ...type.bodySm, color: CP.textPrimary, flex: 1 },
+  streamValue: { ...type.numSmStrong, color: CP.textPrimary },
   nextInc: { flexDirection: "row", alignItems: "center", gap: space.xs },
   nextIncText: {
     ...type.caption,
     fontFamily: fonts.semibold,
-    color: colors.textSecondary,
+    color: CP.textSecondary,
   },
   upg: { ...cardStyle, padding: space.md, gap: space.sm },
   upgHead: { flexDirection: "row", alignItems: "center", gap: space.md },
@@ -1796,20 +1769,20 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surface2,
+    backgroundColor: CP.surface2,
   },
-  upgTitle: { ...type.labelSm, color: colors.textPrimary },
-  upgText: { ...type.caption, color: colors.textSecondary },
+  upgTitle: { ...type.labelSm, color: CP.textPrimary },
+  upgText: { ...type.caption, color: CP.textSecondary },
   levels: { flexDirection: "row", gap: 3 },
   levelPip: {
     width: 10,
     height: 10,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface3,
+    backgroundColor: CP.surface3,
   },
   levelOn: { backgroundColor: EL_INK },
   upgFoot: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  upgMeta: { ...type.caption, color: colors.textSecondary, flex: 1 },
+  upgMeta: { ...type.caption, color: CP.textSecondary, flex: 1 },
   upgBtn: {
     minWidth: 80,
     height: 34,
@@ -1821,9 +1794,9 @@ const styles = StyleSheet.create({
     gap: space.xs,
     backgroundColor: CITY2_UI.go,
   },
-  upgBtnOff: { backgroundColor: colors.surface3 },
+  upgBtnOff: { backgroundColor: CP.surface3 },
   upgBtnText: { ...type.label, fontFamily: fonts.bold, color: CITY_UI.white },
-  upgBtnTextOff: { color: colors.textTertiary },
+  upgBtnTextOff: { color: CP.textTertiary },
   effect: {
     ...cardStyle,
     flexDirection: "row",
@@ -1831,7 +1804,7 @@ const styles = StyleSheet.create({
     gap: space.md,
     padding: space.md,
   },
-  effectNow: { ...type.labelSm, color: colors.textPrimary },
+  effectNow: { ...type.labelSm, color: CP.textPrimary },
 
   history: { gap: space.md, paddingBottom: space.lg },
   totals: { flexDirection: "row", gap: space.xs },
@@ -1841,17 +1814,17 @@ const styles = StyleSheet.create({
     gap: 2,
     paddingVertical: space.sm,
     borderRadius: radius.lg,
-    backgroundColor: colors.surface2,
+    backgroundColor: CP.surface2,
   },
-  totalLabel: { ...type.micro, color: colors.textTertiary, letterSpacing: 0 },
+  totalLabel: { ...type.micro, color: CP.textTertiary, letterSpacing: 0 },
   totalValue: {
     ...type.label,
     fontFamily: fonts.bold,
-    color: colors.textPrimary,
+    color: CP.textPrimary,
   },
   days: { gap: space.xs },
   daysHead: { gap: 2 },
-  daysMeta: { ...type.caption, color: colors.textTertiary },
+  daysMeta: { ...type.caption, color: CP.textTertiary },
   daysTable: {
     ...cardStyle,
     paddingVertical: space.xs,
@@ -1860,7 +1833,7 @@ const styles = StyleSheet.create({
   dayRow: { flexDirection: "row", alignItems: "center", minHeight: 30 },
   dayCell: {
     ...type.numSmStrong,
-    color: colors.textSecondary,
+    color: CP.textSecondary,
     flex: 1,
     textAlign: "right",
   },
@@ -1868,17 +1841,17 @@ const styles = StyleSheet.create({
     ...type.bodySm,
     flex: 1.6,
     textAlign: "left",
-    color: colors.textPrimary,
+    color: CP.textPrimary,
   },
-  dayHeadText: { ...type.micro, color: colors.textTertiary, letterSpacing: 0 },
+  dayHeadText: { ...type.micro, color: CP.textTertiary, letterSpacing: 0 },
   group: { gap: space.xs },
   groupHead: {
     flexDirection: "row",
     alignItems: "baseline",
     justifyContent: "space-between",
   },
-  groupTitle: { ...type.labelSm, color: colors.textPrimary },
-  groupNet: { ...type.numSmStrong, color: colors.textSecondary },
+  groupTitle: { ...type.labelSm, color: CP.textPrimary },
+  groupNet: { ...type.numSmStrong, color: CP.textSecondary },
   groupCard: { ...cardStyle, paddingHorizontal: space.md },
   ledger: {
     flexDirection: "row",
@@ -1886,7 +1859,7 @@ const styles = StyleSheet.create({
     gap: space.sm,
     paddingVertical: space.sm,
     borderBottomWidth: hairline,
-    borderBottomColor: colors.separator,
+    borderBottomColor: CP.separator,
   },
   ledgerLast: { borderBottomWidth: 0 },
   ledgerIcon: {
@@ -1895,16 +1868,16 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surface2,
+    backgroundColor: CP.surface2,
   },
-  ledgerIconPlus: { backgroundColor: colors.surface3 },
+  ledgerIconPlus: { backgroundColor: CP.surface3 },
   ledgerTitle: {
     ...type.bodySm,
     fontFamily: fonts.semibold,
-    color: colors.textPrimary,
+    color: CP.textPrimary,
   },
-  ledgerSub: { ...type.caption, color: colors.textTertiary },
-  ledgerAmount: { ...type.numSmStrong, color: colors.textSecondary },
+  ledgerSub: { ...type.caption, color: CP.textTertiary },
+  ledgerAmount: { ...type.numSmStrong, color: CP.textSecondary },
 
   how: { gap: space.lg, paddingBottom: space.lg },
   howLead: { flexDirection: "row", gap: space.md, alignItems: "center" },
@@ -1917,8 +1890,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.s,
     paddingVertical: 2,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface2,
+    backgroundColor: CP.surface2,
   },
-  chipFull: { backgroundColor: colors.warnDim },
-  chipText: { ...type.micro, letterSpacing: 0, color: colors.textSecondary },
+  chipFull: { backgroundColor: CP.warnDim },
+  chipText: { ...type.micro, letterSpacing: 0, color: CP.textSecondary },
 });

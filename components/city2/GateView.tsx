@@ -11,12 +11,13 @@ import { StyleSheet, Text, View } from "react-native";
 import type { ReactNode } from "react";
 import { useState } from "react";
 
-import { BottomSheet, Button, Touchable } from "@/components/ui";
+import { Touchable } from "@/components/ui";
 import type { City2Gate, City2GateCondition, City2GateItem, City2Next, City2RawCond, City2RawGate } from "@/lib/puzzle/city2";
-import { colors, fonts, hairline, radius, space, textScale, type } from "@/theme";
+import { fonts, hairline, radius, space, textScale, type } from "@/theme";
 
 import { Check, StarCost, fmt } from "./shared";
-
+import { CP } from "@/lib/puzzle/cityGamePalette";
+import { GameButton, GameSheet } from "./game/GamePaper";
 
 function CondLine({ c }: { c: City2GateCondition }) {
   return (
@@ -69,7 +70,7 @@ function Option({
   return (
     <View style={[styles.option, ok ? styles.optionOk : null]}>
       <View style={styles.optionHead}>
-        <Ionicons name={ok ? "checkmark-circle" : icon} size={16} color={ok ? colors.win : (tint ?? colors.brandAccent)} />
+        <Ionicons name={ok ? "checkmark-circle" : icon} size={16} color={ok ? CP.win : (tint ?? CP.brandAccent)} />
         {tag ? (
           <Text style={styles.optionTag} numberOfLines={1} {...textScale.badge}>
             {tag}
@@ -101,7 +102,7 @@ export function GateLive({ next, gate, busy, onPay }: { next: City2Next; gate: C
   return (
     <View style={styles.wrap}>
       <View style={styles.head}>
-        <Ionicons name="shield-checkmark" size={16} color={gate.ok ? colors.win : colors.brandAccent} />
+        <Ionicons name="shield-checkmark" size={16} color={gate.ok ? CP.win : CP.brandAccent} />
         <Text style={styles.headTitle} {...textScale.dense}>
           Gerçek hayat kilidi
         </Text>
@@ -123,7 +124,7 @@ export function GateLive({ next, gate, busy, onPay }: { next: City2Next; gate: C
           ))}
         </Option>
         {showStar && star ? (
-          <Option icon="star" title="Yıldızla aç" ok={false} tint={colors.yellowCard}>
+          <Option icon="star" title="Yıldızla aç" ok={false} tint={CP.yellowCard}>
             <StarCost value={cost} />
             <Text style={styles.condText} numberOfLines={2} {...textScale.dense}>
               {missing > 0 ? `${fmt(missing)} yıldız eksik` : "yıldızın yetiyor"}
@@ -146,7 +147,7 @@ export function GateLive({ next, gate, busy, onPay }: { next: City2Next; gate: C
           accessibilityState={{ disabled: !next.can_buy || Boolean(busy) }}
           accessibilityLabel={`Kilidi ${cost} yıldızla aç`}
         >
-          <Ionicons name="star" size={14} color={next.can_buy ? colors.yellowCard : colors.textTertiary} />
+          <Ionicons name="star" size={14} color={next.can_buy ? CP.yellowCard : CP.textTertiary} />
           <Text style={[styles.payText, !next.can_buy ? styles.payTextOff : null]} {...textScale.dense}>
             {next.can_buy
               ? `Yıldızla aç ve lige yüksel · ${fmt(cost)}`
@@ -156,14 +157,14 @@ export function GateLive({ next, gate, busy, onPay }: { next: City2Next; gate: C
           </Text>
         </Touchable>
       ) : null}
-      <BottomSheet
+      <GameSheet
         visible={confirm}
         onClose={() => setConfirm(false)}
         title="Yıldızla açılsın mı?"
         footer={
           <View style={styles.confirmButtons}>
-            <Button label="Vazgeç" variant="secondary" onPress={() => setConfirm(false)} style={styles.flex} />
-            <Button
+            <GameButton label="Vazgeç" variant="secondary" onPress={() => setConfirm(false)} style={styles.flex} />
+            <GameButton
               label={`${fmt(cost)} yıldız öde`}
               icon="star"
               onPress={() => {
@@ -179,7 +180,7 @@ export function GateLive({ next, gate, busy, onPay }: { next: City2Next; gate: C
         <Text style={styles.confirmText} {...textScale.long}>
           {`${next.label}. ligin (${next.title}) gerçek hayat kilidi ${fmt(cost)} yıldızla açılır ve hemen lige yükselirsin. ${player.available ? "Sahada oynayarak ya da taraftar yolundan" : "Taraftar yolundan"} bu kilidi ücretsiz de açabilirsin.`}
         </Text>
-      </BottomSheet>
+      </GameSheet>
     </View>
   );
 }
@@ -193,7 +194,7 @@ export function GateSummary({ gate, metrics }: { gate: City2RawGate; metrics: Re
   return (
     <View style={styles.summary}>
       <View style={styles.summaryRow}>
-        <Ionicons name="shield-checkmark-outline" size={13} color={colors.textTertiary} />
+        <Ionicons name="shield-checkmark-outline" size={13} color={CP.textTertiary} />
         <Text style={styles.summaryHead} {...textScale.dense}>
           Gerçek hayat kilidi · son {gate.days} gün
         </Text>
@@ -223,19 +224,19 @@ export function GateSummary({ gate, metrics }: { gate: City2RawGate; metrics: Re
 const styles = StyleSheet.create({
   wrap: { gap: space.sm },
   head: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  headTitle: { ...type.label, color: colors.textPrimary },
-  headMeta: { ...type.caption, color: colors.textTertiary, flex: 1 },
+  headTitle: { ...type.label, color: CP.textPrimary },
+  headMeta: { ...type.caption, color: CP.textTertiary, flex: 1 },
   options: { flexDirection: "row", gap: space.xs },
-  option: { flex: 1, gap: space.xxs, padding: space.sm, borderRadius: radius.md, backgroundColor: colors.surface2 },
-  optionOk: { backgroundColor: colors.winDim },
+  option: { flex: 1, gap: space.xxs, padding: space.sm, borderRadius: radius.md, backgroundColor: CP.surface2 },
+  optionOk: { backgroundColor: CP.winDim },
   optionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.xxs },
-  optionTag: { ...type.nano, color: colors.win, flexShrink: 1 },
-  optionTitle: { ...type.labelSm, color: colors.textPrimary },
+  optionTag: { ...type.nano, color: CP.win, flexShrink: 1 },
+  optionTitle: { ...type.labelSm, color: CP.textPrimary },
   cond: { gap: 1 },
   condTop: { flexDirection: "row", alignItems: "center", gap: 3 },
-  condCount: { ...type.numSmStrong, color: colors.textPrimary },
-  condText: { ...type.caption, color: colors.textSecondary },
-  condOk: { color: colors.win },
+  condCount: { ...type.numSmStrong, color: CP.textPrimary },
+  condText: { ...type.caption, color: CP.textSecondary },
+  condOk: { color: CP.win },
   payBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -245,21 +246,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     borderRadius: radius.pill,
     borderWidth: hairline,
-    borderColor: colors.borderStrong,
-    backgroundColor: colors.surface1,
+    borderColor: CP.borderStrong,
+    backgroundColor: CP.surface1,
   },
-  payBtnOff: { backgroundColor: colors.surface2, borderColor: colors.border },
-  payText: { ...type.labelSm, color: colors.textPrimary },
-  payTextOff: { color: colors.textTertiary },
-  confirmText: { ...type.body, color: colors.textSecondary, paddingBottom: space.sm },
+  payBtnOff: { backgroundColor: CP.surface2, borderColor: CP.border },
+  payText: { ...type.labelSm, color: CP.textPrimary },
+  payTextOff: { color: CP.textTertiary },
+  confirmText: { ...type.body, color: CP.textSecondary, paddingBottom: space.sm },
   confirmButtons: { flexDirection: "row", gap: space.sm },
   flex: { flex: 1 },
   any: { gap: space.xxs, paddingLeft: space.xs },
-  anyTitle: { ...type.caption, color: colors.textTertiary },
-  note: { ...type.caption, color: colors.textSecondary },
+  anyTitle: { ...type.caption, color: CP.textTertiary },
+  note: { ...type.caption, color: CP.textSecondary },
   summary: { gap: 2 },
   summaryRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  summaryHead: { ...type.caption, color: colors.textSecondary },
-  summaryText: { ...type.caption, color: colors.textTertiary },
-  summaryKey: { fontFamily: fonts.semibold, color: colors.textSecondary },
+  summaryHead: { ...type.caption, color: CP.textSecondary },
+  summaryText: { ...type.caption, color: CP.textTertiary },
+  summaryKey: { fontFamily: fonts.semibold, color: CP.textSecondary },
 });

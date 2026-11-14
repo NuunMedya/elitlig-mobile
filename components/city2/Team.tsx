@@ -15,13 +15,15 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { Avatar, Button, Stepper, Touchable } from "@/components/ui";
+import { Avatar, Stepper, Touchable } from "@/components/ui";
 import { fmtEl, fmtPct, type City2TeamContribution, type City2TeamFacility, type City2TeamSummary, type City2TeamToday } from "@/lib/puzzle/city2";
 import { CITY2_TEAM, CITY_UI } from "@/lib/puzzle/cityPalette";
-import { colors, fonts, hairline, radius, space, textScale, type } from "@/theme";
+import { fonts, hairline, radius, space, textScale, type } from "@/theme";
 
-import { ElCoin } from "./ElitLira";
+import { ElCoin } from "./ElCoin";
 import { Bar, cardStyle, fmt } from "./shared";
+import { CP } from "@/lib/puzzle/cityGamePalette";
+import { GameButton } from "./game/GamePaper";
 
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
@@ -59,7 +61,7 @@ export function TeamCityCard({ team, onPress }: { team: City2TeamSummary; onPres
         </Text>
         {!maxed ? <Bar value={team.next_cost ? team.progress / team.next_cost : 0} style={styles.cityBar} /> : null}
       </View>
-      <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+      <Ionicons name="chevron-forward" size={18} color={CP.textTertiary} />
     </Touchable>
   );
 }
@@ -154,7 +156,7 @@ export function DonateCard({
       <AmountRow
         icon={
           <View style={styles.starIcon}>
-            <Ionicons name="star" size={16} color={colors.star} />
+            <Ionicons name="star" size={16} color={CP.star} />
           </View>
         }
         title="Yıldız"
@@ -172,7 +174,7 @@ export function DonateCard({
       <Text style={styles.rate} {...textScale.dense}>
         1 yıldız = {team.rates.star_points} puan · {per} EL = 1 puan
       </Text>
-      <Button
+      <GameButton
         label={maxed ? "Tesis en üst seviyede" : capped ? "Bugünlük bağış hakkın doldu" : points > 0 ? `Bağışla · +${fmt(points)} puan` : "Miktar seç"}
         icon="heart-outline"
         onPress={() => {
@@ -267,7 +269,7 @@ function ContributionRow({ r }: { r: City2TeamContribution }) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  muted: { color: colors.textTertiary },
+  muted: { color: CP.textTertiary },
   off: { opacity: 0.5 },
   tile: { alignItems: "center", justifyContent: "center" },
   levelBadge: {
@@ -282,46 +284,46 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: CITY_UI.ink,
     borderWidth: 1.5,
-    borderColor: colors.surface1,
+    borderColor: CP.surface1,
   },
   levelBadgeText: { ...type.micro, fontFamily: fonts.bold, color: CITY_UI.white },
 
   cityCard: { ...cardStyle, flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md },
-  cityTitle: { ...type.h3, color: colors.textPrimary },
-  cityMeta: { ...type.caption, color: colors.textTertiary },
+  cityTitle: { ...type.h3, color: CP.textPrimary },
+  cityMeta: { ...type.caption, color: CP.textTertiary },
   cityBar: { marginTop: space.xs, height: 6 },
 
   donate: { ...cardStyle, padding: space.md, gap: space.md },
   amount: { gap: space.sm },
   amountHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  amountTitle: { ...type.h4, color: colors.textPrimary },
-  amountMeta: { ...type.caption, color: colors.textTertiary },
+  amountTitle: { ...type.h4, color: CP.textPrimary },
+  amountMeta: { ...type.caption, color: CP.textTertiary },
   amountFoot: { flexDirection: "row", alignItems: "center", gap: space.sm },
   amountBar: { flex: 1, height: 6 },
-  amountShort: { ...type.caption, color: colors.warn },
-  maxChip: { paddingHorizontal: space.sm, height: 26, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: hairline, borderColor: colors.border, backgroundColor: colors.surface2 },
-  maxChipText: { ...type.labelXs, color: colors.textSecondary },
-  starIcon: { width: 28, height: 28, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.warnDim },
-  rule: { height: hairline, backgroundColor: colors.separator },
-  rate: { ...type.caption, color: colors.textTertiary, textAlign: "center" },
+  amountShort: { ...type.caption, color: CP.warn },
+  maxChip: { paddingHorizontal: space.sm, height: 26, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: hairline, borderColor: CP.border, backgroundColor: CP.surface2 },
+  maxChipText: { ...type.labelXs, color: CP.textSecondary },
+  starIcon: { width: 28, height: 28, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: CP.warnDim },
+  rule: { height: hairline, backgroundColor: CP.separator },
+  rate: { ...type.caption, color: CP.textTertiary, textAlign: "center" },
 
   levels: { ...cardStyle, paddingVertical: space.xs, paddingHorizontal: space.sm },
   levelRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.s, paddingHorizontal: space.xs, borderRadius: radius.md },
-  levelNext: { backgroundColor: colors.brandDim },
-  levelNo: { width: 26, height: 26, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface3 },
-  levelNoDone: { backgroundColor: colors.win },
-  levelNoNext: { backgroundColor: colors.brandAccent },
-  levelNoText: { ...type.micro, fontFamily: fonts.bold, color: colors.textTertiary },
-  levelNoTextNext: { color: colors.textOnBrand },
-  levelTitle: { ...type.labelSm, color: colors.textPrimary },
-  levelMeta: { ...type.caption, color: colors.textTertiary },
-  levelCost: { ...type.numSmStrong, color: colors.textPrimary },
+  levelNext: { backgroundColor: CP.brandDim },
+  levelNo: { width: 26, height: 26, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: CP.surface3 },
+  levelNoDone: { backgroundColor: CP.win },
+  levelNoNext: { backgroundColor: CP.brandAccent },
+  levelNoText: { ...type.micro, fontFamily: fonts.bold, color: CP.textTertiary },
+  levelNoTextNext: { color: CP.textOnBrand },
+  levelTitle: { ...type.labelSm, color: CP.textPrimary },
+  levelMeta: { ...type.caption, color: CP.textTertiary },
+  levelCost: { ...type.numSmStrong, color: CP.textPrimary },
 
   contrib: { ...cardStyle, padding: space.sm, gap: space.xxs },
   contribRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.s, paddingHorizontal: space.sm, borderRadius: radius.md },
-  contribMe: { backgroundColor: colors.brandDim },
-  contribRank: { ...type.numSmStrong, color: colors.textTertiary, width: 22, textAlign: "center" },
-  contribName: { ...type.labelSm, color: colors.textPrimary },
-  contribMeta: { ...type.caption, color: colors.textTertiary },
-  contribPoints: { ...type.numSmStrong, color: colors.textPrimary },
+  contribMe: { backgroundColor: CP.brandDim },
+  contribRank: { ...type.numSmStrong, color: CP.textTertiary, width: 22, textAlign: "center" },
+  contribName: { ...type.labelSm, color: CP.textPrimary },
+  contribMeta: { ...type.caption, color: CP.textTertiary },
+  contribPoints: { ...type.numSmStrong, color: CP.textPrimary },
 });

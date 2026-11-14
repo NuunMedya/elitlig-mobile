@@ -9,11 +9,14 @@ import { ActivityIndicator, StyleSheet, Text, View, type StyleProp, type ViewSty
 
 import { Touchable } from "@/components/ui";
 import { CITY2_UI, CITY2_UNIT_COLORS, CITY_ICONS, CITY_UI, LANDMARK_ICONS, LANDMARK_TIER_STYLE } from "@/lib/puzzle/cityPalette";
-import { colors, fonts, hairline, radius, space, textScale, type } from "@/theme";
+import { fonts, radius, space, textScale, type } from "@/theme";
+import { CG, CP } from "@/lib/puzzle/cityGamePalette";
 
 export const fmt = (n: number) => n.toLocaleString("tr-TR");
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
+const LEFT = { x: 0, y: 0.5 } as const;
+const RIGHT = { x: 1, y: 0.5 } as const;
 
 type IconName = keyof typeof Ionicons.glyphMap;
 const asIcon = (name: string | undefined, fallback: IconName): IconName =>
@@ -29,7 +32,7 @@ export function BuildingIcon({ buildingKey, icon, size = 48, off, stage }: { bui
     <View>
       {off ? (
         <View style={[styles.icon, box, styles.iconOff]}>
-          <Ionicons name={name} size={Math.round(size * 0.5)} color={colors.textTertiary} />
+          <Ionicons name={name} size={Math.round(size * 0.5)} color={CP.textTertiary} />
         </View>
       ) : (
         <LinearGradient colors={unitColors2(buildingKey)} start={TOP} end={BOTTOM} style={[styles.icon, box]}>
@@ -55,7 +58,7 @@ export function LandmarkIcon({ landmarkKey, tier, size = 44, off }: { landmarkKe
   if (off) {
     return (
       <View style={[styles.icon, box, styles.iconOff]}>
-        <Ionicons name={name} size={Math.round(size * 0.5)} color={colors.textTertiary} />
+        <Ionicons name={name} size={Math.round(size * 0.5)} color={CP.textTertiary} />
       </View>
     );
   }
@@ -70,7 +73,7 @@ export function LandmarkIcon({ landmarkKey, tier, size = 44, off }: { landmarkKe
 export function StarCost({ value, muted, style }: { value: number; muted?: boolean; style?: StyleProp<ViewStyle> }) {
   return (
     <View style={[styles.cost, style]}>
-      <Ionicons name="star" size={12} color={muted ? colors.textTertiary : colors.yellowCard} />
+      <Ionicons name="star" size={12} color={muted ? CP.textTertiary : CP.yellowCard} />
       <Text style={[styles.costText, muted ? styles.costMuted : null]} {...textScale.badge}>
         {fmt(value)}
       </Text>
@@ -78,19 +81,19 @@ export function StarCost({ value, muted, style }: { value: number; muted?: boole
   );
 }
 
-/** İnce ilerleme çubuğu (0..1). */
+/** Parlak ilerleme çubuğu (0..1): oyun yeşili ya da lig moru. */
 export function Bar({ value, tone = "go", style }: { value: number; tone?: "go" | "brand"; style?: StyleProp<ViewStyle> }) {
   const v = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
   return (
     <View style={[styles.track, style]}>
-      <View style={[styles.fill, { width: `${Math.round(v * 100)}%` as const }, tone === "brand" ? styles.fillBrand : null]} />
+      {v > 0 ? <LinearGradient colors={tone === "brand" ? CG.league : CG.barGreen} start={LEFT} end={RIGHT} style={[styles.fill, { width: `${Math.max(4, Math.round(v * 100))}%` as const }]} /> : null}
     </View>
   );
 }
 
 /** Koşul işareti: tamam (yeşil tik) ya da bekliyor (boş daire). */
 export function Check({ ok, size = 18 }: { ok: boolean; size?: number }) {
-  return <Ionicons name={ok ? "checkmark-circle" : "ellipse-outline"} size={size} color={ok ? colors.win : colors.textTertiary} />;
+  return <Ionicons name={ok ? "checkmark-circle" : "ellipse-outline"} size={size} color={ok ? CP.win : CP.textTertiary} />;
 }
 
 /**
@@ -125,10 +128,10 @@ export function CostButton({
       style={[styles.costBtn, short ? styles.costBtnShort : null, off && !short ? styles.costBtnOff : null]}
     >
       {busy ? (
-        <ActivityIndicator size="small" color={colors.textOnBrand} />
+        <ActivityIndicator size="small" color={CP.textOnBrand} />
       ) : (
         <>
-          <Ionicons name="star" size={13} color={short ? colors.textTertiary : CITY_UI.white} />
+          <Ionicons name="star" size={13} color={short ? CP.textTertiary : CITY_UI.white} />
           <Text style={[styles.costBtnText, short ? styles.costBtnTextShort : null]} {...textScale.badge}>
             {fmt(cost)}
           </Text>
@@ -138,18 +141,15 @@ export function CostButton({
   );
 }
 
-/** Bölüm başlığı (sayfa içi). */
+/** Bölüm başlığı (parşömen içi): altın elmas + büyük harf başlık + tahta çizgi. */
 export function SectionTitle({ title, meta, action }: { title: string; meta?: string | null; action?: { label: string; onPress: () => void } }) {
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle} {...textScale.dense}>
-        {title}
+    <View style={styles.section} accessibilityRole="header">
+      <LinearGradient colors={CG.rivet} start={TOP} end={BOTTOM} style={styles.sectionGem} />
+      <Text style={styles.sectionTitle} numberOfLines={1} {...textScale.dense}>
+        {title.toLocaleUpperCase("tr-TR")}
       </Text>
-      {meta ? (
-        <Text style={styles.sectionMeta} numberOfLines={1} {...textScale.dense}>
-          {meta}
-        </Text>
-      ) : null}
+      <View style={styles.sectionRule} />
       {action ? (
         <Touchable onPress={action.onPress} feedback="icon" hitSlop={8} accessibilityRole="button" accessibilityLabel={action.label}>
           <Text style={styles.sectionAction} {...textScale.dense}>
@@ -157,13 +157,18 @@ export function SectionTitle({ title, meta, action }: { title: string; meta?: st
           </Text>
         </Touchable>
       ) : null}
+      {meta ? (
+        <Text style={styles.sectionMeta} numberOfLines={1} {...textScale.dense}>
+          {meta}
+        </Text>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   icon: { alignItems: "center", justifyContent: "center" },
-  iconOff: { backgroundColor: colors.surface3 },
+  iconOff: { backgroundColor: CP.surface3 },
   stageBadge: {
     position: "absolute",
     bottom: -4,
@@ -176,15 +181,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: CITY_UI.ink,
     borderWidth: 1.5,
-    borderColor: colors.surface1,
+    borderColor: CP.surface1,
   },
   stageBadgeText: { ...type.micro, fontFamily: fonts.bold, color: CITY_UI.white },
   cost: { flexDirection: "row", alignItems: "center", gap: 3 },
-  costText: { ...type.numSmStrong, color: colors.textPrimary },
-  costMuted: { color: colors.textTertiary },
-  track: { height: 8, borderRadius: radius.pill, backgroundColor: colors.surface3, overflow: "hidden" },
-  fill: { height: 8, borderRadius: radius.pill, backgroundColor: colors.win },
-  fillBrand: { backgroundColor: colors.brandAccent },
+  costText: { ...type.numSmStrong, color: CP.textPrimary },
+  costMuted: { color: CP.textTertiary },
+  track: { height: 10, borderRadius: radius.pill, backgroundColor: CG.track, overflow: "hidden" },
+  fill: { height: 10, borderRadius: radius.pill },
   costBtn: {
     minWidth: 72,
     height: 36,
@@ -196,19 +200,23 @@ const styles = StyleSheet.create({
     gap: space.xs,
     backgroundColor: CITY2_UI.go,
   },
-  costBtnShort: { backgroundColor: colors.surface3 },
+  costBtnShort: { backgroundColor: CP.surface3 },
   costBtnOff: { opacity: 0.5 },
   costBtnText: { ...type.label, fontFamily: fonts.bold, color: CITY_UI.white },
-  costBtnTextShort: { color: colors.textTertiary },
-  section: { flexDirection: "row", alignItems: "baseline", gap: space.sm, marginTop: space.sm },
-  sectionTitle: { ...type.h2, color: colors.textPrimary },
-  sectionMeta: { ...type.caption, color: colors.textTertiary, flex: 1 },
-  sectionAction: { ...type.label, color: colors.brandAccent },
+  costBtnTextShort: { color: CP.textTertiary },
+  section: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.sm, flexWrap: "wrap" },
+  sectionGem: { width: 12, height: 12, borderRadius: 2, transform: [{ rotate: "45deg" }], borderWidth: 1.5, borderColor: CG.woodLip },
+  sectionTitle: { ...type.h3, fontFamily: fonts.bold, color: CP.textPrimary, letterSpacing: 0.6, flexShrink: 1 },
+  sectionRule: { flex: 1, minWidth: 24, height: 2, borderRadius: 1, backgroundColor: CP.border },
+  sectionMeta: { ...type.caption, fontFamily: fonts.semibold, color: CP.textTertiary, flexBasis: "100%", marginLeft: space.md + space.xxs },
+  sectionAction: { ...type.label, fontFamily: fonts.bold, color: CP.brandAccent },
 });
 
+/** Parşömen kartı: açık krem, kalın altın-kahve kenar, altta kalın "dudak". */
 export const cardStyle = {
   borderRadius: radius.xl,
-  backgroundColor: colors.surface1,
-  borderWidth: hairline,
-  borderColor: colors.border,
+  backgroundColor: CP.surface1,
+  borderWidth: 2,
+  borderBottomWidth: 4,
+  borderColor: CP.border,
 } as const;

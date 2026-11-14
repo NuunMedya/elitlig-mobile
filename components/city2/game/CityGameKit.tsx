@@ -28,7 +28,7 @@ import { fmtEl } from "@/lib/puzzle/city2";
 import { CG, type CityBtnTone, type CitySideTone } from "@/lib/puzzle/cityGamePalette";
 import { colors, fonts, radius, space, textScale, touchSlop, type } from "@/theme";
 
-import { ElCoin } from "../ElitLira";
+import { ElCoin } from "../ElCoin";
 
 export const TOP = { x: 0.5, y: 0 } as const;
 export const BOTTOM = { x: 0.5, y: 1 } as const;

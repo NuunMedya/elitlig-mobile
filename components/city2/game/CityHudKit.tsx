@@ -22,7 +22,7 @@ import { buildingMark, fmtEl, type City2Building, type City2Ladder } from "@/lib
 import { CG, type CityBtnTone } from "@/lib/puzzle/cityGamePalette";
 import { fonts, layout, radius, space, textScale, touchSlop, type } from "@/theme";
 
-import { ElCoin } from "../ElitLira";
+import { ElCoin } from "../ElCoin";
 import { BuildingIcon } from "../shared";
 import { BOTTOM, GameBar, GlossyButton, TOP, fmt } from "./CityGameKit";
 

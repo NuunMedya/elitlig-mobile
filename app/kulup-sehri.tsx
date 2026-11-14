@@ -39,13 +39,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, BackHandler, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ActionSheet, useAdminMutation } from "@/components/admin";
+import { useAdminMutation } from "@/components/admin";
 import { CityV1Screen } from "@/components/city/CityV1";
 import { DailyRewardSheet } from "@/components/city/DailyReward";
 import { MatchStarsSheet } from "@/components/city/MatchStars";
 import { HowSheet, StarWallet, type WalletStars } from "@/components/city/StarWallet";
 import { XpTransferBanner } from "@/components/city/XpTransferBanner";
-import { LeagueSheet } from "@/components/city2/CityHome";
 import { ElHistorySheet, ElHowSheet, ElWallet, FormCard } from "@/components/city2/ElitLira";
 import { LandmarkSheet, type LandmarkTab, type Placing } from "@/components/city2/Landmarks";
 import { MigrationNotice, StepCelebration, type StepResult } from "@/components/city2/Notices";
@@ -55,6 +54,7 @@ import { BOTTOM, CityRound, GlossyButton, PaperHead, PaperRow, PaperText, TOP, f
 import { BuildingStrip, CityDock, CityTopBar, LeagueRibbon, PlaceBar, type DockTile } from "@/components/city2/game/CityHudKit";
 import { CityNavProvider, type CityNav, type CityWindowKey, type CityWindowParams } from "@/components/city2/game/CityNav";
 import { GameModal } from "@/components/city2/game/GameModal";
+import { LeagueWindow } from "@/components/city2/game/LeagueWindow";
 import { AcademyWindow } from "@/components/city2/windows/AcademyWindow";
 import { LadderWindow } from "@/components/city2/windows/LadderWindow";
 import { LeaderboardWindow } from "@/components/city2/windows/LeaderboardWindow";
@@ -599,7 +599,7 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
           ) : null}
         </GameModal>
 
-        <GameModal visible={sheet === "el"} onClose={() => setSheet(null)} title="Elit Lira kasası" surface="page">
+        <GameModal visible={sheet === "el"} onClose={() => setSheet(null)} title="Elit Lira kasası">
           {city2?.el ? (
             <>
               <ElWallet
@@ -723,7 +723,7 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
         </GameModal>
 
         {/* ── Ayrıntı pencereleri (alttan) ── */}
-        <LeagueSheet
+        <LeagueWindow
           visible={leagueSheet}
           onClose={() => setLeagueSheet(false)}
           ladder={ladder}
@@ -739,7 +739,7 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
             openWin("merdiven");
           }}
         />
-        <DailyRewardSheet visible={dailySheet} onClose={() => setDailySheet(false)} />
+        <DailyRewardSheet visible={dailySheet} onClose={() => setDailySheet(false)} variant="game" />
         <ElHistorySheet visible={elHistory} onClose={() => setElHistory(false)} el={city2?.el ?? null} />
         <ElHowSheet visible={elHow} onClose={() => setElHow(false)} el={city2?.el ?? null} bonus={incomeBonus} />
         <LandmarkSheet
@@ -759,19 +759,31 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
           onSlot={placeAt}
           onCancelPlacing={() => setPlacing(null)}
         />
-        <ActionSheet
+        <GameModal
           visible={Boolean(picked)}
           onClose={() => setPicked(null)}
-          title={picked?.title}
-          actions={
-            picked
-              ? [
-                  { label: "Taşı", hint: "Başka bir boş yuvaya koy", icon: "move", onPress: () => startPlacing(picked) },
-                  { label: "Depoya kaldır", hint: "Güzellik puanından düşer; istediğinde yeniden yerleştir", icon: "archive-outline", onPress: () => actions.place.mutate({ id: picked.id, slot: null }) },
-                ]
-              : []
+          title={picked?.title ?? "Sembol yapı"}
+          footer={
+            picked ? (
+              <>
+                <GlossyButton label="TAŞI" sub="Başka bir boş yuvaya koy" icon="move" tone="blue" onPress={() => (setPicked(null), startPlacing(picked))} />
+                <GlossyButton
+                  label="DEPOYA KALDIR"
+                  icon="archive"
+                  tone="gold"
+                  small
+                  disabled={actions.busy}
+                  onPress={() => {
+                    setPicked(null);
+                    actions.place.mutate({ id: picked.id, slot: null });
+                  }}
+                />
+              </>
+            ) : null
           }
-        />
+        >
+          <PaperText center>Depoya kaldırılan yapı güzellik puanından düşer; istediğinde yeniden yerleştirirsin.</PaperText>
+        </GameModal>
         <MigrationNotice city2={city2} />
         <SeasonEndSheet
           city2={city2}
@@ -782,6 +794,7 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
         />
         <StepCelebration result={stepResult} city2={city2} onClose={() => setStepResult(null)} />
         <CoinShopSheet
+          variant="game"
           visible={coinShop}
           onClose={() => setCoinShop(false)}
           onKitBought={(key) => {
@@ -789,8 +802,9 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
             if (next) chooseKit(next);
           }}
         />
-        <MatchStarsSheet visible={matchSheet} onClose={() => setMatchSheet(false)} detail={city2?.stars.sources.match_detail} total={city2?.stars.sources.match ?? 0} />
+        <MatchStarsSheet variant="game" visible={matchSheet} onClose={() => setMatchSheet(false)} detail={city2?.stars.sources.match_detail} total={city2?.stars.sources.match ?? 0} />
         <HowSheet
+          variant="game"
           visible={howSheet}
           onClose={() => setHowSheet(false)}
           stars={city2 ? walletStars(city2) : undefined}

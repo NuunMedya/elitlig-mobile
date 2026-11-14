@@ -23,12 +23,14 @@ import { CrestBadge, RewardTiers, SeasonEndSheet, SeasonHistoryList, SeasonParts
 import { SectionTitle, fmt } from "@/components/city2/shared";
 import { useCityNav } from "@/components/city2/game/CityNav";
 import { CityWindow } from "@/components/city2/game/CityWindow";
-import { Button, EmptyState, ErrorState, SkeletonCard, refreshControlProps, useRefresh } from "@/components/ui";
+import { refreshControlProps, useRefresh } from "@/components/ui";
 import { estimateTier, seasonLeftText, spanText } from "@/lib/puzzle/city2";
 import { CITY2_UI, CITY_UI } from "@/lib/puzzle/cityPalette";
 import { useCity2, useCity2Season } from "@/lib/puzzle/useCity2";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { CP } from "@/lib/puzzle/cityGamePalette";
+import { GameButton, GameEmpty, GameError, GameLoading } from "@/components/city2/game/GamePaper";
 
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
@@ -55,11 +57,11 @@ export function SeasonWindow() {
     >
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />}>
         {unsupported ? (
-          <EmptyState icon="calendar-outline" title="Sezonlar yakında" body="Sezon puanı ve sezon kupaları sunucu güncellemesiyle açılacak." variant="inline" action={{ label: "Şehre dön", onPress: nav.close, haptic: "light" }} />
+          <GameEmpty icon="calendar-outline" title="Sezonlar yakında" body="Sezon puanı ve sezon kupaları sunucu güncellemesiyle açılacak." variant="inline" action={{ label: "Şehre dön", onPress: nav.close, haptic: "light" }} />
         ) : !season && query.isLoading ? (
-          <SkeletonCard lines={6} />
+          <GameLoading lines={6} />
         ) : !season ? (
-          <ErrorState error={query.error} onRetry={() => query.refetch()} />
+          <GameError error={query.error} onRetry={() => query.refetch()} />
         ) : (
           <>
             <View style={styles.hero}>
@@ -144,7 +146,7 @@ export function SeasonWindow() {
               </>
             ) : null}
 
-            <Button label="Sezon sıralaması" icon="podium-outline" variant="secondary" onPress={() => nav.open("siralama", { tab: "season" })} fullWidth />
+            <GameButton label="Sezon sıralaması" icon="podium-outline" variant="secondary" onPress={() => nav.open("siralama", { tab: "season" })} fullWidth />
           </>
         )}
       </ScrollView>
@@ -185,5 +187,5 @@ const styles = StyleSheet.create({
   heroRule: { width: hairline, alignSelf: "stretch", backgroundColor: CITY2_UI.panelEdge },
   estLine: { flexDirection: "row", alignItems: "center", gap: space.xs },
   heroNote: { ...type.bodySm, color: CITY2_UI.panelMuted },
-  intro: { ...type.bodySm, color: colors.textSecondary },
+  intro: { ...type.bodySm, color: CP.textSecondary },
 });

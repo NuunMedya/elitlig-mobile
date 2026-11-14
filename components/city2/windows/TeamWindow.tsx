@@ -23,14 +23,16 @@ import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native
 
 import { LandmarkIcon, SectionTitle, fmt } from "@/components/city2/shared";
 import { ContributionList, DonateCard, LevelList, TeamTile } from "@/components/city2/Team";
-import { Button, EmptyState, ErrorState, SkeletonCard, Touchable, refreshControlProps, useRefresh } from "@/components/ui";
+import { Touchable, refreshControlProps, useRefresh } from "@/components/ui";
 import { fmtPct } from "@/lib/puzzle/city2";
 import { CITY2_EL, CITY2_UI, CITY_UI } from "@/lib/puzzle/cityPalette";
 import { useCity2, useCity2Donate, useCity2Team } from "@/lib/puzzle/useCity2";
 import { useCityNav } from "@/components/city2/game/CityNav";
 import { CityWindow } from "@/components/city2/game/CityWindow";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { CP } from "@/lib/puzzle/cityGamePalette";
+import { GameButton, GameEmpty, GameError, GameLoading } from "@/components/city2/game/GamePaper";
 
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
@@ -57,13 +59,13 @@ export function TeamWindow() {
       >
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />}>
         {unsupported ? (
-          <EmptyState icon="people-outline" title="Takım tesisi yakında" body="Takımınla ortak bina kurmak sunucu güncellemesiyle açılacak." variant="inline" action={{ label: "Şehre dön", onPress: () => nav.close(), haptic: "light" }} />
+          <GameEmpty icon="people-outline" title="Takım tesisi yakında" body="Takımınla ortak bina kurmak sunucu güncellemesiyle açılacak." variant="inline" action={{ label: "Şehre dön", onPress: () => nav.close(), haptic: "light" }} />
         ) : query.isLoading ? (
-          <SkeletonCard lines={6} />
+          <GameLoading lines={6} />
         ) : query.isError || !view ? (
-          <ErrorState error={query.error} onRetry={() => query.refetch()} />
+          <GameError error={query.error} onRetry={() => query.refetch()} />
         ) : !team ? (
-          <EmptyState icon="people-outline" title="Takımın yok" body={view.text ?? "Takım tesisi, oyuncu kartın bir takıma bağlı olduğunda açılır."} variant="inline" action={{ label: "Şehre dön", onPress: () => nav.close(), haptic: "light" }} />
+          <GameEmpty icon="people-outline" title="Takımın yok" body={view.text ?? "Takım tesisi, oyuncu kartın bir takıma bağlı olduğunda açılır."} variant="inline" action={{ label: "Şehre dön", onPress: () => nav.close(), haptic: "light" }} />
         ) : (
           <>
             <View style={styles.hero}>
@@ -146,7 +148,7 @@ export function TeamWindow() {
                   {team.landmark.unlocked ? "Açıldı · takımın bütün üyelerinin deposunda" : `${team.landmark.level}. seviyede takımın bütün üyelerine açılır`}
                 </Text>
               </View>
-              <Ionicons name={team.landmark.unlocked ? "checkmark-circle" : "lock-closed"} size={18} color={team.landmark.unlocked ? colors.win : colors.textTertiary} />
+              <Ionicons name={team.landmark.unlocked ? "checkmark-circle" : "lock-closed"} size={18} color={team.landmark.unlocked ? CP.win : CP.textTertiary} />
             </View>
 
             {view.today && !maxed ? (
@@ -169,7 +171,7 @@ export function TeamWindow() {
                 {view.contributions.top.length ? (
                   <ContributionList top={view.contributions.top} me={view.contributions.me} />
                 ) : (
-                  <EmptyState icon="heart-outline" title="Henüz bağış yok" body="İlk bağışı sen yap, tesis ilk seviyeye yaklaşsın." variant="inline" compact />
+                  <GameEmpty icon="heart-outline" title="Henüz bağış yok" body="İlk bağışı sen yap, tesis ilk seviyeye yaklaşsın." variant="inline" compact />
                 )}
               </>
             ) : null}
@@ -180,7 +182,7 @@ export function TeamWindow() {
             <Text style={styles.intro} {...textScale.long}>
               {team.intro}
             </Text>
-            <Button label="Takım sıralaması" icon="podium-outline" variant="secondary" onPress={toBoard} fullWidth />
+            <GameButton label="Takım sıralaması" icon="podium-outline" variant="secondary" onPress={toBoard} fullWidth />
           </>
         )}
       </ScrollView>
@@ -208,8 +210,8 @@ const styles = StyleSheet.create({
   heroStatLabel: { ...type.caption, color: CITY2_UI.panelMuted },
   heroRule: { width: hairline, backgroundColor: CITY2_UI.panelEdge },
   heroNote: { ...type.caption, color: CITY2_UI.panelMuted },
-  landmark: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
-  landmarkTitle: { ...type.h4, color: colors.textPrimary },
-  landmarkMeta: { ...type.caption, color: colors.textTertiary },
-  intro: { ...type.bodySm, color: colors.textSecondary },
+  landmark: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.xl, backgroundColor: CP.surface1, borderWidth: hairline, borderColor: CP.border },
+  landmarkTitle: { ...type.h4, color: CP.textPrimary },
+  landmarkMeta: { ...type.caption, color: CP.textTertiary },
+  intro: { ...type.bodySm, color: CP.textSecondary },
 });

@@ -15,16 +15,17 @@ import { StyleSheet, Text, View } from "react-native";
 import { Avatar, Toggle, Touchable } from "@/components/ui";
 import type { City2VisitCard, City2VisitSummary } from "@/lib/puzzle/city2";
 import { seasonTierStyle } from "@/lib/puzzle/cityPalette";
-import { colors, fonts, hairline, radius, space, textScale, type } from "@/theme";
+import { fonts, hairline, radius, space, textScale, type } from "@/theme";
 
 import { PrestigeStars } from "./Season";
 import { cardStyle, fmt } from "./shared";
+import { CP } from "@/lib/puzzle/cityGamePalette";
 
 export function VisitEntryCard({ visit, onPress }: { visit: City2VisitSummary; onPress: () => void }) {
   return (
     <Touchable onPress={onPress} feedback="card" style={styles.entry} accessibilityRole="button" accessibilityLabel={`Şehirleri gez. Şehrin ${visit.applause} alkış aldı`}>
       <View style={styles.entryIcon}>
-        <Ionicons name="compass" size={22} color={colors.brandAccent} />
+        <Ionicons name="compass" size={22} color={CP.brandAccent} />
       </View>
       <View style={styles.flex}>
         <Text style={styles.entryTitle} {...textScale.dense}>
@@ -35,12 +36,12 @@ export function VisitEntryCard({ visit, onPress }: { visit: City2VisitSummary; o
         </Text>
       </View>
       <View style={styles.entryChip}>
-        <Ionicons name="hand-left" size={12} color={colors.brandAccent} />
+        <Ionicons name="hand-left" size={12} color={CP.brandAccent} />
         <Text style={styles.entryChipText} {...textScale.badge}>
           Alkışla
         </Text>
       </View>
-      <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+      <Ionicons name="chevron-forward" size={18} color={CP.textTertiary} />
     </Touchable>
   );
 }
@@ -66,13 +67,13 @@ export function VisitCityRow({ c, onPress }: { c: City2VisitCard; onPress: () =>
       </View>
       <View style={styles.values}>
         <View style={styles.valueLine}>
-          <Ionicons name="sparkles" size={12} color={colors.brandAccent} />
+          <Ionicons name="sparkles" size={12} color={CP.brandAccent} />
           <Text style={styles.value} {...textScale.badge}>
             {fmt(c.beauty)}
           </Text>
         </View>
         <View style={styles.valueLine}>
-          <Ionicons name="hand-left-outline" size={11} color={colors.textTertiary} />
+          <Ionicons name="hand-left-outline" size={11} color={CP.textTertiary} />
           <Text style={styles.sub} {...textScale.badge}>
             {fmt(c.applause)}
           </Text>
@@ -92,7 +93,7 @@ export function VisitPrivacyRow({ label, help, value, disabled, onChange }: { la
       accessibilityState={{ checked: value, disabled: Boolean(disabled) }}
       accessibilityLabel={`${label}. ${value ? "açık" : "kapalı"}`}
     >
-      <Ionicons name={value ? "eye-off" : "eye-outline"} size={18} color={colors.textSecondary} />
+      <Ionicons name={value ? "eye-off" : "eye-outline"} size={18} color={CP.textSecondary} />
       <View style={styles.flex}>
         <Text style={styles.privacyTitle} {...textScale.dense}>
           {label}
@@ -109,23 +110,23 @@ export function VisitPrivacyRow({ label, help, value, disabled, onChange }: { la
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   entry: { ...cardStyle, flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md },
-  entryIcon: { width: 44, height: 44, borderRadius: radius.lg, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandDim },
-  entryTitle: { ...type.h3, color: colors.textPrimary },
-  entryMeta: { ...type.caption, color: colors.textTertiary },
-  entryChip: { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: space.sm, height: 24, borderRadius: radius.pill, backgroundColor: colors.brandDim },
-  entryChipText: { ...type.labelXs, color: colors.brandAccent },
+  entryIcon: { width: 44, height: 44, borderRadius: radius.lg, alignItems: "center", justifyContent: "center", backgroundColor: CP.brandDim },
+  entryTitle: { ...type.h3, color: CP.textPrimary },
+  entryMeta: { ...type.caption, color: CP.textTertiary },
+  entryChip: { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: space.sm, height: 24, borderRadius: radius.pill, backgroundColor: CP.brandDim },
+  entryChipText: { ...type.labelXs, color: CP.brandAccent },
 
   row: { ...cardStyle, flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.m, paddingHorizontal: space.md, borderRadius: radius.lg },
   avatarRing: { padding: 2, borderRadius: radius.pill, borderWidth: 2, borderColor: "transparent" },
   nameLine: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  name: { ...type.h4, fontFamily: fonts.semibold, color: colors.textPrimary, flexShrink: 1 },
-  meta: { ...type.caption, color: colors.textTertiary },
+  name: { ...type.h4, fontFamily: fonts.semibold, color: CP.textPrimary, flexShrink: 1 },
+  meta: { ...type.caption, color: CP.textTertiary },
   values: { alignItems: "flex-end", gap: 2 },
   valueLine: { flexDirection: "row", alignItems: "center", gap: 3 },
-  value: { ...type.numSmStrong, color: colors.textPrimary },
-  sub: { ...type.caption, color: colors.textTertiary },
+  value: { ...type.numSmStrong, color: CP.textPrimary },
+  sub: { ...type.caption, color: CP.textTertiary },
 
   privacy: { ...cardStyle, flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderWidth: hairline },
-  privacyTitle: { ...type.h4, color: colors.textPrimary },
-  privacyHelp: { ...type.caption, color: colors.textTertiary },
+  privacyTitle: { ...type.h4, color: CP.textPrimary },
+  privacyHelp: { ...type.caption, color: CP.textTertiary },
 });

@@ -2,7 +2,8 @@
  * ŞEHİR PENCERESİ — akademi, sezon, takım, ziyaret, sıralama ve liglerin
  * tam ekran oyun penceresi. Gece mavisi zemin, ortada kurdele başlık, sağ
  * üstte kırmızı kapat düğmesi, solda yuvarlak eylem düğmeleri; içerik ahşap
- * çerçevenin içindeki (temaya uyan) sayfada.
+ * çerçevenin içindeki krem PARŞÖMENDE (iki temada aynı; iç parçalar
+ * lib/puzzle/cityGamePalette `CP` paletiyle çizilir).
  *
  * Şehrin içinde katman olarak (CityNavProvider) ve kendi rotasında aynı
  * görünür; kapatma `useCityNav().close` ile (katmanda şehre döner, rotada
@@ -17,7 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Touchable, type ScreenHeaderAction } from "@/components/ui";
 import { CG } from "@/lib/puzzle/cityGamePalette";
-import { colors, fonts, layout, radius, space, textScale, touchSlop, type } from "@/theme";
+import { fonts, layout, radius, space, textScale, touchSlop, type } from "@/theme";
 
 import { BOTTOM, CloseBubble, Ribbon, TOP } from "./CityGameKit";
 import { useCityNav } from "./CityNav";
@@ -77,7 +78,9 @@ export function CityWindow({
       <View style={[styles.frameWrap, { paddingBottom: Math.max(insets.bottom, space.sm) }]}>
         <View style={styles.frameLip} />
         <LinearGradient colors={CG.wood} start={TOP} end={BOTTOM} style={styles.frame}>
-          <View style={styles.page}>{children}</View>
+          <LinearGradient colors={CG.paper} start={TOP} end={BOTTOM} style={styles.page}>
+            {children}
+          </LinearGradient>
         </LinearGradient>
       </View>
     </View>
@@ -98,5 +101,5 @@ const styles = StyleSheet.create({
   frameWrap: { flex: 1, paddingHorizontal: space.sm },
   frameLip: { position: "absolute", left: space.sm, right: space.sm, top: 6, bottom: 0, borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl, backgroundColor: CG.woodLip },
   frame: { flex: 1, padding: 6, borderRadius: radius.xxl, borderWidth: 2, borderColor: CG.woodEdge },
-  page: { flex: 1, borderRadius: radius.xl, overflow: "hidden", backgroundColor: colors.bg },
+  page: { flex: 1, borderRadius: radius.xl, overflow: "hidden", borderWidth: 2, borderColor: CG.paperEdge },
 });

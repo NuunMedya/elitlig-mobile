@@ -14,10 +14,11 @@ import { StyleSheet, Text, View } from "react-native";
 import { ChunkyButton } from "@/components/city/ChunkyButton";
 import { MatchStarsChip } from "@/components/city/MatchStars";
 import { XpBuckets } from "@/components/city/XpBuckets";
-import { BottomSheet, Button, Touchable } from "@/components/ui";
+import { Button, Touchable } from "@/components/ui";
 import type { CityState, CityXp } from "@/lib/puzzle/api";
 import { ARENA_TITLES, CITY2_UI, CITY_UI } from "@/lib/puzzle/cityPalette";
 import { colors, fonts, hairline, radius, space, textScale, type } from "@/theme";
+import { CitySheet } from "@/components/city2/game/GamePaper";
 
 const fmt = (n: number) => n.toLocaleString("tr-TR");
 const TOP = { x: 0.5, y: 0 } as const;
@@ -134,9 +135,12 @@ export function HowSheet({
   xp,
   onGames,
   onQuests,
+  variant,
 }: {
   visible: boolean;
   onClose: () => void;
+  /** "game": şehrin oyun penceresi (ahşap çerçeve). */
+  variant?: "app" | "game";
   stars?: WalletStars;
   xp?: CityXp;
   onGames: () => void;
@@ -145,7 +149,7 @@ export function HowSheet({
   const byGame = Object.entries(stars?.arena_by_game ?? {}).sort((a, b) => b[1] - a[1]);
   const rules = stars?.match_detail?.rules;
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="Yıldız nasıl kazanılır?" snap="full">
+    <CitySheet variant={variant} visible={visible} onClose={onClose} title="Yıldız nasıl kazanılır?" snap="full">
       <View style={styles.how}>
         <HowRow icon="extension-puzzle" title="Lig Yolu" text="Elit Üçlü, Üçle Kazan, Soyunma Odası, Kantin ve Kariyer Yolu: her seviye 1–3 yıldız." />
         <HowRow
@@ -196,7 +200,7 @@ export function HowSheet({
           <Button label="Haftalık görevler" icon="list" variant="secondary" onPress={onQuests} fullWidth />
         </View>
       </View>
-    </BottomSheet>
+    </CitySheet>
   );
 }
 

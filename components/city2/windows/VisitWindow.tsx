@@ -18,15 +18,17 @@ import { useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { VisitCityRow, VisitPrivacyRow } from "@/components/city2/Visit";
-import { EmptyState, ErrorState, SegmentedControl, SkeletonListRow, refreshControlProps, useRefresh, type SegmentedItem } from "@/components/ui";
+import { refreshControlProps, useRefresh } from "@/components/ui";
 import type { City2VisitCard, City2VisitKind } from "@/lib/puzzle/city2";
 import { useCity2, useCity2VisitList, usePrivacyPreferences } from "@/lib/puzzle/useCity2";
 import { useCityNav } from "@/components/city2/game/CityNav";
 import { CityWindow } from "@/components/city2/game/CityWindow";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, space, textScale, type } from "@/theme";
+import { layout, space, textScale, type } from "@/theme";
+import { CP } from "@/lib/puzzle/cityGamePalette";
+import { GameEmpty, GameError, GameLoading, GameSegment, type GameSegmentItem } from "@/components/city2/game/GamePaper";
 
-const TABS: SegmentedItem<City2VisitKind>[] = [
+const TABS: GameSegmentItem<City2VisitKind>[] = [
   { key: "featured", label: "En güzel" },
   { key: "team", label: "Takımım" },
   { key: "city", label: "İlim" },
@@ -61,11 +63,11 @@ export function VisitWindow() {
     <CityWindow
         title="Şehirleri gez"
         subtitle="Başka başkanların şehirleri"
-        bottom={unsupported ? undefined : <View style={styles.tabs}><SegmentedControl items={TABS} value={tab} onChange={setTab} stretch size="sm" /></View>}
+        bottom={unsupported ? undefined : <View style={styles.tabs}><GameSegment items={TABS} value={tab} onChange={setTab} stretch size="sm" onDark /></View>}
       >
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />}>
         {unsupported ? (
-          <EmptyState icon="compass-outline" title="Şehir ziyareti yakında" body="Başka şehirleri gezmek ve alkışlamak sunucu güncellemesiyle açılacak." variant="inline" action={{ label: "Şehre dön", onPress: () => nav.close(), haptic: "light" }} />
+          <GameEmpty icon="compass-outline" title="Şehir ziyareti yakında" body="Başka şehirleri gezmek ve alkışlamak sunucu güncellemesiyle açılacak." variant="inline" action={{ label: "Şehre dön", onPress: () => nav.close(), haptic: "light" }} />
         ) : (
           <>
             {lists?.intro ? (
@@ -82,11 +84,11 @@ export function VisitWindow() {
               </Text>
             ) : null}
             {query.isLoading ? (
-              <SkeletonListRow count={6} avatar />
+              <GameLoading count={6} avatar />
             ) : query.isError ? (
-              <ErrorState error={query.error} onRetry={() => query.refetch()} />
+              <GameError error={query.error} onRetry={() => query.refetch()} />
             ) : rows.length === 0 ? (
-              <EmptyState
+              <GameEmpty
                 icon="compass-outline"
                 title={tab === "team" && lists && lists.team_info === null ? "Takımın yok" : EMPTY[tab].title}
                 body={tab === "team" && lists && lists.team_info === null ? "Oyuncu kartın bir takıma bağlı olduğunda takım arkadaşlarının şehirleri burada çıkar." : EMPTY[tab].body}
@@ -110,7 +112,7 @@ export function VisitWindow() {
 const styles = StyleSheet.create({
   tabs: { paddingHorizontal: layout.screenPadding, paddingBottom: space.sm },
   content: { paddingHorizontal: layout.screenPadding, paddingTop: space.md, paddingBottom: space.giant * 2, gap: space.md },
-  intro: { ...type.bodySm, color: colors.textSecondary },
-  meta: { ...type.caption, color: colors.textTertiary },
+  intro: { ...type.bodySm, color: CP.textSecondary },
+  meta: { ...type.caption, color: CP.textTertiary },
   list: { gap: space.sm },
 });

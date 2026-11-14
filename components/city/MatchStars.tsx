@@ -14,11 +14,12 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { StyleSheet, Text, View } from "react-native";
 
-import { BottomSheet, Touchable } from "@/components/ui";
+import { Touchable } from "@/components/ui";
 import { CARTOON } from "@/lib/game/cartoon";
 import type { MatchStarsDetail, MatchStarsEntry } from "@/lib/puzzle/api";
 import { CITY_UI } from "@/lib/puzzle/cityPalette";
 import { colors, fonts, hairline, radius, space, textScale, type } from "@/theme";
+import { CitySheet } from "@/components/city2/game/GamePaper";
 
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
@@ -58,14 +59,14 @@ export function MatchStarsChip({ detail, onPress }: { detail: MatchStarsDetail; 
   );
 }
 
-export function MatchStarsSheet({ visible, onClose, detail, total }: { visible: boolean; onClose: () => void; detail: MatchStarsDetail | undefined; total: number }) {
+export function MatchStarsSheet({ visible, onClose, detail, total, variant }: { visible: boolean; onClose: () => void; detail: MatchStarsDetail | undefined; total: number; /** "game": şehrin oyun penceresi. */ variant?: "app" | "game" }) {
   if (!detail) return null;
   const w = detail.week;
   const r = detail.rules;
   const matchProg = Math.min(1, w.matches / Math.max(1, w.cap_matches));
   const starProg = Math.min(1, w.stars / Math.max(1, w.cap_stars));
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="Maç yıldızı" snap="full">
+    <CitySheet variant={variant} visible={visible} onClose={onClose} title="Maç yıldızı" snap="full">
       <View style={styles.sheet}>
         <View style={styles.hero}>
           <LinearGradient colors={CARTOON.pill} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
@@ -115,7 +116,7 @@ export function MatchStarsSheet({ visible, onClose, detail, total }: { visible: 
           )}
         </View>
       </View>
-    </BottomSheet>
+    </CitySheet>
   );
 }
 

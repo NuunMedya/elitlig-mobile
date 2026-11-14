@@ -24,20 +24,22 @@ import { Redirect } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { ChunkyButton } from "@/components/city/ChunkyButton";
 import { GateSummary } from "@/components/city2/GateView";
 import { StepCelebration, type StepResult } from "@/components/city2/Notices";
 import { PrestigeCard, PrestigeCelebration, PrestigeSheet, PrestigeTeaser } from "@/components/city2/Prestige";
 import { CrestBadge } from "@/components/city2/Season";
 import { cardStyle, fmt } from "@/components/city2/shared";
 import { NextRequirements, RungBadge } from "@/components/city2/StepCard";
-import { EmptyState, ErrorState, SkeletonCard, refreshControlProps, useRefresh } from "@/components/ui";
+import { refreshControlProps, useRefresh } from "@/components/ui";
 import type { City2Building, City2History, City2PrestigePreviewResult, City2PrestigeResult, City2State, City2Step } from "@/lib/puzzle/city2";
 import { useCity2, useCity2Actions, useCity2Prestige } from "@/lib/puzzle/useCity2";
 import { useCityNav } from "@/components/city2/game/CityNav";
 import { CityWindow } from "@/components/city2/game/CityWindow";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { CP } from "@/lib/puzzle/cityGamePalette";
+import { GameEmpty, GameError, GameLoading } from "@/components/city2/game/GamePaper";
+import { GlossyButton } from "@/components/city2/game/CityGameKit";
 
 const dateText = (iso: string | null) => {
   if (!iso) return null;
@@ -104,12 +106,12 @@ export function LadderWindow() {
     <CityWindow title="Kariyer merdiveni" subtitle={ladder ? `${ladder.current.no}/${lastNo} · ${ladder.current.title}` : "Mahalle arasından Avrupa'ya"} >
       {query.isLoading ? (
         <View style={styles.content}>
-          <SkeletonCard lines={6} />
+          <GameLoading lines={6} />
         </View>
       ) : legacy ? (
-        <EmptyState icon="trending-up-outline" title="Merdiven yakında" body="Kariyer merdiveni sunucu güncellemesiyle açılacak." variant="inline" />
+        <GameEmpty icon="trending-up-outline" title="Merdiven yakında" body="Kariyer merdiveni sunucu güncellemesiyle açılacak." variant="inline" />
       ) : query.isError || !city2 || !ladder ? (
-        <ErrorState error={query.error} onRetry={() => query.refetch()} />
+        <GameError error={query.error} onRetry={() => query.refetch()} />
       ) : (
         <ScrollView
           ref={scroll}
@@ -253,9 +255,9 @@ function RungRow({
               ŞU AN
             </Text>
           ) : state === "done" ? (
-            <Ionicons name="checkmark-circle" size={18} color={colors.win} />
+            <Ionicons name="checkmark-circle" size={18} color={CP.win} />
           ) : state === "locked" ? (
-            <Ionicons name="lock-closed" size={14} color={colors.textTertiary} />
+            <Ionicons name="lock-closed" size={14} color={CP.textTertiary} />
           ) : null}
         </View>
         {history && (state === "done" || state === "current") ? (
@@ -268,7 +270,7 @@ function RungRow({
           <View style={styles.nextBox}>
             <NextRequirements next={ladder.next} buildings={city2.buildings} onBuilding={onBuilding} busy={busy} onPay={() => onAdvance(true)} />
             {ladder.next.can_advance ? (
-              <ChunkyButton label={busy ? "ÇIKILIYOR…" : `LİGE YÜKSEL · ${s.label}`} icon="arrow-up-circle" tone="green" disabled={busy} onPress={() => onAdvance()} />
+              <GlossyButton label={busy ? "ÇIKILIYOR…" : `LİGE YÜKSEL · ${s.label}`} icon="arrow-up-circle" tone="green" disabled={busy} onPress={() => onAdvance()} />
             ) : null}
           </View>
         ) : state === "locked" ? (
@@ -280,7 +282,7 @@ function RungRow({
             ) : null}
             {stageNeeds(s.stages, city2.buildings).map((n) => (
               <View key={n.key} style={styles.reqRow}>
-                <Ionicons name={n.ok ? "checkmark" : "ellipse-outline"} size={11} color={n.ok ? colors.win : colors.textTertiary} />
+                <Ionicons name={n.ok ? "checkmark" : "ellipse-outline"} size={11} color={n.ok ? CP.win : CP.textTertiary} />
                 <Text style={styles.req} numberOfLines={2} {...textScale.dense}>
                   {n.text}
                 </Text>
@@ -292,7 +294,7 @@ function RungRow({
 
         {opens.length && state !== "done" && state !== "current" ? (
           <View style={styles.opens}>
-            <Ionicons name="business-outline" size={12} color={colors.brandAccent} />
+            <Ionicons name="business-outline" size={12} color={CP.brandAccent} />
             <Text style={styles.opensText} numberOfLines={2} {...textScale.dense}>
               Açılır: {opens.map((b) => b.title).join(", ")}
             </Text>
@@ -323,34 +325,34 @@ function HistoryRow({ h, steps }: { h: City2History; steps: City2Step[] }) {
 const styles = StyleSheet.create({
   content: { paddingHorizontal: layout.screenPadding, paddingTop: space.md, paddingBottom: space.giant * 2, gap: space.lg },
   summary: { ...cardStyle, flexDirection: "row", alignItems: "center", paddingVertical: space.md },
-  summaryRule: { width: hairline, alignSelf: "stretch", backgroundColor: colors.border },
+  summaryRule: { width: hairline, alignSelf: "stretch", backgroundColor: CP.border },
   stat: { flex: 1, alignItems: "center", gap: 2 },
-  statValue: { ...type.metricSm, color: colors.textPrimary },
-  statLabel: { ...type.caption, color: colors.textTertiary },
+  statValue: { ...type.metricSm, color: CP.textPrimary },
+  statLabel: { ...type.caption, color: CP.textTertiary },
 
   rung: { flexDirection: "row", gap: space.md },
   rail: { width: 36, alignItems: "center" },
-  railLine: { flex: 1, width: 2, minHeight: space.md, marginVertical: space.xxs, borderRadius: radius.pill, backgroundColor: colors.surface3 },
-  railLineDone: { backgroundColor: colors.win },
+  railLine: { flex: 1, width: 2, minHeight: space.md, marginVertical: space.xxs, borderRadius: radius.pill, backgroundColor: CP.surface3 },
+  railLineDone: { backgroundColor: CP.win },
   rungBody: { flex: 1, gap: space.xs, paddingVertical: space.s, paddingHorizontal: space.md, marginBottom: space.md, borderRadius: radius.lg },
-  rungCurrent: { backgroundColor: colors.brandDim, borderWidth: hairline, borderColor: colors.brandBorder },
+  rungCurrent: { backgroundColor: CP.brandDim, borderWidth: hairline, borderColor: CP.brandBorder },
   rungNext: { ...cardStyle, paddingVertical: space.md, gap: space.md },
   rungHead: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 24 },
-  rungTitle: { ...type.h3, color: colors.textPrimary, flex: 1 },
-  rungTitleLocked: { color: colors.textSecondary },
-  rungMeta: { ...type.caption, color: colors.textTertiary },
-  tagNow: { ...type.micro, fontFamily: fonts.bold, color: colors.brandAccent },
+  rungTitle: { ...type.h3, color: CP.textPrimary, flex: 1 },
+  rungTitleLocked: { color: CP.textSecondary },
+  rungMeta: { ...type.caption, color: CP.textTertiary },
+  tagNow: { ...type.micro, fontFamily: fonts.bold, color: CP.brandAccent },
   nextBox: { gap: space.md },
   reqs: { gap: 3 },
   reqRow: { flexDirection: "row", alignItems: "flex-start", gap: space.xs },
-  req: { ...type.caption, color: colors.textTertiary, flex: 1 },
+  req: { ...type.caption, color: CP.textTertiary, flex: 1 },
   opens: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  opensText: { ...type.caption, color: colors.brandAccent, flex: 1 },
+  opensText: { ...type.caption, color: CP.brandAccent, flex: 1 },
 
   history: { ...cardStyle, padding: space.md, gap: space.sm },
-  historyTitle: { ...type.h3, color: colors.textPrimary },
+  historyTitle: { ...type.h3, color: CP.textPrimary },
   historyRow: { flexDirection: "row", alignItems: "center", gap: space.md },
   historyTexts: { flex: 1, gap: 1 },
-  historyName: { ...type.labelSm, color: colors.textPrimary },
-  historyMeta: { ...type.caption, color: colors.textTertiary },
+  historyName: { ...type.labelSm, color: CP.textPrimary },
+  historyMeta: { ...type.caption, color: CP.textTertiary },
 });
