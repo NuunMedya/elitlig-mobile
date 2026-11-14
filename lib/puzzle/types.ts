@@ -22,7 +22,7 @@
  *     alana göre büyür, boş kalan alt bölge bırakılmaz. Telefon dikey kullanımı esas.
  */
 
-export type PuzzleGameKey = "uclu" | "ucle" | "soyunma" | "kantin" | "kariyer";
+export type PuzzleGameKey = "uclu" | "ucle" | "soyunma" | "kantin" | "kariyer" | "penalti" | "kadro" | "savunma";
 
 export interface PuzzleResult {
   won: boolean;

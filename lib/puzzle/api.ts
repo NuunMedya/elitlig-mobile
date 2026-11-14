@@ -2,6 +2,53 @@ import { get, post } from "../http";
 import type { PuzzleGameKey } from "./types";
 
 /**
+ * Canı olan bütün oyunlar (sözleşme §4, sunucu rules.LIFE_GAMES): bölümlü
+ * oyunlar + sonsuz (slalom, sektir) + bilgi (seri, kimbu, tahmin). Günün Testi
+ * canı yoktur (zaten günde 1).
+ */
+export type LifeGameKey = PuzzleGameKey | "slalom" | "sektir" | "seri" | "kimbu" | "tahmin";
+
+/** Genel ödüllü reklam türleri (sözleşme §5; sunucu rules.ADS). */
+export type AdKind = "life" | "double_coins" | "booster" | "spin";
+
+/**
+ * Bölüm kazancıyla gelen hediye (sözleşme §5): seri hediyesi, yıldız sandığı
+ * (her 40 bölüm yıldızında), bölüm sandığı (her 10 bölümde).
+ */
+export interface PuzzleGift {
+  kind: "streak" | "chest" | "star_chest" | "level_chest";
+  title: string;
+  coins?: number;
+  boosters?: Record<string, number>;
+  stars?: number;
+}
+
+/** Oyun başına üst üste kazanma serisi (0–3 basamak). */
+export interface PuzzleStreak {
+  wins: number;
+  /** 0 = seri yok · 1/2/3 = basamak (sonraki bölümde ücretsiz güçlendirici). */
+  tier: number;
+  /** Bir sonraki basamak için gereken üst üste kazanç (son basamakta null). */
+  next_at: number | null;
+}
+
+/** Ödüllü reklamın bugünkü hakkı. */
+export interface AdQuota {
+  left: number;
+  per_day: number;
+  seconds: number;
+}
+
+/** Hediye ilerlemesi (GET /me → profile.gifts; eski sunucuda yok). */
+export interface PuzzleGiftsState {
+  streaks: Partial<Record<PuzzleGameKey, PuzzleStreak>>;
+  /** Yıldız sandığı: `progress` / `every` bölüm yıldızı; dolunca sandık açılır. */
+  star_chest: { progress: number; every: number; opened: number };
+  /** Bölüm sandığı: her `every` bölümde bir (ilk geçişte). */
+  level_chest: { every: number };
+}
+
+/**
  * LİG YOLU API — elitlig-server routes/puzzle.js (services/puzzle).
  *
  * İlerleme sunucuda tutulur: telefon değişse de seviye, yıldız, jeton, can,
@@ -121,10 +168,17 @@ export interface PuzzleProfile {
   daily: DailyStatus;
   /** Reklamla can: bugün kalan hak (eski sunucuda yok). */
   ad_lives?: { left: number; per_day: number; seconds: number };
-  /** Oyun başına can (her oyunun kendi 5 canı; eski sunucuda yok). */
-  lives_by_game?: Partial<Record<PuzzleGameKey, { lives: number; next_life_at: string | null }>>;
+  /**
+   * Oyun başına can (her oyunun kendi 5 canı; eski sunucuda yok). Yeni sunucu
+   * bütün LifeGameKey oyunlarını döndürür (sonsuz ve bilgi oyunları dahil).
+   */
+  lives_by_game?: Partial<Record<LifeGameKey, { lives: number; next_life_at: string | null }>>;
   /** `livesFor` ile üretilen görünümde: canların ait olduğu oyun. */
-  life_game?: PuzzleGameKey;
+  life_game?: LifeGameKey;
+  /** Genel ödüllü reklam hakları (yeni sunucu). */
+  ads?: Partial<Record<AdKind, AdQuota>>;
+  /** Seri / sandık hediyelerinin ilerlemesi (yeni sunucu). */
+  gifts?: PuzzleGiftsState;
   /** Şehir 2.1: jeton harcama yerleri (eski sunucuda yok). */
   coin_shop?: CoinShop;
 }
@@ -147,7 +201,7 @@ export const saveStreakWithCoins = () => post<{ saved: true; coins: number; stre
  * Cüzdan, can doldurma ve reklamla can bu görünümle çalışır. Eski sunucu
  * (tek havuz) için profil olduğu gibi döner.
  */
-export function livesFor<T extends PuzzleProfile | undefined>(profile: T, game: PuzzleGameKey | null | undefined): T {
+export function livesFor<T extends PuzzleProfile | undefined>(profile: T, game: LifeGameKey | null | undefined): T {
   if (!profile || !game) return profile;
   const g = profile.lives_by_game?.[game];
   return (g ? { ...profile, lives: g.lives, next_life_at: g.next_life_at, life_game: game } : { ...profile, life_game: game }) as T;
@@ -181,9 +235,25 @@ export interface PuzzleMe {
   };
 }
 
+export interface FinishReward {
+  coins: number;
+  xp: number;
+  firstClear: boolean;
+  /** Bu kazançla gelen bölüm yıldızı (1–3 farkı) + bölüm primi. */
+  starsGained: number;
+  /** İlk geçişte bölüm primi (rules.levelBonus; yeni sunucu). */
+  level_bonus?: number;
+  /** Seri / sandık hediyeleri (yeni sunucu; jeton ve güçlendiriciler eklenmiş olarak gelir). */
+  gifts?: PuzzleGift[];
+  /** Bu oyundaki üst üste kazanma serisi (yeni sunucu). */
+  streak?: PuzzleStreak;
+  /** Reklamla 2 kat jeton hakkı (startAd("double_coins", game)). */
+  ad_double?: { token_kind: "double_coins"; coins: number } | null;
+}
+
 export interface FinishResponse {
   won: boolean;
-  reward: { coins: number; xp: number; firstClear: boolean; starsGained: number } | null;
+  reward: FinishReward | null;
   game: PuzzleGameProgress;
   profile: PuzzleProfile;
 }
@@ -210,21 +280,104 @@ export const getPuzzleMe = () => get<PuzzleMe>("/api/puzzle/me", undefined, { re
  * jetonla yazılır (sunucu en kısa süreye ve günlük kazanç sınırına da bakar,
  * `wins_left`: bugün kalan kazanç hakkı). Eski sunucu ikisini de göndermez.
  */
+export interface StartLevelResponse {
+  ok: true;
+  level: number;
+  play?: string;
+  wins_left?: number;
+  /**
+   * Seri hediyesi (yeni sunucu): bu bölümde ÜCRETSİZ kullanılacak
+   * güçlendiriciler. Stoktan düşülmez; `finishLevel` boosters_used içine
+   * YAZILMAZ (sunucu zaten saymaz). Boş nesne = seri yok.
+   */
+  streak_boosters?: Record<string, number>;
+  streak?: PuzzleStreak;
+  profile: PuzzleProfile;
+}
 export const startLevel = (game: PuzzleGameKey, level: number) =>
-  post<{ ok: true; level: number; play?: string; wins_left?: number; profile: PuzzleProfile }>(`/api/puzzle/${game}/start`, { level }, { retry: false });
+  post<StartLevelResponse>(`/api/puzzle/${game}/start`, { level }, { retry: false });
 export const finishLevel = (
   game: PuzzleGameKey,
   body: { level: number; won: boolean; stars: number; boosters_used: Record<string, number>; play?: string }
 ) => post<FinishResponse>(`/api/puzzle/${game}/finish`, body, { retry: false });
-export const buyItem = (item: string, game?: PuzzleGameKey | null) =>
+export const buyItem = (item: string, game?: LifeGameKey | null) =>
   post<{ item: string; profile: PuzzleProfile }>("/api/puzzle/shop", game ? { item, game } : { item });
 export const buildStadium = (id: string) =>
   post<{ item: StadiumItem; zone_done: boolean; bonus_coins: number; profile: PuzzleProfile }>("/api/puzzle/stadium/build", { id });
 /** Ödüllü reklam: başlat (jeton) → reklam biter → ödülü iste (+1 can). */
-export const startAdLife = (game?: PuzzleGameKey | null) =>
+export const startAdLife = (game?: LifeGameKey | null) =>
   post<{ token: string; seconds: number; left: number }>("/api/puzzle/ad-life/start", game ? { game } : undefined, { retry: false });
 export const claimAdLife = (token: string) =>
   post<{ lives_added: number; profile: PuzzleProfile }>("/api/puzzle/ad-life/claim", { token }, { retry: false });
+/**
+ * Genel ödüllü reklam (sözleşme §5): başlat → reklam biter (en az `seconds`)
+ * → ödülü iste. kind: life (game'in +1 canı) · double_coins (son kazancın
+ * jetonu kadar ek jeton; kazanç başına 1) · booster (o oyundan 1 ücretsiz
+ * güçlendirici) · spin (günlük çark). Günlük hak dolunca 429 AD_LIMIT.
+ */
+export const startAd = (kind: AdKind, game?: LifeGameKey | null) =>
+  post<{ token: string; kind: AdKind; game: LifeGameKey | null; seconds: number; left: number }>(
+    "/api/puzzle/ad/start",
+    game ? { kind, game } : { kind },
+    { retry: false },
+  );
+export interface AdClaimResponse {
+  kind: AdKind;
+  game: LifeGameKey | null;
+  reward: { lives?: number; coins?: number; boosters?: Record<string, number>; stars?: number; title?: string };
+  profile: PuzzleProfile;
+}
+export const claimAd = (token: string) => post<AdClaimResponse>("/api/puzzle/ad/claim", { token }, { retry: false });
+/* ───────────────────────── ÇEVRİMDIŞI EŞİTLEME (sözleşme §7) ───────────────────────── */
+
+interface OfflineEventBase {
+  /** Cihazda üretilen uuid (sunucu tekrarı `dup` sayar). */
+  id: string;
+  /** Cihaz saati (ms). */
+  startedAt: number;
+  finishedAt: number;
+  /** Monotonik ölçülen oyun süresi (ms). */
+  durationMs: number;
+}
+export interface OfflineLevelEvent extends OfflineEventBase {
+  kind: "level";
+  game: PuzzleGameKey;
+  level: number;
+  won: boolean;
+  stars: number;
+  score?: number;
+  boosters_used?: Record<string, number>;
+}
+export interface OfflineArenaEvent extends OfflineEventBase {
+  kind: "arena";
+  /** lib/api/arena ArenaGame. */
+  game: string;
+  score: number;
+  stats?: Record<string, number> | null;
+  v?: number;
+}
+export type OfflineEvent = OfflineLevelEvent | OfflineArenaEvent;
+
+export interface SyncEventResult {
+  id: string;
+  status: "ok" | "dup" | "rejected";
+  /** rejected: LEVEL_LOCKED · TOO_SHORT · TOO_OLD · FUTURE · DAILY_WIN_LIMIT · IMPLAUSIBLE · BAD_EVENT … */
+  reason: string | null;
+  /** ok olaylarda: bu olayın getirdiği yıldız / jeton. */
+  stars?: number;
+  coins?: number;
+  /** arena: doğrulandı mı (yıldız yalnız doğrulanmışa). */
+  verified?: boolean;
+}
+export interface SyncResponse {
+  results: SyncEventResult[];
+  gained: { stars: number; coins: number };
+  profile: PuzzleProfile;
+  games: Record<PuzzleGameKey, PuzzleGameProgress>;
+}
+/** Kuyruktaki çevrimdışı sonuçları tek istekte gönderir (en çok 100 olay). */
+export const syncOffline = (events: OfflineEvent[]) => post<SyncResponse>("/api/puzzle/sync", { events }, { retry: false });
+
 /** joker: gün 3'ün güçlendiricisi · game: gün 5'te canı dolacak oyun (eski sunucu yok sayar). */
 export const claimDaily = (body?: { joker?: string; game?: PuzzleGameKey }) =>
   post<DailyClaimResponse>("/api/puzzle/daily", body && (body.joker || body.game) ? body : undefined, { retry: false });
