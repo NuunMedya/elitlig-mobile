@@ -381,7 +381,7 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
   }, [phase, score, finishRun, correct, asked, bestStreak]);
 
   const [livesOpen, setLivesOpen] = useState(false);
-  const lives = useGameLives(config.game === "gunun" ? null : (config.game as LifeGameKey));
+  const gameLives = useGameLives(config.game === "gunun" ? null : (config.game as LifeGameKey));
   const beginRun = run.begin;
   const startingRef = useRef(false);
   const start = async () => {
@@ -536,6 +536,7 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
         </View>
 
         <View style={styles.stage}>
+          {phase === "setup" ? <OfflinePill /> : null}
           {phase === "setup" ? (
             <SetupCard
               config={config}
@@ -735,6 +736,10 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
           />
         }
       />
+
+      {config.game !== "gunun" ? (
+        <LivesSheet visible={livesOpen} onClose={() => setLivesOpen(false)} game={config.game as LifeGameKey} lives={gameLives} title={config.title} />
+      ) : null}
 
       <QuizCityPicker
         visible={pickerOpen}
