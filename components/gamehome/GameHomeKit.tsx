@@ -85,7 +85,7 @@ export const HomeTopBar = React.memo(function HomeTopBar({
             label={`Can ${lives.lives}/${lives.max}${lives.label && lives.label !== "Dolu" ? `, sıradaki ${lives.label}` : ""}`}
           />
         ) : null}
-        <TopPill icon="disc" tint={GH.coin} value={coins != null ? fmt(coins) : "–"} plus={Boolean(onCoins)} onPress={onCoins} label={`Jeton ${coins ?? 0}`} />
+        <TopPill icon="disc" tint={GH.coin} value={coins != null ? fmtCoins(coins) : "–"} wide plus={Boolean(onCoins)} onPress={onCoins} label={`Jeton ${coins ?? 0}`} />
         <TopPill icon="star" tint={GH.star} value={stars != null ? fmt(stars) : "–"} onPress={onStars} label={`Yıldız ${stars ?? 0}`} />
       </View>
       <Touchable onPress={onSettings} hitSlop={touchSlop(42)} accessibilityRole="button" accessibilityLabel="Ayarlar" style={styles.round} haptic="light">
@@ -103,7 +103,10 @@ function TopPill({
   plus,
   onPress,
   label,
+  wide,
 }: {
+  /** Jeton hapı: "+" düğmesi de taşıdığı için daha geniş (sayı kesilmesin). */
+  wide?: boolean;
   icon: keyof typeof Ionicons.glyphMap;
   tint: string;
   value: string;
@@ -113,7 +116,7 @@ function TopPill({
   label: string;
 }) {
   return (
-    <Touchable onPress={onPress} disabled={!onPress} haptic="selection" style={styles.pill} accessibilityRole="button" accessibilityLabel={label}>
+    <Touchable onPress={onPress} disabled={!onPress} haptic="selection" style={[styles.pill, wide ? styles.pillWide : null]} accessibilityRole="button" accessibilityLabel={label}>
       <View style={styles.pillIcon}>
         <Ionicons name={icon} size={24} color={tint} />
       </View>
@@ -386,6 +389,9 @@ export function ModalRow({ icon, tint, title, sub, right }: { icon: keyof typeof
 
 /* ═══════════════════════ STİLLER ═══════════════════════ */
 
+/** Jeton: 100.000 ve üstü kısaltılır ("125B") ki dar telefonda kesilmesin. */
+const fmtCoins = (n: number) => (n >= 100_000 ? `${Math.floor(n / 1000)}B` : n.toLocaleString("tr-TR"));
+
 const shadowText = { textShadowColor: GH.inkShadow, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 2 };
 
 const styles = StyleSheet.create({
@@ -408,7 +414,8 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: GH.pillEdge,
   },
-  pillIcon: { marginLeft: -6, width: 30, alignItems: "center" },
+  pillWide: { flex: 1.45 },
+  pillIcon: { marginLeft: -6, width: 28, alignItems: "center" },
   pillTexts: { flex: 1, minWidth: 0 },
   pillValue: { ...type.label, fontFamily: fonts.bold, color: GH.white, ...shadowText },
   pillHint: { ...type.nano, fontFamily: fonts.bold, color: GH.white, opacity: 0.85 },
