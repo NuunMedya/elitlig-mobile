@@ -71,7 +71,10 @@ import {
   useUrgency,
 } from "@/components/game/QuizKit";
 import { BottomSheet, useReduceMotion, useToast } from "@/components/ui";
-import { startArenaSession, submitArenaScore } from "@/lib/api/arena";
+import { ARENA_CLIENT_VERSION, startArenaSession, submitArenaScore } from "@/lib/api/arena";
+import { isOfflineCacheMiss, withOfflineCache } from "@/lib/offline/cache";
+import { isOfflineError } from "@/lib/offline/net";
+import { enqueueOffline } from "@/lib/offline/queue";
 import { getPlayerRankings } from "@/lib/api/players";
 import { CARTOON } from "@/lib/game/cartoon";
 import { QUIZ, QUIZ_LETTER_TONES, QUIZ_TONES, type QuizToneName } from "@/lib/game/quizPalette";
@@ -380,11 +383,14 @@ export default function DailyQuizScreen() {
   const day = new Date().toISOString().slice(0, 10);
   const dayLabel = new Date().toLocaleDateString("tr-TR", { day: "numeric", month: "long" });
 
+  // Çevrimdışı (sözleşme §7): bugünün havuzu çevrimiçiyken cihaza yazılır;
+  // ağ yokken yalnız BUGÜN yazılmışsa oynanır (herkes aynı soruları çözsün).
   const query = useQuery({
-    queryKey: queryKeys.playerRankings({}, "topScorers"),
-    queryFn: () => getPlayerRankings({}, "topScorers"),
+    queryKey: [...queryKeys.playerRankings({}, "topScorers"), "gunun", day],
+    queryFn: () => withOfflineCache(`gunun.pool`, () => getPlayerRankings({}, "topScorers"), { sameDay: true }),
     staleTime: 10 * 60_000,
   });
+  const offlineMiss = isOfflineCacheMiss(query.error);
 
   const standingQuery = useQuery({
     queryKey: ["arena", "me", "weekly", "gunun"],
@@ -564,13 +570,27 @@ export default function DailyQuizScreen() {
         .then(settle)
         .catch((error) => {
           if (error instanceof ApiError && error.status === 409) settle();
+          else if (isOfflineError(error) && auth.user) {
+            // Çevrimdışı: skor kuyruğa; bağlantı gelince /api/puzzle/sync ile gider.
+            const now = Date.now();
+            void enqueueOffline(auth.user.id, {
+              kind: "arena",
+              game: "gunun",
+              score: result.score,
+              stats: { correct: result.correct },
+              v: ARENA_CLIENT_VERSION,
+              startedAt: startedAt.current || now,
+              finishedAt: now,
+              durationMs: startedAt.current ? Math.max(0, now - startedAt.current) : 0,
+            }).then(settle, () => undefined);
+          }
           // Diğer hatalarda skor bekler; ekran yeniden açılınca denenir.
         })
         .finally(() => {
           sendingDaily.current = false;
         });
     },
-    [day, refetchStanding]
+    [auth.user, day, refetchStanding]
   );
 
   /* Misafir giriş yaptıysa ya da önceki gönderim düştüyse bugünün skoru gönderilir. */
@@ -738,10 +758,12 @@ export default function DailyQuizScreen() {
             <CartoonPanel style={styles.stateCard}>
               <IconBubble icon={query.isError ? "cloud-offline" : "calendar"} tone="red" size={60} />
               <Text style={styles.stateTitle} {...textScale.dense}>
-                {query.isError ? "Sorular yüklenemedi" : "Test hazırlanamadı"}
+                {offlineMiss ? "İnternet gerekli" : query.isError ? "Sorular yüklenemedi" : "Test hazırlanamadı"}
               </Text>
               <Text style={styles.stateBody} {...textScale.long}>
-                {query.isError
+                {offlineMiss
+                  ? "Bugünün soruları henüz bu cihaza inmedi. İnternete bağlanınca testi bir kez aç; sonra çevrimdışı da çözebilirsin."
+                  : query.isError
                   ? "Bağlantını kontrol edip tekrar dene."
                   : "Soru havuzu şu an yüklenemedi, birazdan tekrar dene."}
               </Text>

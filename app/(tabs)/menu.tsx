@@ -5,8 +5,10 @@
  *   1. KİMLİK SAHNESİ (ProfileHero) — girişlide avatar + imza halkası, rol /
  *      takım hapları, ELİT SEVİYE şeridi (XP + GradientBar) ve takip
  *      sayıları; misafirde davet + giriş / üye ol.
- *   2. HIZLI ERİŞİM — dört renkli karo: Oyun merkezi · Tahmin Ligi ·
- *      Fantezi · Görevler. Altında Günün Testi şeridi (bugün oynandı mı).
+ *   2. OYUN MERKEZİ — büyük, göze çarpan giriş kartı (GameCenterEntry):
+ *      Günün Testi, Fantezi ve Tahmin Ligi artık oyun merkezinin İÇİNDEDİR;
+ *      kart bugünkü Günün Testi durumunu da gösterir. Altında üç hızlı karo:
+ *      Kulüp Şehri · Görevler · Rekorlar.
  *   3. GRUPLAR — her biri ikonlu başlık + TEK kart:
  *        Takip · Görevler ve ödüller · Lig ve istatistik (karşılaştırma
  *        çifti + liste) · Destek · Ayarlar (tema anahtarı burada).
@@ -39,6 +41,7 @@ import {
   useToast,
 } from "@/components/ui";
 import { MenuGroup, MenuItemRow as MenuGroupRow, QuickGrid, type MenuItemSpec, type QuickItem } from "@/components/account/MenuBlocks";
+import { GameCenterEntry } from "@/components/gamehome/GameCenterEntry";
 import { ProfileHero, type ProfileHeroLevel, type ProfileHeroStat } from "@/components/account/ProfileHero";
 import { THEME_STORAGE_KEY, setStoredTheme } from "@/constants/themePreference";
 import { useNotificationBell } from "@/hooks/useNotificationBell";
@@ -291,10 +294,9 @@ export default function MenuTabScreen() {
 
   const quick = useMemo<QuickItem[]>(
     () => [
-      { key: "oyun", icon: "game-controller", label: "Oyunlar", hint: "Merkez", tone: "violet", onPress: () => go("/(tabs)/oyunlar") },
-      { key: "tahmin", icon: "podium", label: "Tahmin", hint: "Skor bil", tone: "cyan", onPress: () => go("/tahmin-ligi") },
-      { key: "fantezi", icon: "people-circle", label: "Fantezi", hint: "Kadro kur", tone: "pink", onPress: () => go("/fantezi") },
+      { key: "sehir", icon: "business", label: "Kulüp Şehri", hint: "Yıldız harca", tone: "cyan", onPress: () => go("/kulup-sehri") },
       { key: "gorev", icon: "flag", label: "Görevler", hint: questHint ?? "XP kazan", tone: "gold", onPress: () => go("/gorevler") },
+      { key: "rekor", icon: "trophy", label: "Rekorlar", hint: "Sıralama", tone: "pink", onPress: () => go("/siralama") },
     ],
     [go, questHint]
   );
@@ -536,10 +538,10 @@ export default function MenuTabScreen() {
           </Touchable>
         ) : null}
 
-        {/* HIZLI ERİŞİM — dört karo + Günün Testi şeridi. */}
+        {/* OYUN MERKEZİ — büyük giriş kartı (Günün Testi, Fantezi, Tahmin Ligi içinde) + hızlı karolar. */}
         <View style={styles.section}>
+          <GameCenterEntry onPress={() => go("/(tabs)/oyunlar")} dailyCorrect={dailyCorrect} />
           <QuickGrid items={quick} />
-          <DailyStrip correct={dailyCorrect} onPress={() => go("/gunun")} />
         </View>
 
         <MenuGroup title="Takip" icon="star" tone="violet" items={followItems} style={styles.section} />
@@ -607,54 +609,6 @@ export default function MenuTabScreen() {
 }
 
 /* ============================== ALT BİLEŞENLER ============================= */
-
-/** Günün Testi şeridi — bugün oynandıysa skor, oynanmadıysa çağrı. */
-const DailyStrip = React.memo(function DailyStrip({
-  correct,
-  onPress,
-}: {
-  correct: number | null;
-  onPress: () => void;
-}) {
-  const played = correct != null;
-  return (
-    <Touchable
-      feedback="card"
-      haptic="selection"
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={played ? `Günün Testi: bugün ${correct}/10 doğru` : "Günün Testi: bugünün 10 sorusu seni bekliyor"}
-      style={styles.daily}
-    >
-      <IconTile icon={played ? "checkmark-done" : "bulb"} tone="mint" size={36} glow={false} />
-      <View style={styles.dailyBody}>
-        <Text style={styles.dailyTitle} numberOfLines={1} {...textScale.dense}>
-          Günün Testi
-        </Text>
-        <Text style={styles.dailyHint} numberOfLines={1} {...textScale.dense}>
-          {played ? "Bugünkü testi bitirdin · yarın yeni sorular" : "Herkese aynı 10 soru, günde bir kez"}
-        </Text>
-      </View>
-      {played ? (
-        <View style={styles.dailyScore}>
-          <Text style={styles.dailyScoreValue} {...textScale.badge}>
-            {correct}
-          </Text>
-          <Text style={styles.dailyScoreUnit} {...textScale.badge}>
-            /10
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.dailyCta}>
-          <Text style={styles.dailyCtaText} {...textScale.badge}>
-            Oyna
-          </Text>
-          <Ionicons name="play" size={11} color={colors.brandAccent} />
-        </View>
-      )}
-    </Touchable>
-  );
-});
 
 /** Lig ve istatistik kartının üst bandındaki karşılaştırma aracı. */
 const CompareTile = React.memo(function CompareTile({

@@ -7,19 +7,24 @@
  *   · En üstte Kulüp Şehri kartı: statü, harcanabilir yıldız, sıradaki statüye
  *     ilerleme, toplanmayı bekleyen XP yıldızı ve "Şehrini geliştir".
  *   · Altında yıldızın kaynakları tek şeritte. OYUNLAR doğrudan YILDIZ verir
- *     (XP vermez): bulmaca seviyeleri (1–3 yıldız), bilgi ve arcade skorları
- *     (skora göre, günlük tavanlı), Tahmin Ligi ve Fantezi puanları (haftalık
- *     tavanlı). XP yalnız SAHADAN ve GÖREVLERDEN gelir; o da yıldıza çevrilir
- *     (10 XP = 1 yıldız, Kulüp Şehri'nde "Yıldızları topla"; 3 gün bekler).
+ *     (XP vermez): bölümlü oyunlar (bölüm başına 1–3 yıldız + bölüm primi),
+ *     sonsuz ve bilgi oyunları (REKOR YILDIZI: rekorunu geçince yeni eşiklerin
+ *     yıldızı + küçük katılım yıldızı, günlük tavanlı), Günün Testi (doğru
+ *     sayısına göre en çok 5), Tahmin Ligi ve Fantezi puanları (haftalık
+ *     tavanlı). XP yalnız SAHADAN ve GÖREVLERDEN gelir; HAFTALIK birikir ve
+ *     hafta kapanınca yıldıza döner (10 XP = 1 yıldız, Kulüp Şehri'nde
+ *     "Yıldızları topla"; Pazartesi–Çarşamba 3 gün toplanabilir).
  *     Gerçek maçlar da doğrudan yıldız verir (maç başı 25 + bonus, haftada 2).
  *   · Günlük giriş ödülü + seri kartı (components/city/DailyReward): yıldız,
  *     jeton, joker; uzun seri ödülleri ve seri koruyucu (eski "Lig Yolu
  *     günlük ödülü" bunun içindedir).
  *   · Oyunlar EŞİT satırlar halinde, yalnız kategori başlıkları altında:
- *       Bilgi yarışmaları · Bulmacalar · Arcade · Lig yarışmaları
+ *       Bilgi yarışmaları · Bulmacalar · Bölümlü arcade · Sonsuz arcade · Lig yarışmaları
+ *     Her oyun kendi ANA SAYFASINA açılır (sözleşme §6): bölümlüler
+ *     /lig-yolu/<oyun>, sonsuz ve bilgi oyunları /oyun/<oyun>.
  *     Hiçbir oyun ötekinden büyük ya da önde değildir. Her satır aynı bilgiyi
  *     verir: rekor ya da seviye ve o oyunun şehre kazandırdığı yıldız.
- *     Bulmacalar (eski "Lig Yolu" başlığı) doğrudan kendi haritasına açılır.
+ *     Penaltı, Kadro Koşusu ve Savunma Hattı artık bölümlüdür (Lig Yolu modülü).
  *   · En altta sıralamalar, bu haftanın özeti, görevler ve kariyer.
  *
  * VERİ: rekorlar hesabın oyun kaydından (lib/puzzle/saves `bests`: cihaz önbelleği + sunucu)
@@ -42,10 +47,12 @@ import Svg, { Circle, Ellipse, Path, Polygon, Rect } from "react-native-svg";
 
 import { DailyRewardEntry } from "@/components/city/DailyReward";
 import { XpTransferBanner } from "@/components/city/XpTransferBanner";
+import { OfflinePill, requestOfflineFlush } from "@/components/offline/OfflineSync";
 import { Touchable } from "@/components/ui";
 import { getMyArenaSummary, type ArenaGame } from "@/lib/api/arena";
 import { HUB } from "@/lib/game/hubPalette";
-import { cityKeys, getCity, type CityState } from "@/lib/puzzle/api";
+import { cityKeys, getCity, type CityState, type LifeGameKey } from "@/lib/puzzle/api";
+import { puzzleGame } from "@/lib/puzzle/registry";
 import { useGameSave } from "@/lib/puzzle/saves";
 import type { PuzzleGameKey } from "@/lib/puzzle/types";
 import { usePuzzleMe } from "@/lib/puzzle/usePuzzle";
@@ -62,7 +69,7 @@ const ARENA_DAILY_CAP = 30;
 
 /* ═══════════════════════ OYUN KATALOĞU (saf veri) ═══════════════════════ */
 
-type Category = "quiz" | "puzzle" | "arcade" | "league";
+type Category = "quiz" | "puzzle" | "arcade" | "endless" | "league";
 
 interface GameRow {
   key: string;
@@ -77,43 +84,50 @@ interface GameRow {
   route: string;
   /** Giriş gerektirir mi (sunucu ilerlemesi). */
   auth?: boolean;
+  /** Her tur 1 can (sonsuz + bilgi oyunları, sözleşme §4). */
+  lives?: boolean;
 }
 
+/** Bölümlü arcade (Penaltı · Kadro · Savunma): Lig Yolu modülü kayıtlıysa ana sayfası /lig-yolu/<oyun>. */
+const levelRoute = (key: "penalti" | "kadro" | "savunma") => (puzzleGame(key) ? `/lig-yolu/${key}` : `/${key}`);
+
 const GAMES: GameRow[] = [
-  // BİLGİ YARIŞMALARI — skora göre şehir yıldızı
-  { key: "gunun", category: "quiz", title: "Günün Testi", blurb: "Herkese aynı 10 soru, günde bir kez", icon: "bulb", arena: "gunun", route: "/gunun" },
-  { key: "kimbu", category: "quiz", title: "Kim Bu?", blurb: "İpuçlarından gizemli oyuncuyu bul", icon: "search", arena: "kimbu", route: "/kimbu" },
-  { key: "seri", category: "quiz", title: "Gol Düellosu", blurb: "İki oyuncudan hangisi daha çok gol attı?", icon: "flame", arena: "seri", route: "/arena" },
-  { key: "tahmin", category: "quiz", title: "Kim Kazandı?", blurb: "Oynanmış maçların sonucunu bil: 1 · X · 2", icon: "stats-chart", arena: "tahmin", route: "/tahmin" },
-  // BULMACALAR — seviye başına 1–3 yıldız
+  // BİLGİ YARIŞMALARI — rekor yıldızı (Günün Testi: doğru sayısına göre)
+  { key: "gunun", category: "quiz", title: "Günün Testi", blurb: "Herkese aynı 10 soru, günde bir kez", icon: "bulb", arena: "gunun", route: "/oyun/gunun" },
+  { key: "kimbu", category: "quiz", title: "Kim Bu?", blurb: "İpuçlarından gizemli oyuncuyu bul", icon: "search", arena: "kimbu", route: "/oyun/kimbu", lives: true },
+  { key: "seri", category: "quiz", title: "Gol Düellosu", blurb: "İki oyuncudan hangisi daha çok gol attı?", icon: "flame", arena: "seri", route: "/oyun/seri", lives: true },
+  { key: "tahmin", category: "quiz", title: "Kim Kazandı?", blurb: "Oynanmış maçların sonucunu bil: 1 · X · 2", icon: "stats-chart", arena: "tahmin", route: "/oyun/tahmin", lives: true },
+  // BULMACALAR — bölüm başına 1–3 yıldız
   { key: "uclu", category: "puzzle", title: "Elit Üçlü", blurb: "Kaydır, üçle, patlat: sahayı temizle", icon: "football", puzzle: "uclu", route: "/lig-yolu/uclu", auth: true },
   { key: "ucle", category: "puzzle", title: "Üçle Kazan", blurb: "Karoları rafa topla, üçlüyü patlat", icon: "layers", puzzle: "ucle", route: "/lig-yolu/ucle", auth: true },
   { key: "soyunma", category: "puzzle", title: "Soyunma Odası", blurb: "Formaları takım takım dolaplara diz", icon: "shirt", puzzle: "soyunma", route: "/lig-yolu/soyunma", auth: true },
   { key: "kantin", category: "puzzle", title: "Stadyum Kantini", blurb: "Taraftarın siparişini doğru sırayla hazırla", icon: "fast-food", puzzle: "kantin", route: "/lig-yolu/kantin", auth: true },
   { key: "kariyer", category: "puzzle", title: "Kariyer Yolu", blurb: "Mahalle sahasından yıldızlığa: şut, pas, çalım", icon: "trending-up", puzzle: "kariyer", route: "/lig-yolu/kariyer", auth: true },
-  // ARCADE — skora göre şehir yıldızı
-  { key: "penalti", category: "arcade", title: "Penaltı", blurb: "Seri penaltıda ligin kulüplerini geç", icon: "golf", arena: "penalti", route: "/penalti" },
-  { key: "slalom", category: "arcade", title: "Slalom", blurb: "Sokakta top sür: zıpla, kay, şerit değiştir", icon: "flag", arena: "slalom", route: "/slalom" },
-  { key: "sektir", category: "arcade", title: "Top Sektir", blurb: "Dokun, topu sektir, barajın arasından geçir", icon: "football-outline", arena: "sektir", route: "/sektir" },
-  { key: "savunma", category: "arcade", title: "Savunma Hattı", blurb: "Oyuncularını diz, hücumu durdur, kaleni koru", icon: "shield", arena: "savunma", route: "/savunma" },
-  { key: "kadro", category: "arcade", title: "Kadro Koşusu", blurb: "Kapılardan geç, kadronu büyüt, golü at", icon: "people", arena: "kadro", route: "/kadro" },
-  // LİG YARIŞMALARI — gerçek maçlarla, XP → yıldız
+  // BÖLÜMLÜ ARCADE — bölüm başına 1–3 yıldız
+  { key: "penalti", category: "arcade", title: "Penaltı", blurb: "Bölüm bölüm seri penaltı: ligin kulüplerini geç", icon: "golf", puzzle: "penalti", route: levelRoute("penalti"), auth: true },
+  { key: "kadro", category: "arcade", title: "Kadro Koşusu", blurb: "Kapılardan geç, kadronu büyüt, golü at", icon: "people", puzzle: "kadro", route: levelRoute("kadro"), auth: true },
+  { key: "savunma", category: "arcade", title: "Savunma Hattı", blurb: "Oyuncularını diz, hücumu durdur, kaleni koru", icon: "shield", puzzle: "savunma", route: levelRoute("savunma"), auth: true },
+  // SONSUZ ARCADE — rekor yıldızı
+  { key: "slalom", category: "endless", title: "Slalom", blurb: "Sokakta top sür: zıpla, kay, şerit değiştir", icon: "flag", arena: "slalom", route: "/oyun/slalom", lives: true },
+  { key: "sektir", category: "endless", title: "Top Sektir", blurb: "Dokun, topu sektir, barajın arasından geçir", icon: "football-outline", arena: "sektir", route: "/oyun/sektir", lives: true },
+  // LİG YARIŞMALARI — gerçek maçlarla, haftalık tavanlı yıldız
   { key: "fantezi", category: "league", title: "Fantezi ElitLig", blurb: "Liginin oyuncularıyla haftalık 5 kişilik kadro", icon: "people-circle", route: "/fantezi" },
   { key: "tahminLigi", category: "league", title: "Tahmin Ligi", blurb: "Liginin gelecek maçlarına skor tahmini", icon: "podium", route: "/tahmin-ligi" },
   { key: "kulupArenasi", category: "league", title: "Kulüp Arenası", blurb: "Takımların haftalık arena yarışı ve derbi", icon: "shield-half", route: "/kulup-arenasi" },
 ];
 
 const CATEGORIES: { key: Category; title: string; hint: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { key: "quiz", title: "BİLGİ YARIŞMALARI", hint: "Skoruna göre şehrine yıldız", icon: "bulb" },
-  { key: "puzzle", title: "BULMACALAR", hint: "Her seviye 1–3 yıldız · oyun başına 5 can", icon: "extension-puzzle" },
-  { key: "arcade", title: "ARCADE", hint: "Skoruna göre şehrine yıldız", icon: "game-controller" },
-  { key: "league", title: "LİG YARIŞMALARI", hint: "Gerçek maçlarla puan · Fantezi ve Tahmin yıldız verir", icon: "trophy" },
+  { key: "quiz", title: "BİLGİ YARIŞMALARI", hint: "Rekorunu kır: yeni eşik = yeni yıldız", icon: "bulb" },
+  { key: "puzzle", title: "BULMACALAR", hint: "Her bölüm 1–3 yıldız · oyun başına 5 can", icon: "extension-puzzle" },
+  { key: "arcade", title: "BÖLÜMLÜ ARCADE", hint: "Her bölüm 1–3 yıldız · bölüm sandıkları", icon: "game-controller" },
+  { key: "endless", title: "SONSUZ ARCADE", hint: "Rekorunu kır: yeni eşik = yeni yıldız", icon: "infinite" },
+  { key: "league", title: "LİG YARIŞMALARI", hint: "Gerçek maçlarla puan · Fantezi ve Tahmin haftalık yıldız", icon: "trophy" },
 ];
 
 /** Lig yarışmalarının satır alt yazısı (oyunlar XP vermez; puan yıldıza döner). */
 const LEAGUE_LINE: Record<string, string> = {
-  fantezi: "Haftalık puanına göre yıldız",
-  tahminLigi: "Tahmin puanına göre yıldız",
+  fantezi: "Haftalık puanına göre yıldız (haftalık tavan)",
+  tahminLigi: "Tahmin puanına göre yıldız (haftalık tavan)",
   kulupArenasi: "Takımının haftalık yarışı · yıldız vermez",
 };
 
@@ -161,6 +175,8 @@ export default function OyunlarScreen() {
   useFocusEffect(
     useCallback(() => {
       void loadLocal();
+      // Oyun merkezine girince bekleyen çevrimdışı sonuçlar gönderilir (sözleşme §7).
+      requestOfflineFlush();
     }, [loadLocal])
   );
 
@@ -205,15 +221,21 @@ export default function OyunlarScreen() {
     if (g.puzzle) {
       const p = me?.games[g.puzzle];
       const lives = me?.profile.lives_by_game?.[g.puzzle]?.lives ?? null;
-      if (!signedIn) return { line: "Giriş yap, seviye seviye ilerle", stars: null };
-      return { line: p ? `${p.level + 1}. seviye` : "1. seviye", stars: p?.total_stars ?? 0, lives };
+      if (!signedIn) return { line: "Giriş yap, bölüm bölüm ilerle", stars: null };
+      return { line: p ? `${p.level + 1}. bölüm` : "1. bölüm", stars: p?.total_stars ?? 0, lives };
     }
     if (g.arena) {
       const best = bestOf(g.arena);
       const stars = signedIn ? city?.stars.arena_by_game?.[g.arena] ?? 0 : null;
-      const badge = g.key === "gunun" ? (local.daily ? `Bugün ${local.daily.correct}/${local.daily.total}` : "Bugünkü test hazır") : null;
-      return { line: best != null ? `Rekor ${fmt(best)}` : "İlk rekorunu kur", stars, badge };
+      const lives = g.lives && signedIn ? me?.profile.lives_by_game?.[g.arena as LifeGameKey]?.lives ?? null : null;
+      if (g.key === "gunun") {
+        return { line: "Doğru sayına göre en çok 5 yıldız", stars, badge: local.daily ? `Bugün ${local.daily.correct}/${local.daily.total} · yarın yeni test` : "Bugünkü test hazır · en çok 5 yıldız" };
+      }
+      return { line: best != null ? `Rekor ${fmt(best)} · geç, yıldız kazan` : "İlk rekorunu kur, yıldız kazan", stars, lives };
     }
+    const tribun = city?.stars.tribun_detail;
+    if (tribun && g.key === "fantezi") return { line: `Bu hafta +${tribun.week.fantasy}/${tribun.week.cap_fantasy} yıldız`, stars: tribun.fantasy };
+    if (tribun && g.key === "tahminLigi") return { line: `Bu hafta +${tribun.week.predictions}/${tribun.week.cap_predictions} yıldız`, stars: tribun.predictions };
     return { line: LEAGUE_LINE[g.key] ?? "Puanına göre yıldız", stars: null };
   };
 
@@ -247,6 +269,8 @@ export default function OyunlarScreen() {
           </View>
         </View>
 
+        <OfflinePill />
+
         {/* 1) KULÜP ŞEHRİ — her şey bunun için */}
         <CityHero
           signedIn={signedIn}
@@ -262,8 +286,8 @@ export default function OyunlarScreen() {
 
         {/* Yıldız kaynakları */}
         <View style={styles.sources}>
-          <Source icon="extension-puzzle" tint={HUB.ribbon.puzzle[0]} title="Bulmaca" text="1–3 yıldız / seviye" />
-          <Source icon="game-controller" tint={HUB.ribbon.arcade[0]} title="Bilgi · Arcade" text={city ? `bugün +${city.stars.arena_today ?? 0}/${ARENA_DAILY_CAP} yıldız` : "skora göre yıldız"} />
+          <Source icon="extension-puzzle" tint={HUB.ribbon.puzzle[0]} title="Bölümler" text="1–3 yıldız / bölüm" />
+          <Source icon="game-controller" tint={HUB.ribbon.arcade[0]} title="Rekor yıldızı" text={city ? `bugün +${city.stars.arena_today ?? 0}/${ARENA_DAILY_CAP} yıldız` : "rekorunu kır, yıldız al"} />
           <Source
             icon="football"
             tint={HUB.ribbon.quiz[0]}
@@ -271,7 +295,7 @@ export default function OyunlarScreen() {
             text={city?.stars.match_detail ? `bu hafta ${city.stars.match_detail.week.matches}/${city.stars.match_detail.week.cap_matches} maç` : "25+ yıldız / maç"}
           />
           <Source icon="podium" tint={HUB.ribbon.league[0]} title="Lig oyunları" text="Tahmin · Fantezi puanı" />
-          <Source icon="flash" tint={HUB.ribbon.career[0]} title="Saha · Görev" text="10 XP = 1 yıldız" />
+          <Source icon="flash" tint={HUB.ribbon.career[0]} title="Saha · Görev" text="Haftalık XP · 10 XP = 1 yıldız" />
         </View>
 
         {/* 2) OYUNLAR — eşit satırlar, yalnız kategori başlıkları */}

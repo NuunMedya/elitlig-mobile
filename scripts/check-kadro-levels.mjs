@@ -2,7 +2,7 @@
  * KADRO KOŞUSU BÖLÜM DENETİMİ — 250 bölümün tamamını üretir ve doğrular,
  * bir botla örnek bölümleri baştan sona oynatır.
  *
- * Çalıştırma:  node --experimental-strip-types --no-warnings scripts/check-kadro-levels.mjs [--all] [--from N --to M]
+ * Çalıştırma:  npm run check:kadro  (-- --all · -- --from N --to M · -- --verbose)
  *   (varsayılan: 1–30 ve sonrasında her 10. ile her 25. bölüm oynanır; --all hepsini oynar, birkaç dakika)
  *
  * Doğrulananlar (npm run check:games yalnız tabloları ve kısa akışları dener;
@@ -101,10 +101,15 @@ export function playLevel(level, { boosters = [], maxSec = 260, bot = kadroBot, 
   cmd({ type: "config", levelMode: true, level, boosters, sound: false });
   cmd({ type: "start" });
   const dt = 1 / 60;
-  let t = 0, playT = 0, fails = 0;
+  let t = 0, playT = 0, fails = 0, frame = 0;
   for (; t < maxSec; t += dt) {
     A.time += dt;
     A.game.update(dt);
+    // çizim de denenir (yeni engeller, tanıtım kartı, kalkan halkası çökmesin)
+    if (frame++ % 30 === 0) {
+      A.stepParticles(dt * 30);
+      A.game.render(A.ctx, dt * 30);
+    }
     if (A.game.debug().state === "play") playT += dt;
     if (bot) bot(A);
     const f = log.filter((m) => m.type === "fail").length;

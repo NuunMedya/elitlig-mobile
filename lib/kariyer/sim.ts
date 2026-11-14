@@ -281,7 +281,7 @@ export function createMoment(def: MomentDef, attrs: Attrs, w: number, h: number)
     shake: 0,
     flash: 0,
     goalX: w / 2,
-    goalY: h * 0.15,
+    goalY: h * 0.19,
     goalHalf: w * (0.3 - d * 0.06),
     runX0: 0,
     runY0: 0,
@@ -337,8 +337,8 @@ export function createMoment(def: MomentDef, attrs: Attrs, w: number, h: number)
     s.keeper.x = s.goalX;
     s.keeper.y = s.goalY + unit * 5;
     s.keeper.vx = (rnd() < 0.5 ? -1 : 1) * w * (0.16 + d * 0.3);
-    s.keeper.a = w * (0.34 + d * 0.5) * (ace ? 1.3 : 1); // topa atılma hızı
-    s.keeper.b = unit * (7.5 + d * 4.5 - a("sut") * 2.5) * (ace ? 1.18 : 1); // uzanma yarıçapı
+    s.keeper.a = w * (0.34 + d * 0.4) * (ace ? 1.25 : 1); // topa atılma hızı
+    s.keeper.b = unit * (7.5 + d * 3.5 - a("sut") * 3) * (ace ? 1.15 : 1); // uzanma yarıçapı
   };
 
   if (kind === KIND_SHOT) {
@@ -357,9 +357,9 @@ export function createMoment(def: MomentDef, attrs: Attrs, w: number, h: number)
     }
   } else if (kind === KIND_PENALTY) {
     s.goalHalf = w * (0.34 - d * 0.04);
-    s.goalY = h * 0.18;
+    s.goalY = h * 0.21;
     s.ball.x = w / 2;
-    s.ball.y = h * 0.62;
+    s.ball.y = s.goalY + h * 0.4;
     s.me.x = s.ball.x - unit * 3;
     s.me.y = s.ball.y + unit * 9;
     s.power = h * (1.25 + a("sut") * 0.7);
@@ -378,27 +378,34 @@ export function createMoment(def: MomentDef, attrs: Attrs, w: number, h: number)
     s.me.x = s.ball.x - unit * 3;
     s.me.y = s.ball.y + unit * 8;
     s.power = h * (1.05 + a("sut") * 0.6);
+    s.goalHalf = w * (0.33 - d * 0.05);
     setupKeeper();
-    // Baraj: topla kale ortası arasındaki çizgide, top tarafına kaydırılmış.
-    const wy = s.ball.y - h * 0.2;
+    // Baraj: topla kale ortası arasındaki yolun yarısında, yakın direğe
+    // kaydırılmış — uzak köşe açık kalır, kavis kaleciyi ters köşeye yatırır.
+    const wy = s.ball.y + (s.goalY - s.ball.y) * 0.5;
     const k = (wy - s.ball.y) / (s.goalY - s.ball.y);
-    s.wallX = s.ball.x + (s.goalX - s.ball.x) * k + (s.ball.x < w / 2 ? -1 : 1) * unit * 2;
+    s.wallX = s.ball.x + (s.goalX - s.ball.x) * k + (s.ball.x < w / 2 ? -1 : 1) * unit * 4;
     s.wallAmp = mods & MOD_WALLMOVE ? w * (0.08 + d * 0.06) : 0;
+    // Kavisli top kalecinin tahminini şaşırtır: frikikte biraz daha geç tepki.
+    s.keeper.a *= 0.85;
     const n = Math.max(2, def.rivals);
     for (let i = 0; i < n; i += 1) {
-      const rival = body(0, wy, unit * 4.2);
-      rival.a = (i - (n - 1) / 2) * unit * 8.6; // barajdaki ofset
+      const rival = body(0, wy, unit * 3.8);
+      rival.a = (i - (n - 1) / 2) * unit * 6.2; // barajdaki ofset
       rival.x = s.wallX + rival.a;
       rival.d = 2; // baraj oyuncusu
       s.rivals.push(rival);
     }
   } else if (kind === KIND_HEADER) {
-    s.goalY = h * 0.13;
+    s.goalY = h * 0.18;
     s.me.x = w * (0.38 + rnd() * 0.24);
-    s.me.y = h * 0.46;
-    s.power = h * (0.95 + a("sut") * 0.45);
+    s.me.y = h * 0.5;
+    s.power = h * (1.2 + a("sut") * 0.5);
     setupKeeper();
     s.keeper.y = s.goalY + unit * 5;
+    // Kafa topu yakın mesafeden gelir: kaleci daha geç tepki verir.
+    s.keeper.a *= 0.72;
+    s.keeper.b *= 0.9;
     const fromLeft = rnd() < 0.5;
     s.crossX0 = fromLeft ? w * 0.03 : w * 0.97;
     s.crossY0 = s.goalY + h * 0.04;
@@ -598,6 +605,10 @@ function goalCheck(s: MomentState): boolean {
   return true;
 }
 
+/** Kavis: yolun büküldüğü yana açılma payı ve geri çeken ivme katsayısı. */
+const CURL_TURN = 0.55;
+const CURL_PULL = 1.5;
+
 /** Çekişten şut: yön + güç (+ frikikte kavis). Şut çekildiyse true. */
 function release(s: MomentState, touch: TouchInput, curl: boolean): boolean {
   "worklet";
@@ -613,15 +624,16 @@ function release(s: MomentState, touch: TouchInput, curl: boolean): boolean {
     // Kavis: yol kirişin hangi yanına bükülmüşse top önce o yana açılır, sonra
     // geri döner — parmağın çizdiği eğri sahada tekrarlanır.
     const dev = perpDistance(touch.sx, touch.sy, touch.x, touch.y, touch.bx, touch.by);
-    const k = Math.max(-1, Math.min(1, dev / (s.h * 0.1)));
+    // dev > 0: yol kirişin sağına (−uy, ux yönünün tersine) bükülmüş.
+    const k = Math.max(-1, Math.min(1, -dev / (s.h * 0.1)));
     const px = -uy;
     const py = ux;
-    ux += px * k * 0.42;
-    uy += py * k * 0.42;
+    ux += px * k * CURL_TURN;
+    uy += py * k * CURL_TURN;
     const l2 = Math.sqrt(ux * ux + uy * uy);
     ux /= l2;
     uy /= l2;
-    const pull = s.power * strength * 1.15 * k;
+    const pull = s.power * strength * CURL_PULL * k;
     s.curlX = -px * pull;
     s.curlY = -py * pull;
   }
@@ -1137,9 +1149,10 @@ function drawPitch(canvas: SkCanvas, s: MomentState, pal: KariyerPalette) {
     const boxW = w * 0.82;
     canvas.drawRect(Skia.XYWHRect((w - boxW) / 2, s.goalY, boxW, h * 0.3), line);
     canvas.drawRect(Skia.XYWHRect(s.goalX - s.goalHalf * 0.8, s.goalY, s.goalHalf * 1.6, h * 0.1), line);
-    canvas.drawCircle(w / 2, s.goalY + h * 0.22, Math.max(2, w * 0.009), fill(pal.line, 0.85));
+    const spotY = s.kind === KIND_PENALTY ? s.goalY + h * 0.4 : s.goalY + h * 0.22;
+    canvas.drawCircle(w / 2, spotY, Math.max(2, w * 0.009), fill(pal.line, 0.85));
     const arc = Skia.Path.Make();
-    arc.addArc(Skia.XYWHRect(w / 2 - w * 0.16, s.goalY + h * 0.22 - w * 0.16, w * 0.32, w * 0.32), 30, 120);
+    arc.addArc(Skia.XYWHRect(w / 2 - w * 0.16, spotY - w * 0.16, w * 0.32, w * 0.32), 30, 120);
     canvas.drawPath(arc, line);
     canvas.drawLine(0, s.goalY, w, s.goalY, line);
     // Kale: ağ (derinlik gölgeli), ağ örgüsü, direkler (gölgeli).
@@ -1195,15 +1208,16 @@ function drawAim(canvas: SkCanvas, s: MomentState, touch: TouchInput, pal: Kariy
   if (s.kind === KIND_FREEKICK) {
     // Kavisli yol önizlemesi: motorla aynı fizik, kısa benzetim.
     const dev = perpDistance(touch.sx, touch.sy, touch.x, touch.y, touch.bx, touch.by);
-    const k = Math.max(-1, Math.min(1, dev / (s.h * 0.1)));
+    // dev > 0: yol kirişin sağına (−uy, ux yönünün tersine) bükülmüş.
+    const k = Math.max(-1, Math.min(1, -dev / (s.h * 0.1)));
     const px = -uy;
     const py = ux;
-    ux += px * k * 0.42;
-    uy += py * k * 0.42;
+    ux += px * k * CURL_TURN;
+    uy += py * k * CURL_TURN;
     const l2 = Math.sqrt(ux * ux + uy * uy);
     ux /= l2;
     uy /= l2;
-    const pull = s.power * strength * 1.15 * k;
+    const pull = s.power * strength * CURL_PULL * k;
     let cx = -px * pull;
     let cy = -py * pull;
     let x = s.ball.x;

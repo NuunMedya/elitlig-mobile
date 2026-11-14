@@ -360,7 +360,7 @@ export function generateKariyerLevel(level: number, line: Line = "FWD"): Kariyer
           : kind === "dribble"
             ? d < 0.3 ? 5 : d < 0.6 ? 7 : 9
             : kind === "freekick"
-              ? d < 0.35 ? 3 : d < 0.7 ? 4 : 5
+              ? d < 0.3 ? 2 : d < 0.65 ? 3 : 4
               : kind === "header"
                 ? d < 0.4 ? 0 : 1
                 : 0;
