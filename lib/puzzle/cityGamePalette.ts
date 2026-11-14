@@ -92,5 +92,54 @@ export const CG = {
   dockEdge: "#E7B57A",
 } as const;
 
+/**
+ * PARŞÖMEN PALETİ — şehir pencerelerinin İÇ içeriği (akademi, sezon, takım,
+ * ziyaret, sıralama, ligler ve şehir içi pencereler) temanın değil oyunun
+ * renkleriyle çizilir: krem parşömen üstünde koyu kahve mürekkep. Anahtarlar
+ * uygulama paletinin (theme/palette) aynı adlı tokenlarının şehir karşılığıdır;
+ * böylece components/city2 içindeki parçalar iki temada da aynı oyun görünür.
+ */
+export const CP = {
+  bg: "#FFF7E6",
+  textPrimary: "#3A2412",
+  textSecondary: "#5E4126",
+  textTertiary: "#7A5A3A",
+  textOnBrand: "#FFFFFF",
+  onDark: "#FFFFFF",
+  brand: "#7C4DFF",
+  brandAccent: "#5B33D6",
+  brandDim: "rgba(124, 77, 255, 0.12)",
+  brandBorder: "rgba(91, 51, 214, 0.35)",
+  win: "#1B8A2D",
+  winDim: "rgba(34, 179, 58, 0.16)",
+  warn: "#B45F00",
+  warnDim: "rgba(217, 119, 6, 0.16)",
+  danger: "#C62828",
+  dangerDim: "rgba(217, 48, 42, 0.14)",
+  star: "#E0A100",
+  yellowCard: "#C98A00",
+  live: "#E0303C",
+  /** Kart: parşömenden bir ton açık; ikinci/üçüncü yüzey kahve yıkama. */
+  surface1: "#FFFBF2",
+  surface2: "rgba(122, 65, 25, 0.08)",
+  surface3: "rgba(122, 65, 25, 0.16)",
+  border: "#E3C891",
+  borderStrong: "#C9A26A",
+  separator: "rgba(122, 65, 25, 0.18)",
+  overlay: "rgba(58, 36, 18, 0.55)",
+  posKeeper: "#8F5F06",
+  posDefense: "#06709C",
+  posMidfield: "#5A46F0",
+  posForward: "#C42762",
+  posUnknown: "#6B5A48",
+} as const;
+
+/** Podyum (ilk üç): altın · gümüş · bronz. */
+export const PODIUM = {
+  1: { fill: ["#FFE45C", "#F5A300"] as [string, string], lip: "#A86A00", ink: "#4A2C00" },
+  2: { fill: ["#F1F4FA", "#AEB8CC"] as [string, string], lip: "#6B7385", ink: "#2E3442" },
+  3: { fill: ["#FFC58A", "#C8742E"] as [string, string], lip: "#7A3E10", ink: "#3D1E05" },
+} as const;
+
 export type CityBtnTone = keyof typeof CG.btn;
 export type CitySideTone = keyof typeof CG.side;
