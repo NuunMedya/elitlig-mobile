@@ -1,7 +1,7 @@
 /**
  * PUAN DURUMU ŞABLONLARI — 10 takımlık pencere.
  *
- *   Tablo · Odak
+ *   Tablo · Zirve (ilk beş, büyük satırlar) · Odak
  *
  * Pencere (from–to) giriş bileşeninde hesaplanır: kullanıcının takımı varsa
  * onu ortalayan 10'luk dilim, yoksa kullanıcının seçtiği aralık. Odak takım
@@ -295,9 +295,64 @@ function Fact({ f, label, value, big, accent }: { f: ShareFrame; label: string; 
   );
 }
 
+/* ══════════════════════════ ZİRVE ══════════════════════════ */
+
+/**
+ * Zirve yarışı — tablonun ilk beşi büyük satırlarda: arma, ad, G-B-M,
+ * averaj ve dev puan. Lider satırı altın çerçeveli; odak takım (ilk
+ * beşteyse) imza şeridiyle. Pencereden bağımsız: daima 1–5.
+ */
+function StandingsTop({ f, d }: { f: ShareFrame; d: TableShareData }) {
+  const { u, t, story } = f;
+  const top = d.rows.slice(0, 5);
+  const leaderPts = num(top[0]?.display_points);
+  const h = story ? 66 : 52;
+  return (
+    <Poster f={f} mood="top" title={d.league} meta={[d.city, d.season].filter(Boolean).join(" · ")} footer={d.footer}>
+      <View style={{ marginTop: u(story ? 6 : 0) }}>
+        <Kicker f={f}>{d.season || "Sezon"}</Kicker>
+        <CText f={f} k="title" scale={story ? 1.15 : 0.82} style={{ marginTop: u(6) }}>Zirve yarışı</CText>
+      </View>
+      <Spacer f={f} grow={0.5} min={story ? 12 : 6} />
+      <View style={{ gap: u(story ? 8 : 5) }}>
+        {top.map((row, index) => {
+          const rank = index + 1;
+          const focus = d.focusTeamId != null && Number(row.team_id) === d.focusTeamId;
+          const gap = leaderPts - num(row.display_points);
+          return (
+            <FillBox
+              key={row.team_id}
+              f={f}
+              radius={16}
+              tone={rank === 1 ? "soft" : "glass"}
+              style={{ height: u(h), flexDirection: "row", alignItems: "center", paddingHorizontal: u(12), gap: u(10), borderWidth: Math.max(1, u(rank === 1 ? 1.2 : 0.7)), borderColor: rank === 1 ? t.gold[1] : t.glassLine }}
+            >
+              {focus ? <View style={{ position: "absolute", left: 0, top: u(h * 0.2), bottom: u(h * 0.2), width: u(3), borderRadius: u(2), backgroundColor: t.sigB }} /> : null}
+              <RankChip f={f} rank={rank} size={story ? 24 : 19} />
+              <Crest f={f} logo={row.logo} name={row.team_name} size={story ? 38 : 30} />
+              <View style={{ flex: 1 }}>
+                <FitName f={f} k="name" text={row.team_name} width={story ? 150 : 165} lines={1} caps align="left" scale={story ? 0.95 : 0.82} min={0.55} />
+                <CText f={f} k="body" color={t.inkMuted} scale={0.88} style={{ marginTop: u(3) }}>
+                  {`${num(row.wins)}G ${num(row.draws)}B ${num(row.losses)}M · ${signed(num(row.goal_diff))}`}
+                </CText>
+              </View>
+              <View style={{ alignItems: "flex-end" }}>
+                <CText f={f} k="score" scale={story ? 0.42 : 0.34} color={rank === 1 ? t.goldText : t.ink}>{num(row.display_points)}</CText>
+                <Overline f={f} color={t.inkMuted} scale={0.8}>{rank === 1 ? "Puan" : `-${gap}`}</Overline>
+              </View>
+            </FillBox>
+          );
+        })}
+      </View>
+      <Spacer f={f} />
+    </Poster>
+  );
+}
+
 export function tableTemplates(d: TableShareData): ShareTemplateDef[] {
   return [
     { key: "tablo", label: "Tablo", render: (f) => <StandingsTable f={f} d={d} /> },
+    ...(d.rows.length >= 5 ? [{ key: "zirve", label: "Zirve", render: (f: ShareFrame) => <StandingsTop f={f} d={d} /> }] : []),
     { key: "odak", label: d.focusTeamId != null ? "Takımım" : "Lider", render: (f) => <StandingsFocus f={f} d={d} /> },
   ];
 }

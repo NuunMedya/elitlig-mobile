@@ -1,9 +1,10 @@
 /**
  * Profil sayfalarının paylaşım girişleri.
  *
- *   TeamShare    — takım sayfası: Sezon kartı · Sıra rozeti · Puan tablosu
- *                  (takımı ortalayan 10'luk pencere) · Takım odağı
- *   PlayerShare  — oyuncu sayfası: Oyuncu kartı · Poster
+ *   TeamShare    — takım sayfası: Takım (Sezon kartı · Sıra rozeti) ve Tablo
+ *                  (takımı ortalayan 10'luk pencere · Tablo odağı · takım ilk
+ *                  beşteyse Zirve)
+ *   PlayerShare  — oyuncu sayfası: Oyuncu kartı · Sezon kartı · Poster
  *   WeeklyShare  — haftanın enleri: Haftanın oyuncusu · Kadro · Ödüller
  *
  * Veriler sayfanın elindeki sorgu sonuçlarıdır; ek istek atılmaz.
@@ -74,7 +75,13 @@ export function TeamShare({ visible, onClose, teamId, name, logo, league, season
         city,
         footer,
       });
-      list.push({ ...table[0], label: "Puan tablosu" }, { ...table[1], label: "Tablo odağı" });
+      const pick = (key: string, label: string) => {
+        const item = table.find((tpl) => tpl.key === key);
+        if (item) list.push({ ...item, label, group: "Tablo" });
+      };
+      pick("tablo", "Puan tablosu");
+      pick("odak", "Tablo odağı");
+      if (index < 5) pick("zirve", "Zirve");
     }
     return list;
   }, [city, league, logo, name, season, standings, teamId, teams]);

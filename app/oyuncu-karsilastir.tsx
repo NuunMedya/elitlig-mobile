@@ -64,6 +64,7 @@ import {
   type IconTileTone,
 } from "@/components/ui";
 import { DUEL_A, DUEL_B, DuelBar, DuelScore, HaloFrame, duelWinner } from "@/components/teampage/ProfileKit";
+import { CompareShare } from "@/components/share/CompareShare";
 import { getPlayer, getPlayerRankings } from "@/lib/api/players";
 import { positionLabel } from "@/lib/api/team";
 import { getTeam } from "@/lib/api/teams";
@@ -271,6 +272,7 @@ export default function PlayerCompareScreen() {
     b: parseId(params.b),
   }));
   const [picking, setPicking] = useState<Side | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const sideA = usePlayerSide(ids.a);
   const sideB = usePlayerSide(ids.b);
@@ -355,6 +357,26 @@ export default function PlayerCompareScreen() {
   const totalTally = useMemo(() => tally([...career, ...(scopeList ?? [])]), [career, scopeList]);
   const showScore = ready && !loading && Boolean(playerA && playerB);
 
+  /* Paylaşım görseli: kapsam satırları varsa onlar (asist dahil, "bu sezon"),
+     yoksa kariyer satırları — ekranda görünen kartın aynısı. */
+  const shareData = useMemo(() => {
+    if (!showScore) return null;
+    const side = (player: ApiPlayer | null, row: PlayerRankRow | null, name: string, team: { team_name?: string | null; logo?: string | null } | undefined) => ({
+      name,
+      image: player?.player_img ?? row?.image ?? null,
+      crest: team?.logo ?? null,
+      sub: team?.team_name ?? row?.teamName ?? null,
+      role: positionLabel(player?.player_position) || null,
+    });
+    return {
+      kind: "player" as const,
+      a: side(playerA, rowA, nameA, sideA.teamQuery.data),
+      b: side(playerB, rowB, nameB, sideB.teamQuery.data),
+      metrics: scopeList ?? career,
+      caption: scopeList ? [scope.leagueLabel, scope.seasonLabel].filter(Boolean).join(" · ") || "Bu kapsamda" : "Kariyer",
+    };
+  }, [career, nameA, nameB, playerA, playerB, rowA, rowB, scope.leagueLabel, scope.seasonLabel, scopeList, showScore, sideA.teamQuery.data, sideB.teamQuery.data]);
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
@@ -362,6 +384,11 @@ export default function PlayerCompareScreen() {
         overline="KARŞILAŞTIRMA"
         scrollY={scrollY}
         back
+        actions={
+          shareData
+            ? [{ icon: "share-outline", onPress: () => setShareOpen(true), accessibilityLabel: "Karşılaştırmayı görsel olarak paylaş" }]
+            : undefined
+        }
       />
 
       <ScrollView
@@ -461,6 +488,8 @@ export default function PlayerCompareScreen() {
           </>
         )}
       </ScrollView>
+
+      {shareData ? <CompareShare visible={shareOpen} onClose={() => setShareOpen(false)} data={shareData} /> : null}
 
       <PlayerPicker
         visible={picking != null}

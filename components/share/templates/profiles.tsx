@@ -2,16 +2,17 @@
  * PROFİL ŞABLONLARI — takım sezon kartı ve oyuncu kartı.
  *
  *   Takım:   Sezon kartı · Sıra rozeti   (+ puan tablosu şablonları, odak = takım)
- *   Oyuncu:  Oyuncu kartı · Poster
+ *   Oyuncu:  Oyuncu kartı · Yıldız kartı · Poster
  */
 
 import React from "react";
 import { View } from "react-native";
 
-import { formLetters, splitName } from "@/lib/share/format";
+import { formLetters, splitName, upper } from "@/lib/share/format";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { alpha } from "@/lib/share/palette";
 import { Poster, Spacer } from "../canvas/Layout";
-import { CText, Crest, FillBox, FitName, FormRow, Glass, Halo, Overline, Portrait, SigBar, StatTile } from "../canvas/Primitives";
+import { CText, Crest, FillBox, FitName, FormRow, Glass, Halo, Overline, Portrait, SigBar, StatTile, useSvgId } from "../canvas/Primitives";
 import type { ShareFrame, ShareTemplateDef } from "../canvas/types";
 
 /* ══════════════════════════ TAKIM ══════════════════════════ */
@@ -176,8 +177,8 @@ function MiniFact({ f, value, label, accent }: { f: ShareFrame; value: string | 
 
 export function teamTemplates(d: TeamShareData): ShareTemplateDef[] {
   return [
-    { key: "sezon", label: "Sezon kartı", render: (f) => <TeamSeason f={f} d={d} /> },
-    { key: "sira", label: "Sıra rozeti", render: (f) => <TeamRank f={f} d={d} /> },
+    { key: "sezon", label: "Sezon kartı", group: "Takım", render: (f) => <TeamSeason f={f} d={d} /> },
+    { key: "sira", label: "Sıra rozeti", group: "Takım", render: (f) => <TeamRank f={f} d={d} /> },
   ];
 }
 
@@ -301,9 +302,95 @@ function PlayerPoster({ f, d }: { f: ShareFrame; d: PlayerShareData }) {
   );
 }
 
+/**
+ * Yıldız kartı — koleksiyon kartı biçimi: altın çerçeveli dikey kart; sol
+ * üstte ortalama puan ve mevki, ortada portre, ad bandı ve altı rakamlık
+ * ızgara (maç · gol · asist · galibiyet · gol/maç · galibiyet %).
+ * Rakamlar oyuncu sayfasının kariyer toplamlarıdır; yeni puan uydurulmaz.
+ */
+function PlayerCollectible({ f, d }: { f: ShareFrame; d: PlayerShareData }) {
+  const id = useSvgId("pc");
+  const { u, t, story } = f;
+  const cw = story ? 264 : 214;
+  const ch = story ? 392 : 316;
+  const W = u(cw);
+  const H = u(ch);
+  const r = u(26);
+  const sw = u(2.4);
+  const decided = d.wins + d.draws + d.losses;
+  const gpm = d.matches > 0 ? d.goals / d.matches : 0;
+  const pos = (d.position ?? "").trim();
+  const posShort = pos ? upper(pos).slice(0, 3) : "";
+  const { first, last } = splitName(d.name);
+  const stats: [string, string | number][] = [
+    ["Maç", d.matches],
+    ["Gol", d.goals],
+    ["Asist", d.assists ?? "—"],
+    ["Galibiyet", d.wins],
+    ["Gol/maç", gpm.toFixed(1).replace(".", ",")],
+    ["Gal. %", decided > 0 ? `%${Math.round((d.wins / decided) * 100)}` : "—"],
+  ];
+  return (
+    <Poster f={f} mood="center" title={d.league} meta={d.city} footer={d.footer}>
+      <Spacer f={f} />
+      <View style={{ alignItems: "center" }}>
+        <Halo f={f} size={story ? 380 : 300} color={t.gold[1]} power={0.45} />
+        <View style={{ width: W, height: H }}>
+          <Svg width={W} height={H} style={{ position: "absolute" }}>
+            <Defs>
+              <LinearGradient id={`${id}f`} x1="0" y1="0" x2="0.4" y2="1">
+                <Stop offset="0" stopColor={t.sigA} stopOpacity={t.dark ? 0.55 : 0.18} />
+                <Stop offset="0.55" stopColor={t.bgBottom} stopOpacity={t.dark ? 0.9 : 0.6} />
+                <Stop offset="1" stopColor={t.bgBottom} stopOpacity={t.dark ? 0.95 : 0.7} />
+              </LinearGradient>
+              <LinearGradient id={`${id}s`} x1="0" y1="0" x2="1" y2="1">
+                <Stop offset="0" stopColor={t.gold[0]} />
+                <Stop offset="0.5" stopColor={t.gold[1]} />
+                <Stop offset="1" stopColor={t.gold[0]} />
+              </LinearGradient>
+            </Defs>
+            <Rect x={sw / 2} y={sw / 2} width={W - sw} height={H - sw} rx={r} fill={`url(#${id}f)`} stroke={`url(#${id}s)`} strokeWidth={sw} />
+          </Svg>
+          {/* Sol üst: puan + mevki + arma */}
+          <View style={{ position: "absolute", left: u(18), top: u(16), alignItems: "center", gap: u(4) }}>
+            <CText f={f} k="score" scale={story ? 0.5 : 0.42} color={t.goldText}>
+              {d.average != null ? d.average.toFixed(1) : d.goals}
+            </CText>
+            <Overline f={f} color={t.inkMuted} scale={0.85}>{d.average != null ? "Ort. puan" : "Gol"}</Overline>
+            {posShort ? <CText f={f} k="numStrong" scale={1.05}>{posShort}</CText> : null}
+            {d.teamName ? <Crest f={f} logo={d.teamLogo} name={d.teamName} size={story ? 24 : 20} /> : null}
+            {d.jersey ? <CText f={f} k="numStrong" scale={0.95} color={t.inkSoft}>#{d.jersey}</CText> : null}
+          </View>
+          <View style={{ position: "absolute", right: u(18), top: u(story ? 22 : 18) }}>
+            <Portrait f={f} image={d.image} name={d.name} size={story ? 150 : 118} ring="gold" />
+          </View>
+          {/* Ad bandı + ızgara */}
+          <View style={{ position: "absolute", left: u(16), right: u(16), bottom: u(story ? 18 : 14) }}>
+            <View style={{ alignItems: "center" }}>
+              {first ? <FitName f={f} k="label" text={first} width={cw - 40} lines={1} caps color={t.inkSoft} scale={1.1} /> : null}
+              <FitName f={f} k="hero" text={last} width={cw - 40} lines={1} caps scale={story ? 1.05 : 0.86} min={0.5} />
+            </View>
+            <View style={{ height: Math.max(1, u(0.8)), backgroundColor: alpha(t.gold[1], 0.5), marginVertical: u(story ? 10 : 7) }} />
+            <View style={{ flexDirection: "row", flexWrap: "wrap", rowGap: u(story ? 8 : 5) }}>
+              {stats.map(([label, value]) => (
+                <View key={label} style={{ width: "33.33%", alignItems: "center" }}>
+                  <CText f={f} k="numStrong" scale={story ? 1.45 : 1.15}>{value}</CText>
+                  <Overline f={f} color={t.inkMuted} scale={0.8}>{label}</Overline>
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+      </View>
+      <Spacer f={f} />
+    </Poster>
+  );
+}
+
 export function playerTemplates(d: PlayerShareData): ShareTemplateDef[] {
   return [
     { key: "kart", label: "Oyuncu kartı", render: (f) => <PlayerCard f={f} d={d} /> },
+    { key: "yildiz-karti", label: "Yıldız kartı", render: (f) => <PlayerCollectible f={f} d={d} /> },
     { key: "poster", label: "Poster", render: (f) => <PlayerPoster f={f} d={d} /> },
   ];
 }
