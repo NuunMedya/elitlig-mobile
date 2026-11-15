@@ -586,6 +586,9 @@ const AMBIENT_LOOP_ALLOWED = new Set([
   "components/ui/Button.tsx",
   "components/ui/GlowRim.tsx",
   "components/ui/LiveBadge.tsx",
+  // Oyun ana sayfası: ödül öğelerinde hafif süzülme ve alınabilir ödülde ışık
+  // süpürmesi (tek dosya; "hareketi azalt" açıkken durur, yerel sürücü).
+  "components/gamehome/GameMotion.tsx",
 ]);
 for (const hit of grep("Animated.loop", "app components")) {
   const [file] = hit.split(":");

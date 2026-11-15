@@ -9,6 +9,14 @@
  *     ve Sonuç penceresini açar;
  *   · seviyeden çıkmak isteyene "çıkarsan 1 can gider" diye sorar (türün
  *     alışık olunan kuralı).
+ *   · TAM EKRAN: uygulama başlığı / şeridi YOK. Oyunun sahnesi kenardan
+ *     kenara (durum çubuğunun ve ev çubuğunun altına) uzanır; güvenli alan
+ *     yalnız etkileşimli HUD'a uygulanır. Durdur düğmesi oyunun içindedir:
+ *     RN bulmacaları onu kendi üst HUD satırına koyar (`onPause`), tam ekran
+ *     (WebView) oyunlarda çerçeve sağ üste, oyun HUD'unun boş bıraktığı
+ *     köşeye bindirir. Seviye bilgisi oyunun kendi HUD'undadır; oyun adı,
+ *     seviye, canlar, ses ve çıkış mola kartındadır. Android geri tuşu mola
+ *     kartını açar; kart açıkken geri tuşu çıkış onayını sorar.
  *   · REKLAMLA DEVAM: oyun `requestContinue` çağırırsa (kaybetmek üzere)
  *     bölüm başına bir kez "Reklam izle · devam et" sorulur.
  *   · SERİ HEDİYESİ: `hediye=<anahtarlar>` ücretsiz güçlendiriciler (stoktan
@@ -19,18 +27,21 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BackHandler, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { confirmAction } from "@/components/admin";
 import { GameButton, ResultSheet } from "@/components/puzzle/LevelSheets";
 import { ShopSheet } from "@/components/puzzle/sheets";
 import { StageBackdrop } from "@/components/puzzle/StageBackdrop";
 import { ConfettiBurst } from "@/components/game/Celebration";
+import { HudPauseButton, OVERLAY_PAUSE } from "@/components/game/HudPauseButton";
+import { GAME_SOUND_KEY } from "@/components/gamehome/HomeSheets";
 import { OfflinePill } from "@/components/offline/OfflineSync";
 import { RewardedAdModal, localAdFlow } from "@/components/puzzle/RewardedLife";
 import { Touchable, useToast } from "@/components/ui";
@@ -44,7 +55,7 @@ import { puzzleGame } from "@/lib/puzzle/registry";
 import type { PuzzleResult } from "@/lib/puzzle/types";
 import { usePuzzleCache, usePuzzleMe } from "@/lib/puzzle/usePuzzle";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, fonts, layout, radius, space, textScale, touchSlop, type } from "@/theme";
+import { fonts, radius, space, textScale, touchSlop, type } from "@/theme";
 
 export default function PuzzlePlayScreen() {
   const auth = useAuth();
@@ -90,6 +101,25 @@ export default function PuzzlePlayScreen() {
   /** Oyun alanının ölçüsü: oyun bu alanı tam doldurur. */
   const [area, setArea] = useState<{ w: number; h: number } | null>(null);
   const [paused, setPaused] = useState(false);
+  const pausedRef = useRef(false);
+  pausedRef.current = paused;
+  const insets = useSafeAreaInsets();
+  /** Ses tercihi (Arena oyunlarıyla ortak); sesli (WebView) oyunlara iletilir. */
+  const [sound, setSound] = useState(true);
+  useEffect(() => {
+    AsyncStorage.getItem(GAME_SOUND_KEY)
+      .then((value) => {
+        if (value === "0") setSound(false);
+      })
+      .catch(() => undefined);
+  }, []);
+  const toggleSound = useCallback(() => {
+    setSound((cur) => {
+      const next = !cur;
+      void AsyncStorage.setItem(GAME_SOUND_KEY, next ? "1" : "0").catch(() => undefined);
+      return next;
+    });
+  }, []);
   const [result, setResult] = useState<{ res: PuzzleResult; server: FinishResponse | null; offline?: boolean } | null>(null);
   const finished = useRef(false);
 
@@ -219,10 +249,12 @@ export default function PuzzlePlayScreen() {
     router.back();
   }, [report, router]);
 
-  // Android geri tuşu ve kaydırarak geri: aynı onay.
+  // Android geri tuşu: önce mola kartı; kart açıkken (ya da oyun bittiyse)
+  // çıkış onayı. Kaydırarak geri: doğrudan onay.
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      void leave();
+      if (!finished.current && !pausedRef.current) setPaused(true);
+      else void leave();
       return true;
     });
     const unsub = navigation.addListener("beforeRemove", (event: { preventDefault: () => void }) => {
@@ -248,38 +280,35 @@ export default function PuzzlePlayScreen() {
   const goToMap = (next?: number) =>
     router.dismissTo({ pathname: "/lig-yolu/[oyun]", params: { oyun: module.key, sonraki: next ? String(next) : "" } });
 
-  return (
-    <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
-      <StageBackdrop game={module.key} />
-      <View style={styles.top}>
-        {/* Çıkış düğmesi yok: oyundan çıkış mola kartında (durdur → Oyundan çık). */}
-        <View style={styles.roundSpacer} />
-        <View style={styles.titleWrap}>
-          <View style={styles.titlePill} accessibilityRole="header">
-            <Text style={styles.titleSmall} numberOfLines={1} {...textScale.badge}>
-              {module.title.toLocaleUpperCase("tr-TR")}
-            </Text>
-            <Text style={styles.titleBig} numberOfLines={1} {...textScale.badge}>
-              Seviye {level}
-            </Text>
-          </View>
-          {startedOffline || offlineNow ? <OfflinePill /> : null}
-          <View style={styles.hearts} accessibilityLabel={`${lives} can`}>
-            {Array.from({ length: maxLives }, (_, i) => (
-              <Ionicons key={i} name={i < lives ? "heart" : "heart-outline"} size={13} color={i < lives ? STAGE_COMMON.heart : STAGE_COMMON.inkSoft} style={styles.heart} />
-            ))}
-          </View>
-        </View>
-        <RoundButton icon={paused ? "play" : "pause"} onPress={() => setPaused((p) => !p)} label={paused ? "Devam et" : "Duraklat"} />
-      </View>
+  /*
+   * Yerleşim: ekranın tamamı oyunundur.
+   *   · Tam ekran (WebView) oyun: tüm ekranı alır, güvenli alanı kendisi uygular.
+   *   · RN bulmacası: kutusu güvenli alanın içindedir (HUD çentiğin altına
+   *     girmez); kutunun dışında kalan pay `bleed` ile bildirilir, oyun kendi
+   *     zeminini oraya taşırır. Arkada aynı oyunun sahne zemini kenardan kenara.
+   */
+  const fullBleed = Boolean(module.fullBleed);
+  const boxTop = fullBleed ? 0 : insets.top + space.xs;
+  const boxBottom = fullBleed ? 0 : Math.max(insets.bottom, space.sm);
+  const boxW = area ? (fullBleed ? area.w : Math.min(area.w - space.sm * 2, 560)) : 0;
+  const boxH = area ? Math.max(320, area.h - boxTop - boxBottom) : 0;
+  const side = area ? Math.max(0, (area.w - boxW) / 2) : 0;
 
-      <View style={styles.board} onLayout={(e) => setArea({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
+  return (
+    <View style={styles.screen} onLayout={(e) => setArea({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
+      <StageBackdrop game={module.key} />
+
+      <View style={[styles.board, { top: boxTop, bottom: boxBottom }]}>
         {stock && area ? (
           <Game
             key={`${module.key}-${level}`}
             level={level}
-            maxWidth={Math.min(area.w - space.sm * 2, 560)}
-            maxHeight={Math.max(320, area.h - space.sm)}
+            maxWidth={boxW}
+            maxHeight={boxH}
+            bleed={{ top: boxTop, bottom: boxBottom, left: side, right: side }}
+            safeArea={fullBleed ? { top: insets.top, bottom: insets.bottom } : undefined}
+            onPause={fullBleed ? undefined : () => setPaused(true)}
+            sound={sound}
             preBoosters={preBoosters}
             boosterStock={stock}
             useBooster={useBooster}
@@ -290,6 +319,15 @@ export default function PuzzlePlayScreen() {
         ) : null}
       </View>
 
+      {/* Tam ekran oyunda durdur düğmesi oyunun HUD köşesinde (oyun orayı boş bırakır). */}
+      {fullBleed && !result ? (
+        <HudPauseButton
+          onPress={() => setPaused(true)}
+          size={OVERLAY_PAUSE.size}
+          style={[styles.overlayPause, { top: insets.top + OVERLAY_PAUSE.top, right: OVERLAY_PAUSE.right + insets.right }]}
+        />
+      ) : null}
+
       {paused && !shopOpen && !result ? (
         <View style={styles.pauseLayer}>
           <View style={styles.pauseCard} accessibilityViewIsModal>
@@ -298,7 +336,26 @@ export default function PuzzlePlayScreen() {
                 {module.title.toLocaleUpperCase("tr-TR")} · SEVİYE {level}
               </Text>
               <Text style={styles.pauseTitle} {...textScale.badge}>Mola</Text>
+              <View style={styles.hearts} accessible accessibilityLabel={`${lives} / ${maxLives} can`}>
+                {Array.from({ length: maxLives }, (_, i) => (
+                  <Ionicons key={i} name={i < lives ? "heart" : "heart-outline"} size={16} color={i < lives ? STAGE_COMMON.heart : STAGE_COMMON.cardSoft} style={styles.heart} />
+                ))}
+              </View>
+              {startedOffline || offlineNow ? <OfflinePill onDark={false} /> : null}
             </View>
+            {fullBleed ? (
+              <Touchable
+                onPress={toggleSound}
+                style={styles.soundBtn}
+                hitSlop={touchSlop(52)}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: sound }}
+                accessibilityLabel="Ses"
+                haptic="light"
+              >
+                <Ionicons name={sound ? "volume-high" : "volume-mute"} size={22} color={STAGE_COMMON.cardInk} />
+              </Touchable>
+            ) : null}
             <View style={styles.pauseBtns}>
               <GameButton label="DEVAM ET" icon="play" onPress={() => setPaused(false)} />
               <GameButton label="OYUNDAN ÇIK" icon="exit-outline" tone="danger" small onPress={() => void leave()} />
@@ -374,40 +431,24 @@ export default function PuzzlePlayScreen() {
           onMap={() => goToMap()}
         />
       ) : null}
-    </SafeAreaView>
-  );
-}
-
-/** Üst şeritteki yuvarlak cam düğme (duraklat / devam). */
-function RoundButton({ icon, onPress, label }: { icon: keyof typeof Ionicons.glyphMap; onPress: () => void; label: string }) {
-  return (
-    <Touchable onPress={onPress} hitSlop={touchSlop(44)} accessibilityRole="button" accessibilityLabel={label} style={styles.round} haptic="light">
-      <Ionicons name={icon} size={20} color={STAGE_COMMON.white} />
-    </Touchable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  top: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: layout.screenPadding, paddingTop: space.xs, paddingBottom: space.sm },
-  round: {
-    width: 44,
-    height: 44,
+  screen: { flex: 1, backgroundColor: STAGE_COMMON.cardShadow },
+  board: { position: "absolute", left: 0, right: 0, alignItems: "center", justifyContent: "center" },
+  overlayPause: { position: "absolute" },
+  hearts: { flexDirection: "row", marginTop: space.xs },
+  heart: { marginHorizontal: 1 },
+  soundBtn: {
+    width: 52,
+    height: 52,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: STAGE_COMMON.glass,
-    borderWidth: 1,
-    borderColor: STAGE_COMMON.glassEdge,
+    backgroundColor: STAGE_COMMON.navySoft,
   },
-  roundSpacer: { width: 44, height: 44 },
-  titleWrap: { flex: 1, alignItems: "center", gap: space.xs },
-  titlePill: { alignItems: "center" },
-  titleSmall: { ...type.micro, fontFamily: fonts.bold, color: STAGE_COMMON.inkSoft, letterSpacing: 1.5 },
-  titleBig: { ...type.h2, fontFamily: fonts.bold, color: STAGE_COMMON.ink },
-  hearts: { flexDirection: "row", paddingHorizontal: space.sm, paddingVertical: space.xxs, borderRadius: radius.pill, backgroundColor: STAGE_COMMON.glass },
-  heart: { marginHorizontal: 1 },
-  board: { flex: 1, alignItems: "center", justifyContent: "center" },
   pauseLayer: { ...StyleSheet.absoluteFillObject, backgroundColor: STAGE_COMMON.dim, alignItems: "center", justifyContent: "center", padding: space.lg },
   pauseCard: {
     width: "100%",

@@ -35,4 +35,5 @@ export const kadroModule: PuzzleGameModule = {
   ],
   goalSummary,
   Game: KadroGame,
+  fullBleed: true,
 };

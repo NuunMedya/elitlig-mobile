@@ -1,10 +1,11 @@
 /**
  * LİG YOLU ▸ OYUN ANA SAYFASI — /lig-yolu/<oyun> (sözleşme §6)
  *
- * Sade oyun evi: üstte ince şerit (geri · can sayacı · jeton · yıldız ·
- * ayarlar) ve tek satırlık yıldız sandığı ilerlemesi; arkada bölge bölge
- * renk değiştiren harita (LevelMap); altta üç çip (Ödüller · Sıralama ·
- * Diğer) ve tek odak yeşil "Bölüm N" (her 5. "Zor", her 10. "Süper Zor").
+ * Oyun evi (v3): üstte renkli HUD kapsülleri (can · jeton · yıldız) ve
+ * yıldız sandığı şeridi; arkada mekân mekân değişen resimli harita
+ * (LevelMap; mekân sırası oyuna göre döner); solda günlük ödüller rafı
+ * (Hediye · Çark · Sandık · Penaltı), sağda araçlar (Sıralama · Mağaza ·
+ * Diğer); altta tek odak yeşil "Bölüm N" (her 5. "Zor", her 10. "Süper Zor").
  * Düğüme ya da düğmeye basınca Başlangıç penceresi açılır
  * (hedefler + seviye öncesi güçlendirici + seri hediyesi); "Oyna" sunucuya
  * sorar (bölüm açık mı, can var mı) ve oyun ekranına geçer.
@@ -21,8 +22,8 @@ import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { GameHome } from "@/components/gamehome/GameHome";
-import { ChestBar, difficultyOf } from "@/components/gamehome/GameHomeKit";
-import { LevelMap } from "@/components/puzzle/LevelMap";
+import { difficultyOf } from "@/components/gamehome/GameHomeKit";
+import { LevelMap, tierOf } from "@/components/puzzle/LevelMap";
 import { LevelStartSheet } from "@/components/puzzle/LevelSheets";
 import { ShopSheet } from "@/components/puzzle/sheets";
 import { EmptyState, ErrorState, SkeletonCard, useToast } from "@/components/ui";
@@ -51,7 +52,7 @@ export default function PuzzleHomeScreen() {
   const [selected, setSelected] = useState<string[]>([]);
   const [shop, setShop] = useState<"lives" | "all" | null>(null);
   const [busy, setBusy] = useState(false);
-  const [insets, setInsets] = useState({ top: 100, bottom: 150 });
+  const [insets, setInsets] = useState({ top: 100, bottom: 150, side: 80 });
   // Bu oyunun canları (her oyunun kendi 5 canı var).
   const profile = livesFor(me?.profile, module?.key);
   const streak = module ? me?.profile.gifts?.streaks?.[module.key] : undefined;
@@ -111,15 +112,15 @@ export default function PuzzleHomeScreen() {
     }
   }, [cache, level, module, profile?.lives, progress, router, selected, toast]);
 
-  const onInsets = useCallback((top: number, bottom: number) => {
-    setInsets((cur) => (Math.abs(cur.top - top) < 2 && Math.abs(cur.bottom - bottom) < 2 ? cur : { top, bottom }));
+  const onInsets = useCallback((top: number, bottom: number, side: number) => {
+    setInsets((cur) => (Math.abs(cur.top - top) < 2 && Math.abs(cur.bottom - bottom) < 2 && cur.side === side ? cur : { top, bottom, side }));
   }, []);
 
   if (!auth.user) return <Redirect href="/giris" />;
   if (!module) return <Redirect href="/lig-yolu" />;
 
   const next = nextLevelOf(progress);
-  const zone = zoneOf(next);
+  const zone = zoneOf(next, module.key);
   const initials = (auth.user.fullName || auth.user.username || "")
     .split(/\s+/)
     .filter(Boolean)
@@ -138,7 +139,16 @@ export default function PuzzleHomeScreen() {
       <ErrorState error={query.error} onRetry={() => query.refetch()} />
     </View>
   ) : progress ? (
-    <LevelMap cleared={progress.level} stars={progress.stars} onPlay={setLevel} contentTop={insets.top} contentBottom={insets.bottom} avatar={initials || null} />
+    <LevelMap
+      cleared={progress.level}
+      stars={progress.stars}
+      onPlay={setLevel}
+      contentTop={insets.top}
+      contentBottom={insets.bottom}
+      avatar={initials || null}
+      game={module.key}
+      side={insets.side}
+    />
   ) : (
     <View style={[styles.fill, { paddingTop: insets.top, backgroundColor: zone.ground[1] }]}>
       <EmptyState icon="game-controller-outline" title="Oyun yüklenemedi" />
@@ -146,22 +156,16 @@ export default function PuzzleHomeScreen() {
   );
 
   return (
-    <View style={[styles.fill, { backgroundColor: zone.ground[1] }]}>
+    <View style={[styles.fill, { backgroundColor: zone.ground[0] }]}>
       <GameHome
         title={module.title}
         livesGame={module.key}
         background={background}
         onInsets={onInsets}
-        eventBar={
-          chest ? (
-            <ChestBar title="Yıldız sandığı" value={chest.progress} max={chest.every} />
-          ) : progress ? (
-            <ChestBar title={`${Math.ceil(next / 10) * 10}. bölüm sandığı`} value={progress.level % 10} max={10} />
-          ) : null
-        }
+        starChest={chest ?? null}
         play={{
           title: `Bölüm ${next}`,
-          sub: progress ? `${module.title} · ${progress.total_stars} yıldız` : module.tagline,
+          sub: progress ? `${tierOf(next)} · ${progress.total_stars} yıldız` : module.tagline,
           difficulty: diff,
           onPress: () => setLevel(next),
           disabled: !progress,

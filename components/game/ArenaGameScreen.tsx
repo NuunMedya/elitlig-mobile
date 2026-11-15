@@ -4,8 +4,10 @@
  *
  * Oyunun kendisi `WebGame` içindeki Canvas'tadır (bkz. games/*.js). Bu dosya
  * yalnız oyunun ÇEVRESİNİ çizer ve bütün oyunlarda birebir aynıdır:
- *   · Başlık YOK: oyun ekranın tamamını kaplar (oyunun içinde hissi). Sağ
- *     üstte yuvarlak DURDUR düğmesi; basınca oyun durur ve mola kartı açılır:
+ *   · Başlık YOK: oyun ekranın tamamını kaplar (durum çubuğunun ve ev
+ *     çubuğunun altına da uzanır; oyun HUD'unu güvenli alanın içinde tutar:
+ *     games/core.js `safeArea`). Sağ üstte oyunun HUD hapı dilinde yuvarlak
+ *     DURDUR düğmesi; basınca oyun durur ve mola kartı açılır:
  *     Devam et · Oyundan çık · ses · rekor tablosu. Android geri tuşu da
  *     mola kartını açar. Oyun HUD'u bu köşeyi boş bırakır (hudInset).
  *   · Giriş kartı: kurallar, kişisel rekor, "Başla". Arkada oyun vitrin
@@ -31,9 +33,10 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { LinearGradient } from "expo-linear-gradient";
 import { BackHandler, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ArenaResultCard, ArenaShareSheet, formatCount, SCORE_UNIT, useArenaScore } from "@/components/game/ArenaResult";
+import { HudPauseButton, OVERLAY_PAUSE, PAUSE_HUD_INSET } from "@/components/game/HudPauseButton";
 import { useGameRoster } from "@/components/game/useGameRoster";
 import { WebGame, type GameOverPayload, type WebGameHandle } from "@/components/game/WebGame";
 import { LivesSheet } from "@/components/gamehome/HomeSheets";
@@ -49,7 +52,7 @@ import { useGameSave, type SaveData } from "@/lib/puzzle/saves";
 import type { WebGameKey } from "@/lib/game/web/games.generated";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, elevate, fonts, radius, space, textScale, touchSlop, type, upperTR } from "@/theme";
+import { colors, elevate, fonts, radius, space, textScale, type, upperTR } from "@/theme";
 
 /* ============================ SÖZLEŞME ============================ */
 
@@ -99,6 +102,10 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
   const reduceMotion = useReduceMotion();
   const run = useArenaScore(config.game);
   const auth = useAuth();
+  /* Tam ekran: sahne kenardan kenara, HUD güvenli alanın içinde. */
+  const insets = useSafeAreaInsets();
+  const safeTop = Math.round(insets.top);
+  const safeBottom = Math.round(insets.bottom);
 
   /* Kariyer avantajı (Elit Kart): bağlı oyuncunun gerçek istatistiklerinden
      gelen küçük oranlar oyuna iletilir. Yalnız penaltı bir avantaj okur. */
@@ -138,8 +145,8 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
 
   /* Ses / hareket tercihi oyuna her değiştiğinde iletilir. */
   useEffect(() => {
-    game.current?.send({ type: "config", sound, reduceMotion, perks, roster, hudInset: HUD_INSET });
-  }, [sound, reduceMotion, phase, perks, roster]);
+    game.current?.send({ type: "config", sound, reduceMotion, perks, roster, hudInset: HUD_INSET, safeArea: { top: safeTop, bottom: safeBottom } });
+  }, [sound, reduceMotion, phase, perks, roster, safeTop, safeBottom]);
 
   /* Odak: başka ekrana geçince oyun durur, dönünce sürer. */
   useFocusEffect(
@@ -189,9 +196,9 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
 
   const onReady = useCallback(() => {
     if (storeRef.current) game.current?.send({ type: "config", store: storeRef.current });
-    game.current?.send({ type: "config", sound, reduceMotion, perks, roster, hudInset: HUD_INSET });
+    game.current?.send({ type: "config", sound, reduceMotion, perks, roster, hudInset: HUD_INSET, safeArea: { top: safeTop, bottom: safeBottom } });
     if (phaseRef.current === "loading") setPhaseBoth("ready");
-  }, [sound, reduceMotion, perks, roster]);
+  }, [sound, reduceMotion, perks, roster, safeTop, safeBottom]);
 
   const lifeGame = (["slalom", "sektir"] as string[]).includes(config.game) ? (config.game as LifeGameKey) : null;
   const lives = useGameLives(lifeGame);
@@ -257,7 +264,7 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
   );
 
   return (
-    <SafeAreaView style={styles.screen} edges={["top"]}>
+    <View style={styles.screen}>
 
       <View style={styles.arena}>
         <WebGame ref={game} game={config.game} onReady={onReady} onOver={onOver} onEvent={onEvent} />
@@ -293,9 +300,11 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
           />
         ) : null}
         {/* Sağ üst: DURDUR — oyunun HUD'u bu köşeyi boş bırakır. */}
-        <Touchable onPress={openMenu} hitSlop={touchSlop(44)} style={styles.pauseBtn} accessibilityRole="button" accessibilityLabel="Oyunu durdur" haptic="light">
-          <Ionicons name="pause" size={20} color={CARTOON.white} />
-        </Touchable>
+        <HudPauseButton
+          onPress={openMenu}
+          size={OVERLAY_PAUSE.size}
+          style={[styles.pauseBtn, { top: insets.top + OVERLAY_PAUSE.top, right: OVERLAY_PAUSE.right + insets.right }]}
+        />
 
         {menu ? (
           <View style={styles.menuLayer}>
@@ -337,7 +346,7 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
       </View>
 
       {phase !== "playing" ? (
-        <View style={styles.offlineHost} pointerEvents="none">
+        <View style={[styles.offlineHost, { top: insets.top + space.huge + space.xxl }]} pointerEvents="none">
           <OfflinePill />
         </View>
       ) : null}
@@ -351,7 +360,7 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
         taunt={config.taunt}
         cityLabel={scope.cityLabel}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -435,12 +444,12 @@ function StartCard({
 /* ================================ STİLLER ================================ */
 
 /** Oyun HUD'unun sağ üstte boş bırakacağı alan (durdur düğmesi), CSS px. */
-const HUD_INSET = { top: 0, right: 64 };
+const HUD_INSET = PAUSE_HUD_INSET;
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
 
 const styles = StyleSheet.create({
-  offlineHost: { position: "absolute", top: space.huge + space.xxl, left: 0, right: 0, alignItems: "center" },
+  offlineHost: { position: "absolute", left: 0, right: 0, alignItems: "center" },
   screen: { flex: 1, backgroundColor: CARTOON.night[2] },
   flex: { flex: 1 },
 
@@ -450,19 +459,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: CARTOON.night[2],
   },
-  pauseBtn: {
-    position: "absolute",
-    top: space.md,
-    right: space.md,
-    width: 44,
-    height: 44,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: CARTOON.glassDark,
-    borderWidth: 1,
-    borderColor: CARTOON.glassEdge,
-  },
+  pauseBtn: { position: "absolute" },
   menuLayer: { ...StyleSheet.absoluteFillObject, backgroundColor: CARTOON.dim, alignItems: "center", justifyContent: "center", padding: space.lg },
   menuWrap: { width: "100%", maxWidth: 340 },
   menuCard: {

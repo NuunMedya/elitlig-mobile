@@ -33,4 +33,5 @@ export const penaltiModule: PuzzleGameModule = {
   ],
   goalSummary,
   Game: PenaltiGame,
+  fullBleed: true,
 };

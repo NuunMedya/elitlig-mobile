@@ -37,7 +37,11 @@ function crowd(width: number, y0: number, y1: number, seed: number) {
   return out;
 }
 
-export const StadiumBackdrop = React.memo(function StadiumBackdrop({ width, height }: { width: number; height: number }) {
+/**
+ * corner: köşe yuvarlaklığı. Tam ekranda (zemin ekran kenarlarına taşarken)
+ * 0 verilir; kutu içinde kullanılırsa kart köşesi.
+ */
+export const StadiumBackdrop = React.memo(function StadiumBackdrop({ width, height, corner = radius.xxl }: { width: number; height: number; corner?: number }) {
   const roofY = height * 0.05;
   const standMid = height * 0.2;
   const standLow = height * 0.36;
@@ -48,7 +52,7 @@ export const StadiumBackdrop = React.memo(function StadiumBackdrop({ width, heig
     { x: width * 0.5, y: roofY - 2, r: width * 0.22 },
   ];
   return (
-    <Svg width={width} height={height} style={[StyleSheet.absoluteFill, { borderRadius: radius.xxl }]} pointerEvents="none">
+    <Svg width={width} height={height} style={[StyleSheet.absoluteFill, { borderRadius: corner }]} pointerEvents="none">
       <Defs>
         <LinearGradient id="ussky" x1="0" y1="0" x2="0" y2="1">
           <Stop offset="0" stopColor={UCLU_STADIUM.skyTop} />

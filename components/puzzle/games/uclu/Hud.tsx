@@ -22,6 +22,7 @@ import Svg, { Circle, Defs, Ellipse, LinearGradient, Path, RadialGradient, Rect,
 import { fonts, radius, space, textScale, type } from "@/theme";
 import { UCLU_BOARD, UCLU_PIECE_COLORS } from "@/lib/puzzle/ucluPalette";
 import type { UcluGoalType } from "@/lib/puzzle/levels/uclu";
+import { HudPauseButton, type HudButtonSkin } from "@/components/game/HudPauseButton";
 import { GoalIcon } from "./GoalIcon";
 
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -178,14 +179,20 @@ export interface HudProps {
   /** Hedef kartının ve içindeki satırın HUD içindeki konumu. */
   onGoalsPart: (part: "right" | "row", e: LayoutChangeEvent) => void;
   onGoalSlot: (i: number, e: LayoutChangeEvent) => void;
+  /** Durdur: HUD satırının sağ ucunda, kartlarla aynı dilde yuvarlak düğme. */
+  onPause?: () => void;
 }
 
-export const Hud = React.memo(function Hud({ level, tag, moves, goals, width, height, onGoalsPart, onGoalSlot }: HudProps) {
+/** Durdur düğmesi: HUD kartlarının koyu lacivert yüzü ve sıcak kenarı. */
+const PAUSE_SKIN: HudButtonSkin = { face: UCLU_BOARD.cardTop, lip: UCLU_BOARD.chromeLip, edge: UCLU_BOARD.cardEdgeHi, ink: UCLU_BOARD.hudText };
+
+export const Hud = React.memo(function Hud({ level, tag, moves, goals, width, height, onGoalsPart, onGoalSlot, onPause }: HudProps) {
   const gap = space.s;
+  const pauseW = onPause ? (width < 360 ? 34 : 38) : 0;
   // Dar ekranda (320) arma ve hamle kartı küçülür; hedef kartı yer kazanır.
   const centerW = Math.round(Math.max(60, Math.min(92, height * 0.82, width * 0.21)));
   const movesW = Math.round(Math.max(64, Math.min(104, width * 0.21)));
-  const goalW = width - centerW - movesW - gap * 2;
+  const goalW = width - centerW - movesW - gap * 2 - (pauseW ? pauseW + gap : 0);
   const n = Math.max(1, goals.length);
   const rowH = height - LIP - CARD_PAD * 2 - CARD_TITLE;
   const slotW = (goalW - CARD_PAD * 2 - 4 * (n - 1)) / n;
@@ -215,6 +222,7 @@ export const Hud = React.memo(function Hud({ level, tag, moves, goals, width, he
         </View>
       </View>
       <MovesCard moves={moves} width={movesW} height={height} low={low} />
+      {onPause ? <HudPauseButton onPress={onPause} size={pauseW} skin={PAUSE_SKIN} /> : null}
     </View>
   );
 });

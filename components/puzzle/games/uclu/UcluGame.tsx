@@ -104,7 +104,9 @@ const IDLE_MS = 2800;
 const IDLE_PHASES = 8;
 
 export default function UcluGame(props: PuzzleGameProps) {
-  const { level, maxWidth, preBoosters, boosterStock, onFinish, paused } = props;
+  const { level, maxWidth, preBoosters, boosterStock, onFinish, paused, onPause } = props;
+  /* Tam ekran: stat zemini oyun kutusunun dışına, ekran kenarlarına taşar. */
+  const bleed = props.bleed ?? { top: 0, bottom: 0, left: 0, right: 0 };
   const continueFn = useRef(props.requestContinue);
   continueFn.current = props.requestContinue;
   const continued = useRef(false);
@@ -898,11 +900,17 @@ export default function UcluGame(props: PuzzleGameProps) {
 
   return (
     <View style={[styles.root, { width: maxWidth, height: maxHeight }]}>
-      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.stage]}>
-        <StadiumBackdrop width={maxWidth} height={maxHeight} />
+      <View
+        pointerEvents="none"
+        style={[
+          styles.stage,
+          { left: -bleed.left, top: -bleed.top, width: maxWidth + bleed.left + bleed.right, height: maxHeight + bleed.top + bleed.bottom },
+        ]}
+      >
+        <StadiumBackdrop width={maxWidth + bleed.left + bleed.right} height={maxHeight + bleed.top + bleed.bottom} corner={0} />
       </View>
       <View onLayout={onHudLayout}>
-        <Hud level={def.level} tag={badge} moves={moves} goals={goals} width={maxWidth} height={hudH} onGoalsPart={onGoalsPart} onGoalSlot={onGoalSlot} />
+        <Hud level={def.level} tag={badge} moves={moves} goals={goals} width={maxWidth} height={hudH} onGoalsPart={onGoalsPart} onGoalSlot={onGoalSlot} onPause={onPause} />
       </View>
 
       <Animated.View onLayout={onBoardLayout} style={[styles.frame, { width: framePx, height: framePx, transform: [{ translateX: shake }, { translateY: Animated.multiply(shake, 0.5) }] }]}>
@@ -986,7 +994,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.xxl,
   },
   clip: { overflow: "hidden" },
-  stage: { overflow: "hidden", borderRadius: radius.xxl },
+  stage: { position: "absolute", overflow: "hidden" },
   selectRing: {
     position: "absolute",
     borderRadius: radius.lg,
