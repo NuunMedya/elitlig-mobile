@@ -1,14 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import * as Sharing from "expo-sharing";
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import ViewShot, { captureRef } from "react-native-view-shot";
 import {
   BottomSheet,
-  Button,
   EmptyState,
   ErrorState,
   FormChips,
@@ -16,15 +12,12 @@ import {
   Odometer,
   Reveal,
   ScreenHeader,
-  SegmentedControl,
   SkeletonCard,
   SkeletonListRow,
   TeamLogo,
   Touchable,
   useHeaderScroll,
   useRefresh,
-  useToast,
-  type SegmentedItem,
 } from "@/components/ui";
 import { getTeamMatches } from "@/lib/api/matches";
 import { getStandings } from "@/lib/api/standings";
@@ -34,6 +27,7 @@ import { queryKeys } from "@/lib/queryKeys";
 import { useScope } from "@/providers/ScopeProvider";
 import { colors, dark, fonts, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 import { DUEL_A, DUEL_B, DuelBar, HaloFrame, duelWinner } from "@/components/teampage/ProfileKit";
+import { CompareShare } from "@/components/share/CompareShare";
 import type { ApiMatch, StandingRow } from "@/lib/types";
 
 /**
@@ -149,7 +143,6 @@ export default function H2HScreen() {
   }>();
   const router = useRouter();
   const scope = useScope();
-  const toast = useToast();
   const { scrollY, scrollProps } = useHeaderScroll();
 
   const [shareOpen, setShareOpen] = useState(false);
@@ -275,10 +268,6 @@ export default function H2HScreen() {
   }, [awayId, router]);
   const openShare = useCallback(() => setShareOpen(true), []);
   const closeShare = useCallback(() => setShareOpen(false), []);
-  const shareFailed = useCallback(
-    () => toast.show({ message: "Paylaşım açılamadı.", tone: "danger", icon: "alert-circle" }),
-    [toast],
-  );
 
   const renderItem = useCallback(
     ({ item, index }: { item: ApiMatch; index: number }) => (
@@ -332,6 +321,40 @@ export default function H2HScreen() {
     }
     return { list, a, b };
   }, [awayForm, awayRank, awayStanding, homeForm, homeRank, homeStanding, meetings.length, tally]);
+
+  /* Paylaşım görseli (Düello · Radar · Kim önde? · Kafa kafaya): ekrandaki
+     "Kafa kafaya" satırları ve karşılaşma geçmişi; yeni sayı üretilmez. */
+  const shareData = useMemo(() => {
+    const sub = (rank: number | null, row: StandingRow | null) =>
+      [rank != null ? `${rank}. sıra` : null, row ? `${Number(row.display_points) || 0} puan` : null].filter(Boolean).join(" · ") || null;
+    return {
+      kind: "team" as const,
+      a: { name: homeName, image: null, crest: homeStanding?.logo ?? null, sub: sub(homeRank, homeStanding), form: homeForm },
+      b: { name: awayName, image: null, crest: awayStanding?.logo ?? null, sub: sub(awayRank, awayStanding), form: awayForm },
+      metrics: duel.list,
+      caption: meetings.length > 0 ? "Karşılaşmalar ve puan tablosu" : "Puan tablosu ve form",
+      h2h:
+        meetings.length > 0
+          ? {
+              played: meetings.length,
+              aWins: tally.homeWins,
+              draws: tally.draws,
+              bWins: tally.awayWins,
+              aGoals: tally.homeGoals,
+              bGoals: tally.awayGoals,
+              recent: meetings.slice(0, 5).map((item) => ({
+                id: item.id,
+                date: item.date,
+                homeName: item.first_team_name,
+                awayName: item.second_team_name,
+                homeScore: item.first_team_score,
+                awayScore: item.second_team_score,
+                result: resultFor(item, homeId, homeLower),
+              })),
+            }
+          : null,
+    };
+  }, [awayForm, awayName, awayRank, awayStanding, duel.list, homeForm, homeId, homeLower, homeName, homeRank, homeStanding, meetings, tally]);
 
   const hero = hasTargets ? (
     <View style={styles.hero}>
@@ -574,21 +597,7 @@ export default function H2HScreen() {
         />
       )}
 
-      <ShareSheet
-        visible={shareOpen}
-        onClose={closeShare}
-        homeName={homeName}
-        awayName={awayName}
-        homeLogo={homeStanding?.logo ?? null}
-        awayLogo={awayStanding?.logo ?? null}
-        homeRank={homeRank}
-        awayRank={awayRank}
-        homeForm={homeForm}
-        awayForm={awayForm}
-        tally={tally}
-        meetings={meetings.length}
-        onError={shareFailed}
-      />
+      <CompareShare visible={shareOpen} onClose={closeShare} data={shareData} />
     </SafeAreaView>
   );
 }
@@ -893,208 +902,6 @@ const MeetingRow = memo(function MeetingRow({
         </Text>
       </View>
     </Touchable>
-  );
-});
-
-/* ══════════════════════════════════════════════════════════════════════════
-   PAYLAŞIM KARTI — iki boyda, tema renkleriyle
-   ══════════════════════════════════════════════════════════════════════════ */
-
-type ShareFormat = "story" | "post";
-
-const SHARE_WIDTH = 264;
-/** Sahne gradyanının ekseni — yatay, sağdan sola (Arena kuralı). */
-const INK_START = { x: 1, y: 0.5 };
-const INK_END = { x: 0, y: 0.5 };
-const SHARE_FORMATS: Record<ShareFormat, { label: string; height: number }> = {
-  story: { label: "Hikâye 9:16", height: Math.round((SHARE_WIDTH * 16) / 9) },
-  post: { label: "Gönderi 3:4", height: Math.round((SHARE_WIDTH * 4) / 3) },
-};
-
-const SHARE_ITEMS: SegmentedItem<ShareFormat>[] = [
-  { key: "story", label: SHARE_FORMATS.story.label },
-  { key: "post", label: SHARE_FORMATS.post.label },
-];
-
-function ShareSheet({
-  visible,
-  onClose,
-  homeName,
-  awayName,
-  homeLogo,
-  awayLogo,
-  homeRank,
-  awayRank,
-  homeForm,
-  awayForm,
-  tally,
-  meetings,
-  onError,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  homeName: string;
-  awayName: string;
-  homeLogo: string | null;
-  awayLogo: string | null;
-  homeRank: number | null;
-  awayRank: number | null;
-  homeForm: string;
-  awayForm: string;
-  tally: { homeWins: number; draws: number; awayWins: number; homeGoals: number; awayGoals: number };
-  meetings: number;
-  onError: () => void;
-}) {
-  const [format, setFormat] = useState<ShareFormat>("story");
-  const [busy, setBusy] = useState(false);
-  const shotRef = useRef<View>(null);
-
-  const share = useCallback(async () => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const uri = await captureRef(shotRef, { format: "png", quality: 1 });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, { mimeType: "image/png" });
-      } else {
-        onError();
-      }
-    } catch {
-      onError();
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, onError]);
-
-  return (
-    <BottomSheet visible={visible} onClose={onClose} title="Karşılaştırmayı paylaş" snap="full">
-      <SegmentedControl items={SHARE_ITEMS} value={format} onChange={setFormat} />
-
-      <View style={styles.shareCardWrap}>
-        <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
-          <View style={[styles.shareCard, { height: SHARE_FORMATS[format].height }]}>
-            {/* SAHNE: paylaşım kartı kimlik anıdır — grafit, sağdan sola ışık. */}
-            <LinearGradient
-              colors={colors.gradientInk}
-              start={INK_START}
-              end={INK_END}
-              style={StyleSheet.absoluteFill}
-              pointerEvents="none"
-            />
-
-            <View style={styles.shareBody}>
-              <View style={styles.shareTop}>
-                <Text style={styles.shareBrand} {...textScale.badge}>
-                  elitlig
-                </Text>
-                <Text style={styles.shareKicker} {...textScale.badge}>
-                  {upperTR("H2H karşılaştırma")}
-                </Text>
-              </View>
-
-              <View style={styles.shareTeams}>
-                <View style={styles.shareTeam}>
-                  <TeamLogo name={homeName} logo={homeLogo} size={40} onDark />
-                  <Text style={styles.shareTeamName} numberOfLines={2} {...textScale.badge}>
-                    {upperTR(homeName)}
-                  </Text>
-                  {homeRank != null ? (
-                    <Text style={styles.shareTeamRank} {...textScale.badge}>
-                      {homeRank}. sıra
-                    </Text>
-                  ) : null}
-                </View>
-
-                <View style={styles.shareVersus}>
-                  <Text style={styles.shareVersusText} {...textScale.badge}>
-                    VS
-                  </Text>
-                  <Text style={styles.shareVersusMeta} {...textScale.badge}>
-                    {meetings} maç
-                  </Text>
-                </View>
-
-                <View style={[styles.shareTeam, styles.shareTeamRight]}>
-                  <TeamLogo name={awayName} logo={awayLogo} size={40} onDark />
-                  <Text
-                    style={[styles.shareTeamName, styles.shareTextRight]}
-                    numberOfLines={2}
-                    {...textScale.badge}
-                  >
-                    {upperTR(awayName)}
-                  </Text>
-                  {awayRank != null ? (
-                    <Text
-                      style={[styles.shareTeamRank, styles.shareTextRight]}
-                      {...textScale.badge}
-                    >
-                      {awayRank}. sıra
-                    </Text>
-                  ) : null}
-                </View>
-              </View>
-
-              <View style={styles.shareTally}>
-                <ShareStat label="GALİBİYET" value={tally.homeWins} tone={colors.brandOnDark} />
-                <ShareStat label="BERABERLİK" value={tally.draws} />
-                <ShareStat label="GALİBİYET" value={tally.awayWins} tone={colors.brandOnDark} />
-              </View>
-
-              <View style={styles.shareGoals}>
-                <ShareStat label="ATILAN GOL" value={tally.homeGoals} />
-                <ShareStat label="ATILAN GOL" value={tally.awayGoals} />
-              </View>
-
-              <View style={styles.shareForm}>
-                <FormChips form={homeForm} size="xs" />
-                <Text style={styles.shareFormLabel} {...textScale.badge}>
-                  FORM
-                </Text>
-                <FormChips form={awayForm} size="xs" />
-              </View>
-
-              <View style={styles.shareSpacer} />
-
-              <Text style={styles.shareFooter} {...textScale.badge}>
-                ELİTLİG.COM
-              </Text>
-            </View>
-          </View>
-        </ViewShot>
-      </View>
-
-      <Button
-        label={busy ? "Hazırlanıyor" : "Paylaş"}
-        icon="share-social"
-        onPress={share}
-        loading={busy}
-        fullWidth
-      />
-      <Text style={styles.shareHint} {...textScale.dense}>
-        İndirmek için: Paylaş → Görüntüyü Kaydet
-      </Text>
-    </BottomSheet>
-  );
-}
-
-const ShareStat = memo(function ShareStat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone?: string;
-}) {
-  return (
-    <View style={styles.shareStat}>
-      <Text style={[styles.shareStatValue, tone ? { color: tone } : null]} {...textScale.badge}>
-        {value}
-      </Text>
-      <Text style={styles.shareStatLabel} {...textScale.badge}>
-        {label}
-      </Text>
-    </View>
   );
 });
 
@@ -1476,123 +1283,4 @@ const styles = StyleSheet.create({
     color: colors.textOnStatus,
   },
 
-  /* — Paylaşım kartı — */
-  shareCardWrap: {
-    alignItems: "center",
-    paddingVertical: space.md,
-  },
-  shareCard: {
-    width: SHARE_WIDTH,
-    backgroundColor: colors.inkBlock,
-    borderRadius: radius.xl,
-    overflow: "hidden",
-  },
-  shareBody: {
-    flex: 1,
-    padding: space.lg,
-    gap: space.md,
-  },
-  shareTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  shareBrand: {
-    ...type.h4,
-    color: colors.onDark,
-  },
-  shareKicker: {
-    ...type.overline,
-    color: colors.brandOnDark,
-  },
-  shareTeams: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: space.sm,
-    marginTop: space.sm,
-  },
-  shareTeam: {
-    flex: 1,
-    gap: space.xs,
-  },
-  shareTeamRight: {
-    alignItems: "flex-end",
-  },
-  shareTeamName: {
-    ...type.label,
-    color: colors.onDark,
-  },
-  shareTeamRank: {
-    ...type.caption,
-    color: colors.onDarkMuted,
-  },
-  shareTextRight: {
-    textAlign: "right",
-  },
-  shareVersus: {
-    alignItems: "center",
-    gap: space.xxs,
-    paddingTop: space.sm,
-  },
-  shareVersusText: {
-    ...type.scoreSm,
-    color: colors.onDarkMuted,
-  },
-  shareVersusMeta: {
-    ...type.overline,
-    color: colors.onDarkMuted,
-  },
-  shareTally: {
-    flexDirection: "row",
-    backgroundColor: colors.inkTile,
-    borderWidth: hairline,
-    borderColor: colors.inkTileBorder,
-    borderRadius: radius.md,
-    paddingVertical: space.md,
-  },
-  shareGoals: {
-    flexDirection: "row",
-    backgroundColor: colors.inkTile,
-    borderWidth: hairline,
-    borderColor: colors.inkTileBorder,
-    borderRadius: radius.md,
-    paddingVertical: space.md,
-  },
-  shareStat: {
-    flex: 1,
-    alignItems: "center",
-    gap: space.xxs,
-  },
-  shareStatValue: {
-    ...type.scoreMd,
-    color: colors.onDark,
-  },
-  shareStatLabel: {
-    ...type.overline,
-    color: colors.onDarkMuted,
-  },
-  shareForm: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: space.sm,
-  },
-  shareFormLabel: {
-    ...type.overline,
-    color: colors.onDarkMuted,
-  },
-  shareSpacer: {
-    flex: 1,
-  },
-  shareFooter: {
-    ...type.overline,
-    color: colors.onDarkMuted,
-    textAlign: "center",
-  },
-  shareHint: {
-    ...type.caption,
-    color: colors.textTertiary,
-    textAlign: "center",
-    marginTop: space.sm,
-  },
 });

@@ -251,9 +251,9 @@ export function Backdrop({
 
         {t.texture === "pitch" && grid ? (
           <>
-            <Path d={`M0 ${H * 0.78}H${W}`} stroke={t.grid} strokeWidth={u(1.2)} />
-            <Circle cx={W / 2} cy={H * 0.78} r={W * 0.2} stroke={t.grid} strokeWidth={u(1.2)} fill="none" />
-            <Circle cx={W / 2} cy={H * 0.78} r={u(2.4)} fill={t.grid} />
+            <Path d={`M0 ${H * 0.86}H${W}`} stroke={t.grid} strokeWidth={u(1.2)} />
+            <Circle cx={W / 2} cy={H * 0.86} r={W * 0.2} stroke={t.grid} strokeWidth={u(1.2)} fill="none" />
+            <Circle cx={W / 2} cy={H * 0.86} r={u(2.4)} fill={t.grid} />
           </>
         ) : null}
 

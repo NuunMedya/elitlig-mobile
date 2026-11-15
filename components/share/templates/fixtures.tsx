@@ -89,7 +89,7 @@ function ProgramRow({ f, m, h }: { f: ShareFrame; m: FixtureItem; h: number }) {
     <View style={{ height: u(h), flexDirection: "row", alignItems: "center", paddingHorizontal: u(12), gap: u(12) }}>
       <View style={{ width: u(story ? 58 : 50), alignItems: "flex-start" }}>
         {m.finished ? (
-          <Overline f={f} color={t.inkMuted} scale={0.95}>Maç sonu</Overline>
+          <CText f={f} k="numStrong" scale={story ? 1.3 : 1.1} color={t.inkMuted}>MS</CText>
         ) : (
           <CText f={f} k="numStrong" scale={story ? 1.5 : 1.25} color={t.accent}>
             {clock(m.time) || "—"}

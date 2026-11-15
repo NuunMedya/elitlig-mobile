@@ -32,6 +32,10 @@
  * gibi "az olan iyi" metrikler ters sayılır. Her kartın başlığında kartın
  * kendi skoru durur.
  *
+ * PAYLAŞ: iki oyuncu yüklenince başlığın sağ üstünde "share-outline" ikonu
+ * paylaşım stüdyosunu (`components/share/CompareShare`) açar — Düello ·
+ * Radar · Kim önde?. Kapsam kartı varsa onun satırları, yoksa kariyer.
+ *
  * SEÇİCİ NEDEN SIRALAMA LİSTESİ: `app/ara.tsx` oyuncu aramasını aynı uçla
  * yapıyor (sunucu kapsamsız tam oyuncu listesi vermiyor). Aynı önbellek
  * anahtarı kullanıldığı için arama ekranından gelen kullanıcıda istek atılmaz.

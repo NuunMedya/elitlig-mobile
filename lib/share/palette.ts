@@ -186,6 +186,8 @@ const saha: ShareTheme = {
   hot: dark.medalGold[0],
   sideA: dark.win,
   sideB: dark.medalGold[0],
+  /* Çim yeşili → altın dolgu açık: üstündeki metin koyu çim mürekkebi. */
+  onFill: PITCH_BOTTOM,
   chipInk: PITCH_BOTTOM,
 };
 

@@ -195,8 +195,8 @@ function MatchDayPoster({ f, d }: { f: ShareFrame; d: MatchShareData }) {
     <Poster f={f} title={d.league} meta={meta(d)} footer={d.footer}>
       <View style={{ marginTop: u(story ? 14 : 2) }}>
         <Kicker f={f}>{weekday(d.date) || "Maç günü"}</Kicker>
-        <CText f={f} k="poster" scale={story ? 1.05 : 0.74} style={{ marginTop: u(story ? 6 : 2) }}>
-          MAÇ <CText f={f} k="poster" scale={story ? 1.05 : 0.74} color={t.accent}>GÜNÜ</CText>
+        <CText f={f} k="poster" scale={story ? 0.84 : 0.62} style={{ marginTop: u(story ? 6 : 2) }}>
+          MAÇ <CText f={f} k="poster" scale={story ? 0.84 : 0.62} color={t.accent}>GÜNÜ</CText>
         </CText>
       </View>
 
@@ -386,8 +386,8 @@ function ResultMinimal({ f, d }: { f: ShareFrame; d: MatchShareData }) {
         <TeamColumn f={f} team={d.home} size={crest} room={12} dim={h < a} halo={h > a} haloColor={t.sideA} />
         <TeamColumn f={f} team={d.away} size={crest} room={12} dim={a < h} halo={a > h} haloColor={t.sideB} />
       </View>
-      <View style={{ marginTop: u(story ? 16 : 4) }}>
-        <ScoreText f={f} home={d.homeScore} away={d.awayScore} scale={story ? 1 : 0.76} winnerOnly />
+      <View style={{ marginTop: u(story ? 16 : 12) }}>
+        <ScoreText f={f} home={d.homeScore} away={d.awayScore} scale={story ? 1 : 0.66} winnerOnly />
       </View>
       <View style={{ alignItems: "center", gap: u(8), marginTop: u(story ? 12 : 4) }}>
         <TagPill f={f} label={resultLine(d)} />
@@ -454,7 +454,7 @@ function ResultDetail({ f, d }: { f: ShareFrame; d: MatchShareData }) {
   const { u, t, story } = f;
   const home = groupScorers(d.scorers.home);
   const away = groupScorers(d.scorers.away);
-  const stats = story ? keyStats(d, 3) : [];
+  const stats = keyStats(d, story ? 3 : 2);
   return (
     <Poster f={f} mood="low" title={d.league} meta={meta(d)} footer={d.footer} tag="Maç sonu">
       <Glass f={f} radius={22} strong style={{ paddingVertical: u(story ? 14 : 10), paddingHorizontal: u(8) }}>
@@ -491,9 +491,9 @@ function ResultDetail({ f, d }: { f: ShareFrame; d: MatchShareData }) {
       ) : null}
 
       {stats.length ? (
-        <Glass f={f} radius={22} style={{ marginTop: u(10), padding: u(14), gap: u(10) }}>
+        <Glass f={f} radius={22} style={{ marginTop: u(story ? 10 : 8), padding: u(story ? 14 : 10), gap: u(story ? 10 : 7) }}>
           {stats.map((row) => (
-            <DuelRow key={row.label} f={f} label={row.label} a={row.home} b={row.away} lowerIsBetter={LOWER_IS_BETTER.has(row.label)} thick={4} scale={0.9} />
+            <DuelRow key={row.label} f={f} label={row.label} a={row.home} b={row.away} lowerIsBetter={LOWER_IS_BETTER.has(row.label)} thick={4} scale={story ? 0.9 : 0.75} />
           ))}
         </Glass>
       ) : null}

@@ -57,7 +57,7 @@ export function Poster({
               flex: 1,
               paddingHorizontal: u(SAFE[f.fmt].side),
               paddingTop: u(f.story ? 18 : 10),
-              paddingBottom: u(SAFE[f.fmt].bottom + (f.story ? 14 : 18)),
+              paddingBottom: u(SAFE[f.fmt].bottom + (f.story ? 14 : 22)),
             },
             bodyStyle,
           ]}

@@ -8,7 +8,8 @@
 import React from "react";
 import { View } from "react-native";
 
-import { formLetters, splitName, upper } from "@/lib/share/format";
+import { formLetters, splitName } from "@/lib/share/format";
+import { upperTR } from "@/theme";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { alpha } from "@/lib/share/palette";
 import { Poster, Spacer } from "../canvas/Layout";
@@ -311,8 +312,8 @@ function PlayerPoster({ f, d }: { f: ShareFrame; d: PlayerShareData }) {
 function PlayerCollectible({ f, d }: { f: ShareFrame; d: PlayerShareData }) {
   const id = useSvgId("pc");
   const { u, t, story } = f;
-  const cw = story ? 264 : 214;
-  const ch = story ? 392 : 316;
+  const cw = story ? 270 : 220;
+  const ch = story ? 384 : 300;
   const W = u(cw);
   const H = u(ch);
   const r = u(26);
@@ -320,7 +321,8 @@ function PlayerCollectible({ f, d }: { f: ShareFrame; d: PlayerShareData }) {
   const decided = d.wins + d.draws + d.losses;
   const gpm = d.matches > 0 ? d.goals / d.matches : 0;
   const pos = (d.position ?? "").trim();
-  const posShort = pos ? upper(pos).slice(0, 3) : "";
+  const POS: Record<string, string> = { KALECİ: "KL", DEFANS: "DF", "ORTA SAHA": "OS", FORVET: "FV" };
+  const posShort = pos ? POS[upperTR(pos)] ?? upperTR(pos).slice(0, 3) : "";
   const { first, last } = splitName(d.name);
   const stats: [string, string | number][] = [
     ["Maç", d.matches],
@@ -361,8 +363,8 @@ function PlayerCollectible({ f, d }: { f: ShareFrame; d: PlayerShareData }) {
             {d.teamName ? <Crest f={f} logo={d.teamLogo} name={d.teamName} size={story ? 24 : 20} /> : null}
             {d.jersey ? <CText f={f} k="numStrong" scale={0.95} color={t.inkSoft}>#{d.jersey}</CText> : null}
           </View>
-          <View style={{ position: "absolute", right: u(18), top: u(story ? 22 : 18) }}>
-            <Portrait f={f} image={d.image} name={d.name} size={story ? 150 : 118} ring="gold" />
+          <View style={{ position: "absolute", right: u(16), top: u(story ? 20 : 16) }}>
+            <Portrait f={f} image={d.image} name={d.name} size={story ? 176 : 128} ring="gold" />
           </View>
           {/* Ad bandı + ızgara */}
           <View style={{ position: "absolute", left: u(16), right: u(16), bottom: u(story ? 18 : 14) }}>
