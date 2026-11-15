@@ -1,19 +1,18 @@
 /**
  * ELİT ÜÇLÜ — oyun içi renk paleti (veri).
  *
- * Tahta iki temada da aynı "gece maçı" sahasıdır: taşların renk kimliği tema
- * değişince kaymamalı (oyuncu "mavi top" diye öğrenir). Bu yüzden renkler
+ * Tahta iki temada da aynı "gece maçı" stadıdır: taşların renk kimliği tema
+ * değişince kaymamalı (oyuncu "kırmızı forma" diye öğrenir). Bu yüzden renkler
  * tema tokenı değil, oyun verisidir ve burada hex olarak durur; bileşenler
  * bu dosyayı içe aktarır (components/ altında çıplak hex yazılmaz).
  *
- * TAŞLAR = PARLAK ÇİZGİ FİLM FUTBOL TOPLARI: her renk bir top. Renkler
- * bilerek DOYGUN ve birbirinden UZAK (mavi, kırmızı, yeşil, sarı, mor,
- * pembe); topun klasik beşgen/altıgen panelleri aynı rengin daha koyu
- * tonuyla (`panel`) çizilir — içte beyaz simge yoktur. Renk körlüğü için
- * karışabilecek komşu renklerin panel deseni farklıdır (`pattern`: klasik
- * beşgen, girdap, yıldız) ama hepsi sade bir top olarak okunur.
- * Her topun tonları: açık parıltı (hi), gövde (base), gölge (lo), en koyu
- * kenar (rim) ve panel. Dış çizgi kalın lacivert `UCLU_OUTLINE`'dır.
+ * TAŞLAR = PARLAK, TIKNAZ FUTBOL NESNELERİ: her tür hem ŞEKLİYLE hem RENGİYLE
+ * ayrılır (renk körlüğünde de okunur): mavi top, kırmızı forma, yeşil
+ * krampon, sarı kaleci eldiveni, mor düdük, pembe köşe bayrağı. Her türün
+ * tonları: açık parıltı (hi), gövde (base), gölge (lo), en koyu kenar (rim)
+ * ve ayrıntı (panel: dikiş, şerit, desen).
+ * Özel taşlar RENKSİZDİR (füze, dron, Röveşata, Altın Top): kendi sabit
+ * renkleri `UCLU_SPECIAL`'dadır.
  */
 
 import { CARTOON } from "@/lib/game/cartoon";
@@ -23,7 +22,11 @@ export const UCLU_OUTLINE = CARTOON.outline;
 
 export type UcluBallPattern = "classic" | "swirl" | "star";
 
+export type UcluPieceShape = "ball" | "jersey" | "boot" | "glove" | "whistle" | "flag";
+
 export interface UcluPieceColors {
+  /** Çizim biçimi (taş türü). */
+  shape: UcluPieceShape;
   base: string;
   hi: string;
   lo: string;
@@ -49,6 +52,7 @@ export const UCLU_PIECE_COLORS: readonly UcluPieceColors[] = [
     panel: "#0A36A0",
     ink: "#FFFFFF",
     pattern: "classic",
+    shape: "ball",
     name: "Mavi top",
   },
   {
@@ -59,7 +63,8 @@ export const UCLU_PIECE_COLORS: readonly UcluPieceColors[] = [
     panel: "#A3061E",
     ink: "#FFFFFF",
     pattern: "swirl",
-    name: "Kırmızı top",
+    shape: "jersey",
+    name: "Kırmızı forma",
   },
   {
     base: "#2FD447",
@@ -69,17 +74,19 @@ export const UCLU_PIECE_COLORS: readonly UcluPieceColors[] = [
     panel: "#0C7A20",
     ink: "#FFFFFF",
     pattern: "classic",
-    name: "Yeşil top",
+    shape: "boot",
+    name: "Yeşil krampon",
   },
   {
-    base: "#FFD21A",
+    base: "#FFC21A",
     hi: "#FFF6B8",
     lo: "#E89A00",
     rim: "#7A4A00",
     panel: "#D07E00",
     ink: "#FFFFFF",
     pattern: "star",
-    name: "Sarı top",
+    shape: "glove",
+    name: "Sarı eldiven",
   },
   {
     base: "#A64DFF",
@@ -89,7 +96,8 @@ export const UCLU_PIECE_COLORS: readonly UcluPieceColors[] = [
     panel: "#5512B0",
     ink: "#FFFFFF",
     pattern: "swirl",
-    name: "Mor top",
+    shape: "whistle",
+    name: "Mor düdük",
   },
   {
     base: "#FF45C4",
@@ -99,7 +107,8 @@ export const UCLU_PIECE_COLORS: readonly UcluPieceColors[] = [
     panel: "#A80A78",
     ink: "#FFFFFF",
     pattern: "classic",
-    name: "Pembe top",
+    shape: "flag",
+    name: "Pembe bayrak",
   },
 ];
 
@@ -227,4 +236,84 @@ export const UCLU_BOARD = {
   crateEdge: "#8A4F18",
   hintBg: "#FFFFFF",
   hintInk: "#1F2333",
+  /** Çim hedefi: çıplak toprak ve çimlenmiş hücre. */
+  dirt: "#B9824A",
+  dirtLo: "#8A5A2B",
+  dirtSpot: "rgba(255, 228, 190, 0.28)",
+  grass: "#3FD45A",
+  grassHi: "#8BF28C",
+  grassLo: "#1E9A38",
+  /** Tahta çerçevesi: kalın, parlak altın-ahşap kasa. */
+  frameWoodHi: "#FFD27A",
+  frameWood: "#E79A32",
+  frameWoodLo: "#9C5A12",
+  frameWoodRim: "#5E3208",
+  frameInset: "#1A3B1F",
+  rivet: "#FFF1C4",
+  /** Hücre kutucuğu: hafif kabartma kenar. */
+  cellHi: "rgba(255, 255, 255, 0.18)",
+  cellLo: "rgba(0, 0, 0, 0.10)",
+  /** Kombo yazısı: altın gövde + koyu 3B gölge. */
+  comboGold: "#FFE066",
+  comboDeep: "#B4560B",
+  comboInk: "#3A1A00",
+  /** Kartal bakışı ışın ve şok dalgası. */
+  shock: "rgba(255, 236, 160, 0.55)",
+  ballBeam: "#FFF6C8",
+} as const;
+
+/** Renksiz özel taşlar ve engeller (füze, dron, Röveşata, koni). */
+export const UCLU_SPECIAL = {
+  rocketBody: "#FFFFFF",
+  rocketBodyLo: "#C9D3E6",
+  rocketNose: "#FF3B4E",
+  rocketNoseHi: "#FF9AA4",
+  rocketNoseLo: "#A8102A",
+  rocketBand: "#FFC93C",
+  rocketBandLo: "#C47E00",
+  rocketRim: "#3A1430",
+  flame: "#FFB238",
+  flameCore: "#FFF3B0",
+  droneBody: "#22C7C1",
+  droneHi: "#A6FFF6",
+  droneLo: "#0B7C7A",
+  droneRim: "#063F3E",
+  droneArm: "#2C3550",
+  rotor: "rgba(235, 248, 255, 0.55)",
+  rotorEdge: "rgba(255, 255, 255, 0.9)",
+  droneEye: "#1B1446",
+  droneLed: "#FF4D5E",
+  bombHi: "#6D7BA8",
+  bomb: "#2D3557",
+  bombLo: "#121733",
+  bombPanel: "#FFC93C",
+  fuse: "#C8A06A",
+  spark: "#FFE680",
+  sparkHot: "#FF7A1A",
+  coneHi: "#FFB36B",
+  cone: "#FF7A1A",
+  coneLo: "#C44A00",
+  coneRim: "#6B2400",
+  coneStripe: "#FFFFFF",
+  coneBase: "#3B3F55",
+} as const;
+
+/** Stadyum arka planı (tahtanın arkasındaki sahne). */
+export const UCLU_STADIUM = {
+  skyTop: "#0B1240",
+  skyMid: "#1C2A78",
+  skyLow: "#2D3FA0",
+  standFar: "#1A2163",
+  standNear: "#232C80",
+  standEdge: "#3443A8",
+  crowdA: "rgba(255, 255, 255, 0.22)",
+  crowdB: "rgba(255, 210, 90, 0.28)",
+  crowdC: "rgba(255, 90, 120, 0.24)",
+  roof: "#0E1650",
+  tower: "#2B336E",
+  lamp: "#FFFBE6",
+  lampGlow: "#FFF2B8",
+  beam: "rgba(255, 248, 210, 0.10)",
+  pitch: "#1F7A34",
+  pitchHi: "#2E9A45",
 } as const;

@@ -82,8 +82,25 @@ export interface Listing {
   is_mine: boolean;
 }
 
-export const getListings = (params: { type?: TransferType; q?: string } = {}) =>
-  get<{ items: Listing[] }>("/api/transfer-market/listings", params);
+export interface ListingsPage {
+  items: Listing[];
+  page: number;
+  limit: number;
+  totalItems: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  /** Süzgeçten bağımsız piyasa özeti (açık · satılık · kiralık). */
+  counts?: { total: number; sale: number; loan: number };
+}
+
+/** Sayfalı ilan listesi; arama (oyuncu / takım adı) sunucuda yapılır. */
+export const getListings = (params: { type?: TransferType; q?: string; page?: number; limit?: number } = {}) =>
+  get<ListingsPage>("/api/transfer-market/listings", {
+    type: params.type || undefined,
+    q: params.q?.trim() || undefined,
+    page: params.page ?? 1,
+    limit: params.limit ?? 20,
+  });
 
 export const getMyListings = () => get<{ items: Listing[] }>("/api/transfer-market/mine");
 

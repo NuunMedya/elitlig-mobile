@@ -24,8 +24,7 @@ import { Button, Touchable, useToast } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { getAdmob, unitFor } from "@/lib/ads/admob";
 import { adImage, resolveAppZone, trackAd, type AdSponsor } from "@/lib/ads/api";
-import { claimAdLife, startAdLife, type PuzzleProfile } from "@/lib/puzzle/api";
-import type { PuzzleGameKey } from "@/lib/puzzle/types";
+import { claimAd, claimAdLife, startAd, startAdLife, type AdClaimResponse, type AdKind, type LifeGameKey, type PuzzleProfile } from "@/lib/puzzle/api";
 import { usePuzzleCache } from "@/lib/puzzle/usePuzzle";
 import { colors, fonts, radius, space, textScale, type } from "@/theme";
 
@@ -104,7 +103,7 @@ export interface RewardedFlow<R> {
   success: string;
 }
 
-const lifeFlow = (game: PuzzleGameKey | null | undefined): RewardedFlow<PuzzleProfile> => ({
+const lifeFlow = (game: LifeGameKey | null | undefined): RewardedFlow<PuzzleProfile> => ({
   start: () => startAdLife(game),
   claim: (t) => claimAdLife(t).then((res) => res.profile),
   reward: "+1 can",
@@ -124,7 +123,7 @@ export function RewardedAdModal<R = PuzzleProfile>({
   onClose: () => void;
   onRewarded: (result: R) => void;
   /** Canın ekleneceği oyun (her oyunun kendi canı var). */
-  game?: PuzzleGameKey | null;
+  game?: LifeGameKey | null;
   /** Başka bir ödül akışı (yoksa reklamla can). */
   flow?: RewardedFlow<R>;
 }) {
@@ -325,6 +324,101 @@ export function RewardedAdModal<R = PuzzleProfile>({
         </View>
       </View>
     </Modal>
+  );
+}
+
+/* ═══════════════════════ GENEL ÖDÜLLÜ REKLAM (sözleşme §5) ═══════════════════════ */
+
+const AD_TEXT: Record<AdKind, { reward: string; icon: keyof typeof Ionicons.glyphMap; claiming: string; success: string }> = {
+  life: { reward: "+1 can", icon: "heart", claiming: "Can ekleniyor", success: "+1 can kazandın!" },
+  double_coins: { reward: "2× jeton", icon: "disc", claiming: "Jetonlar ekleniyor", success: "Jetonların ikiye katlandı!" },
+  booster: { reward: "ücretsiz güçlendirici", icon: "flash", claiming: "Güçlendirici ekleniyor", success: "Ücretsiz güçlendirici çantanda!" },
+  spin: { reward: "çark hakkı", icon: "sync-circle", claiming: "Çark dönüyor", success: "Çark ödülün eklendi!" },
+};
+
+/** Sunucu akışlı reklam (POST /ad/start → /ad/claim) — her tür için. */
+export function adFlow(kind: AdKind, game?: LifeGameKey | null, rewardText?: string): RewardedFlow<AdClaimResponse> {
+  const t = AD_TEXT[kind];
+  return {
+    start: () => startAd(kind, game),
+    claim: (token) => claimAd(token),
+    reward: rewardText ?? t.reward,
+    icon: t.icon,
+    claiming: t.claiming,
+    success: t.success,
+  };
+}
+
+/**
+ * Sunucusuz reklam (ör. bölümde "reklamla devam"): ekonomik ödül yok, yalnız
+ * oyun içi ikinci şans. İzleme süresi yine beklenir.
+ */
+export function localAdFlow(reward: string, icon: keyof typeof Ionicons.glyphMap = "play-forward"): RewardedFlow<true> {
+  return {
+    start: async () => ({ token: "yerel", seconds: 12 }),
+    claim: async () => true as const,
+    reward,
+    icon,
+    claiming: "Hazırlanıyor",
+    success: `${reward} hazır!`,
+  };
+}
+
+/**
+ * "Reklam izle · <ödül>" düğmesi (her tür). Hak bilgisi `profile.ads[kind]`
+ * (yeni sunucu) — yoksa ve `requireQuota` ise düğme gizlenir.
+ */
+export function RewardedAd({
+  kind,
+  game,
+  profile,
+  label,
+  rewardText,
+  onRewarded,
+  size = "md",
+  fullWidth = true,
+  variant = "secondary",
+  requireQuota = true,
+}: {
+  kind: AdKind;
+  game?: LifeGameKey | null;
+  profile: PuzzleProfile | undefined;
+  label?: string;
+  rewardText?: string;
+  onRewarded?: (res: AdClaimResponse) => void;
+  size?: "sm" | "md" | "lg";
+  fullWidth?: boolean;
+  variant?: "primary" | "secondary";
+  requireQuota?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const cache = usePuzzleCache();
+  const quota = profile?.ads?.[kind];
+  if (!profile || (requireQuota && !quota)) return null;
+  const left = quota?.left ?? 1;
+  const text = label ?? `Reklam izle · ${rewardText ?? AD_TEXT[kind].reward}`;
+  return (
+    <>
+      <Button
+        label={left > 0 ? (quota ? `${text} (${left})` : text) : "Bugünkü reklam hakkın bitti"}
+        icon="play-circle"
+        variant={variant}
+        size={size}
+        fullWidth={fullWidth}
+        disabled={left < 1}
+        onPress={() => setOpen(true)}
+        haptic="medium"
+      />
+      <RewardedAdModal<AdClaimResponse>
+        visible={open}
+        onClose={() => setOpen(false)}
+        flow={adFlow(kind, game, rewardText)}
+        onRewarded={(res) => {
+          if (res?.profile) cache(res.profile);
+          onRewarded?.(res);
+        }}
+      />
+    </>
   );
 }
 

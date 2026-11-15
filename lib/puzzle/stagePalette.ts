@@ -26,6 +26,9 @@ export const STAGE_THEMES: Record<PuzzleGameKey, StageTheme> = {
   soyunma: { sky: ["#163E73", "#102A55", "#0A1835"], glow: "#4FB3FF", tint: "#1F7AD6" },
   kantin: { sky: ["#4A2C34", "#2C1E36", "#141228"], glow: "#FF9F45", tint: "#E0701A" },
   kariyer: { sky: ["#0F3E4C", "#0B2A3A", "#081828"], glow: "#2FD0E0", tint: "#0E8C9E" },
+  penalti: { sky: ["#123A2A", "#0B2A1E", "#071A12"], glow: "#4ADE80", tint: "#16A34A" },
+  kadro: { sky: ["#2A1B4C", "#1C1236", "#100A22"], glow: "#A78BFA", tint: "#5B3DF5" },
+  savunma: { sky: ["#3A1A12", "#2A120C", "#1A0A06"], glow: "#FB923C", tint: "#EA580C" },
 };
 
 /** Ortak sahne renkleri. */

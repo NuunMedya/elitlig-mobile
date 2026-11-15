@@ -11,12 +11,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { BottomSheet, Button, Reveal } from "@/components/ui";
+import { Reveal } from "@/components/ui";
 import type { City2State, City2StepView } from "@/lib/puzzle/city2";
-import { colors, radius, space, textScale, type } from "@/theme";
+import { radius, space, textScale, type } from "@/theme";
 
 import { BuildingIcon, LandmarkIcon, fmt } from "./shared";
 import { RungBadge } from "./StepCard";
+import { CP } from "@/lib/puzzle/cityGamePalette";
+import { GameButton, GameSheet } from "./game/GamePaper";
 
 const seenKey = (at: string) => `elitlig.city2.migration.seen.v1.${at}`;
 const RECENT_MS = 7 * 24 * 3600e3;
@@ -46,11 +48,11 @@ export function MigrationNotice({ city2 }: { city2: City2State | undefined }) {
     void AsyncStorage.setItem(seenKey(m.at), "1").catch(() => undefined);
   };
   return (
-    <BottomSheet
+    <GameSheet
       visible={show}
       onClose={close}
       title="Kulüp Şehri 2.0"
-      footer={<Button label="Şehrime bak" icon="arrow-forward" iconPosition="right" onPress={close} fullWidth haptic="success" />}
+      footer={<GameButton label="Şehrime bak" icon="arrow-forward" iconPosition="right" onPress={close} fullWidth haptic="success" />}
     >
       <View style={styles.wrap}>
         <View style={styles.hero}>
@@ -69,7 +71,7 @@ export function MigrationNotice({ city2 }: { city2: City2State | undefined }) {
         </Text>
         {m.refund > 0 ? (
           <View style={styles.refund}>
-            <Ionicons name="star" size={18} color={colors.yellowCard} />
+            <Ionicons name="star" size={18} color={CP.yellowCard} />
             <View style={styles.refundTexts}>
               <Text style={styles.refundTitle} {...textScale.dense}>
                 {fmt(m.refund)} yıldız iade edildi
@@ -81,7 +83,7 @@ export function MigrationNotice({ city2 }: { city2: City2State | undefined }) {
           </View>
         ) : null}
       </View>
-    </BottomSheet>
+    </GameSheet>
   );
 }
 
@@ -98,7 +100,7 @@ export function StepCelebration({ result, city2, onClose }: { result: StepResult
   const marks = city2?.landmarks.catalogue.filter((c) => c.min_rung === rung && c.cost != null) ?? [];
   const slots = city2 && result ? city2.landmarks.grid.open_slots - result.slotsBefore : 0;
   return (
-    <BottomSheet visible={Boolean(result)} onClose={onClose} title="Yeni lig!" footer={<Button label="Devam" onPress={onClose} fullWidth haptic="success" />}>
+    <GameSheet visible={Boolean(result)} onClose={onClose} title="Yeni lig!" footer={<GameButton label="Devam" onPress={onClose} fullWidth haptic="success" />}>
       {result ? (
         <View style={styles.wrap}>
           <Reveal scaleFrom={0.85}>
@@ -138,7 +140,7 @@ export function StepCelebration({ result, city2, onClose }: { result: StepResult
               {slots > 0 ? (
                 <View style={styles.openedRow}>
                   <View style={styles.slotIcon}>
-                    <Ionicons name="grid" size={16} color={colors.brandAccent} />
+                    <Ionicons name="grid" size={16} color={CP.brandAccent} />
                   </View>
                   <Text style={styles.openedText} {...textScale.dense}>
                     Meydanda {slots} yeni yuva
@@ -149,7 +151,7 @@ export function StepCelebration({ result, city2, onClose }: { result: StepResult
           ) : null}
         </View>
       ) : null}
-    </BottomSheet>
+    </GameSheet>
   );
 }
 
@@ -157,18 +159,18 @@ const styles = StyleSheet.create({
   wrap: { gap: space.md, paddingBottom: space.sm },
   hero: { flexDirection: "row", alignItems: "center", gap: space.md },
   heroTexts: { flex: 1, gap: 2 },
-  over: { ...type.overline, color: colors.textTertiary },
-  title: { ...type.h1, color: colors.textPrimary },
-  lead: { ...type.body, color: colors.textSecondary },
-  refund: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surface2 },
+  over: { ...type.overline, color: CP.textTertiary },
+  title: { ...type.h1, color: CP.textPrimary },
+  lead: { ...type.body, color: CP.textSecondary },
+  refund: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: CP.surface2 },
   refundTexts: { flex: 1, gap: 2 },
-  refundTitle: { ...type.h3, color: colors.textPrimary },
-  refundSub: { ...type.caption, color: colors.textSecondary },
+  refundTitle: { ...type.h3, color: CP.textPrimary },
+  refundSub: { ...type.caption, color: CP.textSecondary },
   celebrate: { alignItems: "center", gap: space.sm, paddingVertical: space.md },
-  celebrateTitle: { ...type.display, color: colors.textPrimary, textAlign: "center" },
-  celebrateVia: { ...type.bodySm, color: colors.textSecondary },
-  opened: { gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surface2 },
+  celebrateTitle: { ...type.display, color: CP.textPrimary, textAlign: "center" },
+  celebrateVia: { ...type.bodySm, color: CP.textSecondary },
+  opened: { gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: CP.surface2 },
   openedRow: { flexDirection: "row", alignItems: "center", gap: space.md },
-  openedText: { ...type.labelSm, color: colors.textPrimary, flex: 1 },
-  slotIcon: { width: 32, height: 32, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandDim },
+  openedText: { ...type.labelSm, color: CP.textPrimary, flex: 1 },
+  slotIcon: { width: 32, height: 32, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: CP.brandDim },
 });

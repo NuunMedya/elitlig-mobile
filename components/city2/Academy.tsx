@@ -9,13 +9,12 @@
  *
  *   AcademyHero        kadro yuvası, yeni oyuncu sayacı, transfer geliri
  *   OfferCard          teklif kartı (kabul onaylı, ret)
- *   PlayerRow          kadro satırı
+ *   PlayerCard         kadro ızgarasındaki oyuncu kartı (güç, mevki, değer)
  *   PlayerSheet        oyuncu penceresi: değer eğrisi, sakatlık, eylemler
  *   EffectsCard        akademi / üniversite / sağlık / scout etkileri
  *   HistoryCard        satılan, ayrılan, emekli olan oyuncular
  *   AcademyInfoSheet   kurallar + "adım kullanılmasın" anahtarı
  *   TransferCelebration teklif kabulünden sonra kutlama ve EL sayacı
- *   AcademyCityCard    şehir ekranındaki giriş kartı (bekleyen teklif rozeti)
  *   AcademyBuildingSection akademi binası penceresindeki bölüm
  */
 
@@ -24,7 +23,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
-import { BottomSheet, Button, Reveal, Toggle, Touchable, withAlpha } from "@/components/ui";
+import { Reveal, Toggle, Touchable, withAlpha } from "@/components/ui";
 import {
   ACADEMY_SOURCE_TEXT,
   fmtEl,
@@ -40,14 +39,19 @@ import {
   type City2YouthPlayer,
 } from "@/lib/puzzle/city2";
 import { CITY2_EL, CITY2_UI, CITY_UI } from "@/lib/puzzle/cityPalette";
-import { colors, fonts, hairline, isDark, radius, space, textScale, type } from "@/theme";
+import { fonts, hairline, radius, space, textScale, type } from "@/theme";
 
-import { ElCoin, useCountUp } from "./ElitLira";
+import { ElCoin } from "./ElCoin";
+import { useCountUp } from "./ElitLira";
 import { BuildingIcon, cardStyle } from "./shared";
+import { CP } from "@/lib/puzzle/cityGamePalette";
+import { GameButton, GameSheet } from "./game/GamePaper";
+import { GlossyButton } from "./game/CityGameKit";
 
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
-const EL_INK = isDark ? CITY2_EL.inkDark : CITY2_EL.ink;
+/** Parşömen iki temada da açık: EL mürekkebi hep koyu ton. */
+const EL_INK = CITY2_EL.ink;
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -64,18 +68,18 @@ export function useNow(ms = 30_000) {
 /* ───────────────────────── Küçük parçalar ───────────────────────── */
 
 const POS_COLOR: Record<string, string> = {
-  KL: colors.posKeeper,
-  DEF: colors.posDefense,
-  OS: colors.posMidfield,
-  FV: colors.posForward,
+  KL: CP.posKeeper,
+  DEF: CP.posDefense,
+  OS: CP.posMidfield,
+  FV: CP.posForward,
 };
-const posColor = (pos: string | null | undefined) => (pos && POS_COLOR[pos]) || colors.posUnknown;
+const posColor = (pos: string | null | undefined) => (pos && POS_COLOR[pos]) || CP.posUnknown;
 
 /** Gelişim yönü: 26 yaşına dek gelişir, 26–29 zirve, 30'dan sonra düşer. */
 function trendOf(p: City2YouthPlayer): { icon: IconName; label: string; color: string } {
-  if (p.age_exact < 26) return { icon: "trending-up", label: "Gelişiyor", color: colors.win };
-  if (p.age_exact < 30) return { icon: "arrow-forward", label: "Zirvede", color: colors.brandAccent };
-  return { icon: "trending-down", label: "Düşüşte", color: colors.warn };
+  if (p.age_exact < 26) return { icon: "trending-up", label: "Gelişiyor", color: CP.win };
+  if (p.age_exact < 30) return { icon: "arrow-forward", label: "Zirvede", color: CP.brandAccent };
+  return { icon: "trending-down", label: "Düşüşte", color: CP.warn };
 }
 
 const stageTitle = (academy: Pick<City2Academy, "name_stages"> | null | undefined, key: string) =>
@@ -101,8 +105,8 @@ export function PlayerAvatar({ p, size = 44 }: { p: City2YouthPlayer; size?: num
 }
 
 function Pill({ icon, label, tone = "neutral" }: { icon?: IconName; label: string; tone?: "neutral" | "danger" | "brand" | "el" }) {
-  const fg = tone === "danger" ? colors.danger : tone === "brand" ? colors.brandAccent : tone === "el" ? EL_INK : colors.textSecondary;
-  const bg = tone === "danger" ? colors.dangerDim : tone === "brand" ? colors.brandDim : tone === "el" ? withAlpha(EL_INK, 0.12) : colors.surface2;
+  const fg = tone === "danger" ? CP.danger : tone === "brand" ? CP.brandAccent : tone === "el" ? EL_INK : CP.textSecondary;
+  const bg = tone === "danger" ? CP.dangerDim : tone === "brand" ? CP.brandDim : tone === "el" ? withAlpha(EL_INK, 0.12) : CP.surface2;
   return (
     <View style={[styles.pill, { backgroundColor: bg }]}>
       {icon ? <Ionicons name={icon} size={11} color={fg} /> : null}
@@ -124,31 +128,9 @@ function ElAmount({ value, size = "md" }: { value: number; size?: "md" | "lg" })
   );
 }
 
-/** Yeşil "ilerle" düğmesi (şehrin tek vurgusu). */
+/** Yeşil "ilerle" düğmesi (şehrin tek vurgusu): parlak oyun düğmesi. */
 function GoButton({ label, icon, onPress, busy, disabled, accessibilityLabel }: { label: string; icon?: IconName; onPress: () => void; busy?: boolean; disabled?: boolean; accessibilityLabel?: string }) {
-  const off = disabled || busy;
-  return (
-    <Touchable
-      onPress={onPress}
-      disabled={off}
-      haptic="success"
-      accessibilityRole="button"
-      accessibilityState={{ disabled: Boolean(off) }}
-      accessibilityLabel={accessibilityLabel ?? label}
-      style={[styles.go, disabled ? styles.goOff : null]}
-    >
-      {busy ? (
-        <ActivityIndicator size="small" color={CITY_UI.white} />
-      ) : (
-        <>
-          {icon ? <Ionicons name={icon} size={16} color={disabled ? colors.textTertiary : CITY_UI.white} /> : null}
-          <Text style={[styles.goText, disabled ? styles.goTextOff : null]} numberOfLines={1} {...textScale.badge}>
-            {label}
-          </Text>
-        </>
-      )}
-    </Touchable>
-  );
+  return <GlossyButton label={label.toLocaleUpperCase("tr-TR")} icon={icon} tone="green" small busy={busy} disabled={disabled} onPress={onPress} accessibilityLabel={accessibilityLabel ?? label} />;
 }
 
 /* ═════════════════════════ ÜST KART ═════════════════════════ */
@@ -268,7 +250,7 @@ export function OfferCard({
     <View style={styles.offer}>
       <View style={styles.offerTop}>
         <View style={styles.crest}>
-          <Ionicons name="shield-half" size={20} color={colors.brandAccent} />
+          <Ionicons name="shield-half" size={20} color={CP.brandAccent} />
         </View>
         <View style={styles.flex}>
           <Text style={styles.offerClub} numberOfLines={1} {...textScale.dense}>
@@ -308,7 +290,7 @@ export function OfferCard({
             {name} satılsın mı? {offer.club.name} · {fmtEl(offer.amount)} EL. Oyuncu akademiden ayrılır.
           </Text>
           <View style={styles.offerButtons}>
-            <Button label="Vazgeç" variant="secondary" size="sm" onPress={() => setConfirm(false)} style={styles.flex} />
+            <GameButton label="Vazgeç" variant="secondary" size="sm" onPress={() => setConfirm(false)} style={styles.flex} />
             <View style={styles.flex}>
               <GoButton
                 label="Sat"
@@ -326,7 +308,7 @@ export function OfferCard({
         </View>
       ) : (
         <View style={styles.offerButtons}>
-          <Button label="Reddet" variant="secondary" size="sm" loading={rejecting} disabled={busy} onPress={onReject} style={styles.flex} />
+          <GameButton label="Reddet" variant="secondary" size="sm" loading={rejecting} disabled={busy} onPress={onReject} style={styles.flex} />
           <View style={styles.flex}>
             <GoButton
               label={capped ? "Bugünlük sınır doldu" : "Kabul et"}
@@ -344,44 +326,66 @@ export function OfferCard({
 
 /* ═════════════════════════ KADRO ═════════════════════════ */
 
-export function PlayerRow({ p, now, onPress }: { p: City2YouthPlayer; now: number; onPress: () => void }) {
+/**
+ * Oyuncu KARTI (kadro ızgarası, iki sütun): mevki renginde parlak üst kısım,
+ * büyük güç puanı ve mevki, beyaz halkada rozet; altta ad, yaş, potansiyel
+ * çubuğu, durum ve EL değeri. Dokununca oyuncu penceresi açılır.
+ */
+export function PlayerCard({ p, now, onPress }: { p: City2YouthPlayer; now: number; onPress: () => void }) {
   const trend = trendOf(p);
+  const tint = posColor(p.pos);
   const quality = p.pot > 0 ? Math.min(1, p.ovr / p.pot) : 0;
+  const status = p.injured
+    ? { icon: "medkit" as const, label: `Sakat · ${untilText(p.injury_until, now) ?? "az sonra"}`, color: CP.danger }
+    : p.offers.length
+      ? { icon: "mail-unread" as const, label: "Teklif var", color: CP.brandAccent }
+      : p.listed
+        ? { icon: "pricetag" as const, label: "Listede", color: CP.textSecondary }
+        : { icon: trend.icon, label: trend.label, color: trend.color };
   return (
-    <Touchable onPress={onPress} feedback="card" haptic="selection" style={styles.row} accessibilityRole="button" accessibilityLabel={`${p.name}, ${p.age} yaş, değer ${p.value} EL`}>
-      <PlayerAvatar p={p} />
-      <View style={styles.rowTexts}>
-        <Text style={styles.rowName} numberOfLines={1} {...textScale.dense}>
-          {p.name}
-        </Text>
-        <Text style={styles.rowSub} numberOfLines={1} {...textScale.dense}>
-          {[`${p.age} yaş`, p.pos_title].filter(Boolean).join(" · ")}
-        </Text>
-        <View style={styles.rowPills}>
-          {p.source === "self" ? <Pill icon="person" label="Sen" tone="el" /> : null}
-          {p.injured ? <Pill icon="medkit" label={`Sakat · ${untilText(p.injury_until, now) ?? "az sonra"}`} tone="danger" /> : null}
-          {p.offers.length ? <Pill icon="mail-unread" label="Teklif var" tone="brand" /> : null}
-          {p.listed ? <Pill icon="pricetag" label="Listede" /> : null}
-          {!p.injured && !p.offers.length && !p.listed ? (
-            <View style={styles.trend}>
-              <Ionicons name={trend.icon} size={13} color={trend.color} />
-              <Text style={[styles.trendText, { color: trend.color }]} {...textScale.badge}>
-                {trend.label}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-      </View>
-      <View style={styles.rowRight}>
-        <ElAmount value={p.value} />
-        <View style={styles.quality}>
-          <Text style={styles.qualityText} {...textScale.badge}>
+    <Touchable onPress={onPress} haptic="selection" style={styles.pCard} accessibilityRole="button" accessibilityLabel={`${p.name}, ${p.age} yaş, ${p.pos_title ?? ""}, güç ${p.ovr}, değer ${p.value} EL`}>
+      <View style={[styles.pTop, { backgroundColor: tint }]}>
+        <View style={styles.pShine} />
+        <View style={styles.pRating}>
+          <Text style={styles.pOvr} {...textScale.badge}>
             {p.ovr}
-            <Text style={styles.qualityPot}>/{p.pot}</Text>
+          </Text>
+          <Text style={styles.pPos} numberOfLines={1} {...textScale.badge}>
+            {p.pos ?? "—"}
           </Text>
         </View>
-        <View style={styles.qualityTrack}>
-          <View style={[styles.qualityFill, { width: `${Math.round(quality * 100)}%` as const }]} />
+        <View style={styles.pAvatar}>
+          <PlayerAvatar p={p} size={46} />
+        </View>
+        {p.source === "self" ? (
+          <View style={styles.pSelf}>
+            <Ionicons name="person" size={10} color={CITY_UI.white} />
+          </View>
+        ) : null}
+      </View>
+      <View style={styles.pBody}>
+        <Text style={styles.pName} numberOfLines={1} {...textScale.dense}>
+          {p.name}
+        </Text>
+        <Text style={styles.pSub} numberOfLines={1} {...textScale.dense}>
+          {[`${p.age} yaş`, p.pos_title].filter(Boolean).join(" · ")}
+        </Text>
+        <View style={styles.pPotLine}>
+          <View style={styles.pPotTrack}>
+            <View style={[styles.pPotFill, { width: `${Math.max(6, Math.round(quality * 100))}%` as const }]} />
+          </View>
+          <Text style={styles.pPot} {...textScale.badge}>
+            {p.pot}
+          </Text>
+        </View>
+        <View style={styles.pStatus}>
+          <Ionicons name={status.icon} size={12} color={status.color} />
+          <Text style={[styles.pStatusText, { color: status.color }]} numberOfLines={1} {...textScale.badge}>
+            {status.label}
+          </Text>
+        </View>
+        <View style={styles.pValue}>
+          <ElAmount value={p.value} />
         </View>
       </View>
     </Touchable>
@@ -522,13 +526,13 @@ export function PlayerSheet({
           {p.name} serbest bırakılsın mı? Karşılığında EL gelmez; yuvası boşalır ama sıradaki oyuncu yine zamanında gelir.
         </Text>
         <View style={styles.offerButtons}>
-          <Button label="Vazgeç" variant="secondary" onPress={() => setConfirm(false)} style={styles.flex} />
-          <Button label="Serbest bırak" variant="danger" icon="exit-outline" loading={pending.release} disabled={busy} onPress={onRelease} style={styles.flex} />
+          <GameButton label="Vazgeç" variant="secondary" onPress={() => setConfirm(false)} style={styles.flex} />
+          <GameButton label="Serbest bırak" variant="danger" icon="exit-outline" loading={pending.release} disabled={busy} onPress={onRelease} style={styles.flex} />
         </View>
       </View>
     ) : (
       <View style={styles.footerRow}>
-        <Button label="Serbest bırak" variant="secondary" icon="exit-outline" disabled={busy} onPress={() => setConfirm(true)} style={styles.flex} />
+        <GameButton label="Serbest bırak" variant="secondary" icon="exit-outline" disabled={busy} onPress={() => setConfirm(true)} style={styles.flex} />
         {inAcademy ? (
           <View style={styles.flex}>
             <GoButton
@@ -545,7 +549,7 @@ export function PlayerSheet({
   }
 
   return (
-    <BottomSheet visible={Boolean(p)} onClose={onClose} title={p?.name} snap="full" footer={footer}>
+    <GameSheet visible={Boolean(p)} onClose={onClose} title={p?.name} snap="full" footer={footer}>
       {p && academy ? (
         <View style={styles.sheet}>
           <View style={styles.pHero}>
@@ -583,7 +587,7 @@ export function PlayerSheet({
 
           {p.injured ? (
             <View style={styles.injury}>
-              <Ionicons name="medkit" size={18} color={colors.danger} />
+              <Ionicons name="medkit" size={18} color={CP.danger} />
               <View style={styles.flex}>
                 <Text style={styles.injuryTitle} {...textScale.dense}>
                   Sakat · {spanText(p.injury_until, now) ?? "az sonra"} sonra iyileşir
@@ -598,12 +602,12 @@ export function PlayerSheet({
 
           {offer ? (
             <Touchable onPress={onOffers} feedback="card" style={styles.pOffer} accessibilityRole="button" accessibilityLabel={`Bekleyen teklif: ${offer.club.name}, ${offer.amount} EL`}>
-              <Ionicons name="mail-unread" size={18} color={colors.brandAccent} />
+              <Ionicons name="mail-unread" size={18} color={CP.brandAccent} />
               <Text style={styles.pOfferText} numberOfLines={1} {...textScale.dense}>
                 {offer.club.name} teklifi
               </Text>
               <ElAmount value={offer.amount} />
-              <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+              <Ionicons name="chevron-forward" size={16} color={CP.textTertiary} />
             </Touchable>
           ) : null}
 
@@ -622,7 +626,7 @@ export function PlayerSheet({
                 </Text>
               </View>
               {pending.list ? (
-                <ActivityIndicator size="small" color={colors.brandAccent} />
+                <ActivityIndicator size="small" color={CP.brandAccent} />
               ) : (
                 <Toggle
                   value={p.listed}
@@ -634,7 +638,7 @@ export function PlayerSheet({
             </View>
           ) : (
             <View style={styles.aNote}>
-              <Ionicons name="shield-checkmark" size={16} color={colors.brandAccent} />
+              <Ionicons name="shield-checkmark" size={16} color={CP.brandAccent} />
               <Text style={styles.listText} {...textScale.long}>
                 {academy.a_team.text}
               </Text>
@@ -647,7 +651,7 @@ export function PlayerSheet({
           ) : null}
         </View>
       ) : null}
-    </BottomSheet>
+    </GameSheet>
   );
 }
 
@@ -752,7 +756,7 @@ export function HistoryCard({ items, now, limit = 8 }: { items: City2AcademyHist
         return (
           <View key={`${h.at}-${h.player_id}-${h.kind}-${i}`} style={[styles.hRow, i > 0 ? styles.hBorder : null]}>
             <View style={[styles.hIcon, h.kind === "sold" ? styles.hIconSold : null]}>
-              <Ionicons name={meta.icon} size={16} color={h.kind === "sold" ? EL_INK : colors.textSecondary} />
+              <Ionicons name={meta.icon} size={16} color={h.kind === "sold" ? EL_INK : CP.textSecondary} />
             </View>
             <View style={styles.flex}>
               <Text style={styles.hName} numberOfLines={1} {...textScale.dense}>
@@ -793,7 +797,7 @@ export function PrivacyToggleRow({ label, help, value, disabled, onChange }: { l
   return (
     <View style={styles.privacy}>
       <View style={styles.privacyIcon}>
-        <Ionicons name="eye-off" size={18} color={colors.brandAccent} />
+        <Ionicons name="eye-off" size={18} color={CP.brandAccent} />
       </View>
       <View style={styles.flex}>
         <Text style={styles.listTitle} {...textScale.dense}>
@@ -822,14 +826,14 @@ export function AcademyInfoSheet({
   privacy: { supported: boolean; value: boolean; label: string; help: string | null; saving: boolean; set: (v: boolean) => void };
 }) {
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="Akademi nasıl işler?" snap="full">
+    <GameSheet visible={visible} onClose={onClose} title="Akademi nasıl işler?" snap="full">
       {academy ? (
         <View style={styles.sheet}>
           <Text style={styles.lead} {...textScale.long}>
             {academy.intro}
           </Text>
           <View style={styles.infoRow}>
-            <Ionicons name="time-outline" size={18} color={colors.brandAccent} />
+            <Ionicons name="time-outline" size={18} color={CP.brandAccent} />
             <Text style={styles.infoText} {...textScale.long}>
               {academy.time.text}
             </Text>
@@ -879,7 +883,7 @@ export function AcademyInfoSheet({
           </View>
         </View>
       ) : null}
-    </BottomSheet>
+    </GameSheet>
   );
 }
 
@@ -895,7 +899,7 @@ export function TransferCelebration({ result, playerName, onClose }: { result: (
   }, [result]);
   const shown = useCountUp(target);
   return (
-    <BottomSheet visible={Boolean(result)} onClose={onClose} title="Transfer tamam" snap="content" footer={<Button label="Harika" onPress={onClose} fullWidth haptic="success" />}>
+    <GameSheet visible={Boolean(result)} onClose={onClose} title="Transfer tamam" snap="content" footer={<GameButton label="Harika" onPress={onClose} fullWidth haptic="success" />}>
       {result ? (
         <Reveal scaleFrom={0.88}>
           <View style={styles.celebrate}>
@@ -915,46 +919,11 @@ export function TransferCelebration({ result, playerName, onClose }: { result: (
           </View>
         </Reveal>
       ) : null}
-    </BottomSheet>
+    </GameSheet>
   );
 }
 
 /* ═════════════════════════ ŞEHİR EKRANI ═════════════════════════ */
-
-export function AcademyCityCard({ academy, onPress }: { academy: City2Academy; onPress: () => void }) {
-  const now = useNow(60_000);
-  const offers = academy.offers.length;
-  const injured = academy.squad.filter((p) => p.injured).length;
-  const sub = [
-    `${academy.slots.used}/${academy.slots.max} oyuncu`,
-    academy.paused ? "bina kurulana dek yeni oyuncu gelmez" : academy.slots.full ? "kadro dolu" : academy.next_intake_at ? `yeni oyuncu ${untilText(academy.next_intake_at, now) ?? "az sonra"}` : null,
-    injured ? `${injured} sakat` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  return (
-    <Touchable onPress={onPress} feedback="card" haptic="selection" style={styles.cityCard} accessibilityRole="button" accessibilityLabel={`Altyapı akademisi, ${sub}${offers ? `, ${offers} bekleyen teklif` : ""}`}>
-      <BuildingIcon buildingKey="akademi" icon="school" size={44} />
-      <View style={styles.flex}>
-        <Text style={styles.cityTitle} numberOfLines={1} {...textScale.dense}>
-          Altyapı akademisi
-        </Text>
-        <Text style={styles.citySub} numberOfLines={2} {...textScale.dense}>
-          {sub}
-        </Text>
-      </View>
-      {offers ? (
-        <View style={styles.offerBadge}>
-          <Ionicons name="mail-unread" size={12} color={colors.textOnBrand} />
-          <Text style={styles.offerBadgeText} {...textScale.badge}>
-            {offers} teklif
-          </Text>
-        </View>
-      ) : null}
-      <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
-    </Touchable>
-  );
-}
 
 /** Akademi binası penceresi: kuruluysa özet + "Akademiye git"; değilse ne yapacağını anlatır. */
 export function AcademyBuildingSection({ academy, onOpen }: { academy: City2Academy | null; onOpen: () => void }) {
@@ -973,7 +942,7 @@ export function AcademyBuildingSection({ academy, onOpen }: { academy: City2Acad
         </Text>
         {items.map((it) => (
           <View key={it.text} style={styles.infoRow}>
-            <Ionicons name={it.icon} size={17} color={colors.brandAccent} />
+            <Ionicons name={it.icon} size={17} color={CP.brandAccent} />
             <Text style={styles.infoText} {...textScale.long}>
               {it.text}
             </Text>
@@ -995,7 +964,7 @@ export function AcademyBuildingSection({ academy, onOpen }: { academy: City2Acad
         </View>
         {academy.offers.length ? <Pill icon="mail-unread" label={`${academy.offers.length} teklif`} tone="brand" /> : null}
       </View>
-      <Button label="Akademiye git" icon="school-outline" variant="secondary" onPress={onOpen} fullWidth />
+      <GameButton label="Akademiye git" icon="school-outline" variant="secondary" onPress={onOpen} fullWidth />
     </View>
   );
 }
@@ -1003,9 +972,27 @@ export function AcademyBuildingSection({ academy, onOpen }: { academy: City2Acad
 /* ═════════════════════════ STİLLER ═════════════════════════ */
 
 const styles = StyleSheet.create({
+  pCard: { width: "48%", flexGrow: 1, borderRadius: radius.lg, overflow: "hidden", backgroundColor: CP.surface1, borderWidth: 2, borderBottomWidth: 4, borderColor: CP.border },
+  pTop: { height: 72, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space.sm, overflow: "hidden" },
+  pShine: { position: "absolute", top: 0, left: 0, right: 0, height: 30, backgroundColor: CITY_UI.white, opacity: 0.18 },
+  pRating: { alignItems: "center" },
+  pOvr: { ...type.scoreMd, color: CITY_UI.white, textShadowColor: CP.overlay, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
+  pPos: { ...type.micro, fontFamily: fonts.bold, color: CITY_UI.white, letterSpacing: 1 },
+  pAvatar: { padding: 2, borderRadius: radius.pill, backgroundColor: CITY_UI.white },
+  pSelf: { position: "absolute", top: space.xxs, right: space.xxs, width: 18, height: 18, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: EL_INK, borderWidth: 1.5, borderColor: CITY_UI.white },
+  pBody: { padding: space.sm, gap: 3 },
+  pName: { ...type.labelSm, fontFamily: fonts.bold, color: CP.textPrimary },
+  pSub: { ...type.caption, color: CP.textTertiary },
+  pPotLine: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  pPotTrack: { flex: 1, height: 6, borderRadius: radius.pill, backgroundColor: CP.surface3, overflow: "hidden" },
+  pPotFill: { height: 6, borderRadius: radius.pill, backgroundColor: CP.brandAccent },
+  pPot: { ...type.micro, fontFamily: fonts.bold, color: CP.textTertiary },
+  pStatus: { flexDirection: "row", alignItems: "center", gap: 3 },
+  pStatusText: { ...type.micro, letterSpacing: 0, flexShrink: 1 },
+  pValue: { marginTop: 2 },
   flex: { flex: 1 },
   card: { ...cardStyle, padding: space.md, gap: space.sm },
-  sep: { height: hairline, backgroundColor: colors.separator },
+  sep: { height: hairline, backgroundColor: CP.separator },
   avatar: { borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: 1 },
   avatarText: { ...type.h3, fontFamily: fonts.bold },
   avatarTextLg: { ...type.h1, fontFamily: fonts.bold },
@@ -1018,28 +1005,15 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.danger,
+    backgroundColor: CP.danger,
     borderWidth: 1.5,
-    borderColor: colors.surface1,
+    borderColor: CP.surface1,
   },
   pill: { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: space.s, paddingVertical: 2, borderRadius: radius.pill, flexShrink: 1 },
   pillText: { ...type.micro, letterSpacing: 0 },
   elAmount: { flexDirection: "row", alignItems: "center", gap: 4 },
-  elAmountText: { ...type.numSmStrong, color: colors.textPrimary },
-  elAmountLg: { ...type.h2, fontFamily: fonts.bold, color: colors.textPrimary },
-  go: {
-    height: 40,
-    paddingHorizontal: space.md,
-    borderRadius: radius.pill,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: space.xs,
-    backgroundColor: CITY2_UI.go,
-  },
-  goOff: { backgroundColor: colors.surface3 },
-  goText: { ...type.label, fontFamily: fonts.bold, color: CITY_UI.white },
-  goTextOff: { color: colors.textTertiary },
+  elAmountText: { ...type.numSmStrong, color: CP.textPrimary },
+  elAmountLg: { ...type.h2, fontFamily: fonts.bold, color: CP.textPrimary },
 
   hero: { borderRadius: radius.xxl, padding: space.lg, gap: space.md, overflow: "hidden", borderWidth: hairline, borderColor: CITY2_UI.panelEdge },
   heroTop: { flexDirection: "row", alignItems: "center", gap: space.md },
@@ -1062,104 +1036,104 @@ const styles = StyleSheet.create({
 
   offer: { ...cardStyle, padding: space.md, gap: space.md },
   offerTop: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  crest: { width: 40, height: 40, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandDim },
-  offerClub: { ...type.h3, color: colors.textPrimary },
-  offerTier: { ...type.caption, color: colors.textTertiary },
-  offerMid: { flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.sm, borderRadius: radius.lg, backgroundColor: colors.surface2 },
+  crest: { width: 40, height: 40, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: CP.brandDim },
+  offerClub: { ...type.h3, color: CP.textPrimary },
+  offerTier: { ...type.caption, color: CP.textTertiary },
+  offerMid: { flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.sm, borderRadius: radius.lg, backgroundColor: CP.surface2 },
   offerPlayer: { flex: 1, flexDirection: "row", alignItems: "center", gap: space.sm, borderRadius: radius.md },
-  offerFor: { ...type.micro, color: colors.textTertiary },
-  offerName: { ...type.labelSm, color: colors.textPrimary },
+  offerFor: { ...type.micro, color: CP.textTertiary },
+  offerName: { ...type.labelSm, color: CP.textPrimary },
   offerAmountBox: { alignItems: "flex-end", gap: 1 },
-  offerDiff: { ...type.micro, letterSpacing: 0, color: colors.textTertiary },
+  offerDiff: { ...type.micro, letterSpacing: 0, color: CP.textTertiary },
   offerDiffUp: { color: EL_INK },
   offerButtons: { flexDirection: "row", gap: space.sm, alignItems: "center" },
   confirm: { gap: space.sm },
-  confirmText: { ...type.bodySm, color: colors.textSecondary },
+  confirmText: { ...type.bodySm, color: CP.textSecondary },
 
   row: { ...cardStyle, flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md },
   rowTexts: { flex: 1, gap: 2 },
-  rowName: { ...type.h4, fontFamily: fonts.semibold, color: colors.textPrimary },
-  rowSub: { ...type.caption, color: colors.textSecondary },
+  rowName: { ...type.h4, fontFamily: fonts.semibold, color: CP.textPrimary },
+  rowSub: { ...type.caption, color: CP.textSecondary },
   rowPills: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: 2 },
   trend: { flexDirection: "row", alignItems: "center", gap: 3 },
   trendText: { ...type.micro, letterSpacing: 0 },
   rowRight: { alignItems: "flex-end", gap: 3, minWidth: 64 },
   quality: { flexDirection: "row", alignItems: "baseline" },
-  qualityText: { ...type.caption, fontFamily: fonts.bold, color: colors.textPrimary },
-  qualityPot: { ...type.caption, color: colors.textTertiary },
-  qualityTrack: { width: 52, height: 4, borderRadius: radius.pill, backgroundColor: colors.surface3, overflow: "hidden" },
-  qualityFill: { height: 4, borderRadius: radius.pill, backgroundColor: colors.brandAccent },
+  qualityText: { ...type.caption, fontFamily: fonts.bold, color: CP.textPrimary },
+  qualityPot: { ...type.caption, color: CP.textTertiary },
+  qualityTrack: { width: 52, height: 4, borderRadius: radius.pill, backgroundColor: CP.surface3, overflow: "hidden" },
+  qualityFill: { height: 4, borderRadius: radius.pill, backgroundColor: CP.brandAccent },
 
   curve: { ...cardStyle, padding: space.md, gap: space.sm },
   curveHead: { flexDirection: "row", alignItems: "flex-start", gap: space.sm },
-  curveSub: { ...type.caption, color: colors.textSecondary },
+  curveSub: { ...type.caption, color: CP.textSecondary },
   legend: { flexDirection: "row", alignItems: "center", gap: 4 },
   legendDot: { width: 8, height: 8, borderRadius: radius.pill },
-  legendText: { ...type.micro, letterSpacing: 0, color: colors.textTertiary, marginRight: 4 },
+  legendText: { ...type.micro, letterSpacing: 0, color: CP.textTertiary, marginRight: 4 },
   bars: { flexDirection: "row", alignItems: "flex-end", height: 96, gap: 2 },
   barCol: { flex: 1, height: "100%", justifyContent: "flex-end", alignItems: "center" },
-  bar: { width: "100%", borderTopLeftRadius: radius.xs, borderTopRightRadius: radius.xs, backgroundColor: colors.surface3 },
+  bar: { width: "100%", borderTopLeftRadius: radius.xs, borderTopRightRadius: radius.xs, backgroundColor: CP.surface3 },
   barPast: { opacity: 0.55 },
   barPeak: { backgroundColor: withAlpha(EL_INK, 0.7) },
-  barNow: { backgroundColor: colors.brandAccent, opacity: 1 },
+  barNow: { backgroundColor: CP.brandAccent, opacity: 1 },
   axis: { height: 14 },
-  axisText: { ...type.nano, position: "absolute", top: 0, width: 24, marginLeft: -12, color: colors.textTertiary, textAlign: "center" },
-  axisNow: { color: colors.brandAccent, fontFamily: fonts.bold },
-  curveNote: { ...type.caption, color: colors.textTertiary },
+  axisText: { ...type.nano, position: "absolute", top: 0, width: 24, marginLeft: -12, color: CP.textTertiary, textAlign: "center" },
+  axisNow: { color: CP.brandAccent, fontFamily: fonts.bold },
+  curveNote: { ...type.caption, color: CP.textTertiary },
 
   sheet: { gap: space.lg, paddingBottom: space.lg },
   pHero: { flexDirection: "row", alignItems: "center", gap: space.md },
-  pOver: { ...type.overline, color: colors.textTertiary },
-  pAge: { ...type.h2, color: colors.textPrimary },
-  pMeta: { ...type.caption, color: colors.textSecondary },
+  pOver: { ...type.overline, color: CP.textTertiary },
+  pAge: { ...type.h2, color: CP.textPrimary },
+  pMeta: { ...type.caption, color: CP.textSecondary },
   stats: { flexDirection: "row", gap: space.sm },
-  stat: { flex: 1, gap: 2, padding: space.sm, borderRadius: radius.lg, backgroundColor: colors.surface2, alignItems: "flex-start" },
-  statLabel: { ...type.micro, color: colors.textTertiary },
-  statValue: { ...type.h2, fontFamily: fonts.bold, color: colors.textPrimary },
-  statSub: { ...type.micro, letterSpacing: 0, color: colors.textTertiary },
-  injury: { flexDirection: "row", gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.dangerDim },
-  injuryTitle: { ...type.labelSm, color: colors.danger },
-  injuryText: { ...type.caption, color: colors.textSecondary },
-  pOffer: { flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.brandDim },
-  pOfferText: { ...type.labelSm, color: colors.textPrimary, flex: 1 },
+  stat: { flex: 1, gap: 2, padding: space.sm, borderRadius: radius.lg, backgroundColor: CP.surface2, alignItems: "flex-start" },
+  statLabel: { ...type.micro, color: CP.textTertiary },
+  statValue: { ...type.h2, fontFamily: fonts.bold, color: CP.textPrimary },
+  statSub: { ...type.micro, letterSpacing: 0, color: CP.textTertiary },
+  injury: { flexDirection: "row", gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: CP.dangerDim },
+  injuryTitle: { ...type.labelSm, color: CP.danger },
+  injuryText: { ...type.caption, color: CP.textSecondary },
+  pOffer: { flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: CP.brandDim },
+  pOfferText: { ...type.labelSm, color: CP.textPrimary, flex: 1 },
   listRow: { ...cardStyle, flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md },
-  listTitle: { ...type.labelSm, color: colors.textPrimary },
-  listText: { ...type.caption, color: colors.textSecondary, flexShrink: 1 },
-  aNote: { flexDirection: "row", alignItems: "flex-start", gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surface2 },
-  blockNote: { ...type.caption, color: colors.textTertiary },
+  listTitle: { ...type.labelSm, color: CP.textPrimary },
+  listText: { ...type.caption, color: CP.textSecondary, flexShrink: 1 },
+  aNote: { flexDirection: "row", alignItems: "flex-start", gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: CP.surface2 },
+  blockNote: { ...type.caption, color: CP.textTertiary },
   footer: { gap: space.sm },
   footerRow: { flexDirection: "row", gap: space.sm, alignItems: "center" },
 
   effect: { flexDirection: "row", gap: space.md, alignItems: "flex-start", paddingVertical: space.xs },
   effectHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  effectTitle: { ...type.labelSm, color: colors.textPrimary, flex: 1 },
-  effectStage: { ...type.micro, color: colors.textTertiary },
-  effectText: { ...type.caption, color: colors.textSecondary },
-  effectNext: { ...type.caption, color: colors.textTertiary, marginTop: 2 },
+  effectTitle: { ...type.labelSm, color: CP.textPrimary, flex: 1 },
+  effectStage: { ...type.micro, color: CP.textTertiary },
+  effectText: { ...type.caption, color: CP.textSecondary },
+  effectNext: { ...type.caption, color: CP.textTertiary, marginTop: 2 },
 
   hRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.sm },
-  hBorder: { borderTopWidth: hairline, borderTopColor: colors.separator },
-  hIcon: { width: 32, height: 32, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface2 },
+  hBorder: { borderTopWidth: hairline, borderTopColor: CP.separator },
+  hIcon: { width: 32, height: 32, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: CP.surface2 },
   hIconSold: { backgroundColor: withAlpha(EL_INK, 0.12) },
-  hName: { ...type.labelSm, color: colors.textPrimary },
-  hDetail: { ...type.caption, color: colors.textTertiary },
+  hName: { ...type.labelSm, color: CP.textPrimary },
+  hDetail: { ...type.caption, color: CP.textTertiary },
   hRight: { alignItems: "flex-end", gap: 1 },
   hAmount: { ...type.label, fontFamily: fonts.bold, color: EL_INK },
-  hAgo: { ...type.micro, letterSpacing: 0, color: colors.textTertiary },
+  hAgo: { ...type.micro, letterSpacing: 0, color: CP.textTertiary },
   more: { alignItems: "center", paddingVertical: space.sm, borderRadius: radius.md },
-  moreText: { ...type.label, color: colors.brandAccent },
+  moreText: { ...type.label, color: CP.brandAccent },
 
   privacy: { ...cardStyle, flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md },
-  privacyIcon: { width: 36, height: 36, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandDim },
-  lead: { ...type.body, color: colors.textSecondary },
+  privacyIcon: { width: 36, height: 36, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: CP.brandDim },
+  lead: { ...type.body, color: CP.textSecondary },
   block: { gap: space.sm },
-  blockTitle: { ...type.h3, color: colors.textPrimary },
+  blockTitle: { ...type.h3, color: CP.textPrimary },
   infoRow: { flexDirection: "row", alignItems: "flex-start", gap: space.sm },
-  infoText: { ...type.bodySm, color: colors.textSecondary, flex: 1 },
+  infoText: { ...type.bodySm, color: CP.textSecondary, flex: 1 },
   stagesRow: { flexDirection: "row", gap: space.xs },
-  stageChip: { flex: 1, alignItems: "center", gap: 1, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: colors.surface2 },
-  stageChipTitle: { ...type.labelXs, color: colors.textPrimary },
-  stageChipAge: { ...type.micro, letterSpacing: 0, color: colors.textTertiary },
+  stageChip: { flex: 1, alignItems: "center", gap: 1, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: CP.surface2 },
+  stageChipTitle: { ...type.labelXs, color: CP.textPrimary },
+  stageChipAge: { ...type.micro, letterSpacing: 0, color: CP.textTertiary },
 
   celebrate: { alignItems: "center", gap: space.sm, paddingVertical: space.xl, paddingHorizontal: space.lg, borderRadius: radius.xxl, overflow: "hidden" },
   celebrateAmount: { ...type.scoreLg, color: CITY2_EL.gain },
@@ -1168,11 +1142,11 @@ const styles = StyleSheet.create({
   celebrateBalanceText: { ...type.labelSm, color: CITY2_UI.panelMuted },
 
   cityCard: { ...cardStyle, flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md },
-  cityTitle: { ...type.h3, color: colors.textPrimary },
-  citySub: { ...type.caption, color: colors.textSecondary },
-  offerBadge: { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.brandAccent },
-  offerBadgeText: { ...type.micro, letterSpacing: 0, color: colors.textOnBrand },
+  cityTitle: { ...type.h3, color: CP.textPrimary },
+  citySub: { ...type.caption, color: CP.textSecondary },
+  offerBadge: { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: CP.brandAccent },
+  offerBadgeText: { ...type.micro, letterSpacing: 0, color: CP.textOnBrand },
 
-  bSection: { gap: space.sm, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface2 },
+  bSection: { gap: space.sm, padding: space.md, borderRadius: radius.xl, backgroundColor: CP.surface2 },
   bHead: { flexDirection: "row", alignItems: "flex-start", gap: space.sm },
 });

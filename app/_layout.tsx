@@ -6,6 +6,7 @@ import { AppState, type AppStateStatus } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { CallScreen } from "@/components/CallScreen";
 import { AdLaunchPopup } from "@/components/ads/AdLaunchPopup";
+import { OfflineSyncSetup } from "@/components/offline/OfflineSync";
 import { CrashCatcher } from "@/components/CrashCatcher";
 import { ScopeSheet } from "@/components/ScopeSheet";
 import { ToastProvider } from "@/components/ui";
@@ -131,6 +132,8 @@ export default function RootLayout() {
           <ScopeProvider>
             <FavoriteProvider>
               <ToastProvider>
+               {/* Çevrimdışı oyun sonuçlarının kuyruğu: bağlantı gelince gönderir (sözleşme §7). */}
+               <OfflineSyncSetup />
                <FollowFlowProvider>
                <CallProvider>
                 {/* DAİMA AÇIK: her ekranın tepesinde koyu mor blok var (bkz.

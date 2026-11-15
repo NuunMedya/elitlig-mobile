@@ -1,15 +1,17 @@
 /**
- * XP → YILDIZ, 3 GÜNLÜK BİRİKİM (Ekonomi A4) — Kulüp Şehri cüzdanının içi.
+ * XP → YILDIZ — Kulüp Şehri cüzdanının içi.
  *
- * Dönüştürülebilir XP (saha + görev) İstanbul gününe göre kovalara girer.
- * D gününün XP'si D, D+1 ve D+2'de toplanabilir; D+3 00:00'da YANAR (yıldıza
- * dönmez, XP sıralamasında ve Elit Seviye'de sayılmaya devam eder).
- * "Yıldızları topla" bütün canlı kovaları çevirir (10 XP = 1 yıldız).
+ * HAFTALIK (Ekonomi v3, sunucu `xp.mode === "weekly"`; sözleşme §3):
+ * dönüştürülebilir XP (saha + görev) İstanbul haftası (Pzt–Paz) boyunca
+ * birikir. Hafta kapanınca (Pazartesi 00:00) o haftanın XP'si 10 XP = 1 yıldız
+ * ile toplanabilir olur ve 3 gün (Pzt, Salı, Çarşamba) içinde "Yıldızları
+ * topla" ile alınmalıdır; Perşembe 00:00'da kalan XP YANAR (yıldıza dönmez,
+ * XP sıralamasında ve Elit Seviye'de sayılmaya devam eder). Haftada bir dönüşüm.
+ * Gösterilen: "Geçen hafta" (toplanabilir, yanmaya kalan süre) ve "Bu hafta"
+ * (biriken, Pazartesi'ye kalan süre) kartları, Çarşamba uyarısı.
  *
- * Gösterilen: üç kova (Önceki gün · Dün · Bugün; XP ve yanmaya kalan süre),
- * "Yarın X XP yanacak" uyarısı, toplanabilir yıldız, yanmış XP notu.
- * Oyun dünyası paneli üstünde durur (koyu, iki temada aynı).
- * Eski sunucu (`buckets` yok) için hiçbir şey çizmez.
+ * ESKİ sunucu (3 günlük birikim): üç gün kovası (Önceki gün · Dün · Bugün).
+ * `buckets` hiç yoksa hiçbir şey çizmez.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -32,6 +34,7 @@ export function XpBuckets({ xp }: { xp: CityXp }) {
   const now = useMinuteNow(Boolean(xp.buckets?.length));
   const buckets = xp.buckets;
   if (!buckets?.length) return null;
+  if (xp.mode === "weekly") return <WeeklyXp xp={xp} now={now} />;
   const max = Math.max(1, ...buckets.map((b) => b.xp));
   const burning = xp.expiring_tomorrow ?? buckets[0]?.xp ?? 0;
   const burnAt = xp.expiring_at ?? buckets[0]?.expires_at ?? null;
@@ -77,6 +80,85 @@ export function XpBuckets({ xp }: { xp: CityXp }) {
           <Ionicons name="flame" size={16} color={CARTOON.white} />
           <Text style={styles.warnText} {...textScale.dense}>
             Yarın {fmt(burning)} XP yanacak{burnAt ? ` · ${untilText(burnAt, now)} kaldı` : ""}. Topla, yıldıza çevir!
+          </Text>
+        </View>
+      ) : null}
+      {xp.expired_total ? (
+        <Text style={styles.note} {...textScale.long}>
+          Şimdiye kadar {fmt(xp.expired_total)} XP toplanmadan yandı: yıldıza dönmedi ama XP sıralamasında ve Elit Seviye'de sayılmaya devam ediyor.
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+/** Haftalık görünüm: toplanabilir geçen hafta + biriken bu hafta. */
+function WeeklyXp({ xp, now }: { xp: CityXp; now: number }) {
+  const claim = xp.claim_week ?? null;
+  const week = xp.week ?? null;
+  const burning = xp.expiring_tomorrow ?? 0;
+  const cards: { key: string; label: string; xp: number; hot: boolean; icon: "flame" | "gift" | "time-outline"; foot: string; a11y: string }[] = [];
+  if (claim) {
+    const hot = claim.xp > 0;
+    cards.push({
+      key: `c${claim.key}`,
+      label: "Geçen hafta",
+      xp: claim.xp,
+      hot,
+      icon: hot ? "flame" : "time-outline",
+      foot: hot ? `${untilText(claim.expires_at, now)} içinde topla` : "Toplandı",
+      a11y: `Geçen hafta: ${claim.xp} XP, ${claim.stars} yıldız; ${untilText(claim.expires_at, now)} sonra yanar`,
+    });
+  }
+  if (week) {
+    cards.push({
+      key: `w${week.key}`,
+      label: "Bu hafta",
+      xp: week.xp,
+      hot: false,
+      icon: "gift",
+      foot: `Pazartesi yıldıza döner · ${untilText(week.converts_at, now)}`,
+      a11y: `Bu hafta: ${week.xp} XP birikti; ${untilText(week.converts_at, now)} sonra ${week.stars} yıldıza dönüşür`,
+    });
+  }
+  const max = Math.max(1, ...cards.map((c) => c.xp));
+  return (
+    <View style={styles.wrap}>
+      <View style={styles.head}>
+        <Ionicons name="calendar" size={14} color={CITY_UI.muted} />
+        <Text style={styles.headText} {...textScale.dense}>
+          XP haftalık birikir · Pazartesi yıldıza döner · 3 gün içinde topla · {xp.per_star} XP = 1 yıldız
+        </Text>
+      </View>
+      <View style={styles.row}>
+        {cards.map((c) => (
+          <View key={c.key} style={[styles.bucket, c.hot ? styles.bucketHot : null]} accessibilityLabel={c.a11y}>
+            <Text style={styles.bucketLabel} numberOfLines={1} {...textScale.badge}>
+              {c.label}
+            </Text>
+            <Text style={[styles.bucketXp, c.xp ? null : styles.bucketEmpty]} {...textScale.badge}>
+              {fmt(c.xp)}
+              <Text style={styles.bucketUnit}> XP · {fmt(Math.floor(c.xp / Math.max(1, xp.per_star)))} yıldız</Text>
+            </Text>
+            <View style={styles.bar}>
+              {c.xp > 0 ? (
+                <LinearGradient colors={c.hot ? CARTOON.orange : CITY_UI.green} start={LEFT} end={RIGHT} style={[styles.barFill, { width: `${Math.max(8, (c.xp / max) * 100)}%` }]} />
+              ) : null}
+            </View>
+            <View style={styles.expiry}>
+              <Ionicons name={c.icon} size={11} color={c.hot ? CARTOON.orange[0] : CITY_UI.muted} />
+              <Text style={[styles.expiryText, c.hot ? styles.expiryHot : null]} numberOfLines={2} {...textScale.badge}>
+                {c.foot}
+              </Text>
+            </View>
+          </View>
+        ))}
+      </View>
+      {burning > 0 ? (
+        <View style={styles.warn} accessibilityRole="alert">
+          <Ionicons name="flame" size={16} color={CARTOON.white} />
+          <Text style={styles.warnText} {...textScale.dense}>
+            Bugün son gün: geçen haftanın {fmt(burning)} XP'si gece yarısı yanacak. Topla, yıldıza çevir!
           </Text>
         </View>
       ) : null}

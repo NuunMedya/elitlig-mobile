@@ -22,7 +22,7 @@
  *     alana göre büyür, boş kalan alt bölge bırakılmaz. Telefon dikey kullanımı esas.
  */
 
-export type PuzzleGameKey = "uclu" | "ucle" | "soyunma" | "kantin" | "kariyer";
+export type PuzzleGameKey = "uclu" | "ucle" | "soyunma" | "kantin" | "kariyer" | "penalti" | "kadro" | "savunma";
 
 export interface PuzzleResult {
   won: boolean;
@@ -73,6 +73,14 @@ export interface PuzzleGameProps {
   onFinish: (result: PuzzleResult) => void;
   /** Duraklatıldı mı (ayarlar penceresi açıkken süreli oyunlar durur). */
   paused: boolean;
+  /**
+   * İSTEĞE BAĞLI — reklamla devam (sözleşme §2/§5): oyun kaybetmek üzereyken
+   * (hamle / süre / şut bitti) `onFinish` yerine önce bunu çağırabilir.
+   * Çerçeve "Reklam izle · devam et (<extra>)" sorar; bölüm başına EN ÇOK 1
+   * kez. `true` dönerse oyun ek hakkı verip sürer; `false` ise oyun kaybı
+   * `onFinish` ile bildirir. Kullanmayan oyunlar eskisi gibi çalışır.
+   */
+  requestContinue?: (offer: { extra: string }) => Promise<boolean>;
 }
 
 export interface PuzzleGameModule {

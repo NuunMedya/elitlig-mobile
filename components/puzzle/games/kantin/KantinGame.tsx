@@ -8,8 +8,15 @@
  *
  * Koordinatlar: bütün bölümler hesaplanmış sabit yüksekliklerle MUTLAK
  * yerleşir; uçuş kaynak/hedefleri bu yüzden ölçüm gerektirmeden bilinir.
+ *
+ * 2026-11 YENİLEMESİ: ayrı "tabak" sırası kaldırıldı. Ürünler doğrudan
+ * taraftarın BÜYÜK sipariş balonundaki hücresine uçar; balon hem isteği hem
+ * hazırlığı gösterir (ekran alanı balona kaldı: ikonlar iki-üç kat büyük).
+ * Servis: balon yeşile döner, kocaman onay damgası + şok halkası, taraftar
+ * sevinerek ayrılır, bahşiş jetonu sayaca uçar.
  */
 
+import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 
@@ -24,6 +31,7 @@ import {
   lossReason,
   rushServe,
   takeItem,
+  targetSlot,
   type KantinItem,
   type KantinState,
   type KantinStep,
@@ -33,7 +41,21 @@ import { fonts, haptics, radius, space, textScale, type } from "@/theme";
 
 import { softShadow, useIdleDriver } from "../soyunma/CartoonKit";
 
-import { BoosterDock, FanSpot, HoldRow, Hud, PlateSpot, STACK_VISIBLE, StackColumn, Stands } from "./Board";
+import {
+  Awning,
+  BUBBLE_TAIL,
+  BUBBLE_TOPPAD,
+  BoosterDock,
+  Counter,
+  FanSpot,
+  HoldRow,
+  Hud,
+  STACK_VISIBLE,
+  StackColumn,
+  Stadium,
+  bubbleGeom,
+  type BubbleGeom,
+} from "./Board";
 import { FxLayer, type Fx, type FxInput, type Pt } from "./Effects";
 import type { FanMood } from "./Fan";
 
@@ -57,45 +79,49 @@ interface Meta {
   lastServe: number;
 }
 
-/** Bölümler arası sabit boşluklar (üst, tabak→tezgâh, tezgâh→yığın, yığın→dok). */
-const GAP_TOP = 4;
-const GAP_PH = 10;
-const GAP_HS = 12;
+/** Bölümler arası sabit boşluklar (tezgâh→tepsi, tepsi→raf, alt). */
+const GAP_CH = 8;
+const GAP_HS = 10;
 const GAP_BOT = 8;
 
 /**
  * TAM EKRAN YERLEŞİM. Bütün bölümler tek bir ölçek `k` ile büyür/küçülür
  * (genişlik sınırları ayrıca kırpar); `k`, toplam yükseklik `H`'yi aşmayan en
- * büyük değer olarak ikili aramayla bulunur. Genişlik sınırları yüzünden artan
- * pay kalırsa yığın satır aralığına, tribüne ve bölüm aralarına dağıtılır:
- * sahne tam olarak `H` yüksekliğini doldurur, altta boşluk kalmaz.
+ * büyük değer olarak ikili aramayla bulunur. Artan pay yığın satır aralığına,
+ * tribüne ve bölüm aralarına dağıtılır: sahne tam olarak `H`'yi doldurur.
+ *
+ * Balon bölgesi seviyenin EN UZUN siparişine göre ayrılır; her balon bu
+ * bölgenin altına (taraftarın başına) yaslanır.
  */
-function computeLayout(W: number, H: number, plates: number, cap: number, n: number) {
-  const small = H < 520;
-  const hudH = small ? 48 : 60;
-  const dockH = small ? 54 : 70;
+function computeLayout(W: number, H: number, plates: number, cap: number, n: number, maxItems: number) {
+  const small = H < 540;
+  const hudH = small ? 50 : 60;
+  const dockH = small ? 58 : 70;
   const A = H - hudH - dockH;
   const colW = W / plates;
-  const holdMax = Math.floor((W - 24 - (cap - 1) * HOLD_GAP) / cap);
+  const holdMax = Math.floor((W - 28 - (cap - 1) * HOLD_GAP) / cap);
   const stackMax = Math.floor((W - 8 - (n - 1) * STACK_GAP) / n);
   const build = (k: number) => {
-    const awnH = Math.round(Math.max(10, Math.min(18, 13 * k)));
-    const bubbleH = Math.round(Math.max(30, Math.min(58, 38 * k)));
-    const fanSize = Math.min(colW * 0.62, 56 * k, 86);
+    const awnH = Math.round(Math.max(12, Math.min(22, 16 * k)));
+    const cellMax = Math.round(Math.max(22, Math.min(60, 46 * k)));
+    const geom = bubbleGeom(maxItems, colW - 8, cellMax);
+    const zoneH = geom.h + BUBBLE_TAIL + BUBBLE_TOPPAD;
+    const fanSize = Math.min(colW * 0.64, 66 * k, 96);
     const fanH = (fanSize * 72) / 64;
-    const fansH = bubbleH + 6 + fanH;
-    const platesH = Math.round(Math.min(74, 54 * k));
-    const holdSize = Math.max(22, Math.min(holdMax, Math.round(46 * k), 68));
+    // Tezgâh taraftarın göğsünü örter: büstün üst %70'i görünür.
+    const fanVisible = Math.round(fanH * 0.7);
+    const crowdPad = Math.round(8 * k);
+    const counterH = Math.round(Math.max(14, Math.min(26, 18 * k)));
+    const holdSize = Math.max(24, Math.min(holdMax, Math.round(44 * k), 64));
     const headH = k < 0.8 ? 0 : 24;
     const holdH = holdSize + 10 + headH;
     const stackW = Math.max(28, Math.min(stackMax, Math.round(66 * k), 104));
-    const tile = Math.max(22, Math.min(stackW - 6, Math.round(54 * k), 86));
-    // Dar alanda alt ürünler daha sık dizilir (oran k ile sürekli artar → arama tekdüze kalır).
-    const rowStep = Math.round(tile * Math.min(0.8, 0.58 + (k - 0.45) * 0.55));
+    const tile = Math.max(24, Math.min(stackW - 6, Math.round(56 * k), 88));
+    const rowStep = Math.round(tile * Math.min(0.78, 0.56 + (k - 0.45) * 0.5));
     const moreH = k < 0.8 ? 18 : 24;
     const stacksH = 6 + tile + rowStep * (STACK_VISIBLE - 1) + moreH;
-    const used = GAP_TOP + awnH + fansH + platesH + GAP_PH + holdH + GAP_HS + stacksH + GAP_BOT;
-    return { k, awnH, bubbleH, fanSize, fanH, fansH, platesH, holdSize, headH, holdH, stackW, tile, rowStep, moreH, stacksH, used };
+    const used = awnH + crowdPad + zoneH + fanVisible + counterH + GAP_CH + holdH + GAP_HS + stacksH + GAP_BOT;
+    return { k, awnH, cellMax, zoneH, fanSize, fanH, fanVisible, crowdPad, counterH, holdSize, headH, holdH, stackW, tile, rowStep, moreH, stacksH, used };
   };
   let lo = 0.45;
   let hi = 2;
@@ -107,23 +133,21 @@ function computeLayout(W: number, H: number, plates: number, cap: number, n: num
     }
   }
   const b = build(lo);
-  // Artan pay: önce yığın aralığı (alt ürünler daha görünür), sonra tribün,
-  // bölüm araları ve raf iç boşluğu.
   let rest = Math.max(0, A - b.used);
   const rowExtra = Math.min(b.tile * 0.24, (rest * 0.4) / (STACK_VISIBLE - 1));
   const rowStep = b.rowStep + rowExtra;
   rest -= rowExtra * (STACK_VISIBLE - 1);
-  const standExtra = rest * 0.34;
-  const gapPH = GAP_PH + rest * 0.18;
-  const gapHS = GAP_HS + rest * 0.2;
-  const shelfExtra = rest - standExtra - (gapPH - GAP_PH) - (gapHS - GAP_HS);
+  const standExtra = rest * 0.36;
+  const gapCH = GAP_CH + rest * 0.16;
+  const gapHS = GAP_HS + rest * 0.18;
+  const shelfExtra = rest - standExtra - (gapCH - GAP_CH) - (gapHS - GAP_HS);
   const padTop = 6 + shelfExtra * 0.4;
   const stacksH = b.stacksH + rowExtra * (STACK_VISIBLE - 1) + shelfExtra;
 
-  const standY = hudH + GAP_TOP;
-  const fansY = standY + b.awnH + standExtra;
-  const platesY = fansY + b.fansH;
-  const holdY = platesY + b.platesH + gapPH;
+  const standY = hudH;
+  const fansY = standY + b.awnH + b.crowdPad + standExtra;
+  const counterY = fansY + b.zoneH + b.fanVisible;
+  const holdY = counterY + b.counterH + gapCH;
   const stacksY = holdY + b.holdH + gapHS;
   const stackLeft = (W - (n * b.stackW + (n - 1) * STACK_GAP)) / 2;
   const holdLeft = (W - (cap * b.holdSize + (cap - 1) * HOLD_GAP)) / 2;
@@ -137,12 +161,11 @@ function computeLayout(W: number, H: number, plates: number, cap: number, n: num
     stacksH,
     standY,
     fansY,
-    platesY,
+    counterY,
     holdY,
     stacksY,
     stackLeft,
     holdLeft,
-    plateW: colW - 12,
     dockY: H - dockH,
     total: H,
   };
@@ -155,33 +178,45 @@ export function KantinGame({ level: levelNo, maxWidth, maxHeight, preBoosters, b
 
   /* ── ölçüler ── */
   const W = maxWidth;
-  const geo = useMemo(() => computeLayout(W, Math.round(maxHeight), level.plates, cap, level.stacks.length), [W, maxHeight, level, cap]);
-  const BUBBLE_H = geo.bubbleH;
-  const PLATES_H = geo.platesH;
-
-  const plateIcon = useCallback(
-    (n: number) => Math.max(10, Math.min(Math.round(geo.platesH * 0.46), Math.floor((geo.plateW - 18) / Math.max(1, n)) - 2)),
-    [geo.plateW, geo.platesH],
+  const maxItems = useMemo(() => Math.max(2, ...level.orders.map((o) => o.items.length)), [level]);
+  const geo = useMemo(
+    () => computeLayout(W, Math.round(maxHeight), level.plates, cap, level.stacks.length, maxItems),
+    [W, maxHeight, level, cap, maxItems],
   );
 
-  const pos = useMemo(
-    () => ({
+  /** Sipariş boyuna göre balon ızgarası (2–4 ürün; önbellekli). */
+  const geomFor = useMemo(() => {
+    const cache = new Map<number, BubbleGeom>();
+    return (n: number) => {
+      let g = cache.get(n);
+      if (!g) {
+        g = bubbleGeom(n, geo.colW - 8, geo.cellMax);
+        cache.set(n, g);
+      }
+      return g;
+    };
+  }, [geo.colW, geo.cellMax]);
+
+  const pos = useMemo(() => {
+    const bubbleTop = (n: number) => geo.fansY + geo.zoneH - (geomFor(n).h + BUBBLE_TAIL);
+    const bubbleLeft = (slot: number, n: number) => geo.colW * slot + (geo.colW - geomFor(n).w) / 2;
+    return {
       stack: (s: number, d: number): Pt => ({
         x: geo.stackLeft + s * (geo.stackW + STACK_GAP) + geo.stackW / 2,
         y: geo.stacksY + geo.padTop + geo.tile / 2 + Math.min(d, STACK_VISIBLE - 1) * geo.rowStep,
       }),
-      plate: (slot: number, j: number, n: number): Pt => {
-        const icon = plateIcon(n);
-        return { x: geo.colW * slot + geo.colW / 2 + (j - (n - 1) / 2) * (icon + 2), y: geo.platesY + PLATES_H / 2 };
+      /** Balondaki j. hücrenin merkezi. */
+      cell: (slot: number, j: number, n: number): Pt => {
+        const at = geomFor(n).at(j);
+        return { x: bubbleLeft(slot, n) + at.x, y: bubbleTop(n) + at.y };
       },
-      plateCenter: (slot: number): Pt => ({ x: geo.colW * slot + geo.colW / 2, y: geo.platesY + PLATES_H / 2 }),
+      bubbleCenter: (slot: number, n: number): Pt => ({ x: geo.colW * slot + geo.colW / 2, y: bubbleTop(n) + geomFor(n).h / 2 }),
       hold: (k: number): Pt => ({ x: geo.holdLeft + k * (geo.holdSize + HOLD_GAP) + geo.holdSize / 2, y: geo.holdY + geo.headH + 5 + geo.holdSize / 2 }),
-      fan: (slot: number): Pt => ({ x: geo.colW * slot + geo.colW / 2, y: geo.fansY + BUBBLE_H - 2 + geo.fanH / 2 }),
+      fan: (slot: number): Pt => ({ x: geo.colW * slot + geo.colW / 2, y: geo.fansY + geo.zoneH + 2 + geo.fanH / 2 }),
       tips: (): Pt => ({ x: W - 40, y: geo.hudH / 2 }),
-      center: (): Pt => ({ x: W / 2, y: geo.fansY + geo.fansH / 2 }),
-    }),
-    [geo, plateIcon, W, BUBBLE_H, PLATES_H],
-  );
+      center: (): Pt => ({ x: W / 2, y: geo.fansY + geo.zoneH / 2 }),
+    };
+  }, [geo, geomFor, W]);
 
   /* ── durum ── */
   const [st, setSt] = useState<KantinState>(() => initialState(level));
@@ -281,7 +316,12 @@ export function KantinGame({ level: levelNo, maxWidth, maxHeight, preBoosters, b
         haptics.success();
         later(450, () => {
           text("Bütün siparişler tamam!", "win");
-          pushFx([{ kind: "burst", at: pos.center(), delay: 0 }, { kind: "burst", at: { x: W * 0.25, y: geo.platesY }, delay: 120 }, { kind: "burst", at: { x: W * 0.75, y: geo.platesY }, delay: 240 }]);
+          pushFx([
+            { kind: "burst", at: pos.center(), delay: 0 },
+            { kind: "burst", at: { x: W * 0.25, y: geo.counterY }, delay: 120 },
+            { kind: "burst", at: { x: W * 0.75, y: geo.counterY }, delay: 240 },
+            { kind: "ring", at: pos.center(), size: W * 0.6, color: "gold", delay: 60 },
+          ]);
         });
         if (bonus > 0) {
           later(1200, () => {
@@ -307,7 +347,7 @@ export function KantinGame({ level: levelNo, maxWidth, maxHeight, preBoosters, b
         );
       }
     },
-    [level, totalTime, later, text, pushFx, pos, W, geo.platesY, geo.holdY, onFinish],
+    [level, totalTime, later, text, pushFx, pos, W, geo.counterY, geo.holdY, onFinish],
   );
 
   /* ── adımı uygula: durum + efektler ── */
@@ -333,9 +373,10 @@ export function KantinGame({ level: levelNo, maxWidth, maxHeight, preBoosters, b
           const servedHere = step.served.find((sv) => sv.slot === slot && sv.items.some((it) => it.uid === mv.item.uid));
           const orderIdx = servedHere ? servedHere.order : plate?.order ?? 0;
           const items = level.orders[orderIdx].items;
-          to = pos.plate(slot, items.indexOf(mv.item.p), items.length);
-          toSize = plateIcon(items.length);
-          if (mv.from.kind === "hold" && plate && arrivedOrders.has(plate.order) && !servedHere) delay = 420;
+          to = pos.cell(slot, items.indexOf(mv.item.p), items.length);
+          toSize = Math.round(geomFor(items.length).cell * 0.84);
+          // Yeni gelen taraftara tezgâhtan kayan ürün, taraftar yerleşince uçar.
+          if (mv.from.kind === "hold" && plate && arrivedOrders.has(plate.order) && !servedHere) delay = 1100;
         } else {
           to = pos.hold(mv.to.index);
           toSize = geo.holdSize - 8;
@@ -343,8 +384,9 @@ export function KantinGame({ level: levelNo, maxWidth, maxHeight, preBoosters, b
         out.push({ kind: "fly", p: mv.item.p, uid: mv.item.uid, from, to, size: mv.from.kind === "stack" ? geo.tile - 10 : geo.holdSize - 8, toSize, delay });
       }
 
-      // Servisler: tabak tepside kalır → hayalet tabak taraftara uçar, taraftar
-      // mutlu ayrılır, bahşiş jetonu sayaca uçar, konfeti.
+      // Servisler: balon yerinde yeşile döner (ürünler indikten sonra) →
+      // onay damgası + şok halkası → taraftar sevinerek ayrılır, bahşiş
+      // jetonu sayaca uçar, konfeti.
       if (step.served.length) {
         const nowMs = Date.now();
         m.combo = nowMs - m.lastServe < COMBO_MS ? m.combo + step.served.length : step.served.length;
@@ -359,38 +401,42 @@ export function KantinGame({ level: levelNo, maxWidth, maxHeight, preBoosters, b
           if (patientOk) m.patient += 1;
           const gain = 2 + (patientOk ? 1 : 0) + (vipActive ? 3 : 0) + Math.max(0, Math.min(3, m.combo - 1));
           m.tips += gain;
-          const d = 280 + k * 380;
+          const d = 340 + k * 300;
           if (!holdServing.has(sv.slot)) holdServing.set(sv.slot, { order: sv.order, filled: sv.items });
           const look = lookFor(order, m.escaped.has(sv.order));
-          out.push({ kind: "serve", at: pos.plateCenter(sv.slot), to: pos.fan(sv.slot), items: order.items, width: geo.plateW, delay: d });
-          out.push({ kind: "leave", at: pos.fan(sv.slot), size: geo.fanSize, jersey: look.jersey, face: look.face, vip: vipActive, angry: false, delay: d + 260 });
-          out.push({ kind: "burst", at: pos.fan(sv.slot), delay: d + 300 });
-          out.push({ kind: "coin", from: pos.fan(sv.slot), to: pos.tips(), delay: d + 320 });
-          out.push({ kind: "text", text: `+${gain}`, tone: "gold", big: false, at: { x: pos.fan(sv.slot).x, y: geo.fansY + 12 }, delay: d + 320 });
-          later(d + 900, () => setTipsBump((b) => b + 1));
+          const bc = pos.bubbleCenter(sv.slot, order.items.length);
+          const bubbleSize = geomFor(order.items.length).h;
+          out.push({ kind: "stamp", at: bc, size: Math.max(44, Math.min(84, bubbleSize * 0.9)), delay: d });
+          out.push({ kind: "ring", at: bc, size: Math.max(70, geo.colW), color: vipActive ? "gold" : "good", delay: d });
+          out.push({ kind: "burst", at: bc, delay: d + 60 });
+          out.push({ kind: "leave", at: pos.fan(sv.slot), size: geo.fanSize, jersey: look.jersey, face: look.face, vip: vipActive, angry: false, delay: d + 460 });
+          out.push({ kind: "coin", from: bc, to: pos.tips(), delay: d + 200 });
+          out.push({ kind: "text", text: `+${gain}`, tone: "gold", big: false, at: { x: bc.x, y: bc.y - 10 }, delay: d + 160 });
+          later(d + 820, () => setTipsBump((b) => b + 1));
         });
         setServing((cur) => {
           const nextMap = new Map(cur);
           holdServing.forEach((v, slot) => nextMap.set(slot, v));
           return nextMap;
         });
-        later(280, () =>
+        later(820 + (step.served.length - 1) * 300, () =>
           setServing((cur) => {
             const nextMap = new Map(cur);
             holdServing.forEach((_, slot) => nextMap.delete(slot));
             return nextMap;
           }),
         );
-        for (const a of step.arrivals) m.arrivedAt.set(a.order, now + 600);
+        for (const a of step.arrivals) m.arrivedAt.set(a.order, now + 1200);
         if (m.combo >= 2) {
           const label = step.served.length >= 2 ? "Zincir servis!" : COMBO_TEXT[Math.min(4, m.combo)];
-          out.push({ kind: "text", text: label, tone: "win", big: true, at: pos.center(), delay: 360 });
+          out.push({ kind: "text", text: label, tone: "win", big: true, at: { x: W / 2, y: geo.counterY }, delay: 420 });
         }
         haptics.medium();
       } else if (step.moves.some((mv) => mv.to.kind === "hold")) {
         if (next.hold.length === cap - 1) {
           haptics.warning();
           out.push({ kind: "text", text: "Son yuva!", tone: "danger", big: false, at: { x: W / 2, y: geo.holdY + 4 }, delay: 120 });
+          out.push({ kind: "ring", at: pos.hold(next.hold.length - 1), size: geo.holdSize * 2, color: "bad", delay: 260 });
         } else haptics.light();
       } else haptics.select();
 
@@ -410,7 +456,7 @@ export function KantinGame({ level: levelNo, maxWidth, maxHeight, preBoosters, b
         later(300, () => finish(false, lossReason(next, cap)));
       }
     },
-    [level, pos, plateIcon, geo, cap, W, pushFx, later, finish],
+    [level, pos, geomFor, geo, cap, W, pushFx, later, finish],
   );
 
   const onTap = useCallback(
@@ -466,11 +512,12 @@ export function KantinGame({ level: levelNo, maxWidth, maxHeight, preBoosters, b
           m.escaped.add(pl.order);
           m.vipMissed += 1;
           m.penalty += KANTIN_VIP_PENALTY;
-          m.arrivedAt.set(pl.order, t + 600);
+          m.arrivedAt.set(pl.order, t + 1200);
           haptics.warning();
           pushFx([
             { kind: "leave", at: pos.fan(slot), size: geo.fanSize, jersey: order.jersey, face: order.face, vip: true, angry: true, delay: 0 },
             { kind: "text", text: `VIP kaçtı! −${KANTIN_VIP_PENALTY} sn`, tone: "danger", big: false, at: { x: pos.fan(slot).x, y: geo.fansY + 14 }, delay: 0 },
+            { kind: "ring", at: pos.fan(slot), size: geo.fanSize * 1.6, color: "bad", delay: 0 },
           ]);
         }
       });
@@ -495,19 +542,18 @@ export function KantinGame({ level: levelNo, maxWidth, maxHeight, preBoosters, b
     (e): e is string => Boolean(e),
   );
 
+  const stadiumH = geo.counterY + geo.counterH * 0.5 - geo.standY;
   return (
     <View style={[styles.root, { width: W, height: geo.total }]}>
-      {/* Kantin duvarı: alt yarıda karo şeritleri */}
-      <View style={[styles.abs, styles.wallTiles, { top: geo.holdY - 4, width: W, height: geo.dockY - geo.holdY + 4 }]} />
+      {/* Satıcı tarafı: tezgâhın altı koyu duvar */}
+      <View style={[styles.abs, styles.wall, { top: geo.counterY, width: W, height: geo.dockY - geo.counterY }]} />
 
-      <View style={[styles.abs, { top: 0, width: W }]}>
-        <Hud served={st.served} total={level.orders.length} timeLeft={timeLeft} tips={m.tips} tipsBump={tipsBump} height={geo.hudH} />
+      {/* Gece stadyumu: tribün, kalabalık, projektörler */}
+      <View style={[styles.abs, styles.stands, { top: geo.standY, width: W, height: stadiumH }]}>
+        <Stadium w={W} h={stadiumH} />
       </View>
 
-      {/* Kantin önü: tribün + tente, taraftarlar + balonlar */}
-      <View style={[styles.abs, styles.stands, { top: geo.standY, width: W, height: geo.platesY + PLATES_H / 2 - geo.standY }]}>
-        <Stands w={W} h={geo.platesY + PLATES_H / 2 - geo.standY} awn={geo.awnH} />
-      </View>
+      {/* Taraftarlar + büyük sipariş balonları */}
       {st.plates.map((pl, slot) => {
         const show = serving.get(slot);
         const orderIdx = show ? show.order : pl?.order;
@@ -518,25 +564,32 @@ export function KantinGame({ level: levelNo, maxWidth, maxHeight, preBoosters, b
         const arrived = m.arrivedAt.get(orderIdx) ?? 0;
         const waited = Math.max(0, elapsed - arrived);
         const patience = (vipActive ? order.patience : kantinFanPatience(order)) * 1000;
-        const ratio = 1 - waited / patience;
+        const ratio = Math.max(0, 1 - waited / patience);
         const source = show ? show.filled : pl?.filled ?? [];
-        const filledMask = order.items.reduce((mask, p, i) => (source.some((it) => it.p === p) ? mask | (1 << i) : mask), 0);
+        // Uçuştaki ürün hücresine inince "hazır" görünür.
+        const filledMask = order.items.reduce((mask, p, i) => {
+          const it = source.find((f) => f.p === p);
+          return it && !hidden.has(it.uid) ? mask | (1 << i) : mask;
+        }, 0);
+        const allIn = filledMask === (1 << order.items.length) - 1;
         const look = lookFor(order, escaped);
-        const mood: FanMood = show ? "joy" : ratio > 0.6 ? "happy" : ratio > 0.3 ? "ok" : ratio > 0 ? "worried" : "angry";
+        const mood: FanMood = show && allIn ? "joy" : ratio > 0.6 ? "happy" : ratio > 0.3 ? "ok" : ratio > 0 ? "worried" : "angry";
         return (
           <View key={`fan-${orderIdx}-${escaped ? "e" : "v"}`} style={[styles.abs, { top: geo.fansY, left: geo.colW * slot, width: geo.colW }]}>
             <FanSpot
               order={order}
               filledMask={filledMask}
               mood={mood}
-              vipRatio={vipActive ? Math.round(Math.max(0, ratio) * 20) / 20 : null}
+              ratio={Math.round(ratio * 20) / 20}
+              vip={vipActive}
+              served={Boolean(show) && allIn}
               jersey={look.jersey}
               face={look.face}
               width={geo.colW}
-              bubbleH={BUBBLE_H}
+              zoneH={geo.zoneH}
+              geom={geomFor(order.items.length)}
               fanSize={geo.fanSize}
-              enterDelay={arrived > 0 || escaped ? 560 : 0}
-              iconMax={Math.max(14, BUBBLE_H - 14)}
+              enterDelay={arrived > 0 || escaped ? 220 : 0}
               idle={idle}
               phase={slot * 0.31}
             />
@@ -544,31 +597,17 @@ export function KantinGame({ level: levelNo, maxWidth, maxHeight, preBoosters, b
         );
       })}
 
-      {/* Tezgâh üstü: tabaklar */}
-      <View style={[styles.abs, styles.counter, { top: geo.platesY - 4, width: W, height: PLATES_H + 8 }]} />
-      {st.plates.map((pl, slot) => {
-        const show = serving.get(slot);
-        const orderIdx = show ? show.order : pl?.order;
-        if (orderIdx === undefined) return null;
-        const order = level.orders[orderIdx];
-        const source = show ? show.filled : pl?.filled ?? [];
-        const shownMask = order.items.reduce((mask, p, i) => {
-          const it = source.find((f) => f.p === p);
-          return it && !hidden.has(it.uid) ? mask | (1 << i) : mask;
-        }, 0);
-        return (
-          <View key={`plate-${slot}`} style={[styles.abs, { top: geo.platesY + 2, left: geo.colW * slot + 6 }]}>
-            <PlateSpot
-              items={order.items}
-              shownMask={shownMask}
-              width={geo.plateW}
-              height={PLATES_H - 4}
-              icon={plateIcon(order.items.length)}
-              vip={order.vip && !m.escaped.has(orderIdx)}
-            />
-          </View>
-        );
-      })}
+      {/* Tente (üstte) ve ahşap tezgâh (taraftarların göğsünü örter) */}
+      <View pointerEvents="none" style={[styles.abs, { top: geo.standY, width: W, height: geo.awnH }]}>
+        <Awning w={W} h={geo.awnH} />
+      </View>
+      <View pointerEvents="none" style={[styles.abs, styles.counter, { top: geo.counterY, width: W, height: geo.counterH }]}>
+        <Counter w={W} h={geo.counterH} />
+      </View>
+
+      <View style={[styles.abs, { top: 0, width: W }]}>
+        <Hud served={st.served} total={level.orders.length} timeLeft={timeLeft} tips={m.tips} tipsBump={tipsBump} height={geo.hudH} />
+      </View>
 
       {/* Bekleme tezgâhı */}
       <View style={[styles.abs, { top: geo.holdY, width: W }]}>
@@ -585,7 +624,7 @@ export function KantinGame({ level: levelNo, maxWidth, maxHeight, preBoosters, b
         />
       </View>
 
-      {/* Ürün yığınları */}
+      {/* Ürün rafları */}
       <View style={[styles.abs, styles.stacksRow, { top: geo.stacksY, left: geo.stackLeft, gap: STACK_GAP }]}>
         {st.stacks.map((s, i) => (
           <StackColumn
@@ -601,13 +640,12 @@ export function KantinGame({ level: levelNo, maxWidth, maxHeight, preBoosters, b
             nudge={nudges[i] ?? 0}
             padTop={geo.padTop}
             idle={idle}
+            hint={Boolean(s[0]) && targetSlot(level, st.plates, s[0].p) >= 0}
           />
         ))}
       </View>
 
-      {showTip && level.tip ? (
-        <TipBanner text={level.tip} top={geo.stacksY + geo.tile + 10} width={W - space.xl * 2} />
-      ) : null}
+      {showTip && level.tip ? <TipBanner text={level.tip} top={geo.stacksY + geo.tile + 10} width={W - space.xl * 2} /> : null}
 
       {/* Alt dok: sıra sayacı + Hızlı Servis güçlendiricisi */}
       <View style={[styles.abs, { top: geo.dockY, width: W }]}>
@@ -646,6 +684,9 @@ function TipBanner({ text, top, width }: { text: string; top: number; width: num
       ]}
       accessibilityLabel={`İpucu: ${text}`}
     >
+      <View style={styles.tipIcon}>
+        <Ionicons name="bulb" size={16} color={S.white} />
+      </View>
       <Text {...textScale.long} style={styles.tipText}>
         {text}
       </Text>
@@ -656,26 +697,37 @@ function TipBanner({ text, top, width }: { text: string; top: number; width: num
 const styles = StyleSheet.create({
   root: { alignSelf: "center", backgroundColor: S.base, borderRadius: radius.xxl, overflow: "hidden" },
   abs: { position: "absolute", left: 0 },
-  wallTiles: { backgroundColor: S.base },
-  stands: {
-    overflow: "hidden",
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-  },
+  wall: { backgroundColor: S.base },
+  stands: { overflow: "hidden" },
   counter: {
-    backgroundColor: S.counterTop,
-    borderBottomWidth: 3,
-    borderColor: S.counterLip,
+    shadowColor: S.dropShadow,
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
   },
   stacksRow: { flexDirection: "row" },
   tip: {
     position: "absolute",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
     paddingHorizontal: space.md,
     paddingVertical: space.m,
     borderRadius: radius.xl,
     backgroundColor: S.tipCard,
+    borderWidth: 3,
+    borderColor: S.tipAccent,
     zIndex: 20,
     ...softShadow,
   },
-  tipText: { ...type.bodySm, fontFamily: fonts.semibold, color: S.tipInk, textAlign: "center" },
+  tipIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: S.tipAccent,
+  },
+  tipText: { ...type.bodySm, fontFamily: fonts.semibold, color: S.tipInk, flex: 1 },
 });

@@ -7,13 +7,14 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { StyleSheet, Text, View } from "react-native";
 
-import { ChunkyButton } from "@/components/city/ChunkyButton";
 import { Touchable } from "@/components/ui";
 import type { City2Building, City2Ladder, City2Next } from "@/lib/puzzle/city2";
-import { colors, radius, space, textScale, type } from "@/theme";
+import { radius, space, textScale, type } from "@/theme";
 
 import { GateLive } from "./GateView";
 import { Bar, BuildingIcon, Check, cardStyle, fmt } from "./shared";
+import { CP } from "@/lib/puzzle/cityGamePalette";
+import { GlossyButton } from "./game/CityGameKit";
 
 export function RungBadge({ label, size = 44, tone = "brand" }: { label: string; size?: number; tone?: "brand" | "done" | "off" }) {
   return (
@@ -85,7 +86,7 @@ export function NextRequirements({
           <Text style={[styles.reqValue, s.ok ? styles.ok : null]} {...textScale.badge}>
             {Math.min(s.have, s.need)}/{s.need}
           </Text>
-          <Ionicons name="chevron-forward" size={14} color={colors.textTertiary} />
+          <Ionicons name="chevron-forward" size={14} color={CP.textTertiary} />
         </Touchable>
       );
     })}
@@ -126,7 +127,7 @@ export function StepCard({
             {ladder.current.title}
           </Text>
         </View>
-        <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+        <Ionicons name="chevron-forward" size={18} color={CP.textTertiary} />
       </Touchable>
 
       {next ? (
@@ -144,7 +145,7 @@ export function StepCard({
           <NextRequirements next={next} buildings={buildings} onBuilding={onBuilding} busy={busy} onPay={() => onAdvance(true)} />
 
           {next.can_advance ? (
-            <ChunkyButton label={busy ? "ÇIKILIYOR…" : `LİGE YÜKSEL · ${next.label}`} icon="arrow-up-circle" tone="green" disabled={busy} onPress={() => onAdvance()} accessibilityLabel={`Lige yüksel: ${next.title}`} />
+            <GlossyButton label={busy ? "ÇIKILIYOR…" : `LİGE YÜKSEL · ${next.label}`} icon="arrow-up-circle" tone="green" disabled={busy} onPress={() => onAdvance()} accessibilityLabel={`Lige yüksel: ${next.title}`} />
           ) : null}
         </>
       ) : (
@@ -160,25 +161,25 @@ const styles = StyleSheet.create({
   card: { ...cardStyle, padding: space.lg, gap: space.md },
   head: { flexDirection: "row", alignItems: "center", gap: space.md, marginHorizontal: -space.xs, paddingHorizontal: space.xs, borderRadius: radius.md },
   headTexts: { flex: 1, gap: 2 },
-  overline: { ...type.overline, color: colors.textTertiary },
-  title: { ...type.h1, color: colors.textPrimary },
-  badge: { alignItems: "center", justifyContent: "center", backgroundColor: colors.brand },
-  badgeDone: { backgroundColor: colors.win },
-  badgeOff: { backgroundColor: colors.surface3 },
-  badgeText: { ...type.scoreSm, color: colors.textOnBrand },
-  badgeTextSm: { ...type.numSmStrong, color: colors.textOnBrand },
-  badgeTextOff: { color: colors.textTertiary },
+  overline: { ...type.overline, color: CP.textTertiary },
+  title: { ...type.h1, color: CP.textPrimary },
+  badge: { alignItems: "center", justifyContent: "center", backgroundColor: CP.brand },
+  badgeDone: { backgroundColor: CP.win },
+  badgeOff: { backgroundColor: CP.surface3 },
+  badgeText: { ...type.scoreSm, color: CP.textOnBrand },
+  badgeTextSm: { ...type.numSmStrong, color: CP.textOnBrand },
+  badgeTextOff: { color: CP.textTertiary },
   nextHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  nextLabel: { ...type.label, color: colors.textSecondary, flex: 1 },
-  nextCount: { ...type.numSmStrong, color: colors.textSecondary },
-  nextReady: { color: colors.win },
+  nextLabel: { ...type.label, color: CP.textSecondary, flex: 1 },
+  nextCount: { ...type.numSmStrong, color: CP.textSecondary },
+  nextReady: { color: CP.win },
   req: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 36 },
   reqTexts: { flex: 1, gap: 2 },
-  reqTitle: { ...type.labelSm, color: colors.textPrimary },
-  reqSub: { ...type.caption, color: colors.textTertiary },
+  reqTitle: { ...type.labelSm, color: CP.textPrimary },
+  reqSub: { ...type.caption, color: CP.textTertiary },
   reqBar: { marginTop: 2 },
-  reqValue: { ...type.numSmStrong, color: colors.textSecondary },
-  ok: { color: colors.win },
-  top: { ...type.body, color: colors.textSecondary },
+  reqValue: { ...type.numSmStrong, color: CP.textSecondary },
+  ok: { color: CP.win },
+  top: { ...type.body, color: CP.textSecondary },
 });
 

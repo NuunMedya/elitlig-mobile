@@ -42,6 +42,32 @@
  *
  * PUAN: eritilen her grup 10 × bölüm; çubuğu kayıpsız geçmek +5; gol
  * 100 + 25 × bölüm + kalan kadronun dörtte biri (en çok +50).
+ *
+ * BÖLÜM MODU (Lig Yolu; docs/oyun-yenileme-2026-11.md §2):
+ *   RN {type:"config", levelMode:true, level:N, boosters:[…]} + {type:"start"}
+ *   → oyun YALNIZ N. bölümü oynatır; bitince {type:"over", score, stats:{level,
+ *   won, stars, goals, squad, rivals, weapons, …}} gönderir (sonraki bölüme
+ *   geçmez, bölüm seçme ekranı yok). Bölüm BELİRLENİMCİDİR: levelSpec(N)
+ *   tablodan gelir (etap sayısı, zorluk çarpanları, açılan özellik), yol
+ *   tohumlu üreteçle (A.seeded(spec.seed)) kurulur; aynı N her cihazda aynı yol.
+ *   · Bölüm = birkaç ETAP (her biri kapı · rakip/engel dizisi, başında silah)
+ *     + kale finali. Uzunluk 2 etaptan (bölüm 1, ~40 sn) 6–7 etaba
+ *     (~90–120 sn) çıkar. Her 10. bölüm KUPA MAÇI (bir etap fazla, sert
+ *     gruplar, 1,5× kaleci), 5'in katları NEFES (kısa, yumuşak, bol silah).
+ *   · UNLOCKS: yeni kapı / engel / rakip / silah / kaleci huyu belirli bölümde
+ *     açılır; açıldığı bölümün başında tanıtım kartı çıkar (dokun → başla).
+ *     TS aynası lib/puzzle/levels/kadro.ts; `npm run check:games` iki tablonun
+ *     (ve 1–400 arası levelSpec'in) birebir aynı olduğunu doğrular.
+ *   · Yıldız: kazanınca kale anındaki kadro / PAR (üretecin kusursuz kapı
+ *     seçimiyle hesapladığı kadro): ≥ %65 → 3★, ≥ %35 → 2★, altı 1★;
+ *     reklamla devam edildiyse 1★.
+ *   · Güçlendiriciler (sunucu anahtarları; config.boosters ya da canlı
+ *     {type:"booster", key}): kalkan (sıradaki zararlı temas — grup, çubuk,
+ *     baraj, kaleci şutu — kayıpsız) · takviye (+5 oyuncu). dev_top (cebe 1
+ *     DEV TOP) oyunda tanımlı ama sunucu kataloğunda yok.
+ *   · Kadro tükenirse {type:"fail", level, canContinue, revive}; RN {type:"continue"}
+ *     gönderirse küçük bir kadroyla sürer (bölüm başına bir kez), {type:"giveUp"}
+ *     ya da FAIL_WAIT sn (oyun saati; duraklatınca durur) yanıt gelmezse `over`.
  */
 (function () {
   "use strict";
@@ -102,7 +128,110 @@
     curve: { name: "FALSOLU TOP", tip: "döner, 3 rakibe seker", col: "#A855F7", dark: "#7E22CE", secs: 5 },
     giant: { name: "DEV TOP", tip: "grubu biçer", col: "#FACC15", dark: "#B45309" },
     boots: { name: "KRAMPON", tip: "hız + omuz şarjı", col: "#22D3EE", dark: "#0E7490", secs: 6 },
+    // yolda çıkmaz: Kalkan güçlendiricisinin HUD rozeti
+    shield: { name: "KALKAN", tip: "ilk temas kayıpsız", col: "#38BDF8", dark: "#0369A1" },
   };
+
+  /* ─────────────────────────── bölüm modu: tablolar ───────────────────────────
+   * Bu iki tablo (UNLOCKS, levelSpec) lib/puzzle/levels/kadro.ts'de AYNEN
+   * vardır; check-games.mjs ikisini karşılaştırır. Yeni bölüm eklemek =
+   * LEVEL_COUNT'u büyütmek (formüller her N için tanımlı; mevcut bölümler değişmez).
+   */
+  var LEVEL_COUNT = 250;
+  /** level → yeni özellik (kind: gate | obstacle | rival | weapon | keeper). */
+  var UNLOCKS = [
+    { level: 1, key: "kapi", kind: "gate", name: "KAPILAR", tip: "Mavi kapı kadronu büyütür, kırmızı küçültür. Rakip grubunu şutla erit, sonunda kaleciyi geç." },
+    { level: 2, key: "triple", kind: "weapon", name: "ÜÇLÜ TOP", tip: "Her vuruşta üç top atar." },
+    { level: 3, key: "carpi", kind: "gate", name: "ÇARPI KAPISI", tip: "× kapısı kadronu katlar." },
+    { level: 4, key: "cubuk", kind: "obstacle", name: "ANTRENMAN ÇUBUĞU", tip: "Sağa sola kayar; değdiği oyuncular düşer." },
+    { level: 6, key: "fire", kind: "weapon", name: "ATEŞLİ TOP", tip: "2,6 kat hasar, arkadaki rakibi de deler." },
+    { level: 7, key: "yarim", kind: "rival", name: "YARIM SAHA GRUBU", tip: "Kalabalık grup yolun yarısını kapatır: ya kaç ya erit." },
+    { level: 8, key: "bolu", kind: "gate", name: "BÖLÜ KAPISI", tip: "÷ kapısı kadronu bölür; dikkatli seç." },
+    { level: 11, key: "curve", kind: "weapon", name: "FALSOLU TOP", tip: "Kavis çizer, rakipten rakibe seker." },
+    { level: 12, key: "ciftKotu", kind: "gate", name: "ÇİFT KÖTÜ KAPI", tip: "İki kapı da kötü olabilir: daha az kaybettireni seç." },
+    { level: 14, key: "boots", kind: "weapon", name: "KRAMPON", tip: "6 sn hız ve omuz şarjı: temasta 1'e 3." },
+    { level: 16, key: "baraj", kind: "obstacle", name: "BARAJ", tip: "Duran savunma duvarı: boşluktan geç." },
+    { level: 18, key: "giant", kind: "weapon", name: "DEV TOP", tip: "Tek atımda grubu biçer." },
+    { level: 22, key: "degisken", kind: "gate", name: "DEĞİŞKEN KAPI", tip: "Kapılar yer değiştirir: zamanlamanı ayarla." },
+    { level: 26, key: "zirhli", kind: "rival", name: "ZIRHLI RAKİP", tip: "Gri formalılar normal topa dirençli; ateşli ve dev top tam vurur." },
+    { level: 32, key: "kayan", kind: "obstacle", name: "KAYAN SAVUNMACI", tip: "Hızla yana kayar; değdiği oyuncuyu düşürür." },
+    { level: 38, key: "gezen", kind: "rival", name: "GEZEN GRUP", tip: "Grup yolda sağa sola kayar." },
+    { level: 45, key: "gizli", kind: "gate", name: "GİZLİ KAPI", tip: "Yaklaşınca açılır; hızlı karar ver." },
+    { level: 55, key: "ciftCubuk", kind: "obstacle", name: "ÇİFT ÇUBUK", tip: "Art arda iki çubuk: araya gir." },
+    { level: 65, key: "ciftSut", kind: "keeper", name: "ÇİFT ŞUT", tip: "Kaleci art arda iki sert şut çeker." },
+    { level: 80, key: "usta", kind: "keeper", name: "USTA KALECİ", tip: "Kaleci gittiğin yöne nişan alır: son anda kaç." },
+    { level: 100, key: "devGrup", kind: "rival", name: "DEV GRUP", tip: "Dev kalabalık: önündeki silahı mutlaka al." },
+  ];
+  var UNLOCK_AT = { sack: 1 };
+  var UNLOCK_BY_LEVEL = {};
+  UNLOCKS.forEach(function (u) {
+    UNLOCK_AT[u.key] = u.level;
+    UNLOCK_BY_LEVEL[u.level] = u;
+  });
+  var WEAPON_KEYS = ["sack", "triple", "fire", "curve", "boots", "giant"];
+  function has(key, lvl) {
+    return lvl >= (UNLOCK_AT[key] || 1e9);
+  }
+  function r2(v) {
+    return Math.round(v * 100) / 100;
+  }
+  /**
+   * N. bölümün tablosu (saf işlev; TS aynası birebir aynı sayıları üretir).
+   *   d: genel zorluk 0 → ~0,97 (yavaş doyan eğri) · wave: on'luk içinde artış
+   *   late: 120 sonrası ek sertlik · tough: rakip canı / beklenen kadro
+   *   keeper: kaleci canı / beklenen kadro · obst: engel olasılığı
+   */
+  function levelSpec(lvl) {
+    var L = Math.max(1, Math.floor(lvl) || 1);
+    var cup = L % 10 === 0, breather = !cup && L % 5 === 0;
+    var d = 1 - Math.exp(-(L - 1) / 70);
+    var wave = cup ? 1 : (L % 10) / 10;
+    var late = L > 120 ? Math.min(1, (L - 120) / 130) : 0;
+    var sections = Math.min(6, 2 + Math.floor((L + 10) / 22));
+    if (cup) sections += 1;
+    if (breather) sections = Math.max(2, sections - 1);
+    var per = L >= 40 ? 8 : 6;
+    var segCount = sections * per;
+    var u = UNLOCK_BY_LEVEL[L] || null;
+    return {
+      level: L,
+      cup: cup,
+      breather: breather,
+      sections: sections,
+      per: per,
+      segs: segCount,
+      meters: segCount * SEG + 14,
+      hard: r2(Math.min(1, (L - 1) / 60)),
+      tough: r2((0.55 + 0.85 * d + 0.12 * wave + 0.15 * late) * (cup ? 1.12 : breather ? 0.8 : 1)),
+      keeper: r2((2.2 + 1.6 * d + 0.4 * late) * (cup ? 1.5 : breather ? 0.8 : 1)),
+      speed: r2(8.2 + 3.3 * (1 - Math.exp(-(L - 1) / 40)) - (breather ? 0.4 : 0)),
+      obst: has("cubuk", L) ? r2(Math.min(0.45, 0.18 + 0.3 * d)) : 0,
+      weapon: r2(breather ? 0.6 : 0.42 - 0.12 * d),
+      shotGap: r2(Math.max(0.8, 1.5 - 0.5 * d - (cup ? 0.15 : 0))),
+      shotLand: r2(Math.max(0.7, 0.95 - 0.2 * d)),
+      shotLoss: r2(0.2 + 0.12 * d),
+      double: has("ciftSut", L) && (cup || L % 3 === 0 || L === UNLOCK_AT.ciftSut),
+      aim: has("usta", L) && (cup || L % 2 === 0 || L === UNLOCK_AT.usta),
+      unlock: u ? u.key : null,
+      seed: (Math.imul(L, 2654435761) ^ 0x4b414452) >>> 0,
+    };
+  }
+
+  /* Bölüm modu durumu */
+  var levelMode = false, modeLevel = 1, spec = null, preBoosters = [];
+  var START_N = 1, E_MAX = 600, FAIL_WAIT = 8;
+  var shield = 0, shieldSeg = null, contUsed = false, failT = 0, finished = false;
+  var goalN = 0, par = 1, stageT = 0, stars = 0, introT = 0, intro = null, sectionZ = [], secShown = 0;
+  /** Üretimde kullanılan rastgele: bölüm modunda tohumlu, sonsuz modda Math.random. */
+  var rnd = Math.random;
+  /** Üretimde: bu bölümde açılan özellik henüz yola konmadıysa onun anahtarı (ilk uygun yere zorla konur). */
+  var force = null;
+  function rr(a, b) {
+    return a + rnd() * (b - a);
+  }
+  function rpick(list) {
+    return list[(rnd() * list.length) | 0];
+  }
 
   var W = 0, H = 0;
   var state = "attract"; // attract | play | goal | dying | over
@@ -126,6 +255,7 @@
   var impacts = 0, lostTotal = 0, fallenTotal = 0, lastWhy = "";
 
   function levelSpeed() {
+    if (levelMode && spec) return spec.speed;
     return Math.min(11.5, 8.2 + 0.4 * (level - 1));
   }
   function baseRate(count) {
@@ -205,6 +335,200 @@
     levelZ0 = from;
   }
 
+  /* ─────────────────────────── bölüm modu: yol üreteci ─────────────────────────── */
+
+  /**
+   * İyi kapı. Beklenen kadro bölümün tavanına (cap) doğru dolar: tavana uzaksa
+   * büyük artı / çarpı, yakınsa küçük artı. Böylece yol içeriği (rakip canı,
+   * kaleci) bölüm boyunca dengeli kalır; kayıplar kapılarla telafi edilir.
+   */
+  function capOf(L) {
+    return 60 + 1.6 * Math.min(L, 150);
+  }
+  function goodOpL(e, sp) {
+    var L = sp.level, cap = capOf(L), room = cap - e;
+    if (has("carpi", L) && e >= 4 && e * 2 <= cap * 1.15 && rnd() < 0.3) return { op: "x", v: e * 3 <= cap && rnd() < 0.25 ? 3 : 2 };
+    return { op: "+", v: Math.round(rr(3, 7) + Math.min(L, 40) * 0.25 + A.clamp(room * 0.35, 0, e * 0.3 + 10)) };
+  }
+  function badOpL(e, good, sp) {
+    var L = sp.level, hard = sp.hard, r = rnd();
+    if (has("bolu", L) && e >= 4 && r < 0.18 + 0.2 * hard) return { op: "/", v: L >= 60 && e >= 30 && rnd() < 0.3 ? 3 : 2 };
+    if (r < 0.78) return { op: "-", v: Math.max(1, Math.round(e * rr(0.15 + 0.12 * hard, 0.35 + 0.2 * hard))) };
+    return { op: "+", v: Math.max(1, Math.round((apply(e, good) - e) * rr(0.2, 0.45))) };
+  }
+  function pickPowerL(L, last, boss2) {
+    var pool = [];
+    WEAPON_KEYS.forEach(function (k) {
+      if (!has(k, L)) return;
+      if (boss2 && (k === "sack" || k === "boots") && L >= UNLOCK_AT.triple) return;
+      pool.push(k);
+      if (!boss2 && k === "fire") pool.push(k);
+    });
+    var t = rpick(pool);
+    if (t === last && pool.length > 1) t = rpick(pool);
+    return t;
+  }
+  function addPickup(type, px, pz) {
+    pickups.push({ type: type, x: px, z: pz, taken: false, gone: false, at: 0, id: ++uid });
+  }
+  function pushGateL(zz, sp, first) {
+    var L = sp.level, hard = sp.hard, e = expect;
+    var g = goodOpL(e, sp), other;
+    var f = first ? null : force;
+    if (f === "carpi" || f === "bolu" || f === "ciftKotu" || f === "degisken" || f === "gizli") force = null;
+    else f = null;
+    if (f === "carpi") {
+      g = { op: "x", v: 2 };
+      other = badOpL(e, g, sp);
+    } else if (f === "bolu") {
+      other = { op: "/", v: 2 };
+    } else if (f === "ciftKotu") {
+      g = { op: "-", v: Math.max(1, Math.round(e * 0.2)) };
+      other = e >= 4 ? { op: "/", v: 2 } : { op: "-", v: Math.max(1, Math.round(e * 0.4)) };
+    } else if (first) {
+      other = goodOpL(e, sp);
+      if (other.op === g.op && other.v === g.v) other = { op: "+", v: g.op === "+" ? Math.max(1, g.v - 2) : 3 };
+    } else if (has("ciftKotu", L) && !sp.breather && rnd() < 0.05 + 0.07 * hard) {
+      // iki kötü kapı: biri hep hafif (en çok %22 kayıp)
+      g = { op: "-", v: Math.max(1, Math.round(e * rr(0.1, 0.22))) };
+      other = badOpL(e, { op: "+", v: Math.max(2, Math.round(e * 0.5)) }, sp);
+    } else if (rnd() < (sp.breather ? 0.45 : Math.max(0.08, 0.22 - 0.14 * hard))) other = goodOpL(e, sp);
+    else other = badOpL(e, g, sp);
+    var flip = rnd() < 0.5;
+    var s = { type: "gate", z: zz, left: flip ? other : g, right: flip ? g : other, done: false, pick: 0, at: 0, id: ++uid };
+    if (f === "degisken" || (!first && !f && has("degisken", L) && rnd() < 0.12 + 0.12 * hard)) {
+      s.swap = r2(1.1 + rnd() * 0.5);
+      s.swph = rnd();
+      s.flipped = false;
+    } else if (f === "gizli" || (!first && !f && has("gizli", L) && rnd() < 0.1 + 0.08 * hard)) s.hide = true;
+    segs.push(s);
+    expect = Math.min(E_MAX, Math.max(apply(e, g), apply(e, other)));
+  }
+  function pushRivalsL(zz, sp, role) {
+    var L = sp.level, F = FIELD, span, hp, full = true, sway = 0, f = null;
+    if (role === "mega") {
+      span = [-F, F];
+      hp = expect * rr(1.9, 2.4);
+    } else if (role === "anchor") {
+      span = [-F, F];
+      hp = expect * rr(0.95, 1.3);
+    } else {
+      var roll = rnd();
+      var f = force === "gezen" || force === "yarim" || force === "zirhli" ? force : null;
+      if (f) force = null;
+      if (f === "gezen") roll = 0;
+      else if (f === "yarim") roll = 0.3;
+      if (has("gezen", L) && roll < 0.16) {
+        span = [-1.8, 1.8];
+        sway = F - 1.8 - 0.2;
+        full = false;
+        hp = expect * rr(1.4, 2.2);
+      } else if (has("yarim", L) && roll < 0.45) {
+        span = rnd() < 0.5 ? [-F, 0.5] : [-0.5, F];
+        full = false;
+        hp = expect * rr(1.6, 2.6);
+      } else {
+        span = [-F, F];
+        hp = expect * rr(0.7, 1.2);
+      }
+    }
+    hp *= sp.tough;
+    var armor = role !== "mega" && has("zirhli", L) && (rnd() < 0.12 + 0.18 * sp.hard || f === "zirhli");
+    if (armor) hp *= 0.7;
+    hp = Math.max(2, Math.round(hp));
+    var s = { type: "rivals", z: zz, x0: span[0], x1: span[1], hp: hp, hp0: hp, full: full, done: false, hitAt: -9, hits: 0, id: ++uid };
+    if (armor) s.armor = true;
+    if (role === "mega") s.mega = true;
+    if (sway) {
+      s.sway = sway;
+      s.swr = r2(0.8 + 0.5 * rnd());
+      s.swph = r2(rnd() * 6.28);
+      s.cx = 0;
+    }
+    segs.push(s);
+    // beklenen kadro: menzilde eritilemeyen kısım temasta gider (yoldaki silahlarla
+    // ortalama ~1,5 kat ateş; dev grubun önünde hep ateşli/dev top vardır)
+    if (full) expect = Math.max(2, Math.round(expect - Math.max(0, hp * (armor ? 1.43 : role === "mega" ? 0.4 : 1) - 2.4 * expect)));
+  }
+  function pushObstacleL(zz, sp) {
+    var L = sp.level, hard = sp.hard;
+    var pool = ["bar"];
+    if (has("baraj", L)) pool.push("wall", "wall");
+    if (has("kayan", L)) pool.push("slide");
+    if (has("ciftCubuk", L)) pool.push("double");
+    var t = rpick(pool);
+    var fo = { cubuk: "bar", baraj: "wall", kayan: "slide", ciftCubuk: "double" }[force];
+    if (fo) {
+      t = fo;
+      force = null;
+    }
+    var base = { type: "bar", look: "bar", z: zz, done: false, x: 0 };
+    function bar(z2, ph) {
+      segs.push(Object.assign({}, base, { z: z2, w: r2(1.6 + 1.0 * hard), phase: ph, rate: r2(1.1 + 1.0 * hard), id: ++uid }));
+    }
+    if (t === "bar") bar(zz, r2(rnd() * 6.28));
+    else if (t === "double") {
+      var ph = r2(rnd() * 6.28);
+      bar(zz - 3.5, ph);
+      bar(zz + 3.5, r2(ph + 3.14));
+    } else if (t === "wall") {
+      var w = r2(2.2 + 1.2 * hard);
+      var fx = r2((rnd() < 0.5 ? -1 : 1) * rr(1.2, FIELD - w / 2 - 0.2));
+      segs.push(Object.assign({}, base, { look: "wall", w: w, fx: fx, x: fx, phase: 0, rate: 0, id: ++uid }));
+    } else segs.push(Object.assign({}, base, { look: "slide", w: 1.3, phase: r2(rnd() * 6.28), rate: r2(2.0 + 1.2 * hard), id: ++uid }));
+    expect = Math.max(2, Math.round(expect * 0.96)); // engelde beklenen sıyrık kayıp
+  }
+
+  /** Bölüm modunun yolu: spec.sections etap × spec.per dilim, sonra KALE. */
+  function buildStage(sp, from) {
+    var L = sp.level;
+    rnd = A.seeded(sp.seed);
+    segs = [];
+    pickups = [];
+    sectionZ = [];
+    expect = START_N;
+    force = sp.unlock;
+    var zz = from + 16, lastP = null;
+    var obstKey = { cubuk: 1, baraj: 1, kayan: 1, ciftCubuk: 1 };
+    var megaSec = has("devGrup", L) ? sp.sections - 1 - (L % 2) : -1;
+    for (var sc = 0; sc < sp.sections; sc++) {
+      sectionZ.push(zz - SEG / 2);
+      var mega = sc === megaSec && sc >= 1;
+      for (var j = 0; j < sp.per; j++) {
+        var lastSlot = j === sp.per - 1;
+        if (j % 2 === 0) pushGateL(zz, sp, sc === 0 && j === 0);
+        else if (lastSlot) pushRivalsL(zz, sp, mega ? "mega" : "anchor");
+        else if ((force && obstKey[force]) || (!(force === "yarim" || force === "gezen" || force === "zirhli") && rnd() < sp.obst)) pushObstacleL(zz, sp);
+        else pushRivalsL(zz, sp, null);
+        // aralıktaki silah: etabın ilk aralığında ve dev gruptan önce her zaman,
+        // kaleden önceki son aralıkta kale silahı; arada şansla
+        var beforeMega = mega && j === sp.per - 2;
+        var final = sc === sp.sections - 1 && lastSlot;
+        if (final) addPickup(pickPowerL(L, lastP, true), rpick([-2.7, 0, 2.7]), zz + SEG / 2);
+        else if (beforeMega) addPickup(has("giant", L) && rnd() < 0.5 ? "giant" : "fire", 0, zz + SEG / 2);
+        else if (j === 0 || rnd() < sp.weapon) {
+          var pt = force && POWERS[force] ? force : pickPowerL(L, lastP, false);
+          if (pt === force) force = null;
+          lastP = pt;
+          addPickup(pt, rpick([-2.7, 0, 2.7]), zz + SEG / 2);
+        }
+        zz += SEG;
+      }
+    }
+    par = expect; // kusursuz kapı seçimiyle kaleye varılan kadro (yıldız ölçeği)
+    var bhp = Math.max(10, Math.round(expect * sp.keeper + 8));
+    boss = { z: zz + 10, hp: bhp, hp0: bhp, next: 1.4, shot: null, k: 0, hitAt: -9, hits: 0, id: ++uid, men: [] };
+    for (var w = 0; w < 5; w++) boss.men.push({ x: (w - 2) * 1.2, z: boss.z - 2.2, alive: true, hitAt: -9, dieAt: 0, dir: 1, look: w, pow: 1 });
+    levelZ0 = from;
+    rnd = Math.random;
+    force = null;
+  }
+
+  /** Bölüm özeti (levelInfo / tanıtım kartı): TS goalSummary ile aynı anlam. */
+  function goalText(sp) {
+    return sp.sections + " etap · " + sp.meters + " m · kaleciyi geç, gol at";
+  }
+
   function resetRun() {
     z = 0;
     x = 0;
@@ -228,7 +552,26 @@
     picked = 0;
     impacts = lostTotal = fallenTotal = 0;
     lastTgt = null;
-    buildLevel(0);
+    shield = 0;
+    shieldSeg = null;
+    contUsed = false;
+    failT = 0;
+    finished = false;
+    goalN = 0;
+    stageT = 0;
+    stars = 0;
+    secShown = 0;
+    intro = null;
+    if (levelMode) {
+      level = modeLevel;
+      spec = levelSpec(level);
+      n = maxN = START_N;
+      buildStage(spec, 0);
+    } else {
+      spec = null;
+      sectionZ = [];
+      buildLevel(0);
+    }
   }
 
   function start() {
@@ -239,8 +582,132 @@
     A.floaters.length = 0;
     A.banner = null;
     A.sound("whistle");
-    A.announce("KADRO KOŞUSU", "Kapılardan geç, silahları topla");
-    theme = 0;
+    if (levelMode) {
+      theme = (level - 1) % THEMES.length;
+      var rv = rivalAt(level);
+      for (var b = 0; b < preBoosters.length; b++) applyBooster(preBoosters[b], false);
+      var u = spec.unlock ? UNLOCK_BY_LEVEL[level] : null;
+      // yeni özellik: tanıtım kartı (dokun ya da birkaç saniye → başla)
+      if (u) {
+        intro = u;
+        introT = 0;
+        state = "intro";
+      }
+      A.announce(spec.cup ? "KUPA MAÇI · " + level + ". BÖLÜM" : level + ". BÖLÜM", "Rakip: " + String(rv.team.name || "Rakip") + " · " + spec.sections + " etap");
+      A.send("levelInfo", { level: level, goal: goalText(spec), tip: u ? u.name + ": " + u.tip : null });
+    } else {
+      A.announce("KADRO KOŞUSU", "Kapılardan geç, silahları topla");
+      theme = 0;
+    }
+  }
+
+  /* ─────────────────────────── bölüm modu: güçlendirici · devam · bitiş ─────────────────────────── */
+
+  /** Güçlendirici etkisi. live: oyun sırasında (çerçeve stoktan düştü). */
+  function applyBooster(key, live) {
+    if (key === "kalkan") {
+      shield = 1;
+      shieldSeg = null;
+      powerPop = 1;
+      if (live) floatAt("KALKAN!", x, 2.8, z, POWERS.shield.col, 22);
+    } else if (key === "takviye") {
+      gain(n + 5);
+      if (live) floatAt("+5 TAKVİYE", x, 2.8, z, GOOD_A, 22);
+    } else if (key === "dev_top") {
+      giant = Math.min(3, giant + 1);
+      powerPop = 1;
+      if (live) floatAt("DEV TOP!", x, 2.8, z, POWERS.giant.col, 22);
+    } else return false;
+    if (live) {
+      A.sound("power");
+      A.haptic("medium");
+    }
+    return true;
+  }
+  /** Kalkan varsa bu zararı yutar (ilk zararlı temas kayıpsız). */
+  function useShield() {
+    if (shield <= 0) return false;
+    shield = 0;
+    floatAt("KALKAN!", x, 2.8, z, POWERS.shield.col, 22);
+    A.sound("power");
+    A.haptic("medium");
+    return true;
+  }
+  /** Bölüm bitti: yıldızı hesapla, `over` gönder (bir kez). */
+  function finishLevel(won) {
+    if (finished) return;
+    finished = true;
+    stars = 0;
+    if (won) {
+      // par: kusursuz kapı seçimiyle kaleye varılacak kadro (üreteçten)
+      var ratio = goalN / Math.max(1, par);
+      stars = contUsed ? 1 : ratio >= 0.65 ? 3 : ratio >= 0.35 ? 2 : 1;
+    }
+    if (!won) {
+      state = "over";
+      A.sound("over");
+    }
+    A.send("over", {
+      score: points,
+      stats: {
+        level: level, won: won ? 1 : 0, stars: stars, goals: goals, squad: maxN, rivals: cleared, weapons: picked,
+        kept: goalN, par: par, lost: lostTotal, continued: contUsed ? 1 : 0,
+      },
+    });
+  }
+  /** Devamda gelen kadro (fail mesajında RN'ye de bildirilir: "+N oyuncu"). */
+  function reviveCount() {
+    return A.clamp(Math.round(maxN * 0.25), 5, 40);
+  }
+  /** Reklamla devam: küçük bir kadro, yakındaki tehlike temizlenir, kalkan. */
+  function revive(extra) {
+    if (state !== "failwait") return;
+    contUsed = true;
+    state = "play";
+    stateT = 0;
+    var want = extra && +extra.squad > 0 ? Math.min(60, Math.round(+extra.squad)) : reviveCount();
+    n = 0;
+    mem = [];
+    gain(want);
+    for (var i = 0; i < segs.length; i++) {
+      var s = segs[i];
+      if (s.done || s.z - z > RANGE + 4) continue;
+      if (s.type === "rivals" || s.type === "bar") {
+        s.done = true;
+        s.dead = true;
+        if (s.men) s.men.forEach(function (m) {
+          if (m.alive) killMan(m, x, "ball", 1.4);
+        });
+      }
+    }
+    if (boss) {
+      boss.shot = null;
+      boss.next = 2.2;
+    }
+    shield = Math.max(shield, 1);
+    shieldSeg = null;
+    A.announce("DEVAM!", "+" + want + " oyuncu · kalkan");
+    A.sound("level");
+    A.haptic("success");
+  }
+  /** RN'den oyuna özgü komutlar (bölüm modu). */
+  function command(cmd) {
+    if (!cmd) return;
+    if (cmd.type === "booster" && typeof cmd.key === "string") {
+      if (state === "play" || state === "intro") applyBooster(cmd.key, true);
+    } else if (cmd.type === "continue") revive(cmd.extra);
+    else if (cmd.type === "giveUp") {
+      if (levelMode && !finished && state !== "goal" && state !== "attract") finishLevel(false);
+    }
+  }
+  /** config'in bölüm moduna ait alanları (core.js config'i oyuna iletmez; aşağıda sarılır). */
+  function configure(cmd) {
+    if (!cmd || cmd.type !== "config") return;
+    if (cmd.levelMode != null) levelMode = !!cmd.levelMode;
+    if (cmd.level != null && isFinite(+cmd.level)) modeLevel = Math.max(1, Math.floor(+cmd.level));
+    if (Array.isArray(cmd.boosters)) preBoosters = cmd.boosters.filter(function (k) {
+      return typeof k === "string";
+    });
   }
 
   /* ─────────────────────────── kadro üyeleri ─────────────────────────── */
@@ -544,7 +1011,8 @@
       shrinkMen(T, T.men, p.tx, T.z - 2.2, p.man, "ball", pow);
     } else {
       if (T.done) return; // eritildi ya da kaçıldı: top boşa düşer
-      T.hp -= p.dmg;
+      // zırhlı rakip: normal top yarı hasar; ateşli ve dev top tam
+      T.hp -= T.armor && p.kind !== "fire" && p.kind !== "giant" ? p.dmg * 0.5 : p.dmg;
       T.hitAt = A.time;
       T.hits += 1;
       shrinkMen(T, T.men, p.tx, p.tz, p.man, "ball", pow);
@@ -603,8 +1071,29 @@
     flashRed = Math.max(0, flashRed - dt * 2.4);
     countBump = A.damp(countBump, 0, 7, dt);
     powerPop = Math.max(0, powerPop - dt * 2.5);
+    /* Bölüm modu: tanıtım kartı (yol durur) ve "devam?" beklemesi */
+    if (state === "intro" || state === "failwait") {
+      if (state === "intro") {
+        introT += dt;
+        if (introT > 4.5) state = "play";
+      } else {
+        failT += dt;
+        if (failT > FAIL_WAIT) finishLevel(false);
+      }
+      speed = 0;
+      stepShots(dt);
+      syncMembers(dt);
+      for (var f0 = fallen.length - 1; f0 >= 0; f0--) if (A.time - fallen[f0].at > 1.0) fallen.splice(f0, 1);
+      return;
+    }
     var playing = state === "play";
     var live = playing || state === "attract";
+    if (playing) stageT += dt;
+    // etap geçişi: kısa yazı
+    if (playing && levelMode && secShown < sectionZ.length && z >= sectionZ[secShown]) {
+      if (secShown > 0) floatAt("ETAP " + (secShown + 1) + "/" + sectionZ.length, x, 3.2, z + 6, "#FFE58A", 24);
+      secShown += 1;
+    }
 
     /* Vitrin: kadro iyi kapıya yönelir, asla bitmez. */
     if (state === "attract") {
@@ -639,6 +1128,17 @@
       if (s.done) continue;
       var d = s.z - z;
       if (s.type === "gate") {
+        if (s.swap && d > 0) {
+          // değişken kapı: iki panel belli aralıkla yer değiştirir
+          var fl = Math.floor(stageT / s.swap + s.swph) % 2 === 1;
+          if (fl !== s.flipped) {
+            var tmp = s.left;
+            s.left = s.right;
+            s.right = tmp;
+            s.flipped = fl;
+            s.swapAt = A.time;
+          }
+        }
         if (d <= 0) {
           s.done = true;
           s.at = A.time;
@@ -660,6 +1160,15 @@
           continue;
         }
         menOf(s);
+        if (s.sway && s.hp > 0 && live) {
+          // gezen grup: figürlerle birlikte yana kayar
+          var cx = Math.sin(A.time * s.swr + s.swph) * s.sway, dx = cx - s.cx;
+          s.cx = cx;
+          s.x0 += dx;
+          s.x1 += dx;
+          for (var mi = 0; mi < s.men.length; mi++) s.men[mi].x += dx;
+          s.menKey = s.x0 + "|" + s.x1 + "|" + s.hp0;
+        }
         var inSpan = x > s.x0 - 0.7 && x < s.x1 + 0.7;
         if (!tgt && inSpan && d < RANGE && d > -1 && live) tgt = s;
         if (inSpan && d < 1.3 && s.hp > 0 && live) {
@@ -670,24 +1179,29 @@
           s.hp -= k;
           shrinkMen(s, s.men, x, z, null, "melee", charge > 1 ? 1.8 : 1);
           s.melee = (s.melee || 0) + k / charge;
+          // kalkan: ilk temas edilen grup kadrodan kimseyi götürmez
+          if (playing && shield > 0 && !shieldSeg && useShield()) shieldSeg = s;
           if (s.melee >= 1) {
             var whole = Math.floor(s.melee);
             s.melee -= whole;
+            if (shieldSeg === s) whole = 0;
             if (playing) lose(whole, "melee");
             else n = Math.max(4, n - whole);
           }
           if (s.hp <= 0) groupDown(s);
         }
       } else if (s.type === "bar") {
-        s.x = Math.sin(A.time * s.rate + s.phase) * (FIELD - s.w / 2 - 0.2);
+        s.x = s.fx != null ? s.fx : Math.sin(A.time * s.rate + s.phase) * (FIELD - s.w / 2 - 0.2);
         if (d <= 0) {
           s.done = true;
           var rad = squadRadius(n);
           var lo = Math.max(x - rad, s.x - s.w / 2), hi = Math.min(x + rad, s.x + s.w / 2);
           var frac = Math.max(0, hi - lo) / (2 * rad);
           if (playing) {
-            if (frac > 0.02) {
-              lose(Math.max(1, n * frac * 0.8), "bar", s.x);
+            if (frac > 0.02 && useShield()) s.hit = 0;
+            else if (frac > 0.02) {
+              s.hit = 1;
+              lose(Math.max(1, n * frac * (levelMode ? 0.45 : 0.8)), "bar", s.x);
               A.sound("thud");
               A.shake(5);
             } else {
@@ -710,7 +1224,15 @@
     speed = A.approach(speed, want, (speed < want ? 14 : 40) * dt);
     if (state === "dying") {
       speed = 0;
-      if (stateT > 1.3) {
+      if (stateT > 1.3 && levelMode) {
+        // bölüm modu: önce "devam?" sorusu (bölüm başına bir kez)
+        A.send("fail", { level: level, canContinue: !contUsed, revive: reviveCount() });
+        if (contUsed) finishLevel(false);
+        else {
+          state = "failwait";
+          failT = 0;
+        }
+      } else if (stateT > 1.3) {
         state = "over";
         A.sound("over");
         A.send("over", { score: points, stats: { level: level, goals: goals, squad: maxN, rivals: cleared, teams: rivals.length, weapons: picked } });
@@ -724,15 +1246,21 @@
       if (boss.hp > 0) tgt = tgt || boss;
       boss.next -= dt;
       if (!boss.shot && boss.next <= 0 && boss.hp > 0) {
-        boss.shot = { x: x, at: A.time, land: A.time + Math.max(0.75, 0.95 - 0.03 * (level - 1)) };
+        var aimX = x;
+        // usta kaleci: kadronun gittiği yöne nişan alır
+        if (spec && spec.aim) aimX = A.clamp(x + (target - x) * 0.8, -FIELD + 0.6, FIELD - 0.6);
+        boss.shot = { x: aimX, at: A.time, land: A.time + (spec ? spec.shotLand : Math.max(0.75, 0.95 - 0.03 * (level - 1))) };
         boss.k += 1;
         if (playing) A.sound("whoosh");
       }
       if (boss.shot && A.time >= boss.shot.land) {
         var miss = Math.abs(x - boss.shot.x) > 1.55 + squadRadius(n) * 0.25;
         if (playing) {
-          if (!miss) {
-            lose(Math.ceil(n * (0.22 + 0.02 * Math.min(5, level - 1))) + level, "boss", boss.shot.x);
+          if (!miss && useShield()) {
+            boss.blocked = (boss.blocked || 0) + 1;
+          } else if (!miss) {
+            boss.hitsOn = (boss.hitsOn || 0) + 1;
+            lose(spec ? Math.ceil(n * spec.shotLoss) + 1 : Math.ceil(n * (0.22 + 0.02 * Math.min(5, level - 1))) + level, "boss", boss.shot.x);
             A.sound("boom");
             A.shake(9);
           } else {
@@ -742,7 +1270,7 @@
         }
         boss.landed = { x: boss.shot.x, at: A.time };
         boss.shot = null;
-        boss.next = Math.max(0.8, 1.5 - 0.07 * level);
+        boss.next = spec ? (spec.double && boss.k % 2 === 1 ? 0.35 : spec.shotGap) : Math.max(0.8, 1.5 - 0.07 * level);
       }
     }
 
@@ -752,6 +1280,7 @@
 
     if (boss && boss.hp <= 0 && state === "play") {
       goals += 1;
+      goalN = n;
       var bonus = 100 + 25 * level + Math.min(50, Math.floor(n / 4));
       points += bonus;
       scoreBump = 1;
@@ -775,8 +1304,11 @@
       }
     }
 
+    /* Bölüm modu: gol sevinci → sonuç (RN çerçevesi); kadro sevinmeye devam eder */
+    if (state === "goal" && levelMode) {
+      if (stateT > 2.3) finishLevel(true);
+    } else if (state === "goal" && stateT > 2.3) {
     /* Gol sevinci → sıradaki bölüm */
-    if (state === "goal" && stateT > 2.3) {
       level += 1;
       var keep = A.clamp(Math.round(n * 0.35), 3, 40);
       n = keep;
@@ -813,6 +1345,7 @@
 
   function down(p) {
     lastTouchX = p.x;
+    if (state === "intro" && introT > 0.35) state = "play"; // tanıtım kartı: dokun → başla
   }
   function move(p) {
     if (state !== "play" || lastTouchX == null) return;
@@ -1502,7 +2035,7 @@
   /* Poz kareleri: bir kez ekran dışına çizilir, sonra yalnız kopyalanır. */
   var sprites = {};
   var SW = 74, SH = 94, OX = 37, OY = 86;
-  var kits = { m: null, f: null, k: null, sig: "" };
+  var kits = { m: null, f: null, k: null, a: null, sig: "" };
   var POSE_FRAMES = { run: 10, kick: 6, cheer: 6, ready: 4, keeper: 6, block: 2, fall: 1 };
   function sprite(team, pose, frame, look, big) {
     var key = team + pose + frame + "_" + look + (big ? "B" : "");
@@ -1618,6 +2151,8 @@
     kits.m = mine;
     kits.f = rk;
     kits.k = keeperKit(rk, mine);
+    // zırhlı rakip: çelik gri forma, rakibin rengi şeritte
+    kits.a = { p: "#64748B", s: rk.p, sh: "#334155", so: rk.p };
     sprites = {};
   }
 
@@ -1822,6 +2357,21 @@
       c.stroke();
       c.fillStyle = "#E2E8F0";
       for (var st = 0; st < 4; st++) c.fillRect(-b * 0.9 + st * b * 0.65, b * 0.6, b * 0.22, b * 0.3);
+    } else if (type === "shield") {
+      // kalkan: beyaz arma, ortasında top
+      c.beginPath();
+      c.moveTo(0, -b * 1.5);
+      c.quadraticCurveTo(b * 0.8, -b * 1.05, b * 1.3, -b * 1.1);
+      c.quadraticCurveTo(b * 1.35, b * 0.6, 0, b * 1.6);
+      c.quadraticCurveTo(-b * 1.35, b * 0.6, -b * 1.3, -b * 1.1);
+      c.quadraticCurveTo(-b * 0.8, -b * 1.05, 0, -b * 1.5);
+      c.closePath();
+      c.fillStyle = "#FFFFFF";
+      c.fill();
+      c.lineWidth = r * 0.07;
+      c.strokeStyle = NAVY;
+      c.stroke();
+      flatBall(c, 0, 0, b * 0.75, 0.5);
     }
   }
   function powerBadge(type) {
@@ -1862,7 +2412,7 @@
     c.fillText(text, lx, ly);
   }
 
-  function drawPanel(c, op, x0, x1, gz, alpha, lift, pop) {
+  function drawPanel(c, op, x0, x1, gz, alpha, lift, pop, hidden) {
     var good = isGood(op);
     proj(x0, 2.75 + lift, gz);
     var ax = PX, ay = PY, k = PK;
@@ -1881,8 +2431,8 @@
     c.fill();
     A.roundRect(c, ax, ay, w, h, r);
     var g = c.createLinearGradient(0, ay, 0, ay + h);
-    g.addColorStop(0, rgba(good ? GOOD_A : BAD_A, 0.86));
-    g.addColorStop(1, rgba(good ? GOOD_B : BAD_B, 0.9));
+    g.addColorStop(0, rgba(hidden ? "#B57BFF" : good ? GOOD_A : BAD_A, 0.86));
+    g.addColorStop(1, rgba(hidden ? "#6D28D9" : good ? GOOD_B : BAD_B, 0.9));
     c.fillStyle = g;
     c.fill();
     // parlak cam: üst bant + çapraz yansıma
@@ -1912,7 +2462,7 @@
     if (fs > 5) {
       c.save();
       c.translate(cx2, cy2 + fs * 0.04);
-      label(c, opLabel(op), 0, 0, fs, "#FFFFFF", "center", NAVY);
+      label(c, hidden ? "?" : opLabel(op), 0, 0, fs, "#FFFFFF", "center", NAVY);
       c.restore();
     }
     c.restore();
@@ -1945,11 +2495,18 @@
       drawPanel(c, side < 0 ? s.left : s.right, x0, x1, s.z, (1 - u) * 0.85, 0.6 + u * 2.2, 1 - 0.45 * A.easeOut(u));
       return;
     }
+    var hidden = !!s.hide && s.z - z > 10; // gizli kapı yaklaşınca açılır
+    var sp2 = s.swapAt ? A.clamp((A.time - s.swapAt) / 0.25, 0, 1) : 1;
+    var pop = 1 - 0.18 * Math.sin(sp2 * Math.PI);
     [-1, 1].forEach(function (sd) {
       var op = sd < 0 ? s.left : s.right;
       var a0 = sd < 0 ? -FIELD + 0.12 : 0.12, a1 = sd < 0 ? -0.12 : FIELD - 0.12;
-      drawPanel(c, op, a0, a1, s.z, far, 0, 1);
+      drawPanel(c, op, a0, a1, s.z, far, 0, pop, hidden);
     });
+    if ((s.swap || s.hide) && far > 0.3) {
+      proj(0, 3.55, s.z);
+      tag(c, s.swap ? "DEĞİŞKEN" : "GİZLİ", PX, PY, A.clamp(PK * 0.32, 9, 15), s.swap ? "#FBBF24" : "#B57BFF", s.swap ? "#D97706" : "#6D28D9");
+    }
     c.globalAlpha = far;
     drawPost(c, -FIELD, s.z, 3.0);
     drawPost(c, 0, s.z, 3.0);
@@ -2086,14 +2643,14 @@
     return q.d - p.d;
   }
 
-  function pushMen(men, block, zMax) {
+  function pushMen(men, block, zMax, armor) {
     for (var k = 0; k < men.length; k++) {
       var m = men[k];
       if (m.z > zMax || m.z < camZ + NEAR) continue;
       if (m.alive) {
         // vuruş tepkisi: kısa sarsılma + geri itilme
         var h = A.clamp(1 - (A.time - m.hitAt) / 0.18, 0, 1);
-        push(m.z + h * 0.25, "foe", { x: m.x + m.dir * h * 0.12, z: m.z + h * 0.25, ph: A.time * (block ? 0.8 : 1.4) + (m.ph || k * 0.3), look: m.look, flash: h * 0.6, rot: m.dir * h * 0.16, block: block });
+        push(m.z + h * 0.25, "foe", { x: m.x + m.dir * h * 0.12, z: m.z + h * 0.25, ph: A.time * (block ? 0.8 : 1.4) + (m.ph || k * 0.3), look: m.look, flash: h * 0.6, rot: m.dir * h * 0.16, block: block, armor: armor });
       } else {
         var t = (A.time - m.dieAt) / 0.95;
         if (t < 0 || t >= 1) continue;
@@ -2106,14 +2663,26 @@
     }
   }
 
+  /** Baraj (duran duvar) ve kayan savunmacı: çubuk kuralı, rakip figürleriyle çizilir. */
+  function pushWall(s) {
+    var wall = s.look === "wall";
+    var cnt = wall ? Math.max(3, Math.round(s.w / 0.72)) : 2;
+    var dir = s.look === "slide" ? (Math.cos(A.time * s.rate + s.phase) >= 0 ? 1 : -1) : 0;
+    for (var k = 0; k < cnt; k++) {
+      var fx = s.x - s.w / 2 + (k + 0.5) * (s.w / cnt);
+      push(s.z + k * 0.001, "foe", { x: fx, z: s.z, ph: A.time * 0.8 + k * 0.4, look: (k + s.id) % 5, flash: 0, rot: dir * 0.28, block: true, armor: false });
+    }
+  }
+
   function collect() {
     items.length = 0;
     var zMax = camZ + FAR - 2;
     segs.forEach(function (s) {
       if (s.z > zMax || s.z < camZ + NEAR - 3) return;
       if (s.type === "gate") push(s.z, "gate", s);
+      else if (s.type === "bar" && (s.look === "wall" || s.look === "slide")) pushWall(s);
       else if (s.type === "bar" && !s.done) push(s.z, "bar", s);
-      else if (s.type === "rivals") pushMen(menOf(s), false, zMax);
+      else if (s.type === "rivals") pushMen(menOf(s), false, zMax, !!s.armor);
     });
     // yoldaki silahlar
     pickups.forEach(function (p) {
@@ -2312,7 +2881,7 @@
           proj(o.x, 0, o.z);
           var k2 = PK * mineK;
           var pose = o.block ? "block" : "ready";
-          blitFig(c, sprite("f", pose, frameOf(pose, o.ph), o.look), PX, PY, k2, o.rot || 0, fogA, o.flash);
+          blitFig(c, sprite(o.armor ? "a" : "f", pose, frameOf(pose, o.ph), o.look), PX, PY, k2, o.rot || 0, fogA, o.flash);
           break;
         }
         case "foeFall": {
@@ -2407,7 +2976,8 @@
       if (s.type !== "rivals" || s.done || s.z - z > 55 || s.z < camZ + NEAR) return;
       // temas anında etiket kadronun sayacının üstüne yükselir (üst üste binmez)
       proj((s.x0 + s.x1) / 2, 2.5 + A.clamp((7 - (s.z - z)) / 6, 0, 1) * 1.6, s.z);
-      tag(c, String(Math.ceil(s.hp)), PX, PY, A.clamp(PK * 0.55, 12, 22), BAD_A, BAD_B);
+      if (s.armor) tag(c, "ZIRH " + Math.ceil(s.hp), PX, PY, A.clamp(PK * 0.5, 11, 20), "#94A3B8", "#475569");
+      else tag(c, (s.mega ? "DEV " : "") + Math.ceil(s.hp), PX, PY, A.clamp(PK * 0.55, 12, 22), BAD_A, BAD_B);
     });
     if (n > 0 && state !== "attract") {
       proj(x, 2.3 + squadRadius(n) * 0.25, z);
@@ -2519,7 +3089,15 @@
     var total = boss ? boss.z - STOP - levelZ0 : 1;
     var prog = boss ? A.clamp((z - levelZ0) / total, 0, 1) : 0;
     var nearBoss = boss && z >= boss.z - STOP - 20 && boss.hp > 0;
-    bar(c, bx, byy, bw, bh, prog, "#4ADE6E", "#16A34A");
+    bar(c, bx, byy, bw, bh, prog, spec && spec.cup ? "#FFD54A" : "#4ADE6E", spec && spec.cup ? "#E0A100" : "#16A34A");
+    // etap çizgileri (bölüm modu)
+    if (levelMode && boss && sectionZ.length > 1) {
+      c.fillStyle = "rgba(255,255,255,0.45)";
+      for (var si = 1; si < sectionZ.length; si++) {
+        var sx2 = bx + bw * A.clamp((sectionZ[si] - levelZ0) / total, 0, 1);
+        c.fillRect(sx2 - 1, byy + 3, 2, bh - 6);
+      }
+    }
     // bitiş bayrağı
     var mx = bx + bw - 6;
     c.fillStyle = "#FFFFFF";
@@ -2531,7 +3109,7 @@
     c.lineTo(mx + 1, byy + 5);
     c.closePath();
     c.fill();
-    var lbl = level + ". BÖLÜM · " + String(rv.team.name || "Rakip");
+    var lbl = (spec && spec.cup ? "KUPA · " : "") + level + ". BÖLÜM · " + String(rv.team.name || "Rakip");
     c.font = A.font(bh * 0.58, 900);
     while (lbl.length > 8 && c.measureText(lbl).width > bw - 50) lbl = lbl.slice(0, -2) + "…";
     var chipX = bx + bw / 2 - c.measureText(lbl).width / 2 - 12;
@@ -2556,6 +3134,7 @@
     if (weapon) list.push({ type: weapon.type, frac: weapon.ammo / Math.max(1, weapon.max), text: String(weapon.ammo) });
     if (giant > 0) list.push({ type: "giant", frac: 1, text: "×" + giant });
     if (boostT > 0) list.push({ type: "boots", frac: boostT / BOOST, text: Math.ceil(boostT) + " sn" });
+    if (shield > 0) list.push({ type: "shield", frac: 1, text: "HAZIR" });
     if (!list.length) return;
     var ph = L.wide ? 34 : 38, pw = L.wide ? 150 : 158;
     var y = H - (L.wide ? 12 : 22) - ph;
@@ -2679,12 +3258,99 @@
     drawWorldLabels(c);
     A.drawParticles(c);
     A.drawFloaters(c, dt);
+    if (shield > 0 || shieldSeg) drawShield(c);
     if (state !== "attract") drawHud(c);
-    A.drawBanner(c, W, L.wide ? H * 0.42 : Math.max(160, H * 0.24), dt);
+    if (state === "failwait") drawFailVeil(c);
+    if (state === "intro" && intro) drawIntro(c);
+    else A.drawBanner(c, W, L.wide ? H * 0.42 : Math.max(160, H * 0.24), dt);
     if (flashRed > 0) {
       c.fillStyle = "rgba(255,77,106," + (0.26 * flashRed).toFixed(3) + ")";
       c.fillRect(0, 0, W, H);
     }
+  }
+
+  /** Kalkan: kadronun çevresinde parlayan cam halka (kullanılınca söner). */
+  function drawShield(c) {
+    if (n <= 0) return;
+    var active = shield > 0 || (shieldSeg && !shieldSeg.done);
+    if (!active) return;
+    var rad = squadRadius(n) + 0.7;
+    proj(x, 0, z);
+    var rx = rad * PK, ry = rx * A.clamp(camH / PD, 0.22, 0.6);
+    var cx = PX, cy = PY;
+    var pulse = 0.5 + 0.5 * Math.sin(A.time * 4);
+    c.beginPath();
+    c.ellipse(cx, cy - ry * 0.4, rx, ry * 1.4 + 1.1 * PK, 0, 0, Math.PI * 2);
+    c.fillStyle = rgba("#38BDF8", 0.12 + 0.06 * pulse);
+    c.fill();
+    c.lineWidth = Math.max(2, 0.08 * PK);
+    c.strokeStyle = rgba("#BAE6FD", 0.55 + 0.3 * pulse);
+    c.stroke();
+  }
+  /** Kadro tükendi, RN "devam?" soruyor: sahne kararır. */
+  function drawFailVeil(c) {
+    c.fillStyle = "rgba(10,8,40,0.55)";
+    c.fillRect(0, 0, W, H);
+    label(c, "KADRO TÜKENDİ", W / 2, H * 0.4, Math.min(34, W * 0.08), "#FFFFFF");
+  }
+  /** Yeni özellik tanıtım kartı: rozet/simge, ad, kısa açıklama, "dokun" ipucu. */
+  function drawIntro(c) {
+    var u = intro;
+    var t = A.easeOutBack(Math.min(1, introT / 0.35));
+    c.fillStyle = "rgba(10,8,40," + (0.5 * Math.min(1, introT / 0.25)).toFixed(3) + ")";
+    c.fillRect(0, 0, W, H);
+    var cw = Math.min(W - 40, 340), ch = 230;
+    var cx = W / 2, cy = H * 0.45;
+    c.save();
+    c.translate(cx, cy);
+    c.scale(t, t);
+    A.roundRect(c, -cw / 2, -ch / 2 + 5, cw, ch, 26);
+    c.fillStyle = "rgba(8,6,30,0.6)";
+    c.fill();
+    A.roundRect(c, -cw / 2, -ch / 2, cw, ch, 26);
+    var cg = c.createLinearGradient(0, -ch / 2, 0, ch / 2);
+    cg.addColorStop(0, "#3A31A8");
+    cg.addColorStop(1, "#1C1760");
+    c.fillStyle = cg;
+    c.fill();
+    c.lineWidth = 3;
+    c.strokeStyle = "rgba(255,255,255,0.22)";
+    c.stroke();
+    // üst şerit: YENİ!
+    A.roundRect(c, -52, -ch / 2 - 14, 104, 30, 15);
+    c.fillStyle = "#FFC24A";
+    c.fill();
+    c.lineWidth = 2.5;
+    c.strokeStyle = NAVY;
+    c.stroke();
+    label(c, "YENİ!", 0, -ch / 2 + 1, 16, "#FFFFFF", "center", NAVY);
+    // simge: silahta rozet, diğerlerinde tür rengi
+    var iy = -ch / 2 + 62;
+    if (POWERS[u.key]) blitBadge(c, u.key, 0, iy, 30);
+    else {
+      var col = u.kind === "gate" ? GOOD_B : u.kind === "obstacle" ? "#FF3D5E" : u.kind === "keeper" ? "#FACC15" : "#94A3B8";
+      blob(c, 0, iy, 28, col, 3);
+      label(c, u.kind === "gate" ? "±" : u.kind === "obstacle" ? "!" : u.kind === "keeper" ? "K" : "R", 0, iy + 1, 26, "#FFFFFF");
+    }
+    label(c, u.name, 0, iy + 50, Math.min(24, cw * 0.075), "#FFE58A");
+    // açıklama: en çok üç satır
+    c.font = A.font(14, 800);
+    var words = u.tip.split(" "), lines = [], cur = "";
+    for (var i = 0; i < words.length; i++) {
+      var tryL = cur ? cur + " " + words[i] : words[i];
+      if (c.measureText(tryL).width > cw - 40 && cur) {
+        lines.push(cur);
+        cur = words[i];
+      } else cur = tryL;
+    }
+    if (cur) lines.push(cur);
+    lines = lines.slice(0, 3);
+    for (var l = 0; l < lines.length; l++) label(c, lines[l], 0, iy + 82 + l * 19, 14, "#FFFFFF", "center", false);
+    c.restore();
+    var blink = 0.55 + 0.45 * Math.sin(A.time * 5);
+    c.globalAlpha = blink;
+    label(c, "BAŞLAMAK İÇİN DOKUN", cx, cy + ch / 2 + 34, 15, "#FFFFFF");
+    c.globalAlpha = 1;
   }
 
   function debug() {
@@ -2693,13 +3359,26 @@
       segs: segs, boss: boss, gl: false, captain: captain.short, rival: rivalAt(level).team.name,
       pickups: pickups, weapon: weapon, giant: giant, boostT: boostT, picked: picked, shots: shots,
       members: mem.length, fallen: fallen.length, impacts: impacts, lostTotal: lostTotal, fallenTotal: fallenTotal, lastWhy: lastWhy,
+      levelMode: levelMode, spec: spec, stars: stars, par: par, shield: shield, contUsed: contUsed, goalN: goalN, sectionZ: sectionZ, stageT: stageT,
+      expect: expect, target: target, levelSpec: levelSpec, UNLOCKS: UNLOCKS, LEVEL_COUNT: LEVEL_COUNT, intro: intro,
       give: function (type) { collectPower({ type: type, x: x, z: z, id: 0 }); },
       setTarget: function (v) { target = v; },
+      setShield: function (v) { shield = v; shieldSeg = null; },
       setZ: function (v) { z = v; },
       setN: function (v) { gain(v); },
       apply: apply,
     };
   }
 
-  A.register({ resize: resize, start: start, update: update, render: render, down: down, move: move, up: up, debug: debug, setRoster: setRoster });
+  A.register({ resize: resize, start: start, update: update, render: render, down: down, move: move, up: up, debug: debug, setRoster: setRoster, command: command, configure: configure });
+  // core.js config'i oyuna yalnız roster olarak iletir: bölüm modu alanları için
+  // köprüyü sar (config önce burada okunur, sonra ortak işleyiciye gider).
+  var baseCmd = window.ArenaCmd;
+  if (typeof baseCmd === "function" && !baseCmd.kadro) {
+    window.ArenaCmd = function (cmd) {
+      if (cmd && cmd.type === "config") configure(cmd);
+      return baseCmd(cmd);
+    };
+    window.ArenaCmd.kadro = true;
+  }
 })();

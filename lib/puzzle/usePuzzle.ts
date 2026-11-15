@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 
+import { loadMirror, saveMirror } from "@/lib/offline/mirror";
+import { isOfflineError, noteOnline, noteRequestError } from "@/lib/offline/net";
 import { useAuth } from "@/providers/AuthProvider";
 
 import { getPuzzleMe, puzzleKeys, type PuzzleGameProgress, type PuzzleMe, type PuzzleProfile } from "./api";
@@ -9,16 +11,39 @@ import type { PuzzleGameKey } from "./types";
 /**
  * Lig Yolu cüzdanı ve ilerlemesi — tek sorgu (["puzzle","me"]); her mutasyon
  * sunucunun döndürdüğü güncel profili önbelleğe yazar (yeniden çekme yok).
+ *
+ * ÇEVRİMDIŞI (sözleşme §7): her yeni veri hesap başına cihaz aynasına yazılır;
+ * sunucuya ulaşılamazsa (yalnız ağ hatası) ayna döner — canlara geçen süre
+ * yerelde işlenmiş olarak.
  */
 export function usePuzzleMe() {
   const auth = useAuth();
-  return useQuery({
+  const userId = auth.user?.id ?? null;
+  const query = useQuery({
     queryKey: puzzleKeys.me(),
-    queryFn: getPuzzleMe,
+    queryFn: async () => {
+      try {
+        const me = await getPuzzleMe();
+        noteOnline();
+        return me;
+      } catch (error) {
+        noteRequestError(error);
+        if (userId != null && isOfflineError(error)) {
+          const mirror = await loadMirror(userId);
+          if (mirror) return mirror;
+        }
+        throw error;
+      }
+    },
     enabled: Boolean(auth.user),
     staleTime: 30_000,
     retry: false,
   });
+  const data = query.data;
+  useEffect(() => {
+    if (data && userId != null) saveMirror(userId, data);
+  }, [data, userId]);
+  return query;
 }
 
 /** Sunucudan dönen profili (ve varsa oyun ilerlemesini) önbelleğe yazar. */

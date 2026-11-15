@@ -58,7 +58,7 @@ export function XpTransferBanner({ transfer, perStar = 10 }: { transfer: XpTrans
           Geçmiş XP'nden {fmt(transfer.stars)} yıldız aktarıldı ({transfer.rate || 100} XP = 1 yıldız)
         </Text>
         <Text style={styles.sub} {...textScale.long}>
-          Önceki {fmt(transfer.xp)} XP'n bir kerelik yıldıza çevrildi ve havuzuna eklendi. Bundan sonra {perStar} XP = 1 yıldız; 3 gün içinde topla.
+          Önceki {fmt(transfer.xp)} XP'n bir kerelik yıldıza çevrildi ve havuzuna eklendi. Bundan sonra XP haftalık birikir: Pazartesi {perStar} XP = 1 yıldız olarak toplanabilir olur, 3 gün (Pzt–Çar) içinde topla.
         </Text>
       </View>
       <Touchable feedback="icon" onPress={dismiss} hitSlop={10} accessibilityRole="button" accessibilityLabel="Bildirimi kapat" style={styles.close}>

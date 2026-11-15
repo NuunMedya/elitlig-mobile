@@ -6,7 +6,7 @@
  */
 
 import type { PuzzleGameModule, PuzzleGoalSummary } from "@/lib/puzzle/types";
-import { ucluLevel, type UcluGoalDef } from "@/lib/puzzle/levels/uclu";
+import { ucluLevel, UCLU_PIECES, type UcluGoalDef } from "@/lib/puzzle/levels/uclu";
 import { UCLU_PIECE_COLORS } from "@/lib/puzzle/ucluPalette";
 import UcluGame from "./UcluGame";
 
@@ -14,34 +14,36 @@ function goalRow(g: UcluGoalDef): PuzzleGoalSummary["goals"][number] {
   switch (g.type) {
     case "color": {
       const p = UCLU_PIECE_COLORS[g.color ?? 0];
-      return { icon: "football", label: `${p.name} topla`, count: g.count };
+      return { icon: UCLU_PIECES[g.color ?? 0]?.icon ?? "football", label: `${p.name} topla`, count: g.count };
     }
     case "mud":
       return { icon: "water", label: "Çamuru temizle", count: g.count };
     case "crate":
       return { icon: "cube", label: "Krampon kutularını kır", count: g.count };
     case "snow":
-      return { icon: "snow", label: "Karı kır", count: g.count };
+      return { icon: "snow", label: "Buzu kır", count: g.count };
+    case "net":
+      return { icon: "grid", label: "Kale ağlarını yırt", count: g.count };
+    case "turf":
+      return { icon: "leaf", label: "Sahayı çimlendir", count: g.count };
+    case "cone":
+      return { icon: "triangle", label: "Konileri devir", count: g.count };
     default:
-      return {
-        icon: "trophy",
-        label: "Şampiyonluk kupasını indir",
-        count: g.count,
-      };
+      return { icon: "trophy", label: "Şampiyonluk kupasını indir", count: g.count };
   }
 }
 
 export const ucluModule: PuzzleGameModule = {
   key: "uclu",
   title: "Elit Üçlü",
-  tagline: "Kaydır, üçle, patlat — sahayı temizle!",
+  tagline: "Kaydır, eşleştir, füzeyi ateşle — sahayı temizle!",
   icon: "football",
   tone: "brand",
   boosters: [
     {
       key: "roket",
-      title: "Füze Şut",
-      description: "Maça bir Füze Şut ile başla: patlayınca satırı ya da sütunu temizler.",
+      title: "Füze",
+      description: "Maça bir Füze ile başla: patlayınca satırı ya da sütunu temizler.",
       icon: "rocket",
       kind: "pre",
     },
@@ -79,7 +81,7 @@ export const ucluModule: PuzzleGameModule = {
     return {
       limit: `${L.moves} hamle`,
       goals: L.goals.map(goalRow),
-      badge: L.cup ? "Kupa maçı" : null,
+      badge: L.hardness === "super" ? "Süper zor" : L.hardness === "zor" ? "Zor seviye" : null,
       tip: L.tip,
     };
   },

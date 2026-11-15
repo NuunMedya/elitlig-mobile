@@ -6,14 +6,32 @@
  * şut atar, STOPER duvar olur. Kalene ulaşan her rakip bir GOL: üç gol yersen
  * bölüm kaybedilir ("TEKRAR DENE").
  *
- * BÖLÜMLER (20): her bölüm sabit, tohumlu bir dalga dizisidir ve SON HÜCUM ile
- * (2. bölümden itibaren rakip KAPTAN'la) biter. Bitirince bölüm kazanılır:
- * yenilen gole göre 1–3 yıldız (0 gol 3, 1 gol 2, 2 gol 1), sıradaki bölüm
- * açılır. "start" komutu tuvalde BÖLÜM SEÇ ekranını açar (açılmış bölüm +1'den
- * ötesi kilitli). Zorluk eğrisi, koridor sayısı (8. bölümden itibaren 6),
- * yeni rakip ve yeni oyuncu kartlarının açıldığı bölümler `levelInfo()` ve
- * FOE_INTRO / UNITS.unlock tablolarındadır; yeni bir şey açılınca bölüm
- * başında "YENİ RAKİP: …" / "YENİ OYUNCU: …" kartı çıkar (oyun o sırada bekler).
+ * BÖLÜMLER (100, genişletilebilir): her bölüm sabit, tohumlu bir dalga
+ * dizisidir ve SON HÜCUM ile (3. bölümden itibaren rakip KAPTAN'la) biter.
+ * Bitirince bölüm kazanılır: yenilen gole göre 1–3 yıldız (0 gol 3, 1 gol 2,
+ * 2+ gol 1). Bölüm tasarımı `levelInfo(n)`'dedir: zorluk `difficulty(n)`
+ * (yavaş doğrusal artış + 10'luk testere: her onluğun başı NEFES, sonu zor,
+ * her 10. bölüm KUPA MAÇI: fazladan dalga, güçlü kaptan, 50'den sonra iki
+ * kaptan). Yeni oyuncu / rakip / saha özelliği TEK tablodadır: `PLAN`
+ * (bölüm → tür → anahtar). İlk üç bölüm yalnız TARAFTAR + FORVET'e karşı
+ * HÜCUMCU öğretir; sonra her ~3–5 bölümde bir yenilik gelir, aynı bölümde
+ * ikisi birden gelmez. Yeni bir şey açılınca bölüm başında "YENİ OYUNCU: …" /
+ * "YENİ RAKİP: …" / "YENİ KORİDOR" / saha özelliği kartı çıkar (oyun bekler).
+ * TS ikizi: lib/puzzle/levels/savunma.ts (LEVEL_COUNT, UNLOCKS, goalSummary);
+ * scripts/check-games.mjs iki tarafı 100 bölümün hepsinde karşılaştırır.
+ * Yeni bölüm eklemek = LEVEL_COUNT'u büyütmek (formüller n'e bağlıdır,
+ * mevcut bölümler DEĞİŞMEZ) ya da PLAN'a satır eklemek (iki dosyada birden).
+ *
+ * BÖLÜM MODU (Lig Yolu, docs/oyun-yenileme-2026-11.md §2): RN
+ *   {type:"config", levelMode:true, level:N, boosters:["gunes", …]}
+ * gönderirse "start" doğrudan N. bölümü oynatır (bölüm seçme ekranı, kayıt
+ * ve "sonraki bölüm" yok; sonuç penceresi RN'nindir). Üçüncü gol bölümü
+ * bitirecekken oyun bekler ve {type:"fail", level, canContinue:true} yollar:
+ * {type:"continue"} +1 hak verir ve o koridoru (ve kale ağzını) temizler;
+ * {type:"giveUp"} bölümü kaybettirir. Bölüm başına en çok CONTINUES (1) devam.
+ * Güçlendiriciler (anahtar · etki): gunes · +150 güneş; duvar · en tehlikeli
+ * üç koridorun önüne bedava STOPER. Seviye öncesi config.boosters ile, oyun
+ * içinde {type:"booster", key} ile gelir (stoğu RN düşer).
  *
  * KALICILIK (RN üzerinden; WebView localStorage'ı güvenilmez): RN kaydı
  * {type:"config", store:{unlocked, stars}} ile gönderir (core.js A.store'a
@@ -42,29 +60,43 @@
  * seçtiğin oyuncunun kulübünün formasını giyer; her BÖLÜM ligin bir takımıdır
  * (forma, ad). Son hücumda o takımın KAPTANI gelir.
  *
- * OYUNCULAR (kart · güneş · görev · açıldığı bölüm):
+ * OYUNCULAR (kart · güneş · görev · açıldığı bölüm — PLAN):
  *   TARAFTAR 50   7 sn'de bir +25 güneş (ilk 3 sn). 1
  *   FORVET   100  koridorunda rakip varsa 1,4 sn'de bir şut (25 hasar). 1
- *   STOPER   50   2400 can; rakibi oyalar, ZIPLAYAN üstünden atlayamaz. 2
- *   FÜZE     125  0,9 sn sonra 3×3 alanı temizler (1800 hasar). 3
- *   FISKİYE  25   tuzak: üstünden geçen rakip yarı hıza düşer, ıslanır. 4
- *   ÇİFT     200  her seferinde iki şut. 5
- *   KALECİ   150  ilk dokunan rakibi KAPAR (kaptana 500); 10 sn topu tutar. 6
- *   PRES     150  şutu rakibi 3,5 sn yarı hıza düşürür. 8
- *   ORTACI   175  kendi ve iki komşu koridora orta (havadan: kalkanı aşar). 10
- *   HAKEM    100  anında: düdük, bütün rakipler 4 sn donar (+20 hasar). 13
+ *   STOPER   50   2400 can; rakibi oyalar, ZIPLAYAN/ÇALIMCI aşamaz. 4
+ *   FÜZE     125  0,9 sn sonra 3×3 alanı temizler (1800 hasar). 13
+ *   FISKİYE  25   tuzak: üstünden geçen rakip yarı hıza düşer, ıslanır. 21
+ *   ÇİFT     200  her seferinde iki şut. 31
+ *   ORTACI   175  kendi ve iki komşu koridora orta (havadan: kalkanı aşar). 38
+ *   KALECİ   150  ilk dokunan rakibi KAPAR (kaptana 500); 10 sn topu tutar. 42
+ *   PRES     150  şutu rakibi 3,5 sn yarı hıza düşürür. 52
+ *   HAKEM    100  anında: düdük, bütün rakipler 4 sn donar (+20 hasar). 58
+ *   DAVULCU  75   çevresindeki (3×3) şutçular %30 sık şut atar. 68
+ *   FRİKİKÇİ 225  3,2 sn'de bir falsolu sert şut: 90 hasar, kalkanı aşar, iki rakibi deler. 82
+ *   DOKTOR   100  çevresindeki (3×3) oyuncuları saniyede 30 can iyileştirir. 88
  * Gökten de güneş düşer (+25, arada altın +50): dokun, topla. Üretilen güneş
  * 6 sn içinde toplanmazsa kendiliğinden toplanır. ÇIKAR oyuncuyu kaldırır.
  *
- * RAKİPLER (açıldığı bölüm): HÜCUMCU (200 can) 1 · HIZLI (140, çok hızlı) 3 ·
- * TANK (700, yavaş) 5 · ZIPLAYAN (ilk temasta önündeki oyuncunun üstünden bir
- * kare ileri atlar; STOPER'ı aşamaz) 7 · KALKANLI (önden gelen ilk 5+ şutu
- * kalkanıyla keser) 10 · TOPÇU (menzile girince durur, koridorundaki en yakın
- * oyuncuna top atar: 60 hasar) 12 · KAPTAN (son hücum, 1000+). Temas ettiği
- * oyuncuya saniyede 100 hasar verir. Can bölümle %4,5 artar.
+ * RAKİPLER (açıldığı bölüm): HÜCUMCU (200 can) 1 · HIZLI (140, çok hızlı) 7 ·
+ * TANK (700, yavaş) 17 · ZIPLAYAN (ilk temasta önündeki oyuncunun üstünden bir
+ * kare ileri atlar; STOPER'ı aşamaz) 24 · KALKANLI (önden gelen ilk 5+ şutu
+ * kalkanıyla keser) 34 · TOPÇU (menzile girince durur, koridorundaki en yakın
+ * oyuncuna top atar: 60 hasar) 48 · ÇALIMCI (ilk oyuncuyu çalımlayıp komşu
+ * koridora geçer; STOPER'a çalım atılmaz) 55 · DEV (1500 can, çok yavaş, çift
+ * temas hasarı) 65 · KAFİLE (durdurulunca iki HIZLI'ya bölünür) 76 · KAPTAN
+ * (son hücum, 800 + 100 × zorluk; kupa maçında ×1,5). Temas ettiği oyuncuya
+ * saniyede 100 hasar verir. Can zorlukla %5 artar.
  *
- * PUAN: rakip başına 10–30, kaptan 80; dalga bitince 50 × dalga; bölüm
- * kazanılınca 100 + 20 × bölüm + 50 × yıldız.
+ * SAHA ÖZELLİKLERİ: 6. KORİDOR 27 · KUPA MAÇI (her 10. bölüm) 10 · YAĞMUR
+ * (rakip %12 hızlı, gökten az güneş) 45 · ÇAMUR (2–4 kareye oyuncu konmaz,
+ * rakip orada ağırlaşır) 62 · GECE MAÇI (koşu yolu karanlık, uyarı oku yok,
+ * gökten az güneş, +25 başlangıç güneşi) 72. Tanıtımdan sonra kurallı
+ * bölümlerde tekrar eder (bkz. levelInfo).
+ *
+ * PUAN: rakip başına 10–50, kaptan 80; dalga bitince 50 × dalga; bölüm
+ * kazanılınca 100 + 20 × bölüm + 50 × yıldız. (Sunucu tavanı
+ * arenaPlausibility.CEILINGS.savunma: defeated × 80 + 25·w(w+1) + 100 +
+ * 20 × bölüm + 150 — en çok 6 dalga, rakip puanı ≤ 80: tavan geçerli.)
  */
 (function () {
   "use strict";
@@ -151,16 +183,19 @@
   var UNITS = {
     taraftar: { name: "TARAFTAR", cost: 50, hp: 300, recharge: 5, color: "#FFB21E", unlock: 1, desc: "Güneş üretir" },
     forvet: { name: "FORVET", cost: 100, hp: 300, recharge: 4, color: "#7C5CFF", unlock: 1, desc: "Şut atar" },
-    stoper: { name: "STOPER", cost: 50, hp: 2400, recharge: 14, color: "#2F80ED", unlock: 2, desc: "Duvar olur, atlatmaz" },
-    fuze: { name: "FÜZE", cost: 125, hp: 9999, recharge: 26, color: "#FF3B5C", unlock: 3, desc: "3×3 alanı temizler" },
-    fiskiye: { name: "FISKİYE", cost: 25, hp: 1, recharge: 8, color: "#14C8E8", unlock: 4, desc: "Çimi ıslatır, yavaşlatır", trap: true },
-    cift: { name: "ÇİFT", cost: 200, hp: 300, recharge: 7, color: "#FF8A1F", unlock: 5, desc: "İki şut birden" },
-    kaleci: { name: "KALECİ", cost: 150, hp: 1200, recharge: 16, color: "#7ED321", unlock: 6, desc: "Rakibi kapar" },
-    pres: { name: "PRES", cost: 150, hp: 300, recharge: 7, color: "#38BDF8", unlock: 8, desc: "Şutu yavaşlatır" },
-    ortaci: { name: "ORTACI", cost: 175, hp: 300, recharge: 8, color: "#D946EF", unlock: 10, desc: "Üç koridora orta, kalkanı aşar" },
-    hakem: { name: "HAKEM", cost: 100, hp: 1, recharge: 35, color: "#FFD400", unlock: 13, desc: "Herkesi dondurur", instant: true },
+    stoper: { name: "STOPER", cost: 50, hp: 2400, recharge: 14, color: "#2F80ED", desc: "Duvar olur, atlatmaz" },
+    fuze: { name: "FÜZE", cost: 125, hp: 9999, recharge: 26, color: "#FF3B5C", desc: "3×3 alanı temizler" },
+    fiskiye: { name: "FISKİYE", cost: 25, hp: 1, recharge: 8, color: "#14C8E8", desc: "Çimi ıslatır, yavaşlatır", trap: true },
+    cift: { name: "ÇİFT", cost: 200, hp: 300, recharge: 7, color: "#FF8A1F", desc: "İki şut birden" },
+    kaleci: { name: "KALECİ", cost: 150, hp: 1200, recharge: 16, color: "#7ED321", desc: "Rakibi kapar" },
+    pres: { name: "PRES", cost: 150, hp: 300, recharge: 7, color: "#38BDF8", desc: "Şutu yavaşlatır" },
+    ortaci: { name: "ORTACI", cost: 175, hp: 300, recharge: 8, color: "#D946EF", desc: "Üç koridora orta, kalkanı aşar" },
+    hakem: { name: "HAKEM", cost: 100, hp: 1, recharge: 35, color: "#FFD400", desc: "Herkesi dondurur", instant: true },
+    davulcu: { name: "DAVULCU", cost: 75, hp: 300, recharge: 8, color: "#F59E0B", desc: "Yanındaki şutçular daha sık şut atar" },
+    frikik: { name: "FRİKİKÇİ", cost: 225, hp: 300, recharge: 9, color: "#10B981", desc: "Falsolu sert şut: kalkanı aşar, iki rakibi deler" },
+    doktor: { name: "DOKTOR", cost: 100, hp: 300, recharge: 12, color: "#EF4444", desc: "Yanındaki oyuncuları iyileştirir" },
   };
-  var ORDER = ["taraftar", "forvet", "stoper", "fuze", "fiskiye", "cift", "kaleci", "pres", "ortaci", "hakem"];
+  var ORDER = ["taraftar", "forvet", "stoper", "fuze", "fiskiye", "cift", "ortaci", "kaleci", "pres", "hakem", "davulcu", "frikik", "doktor"];
   var FOES = {
     hucum: { name: "HÜCUMCU", hp: 200, v: 0.46, pts: 10, k: 1, cost: 1, color: "#FF4D6A", desc: "Kaleye yürür" },
     kanat: { name: "HIZLI", hp: 140, v: 0.95, pts: 15, k: 0.94, cost: 1.4, color: "#FF8A1F", desc: "Çok hızlı koşar, canı az" },
@@ -168,39 +203,133 @@
     ziplayan: { name: "ZIPLAYAN", hp: 220, v: 0.55, pts: 20, k: 1, cost: 1.8, color: "#22C55E", desc: "Önündeki oyuncunun üstünden atlar · STOPER durdurur" },
     kalkanli: { name: "KALKANLI", hp: 240, v: 0.42, pts: 20, k: 1.04, cost: 2, color: "#2F80ED", desc: "Kalkanı ilk şutları keser · ORTA havadan aşar" },
     topcu: { name: "TOPÇU", hp: 240, v: 0.42, pts: 25, k: 1.02, cost: 2.2, color: "#E11D48", desc: "Uzaktan durup oyuncularına top atar" },
+    calimci: { name: "ÇALIMCI", hp: 260, v: 0.58, pts: 25, k: 1, cost: 2, color: "#EC4899", desc: "İlk oyuncuyu çalımlayıp yan koridora geçer · STOPER'a çalım atılmaz" },
+    dev: { name: "DEV", hp: 1500, v: 0.26, pts: 50, k: 1.5, cost: 5.5, color: "#475569", desc: "Dev gibi: çok sağlam, oyuncuları çabuk yıpratır" },
+    kafile: { name: "KAFİLE", hp: 300, v: 0.44, pts: 20, k: 1.08, cost: 2.6, color: "#F97316", desc: "Durdurulunca iki HIZLI'ya bölünür" },
     kaptan: { name: "KAPTAN", hp: 1000, v: 0.3, pts: 80, k: 1.36, cost: 0, color: "#FFD400", desc: "Son hücumu yönetir" },
   };
-  var FOE_ORDER = ["hucum", "kanat", "santrfor", "ziplayan", "kalkanli", "topcu"];
-  /** Rakip türlerinin ilk göründüğü bölüm. */
-  var FOE_INTRO = { kanat: 3, santrfor: 5, ziplayan: 7, kalkanli: 10, topcu: 12 };
-  var MAX_LEVEL = 20, LANE6_AT = 8;
+  var FOE_ORDER = ["hucum", "kanat", "santrfor", "ziplayan", "kalkanli", "topcu", "calimci", "dev", "kafile"];
+  /** Saha özellikleri (tanıtım kartı + bölüm rozeti). */
+  var FEATURES = {
+    lane: { name: "6. KORİDOR", desc: "Saha genişledi: altı koridoru da koru", color: "#22C55E" },
+    kupa: { name: "KUPA MAÇI", desc: "Her 10. bölüm: fazladan dalga, güçlü kaptan", color: "#FFD400" },
+    yagmur: { name: "YAĞMUR", desc: "Çim kaygan: rakipler hızlı koşar, gökten az güneş düşer", color: "#38BDF8" },
+    camur: { name: "ÇAMUR", desc: "Çamurlu kareye oyuncu konmaz; rakip orada ağırlaşır", color: "#A16207" },
+    gece: { name: "GECE MAÇI", desc: "Koşu yolu karanlık: rakipler sahaya girince görünür", color: "#6366F1" },
+  };
+
+  /**
+   * AÇILIŞ TAKVİMİ — tek kaynak: [bölüm, tür, anahtar]. Tür unit | foe |
+   * lane | feature. Aynı bölümde tek yenilik; aralar ~3–5 bölüm; kupa
+   * bölümlerinde (10'un katları) yalnız ilk kupa tanıtılır. TS ikizi
+   * lib/puzzle/levels/savunma.ts UNLOCKS ile AYNI olmalıdır (check-games).
+   */
+  var PLAN = [
+    [4, "unit", "stoper"],
+    [7, "foe", "kanat"],
+    [10, "feature", "kupa"],
+    [13, "unit", "fuze"],
+    [17, "foe", "santrfor"],
+    [21, "unit", "fiskiye"],
+    [24, "foe", "ziplayan"],
+    [27, "lane", "lane"],
+    [31, "unit", "cift"],
+    [34, "foe", "kalkanli"],
+    [38, "unit", "ortaci"],
+    [42, "unit", "kaleci"],
+    [45, "feature", "yagmur"],
+    [48, "foe", "topcu"],
+    [52, "unit", "pres"],
+    [55, "foe", "calimci"],
+    [58, "unit", "hakem"],
+    [62, "feature", "camur"],
+    [65, "foe", "dev"],
+    [68, "unit", "davulcu"],
+    [72, "feature", "gece"],
+    [76, "foe", "kafile"],
+    [82, "unit", "frikik"],
+    [88, "unit", "doktor"],
+  ];
+  function planAt(key) {
+    for (var i = 0; i < PLAN.length; i++) if (PLAN[i][2] === key) return PLAN[i][0];
+    return 1e9;
+  }
+  ORDER.forEach(function (k) {
+    if (!UNITS[k].unlock) UNITS[k].unlock = planAt(k);
+  });
+  /** Rakip türlerinin ilk göründüğü bölüm (PLAN'dan). */
+  var FOE_INTRO = {};
+  PLAN.forEach(function (p) {
+    if (p[1] === "foe") FOE_INTRO[p[2]] = p[0];
+  });
+  /** Bölüm sayısı (genişletilebilir: formüller n'e bağlı, mevcut bölümler değişmez). */
+  var LEVEL_COUNT = 100, MAX_LEVEL = LEVEL_COUNT;
+  var LANE6_AT = planAt("lane"), CUP_AT = planAt("kupa"), RAIN_AT = planAt("yagmur"), MUD_AT = planAt("camur"), NIGHT_AT = planAt("gece");
+  /** Bölüm modunda üçüncü golden sonra reklamla devam hakkı (bölüm başına; çerçeve de 1 sorar). */
+  var CONTINUES = 1;
   var EAT = 100; // temas hasarı / sn
   var PRODUCE = 7, FIRST_PRODUCE = 3, AUTO_COLLECT = 6, FIRE = 1.4;
   var LOB_EVERY = 2.6, LOB_DMG = 45, LOB_T = 0.75;
   var CHEW = 10, FREEZE = 4, WET_DPS = 12;
   var LEAP_T = 0.8, TOPCU_R = 6.2, TOPCU_EVERY = 2.8, FBALL_V = 9, FBALL_DMG = 60;
+  var DRUM = 0.7, FK_EVERY = 3.2, FK_DMG = 90, FK_PIERCE = 2, HEAL = 30, DODGE_T = 0.45;
+  /** 10'luk testere: onluğun başı nefes, sonu zor, 10. bölüm kupa. */
+  var SAW = [0, -0.6, -0.4, -0.2, 0, 0.1, 0.25, 0.4, 0.55, 0.7, 0.9];
+
+  function planOf(n) {
+    return PLAN.filter(function (p) {
+      return p[0] === n;
+    });
+  }
+  /**
+   * Zorluk (eski 20 bölümlük oyunun "bölüm" birimiyle): 1'den başlar,
+   * bölüm başına 0,19 artar (100. bölüm ≈ 20); testereyle dalgalanır. Yeni
+   * rakip / saha özelliği tanıtılan bölüm biraz kolaylaşır (öğrenme payı).
+   */
+  function difficulty(n) {
+    var d = 1 + (n - 1) * 0.19 + SAW[((n - 1) % 10) + 1];
+    if (planOf(n).some(function (p) { return p[1] !== "unit"; })) d -= 0.4;
+    return Math.round(Math.max(1, d) * 100) / 100;
+  }
 
   /**
    * Bölüm tasarımı (formülle "elle"): dalga sayısı, koridor, başlangıç güneşi,
-   * can çarpanı, bölümün yeni rakibi ve yeni kartları.
+   * can çarpanı, kaptan(lar), saha özellikleri, bölümün yenilikleri.
+   * lib/puzzle/levels/savunma.ts `savunmaLevel` ile AYNI (check-games).
    */
   function levelInfo(n) {
+    var news = planOf(n);
+    var intro = news.length > 0;
+    var d = difficulty(n);
+    var cup = n >= CUP_AT && n % 10 === 0;
+    var rain = n === RAIN_AT || (n > RAIN_AT && n % 4 === 1 && !intro);
+    var mud = n === MUD_AT || (n > MUD_AT && n % 5 === 2 && !intro);
+    var night = n === NIGHT_AT || (n > NIGHT_AT && (n % 3 === 0 || n % 50 === 0) && !intro);
     var nf = null;
-    for (var k in FOE_INTRO) if (FOE_INTRO[k] === n) nf = k;
+    news.forEach(function (p) {
+      if (p[1] === "foe") nf = p[2];
+    });
     return {
       n: n,
-      waves: n <= 2 ? 2 : n <= 6 ? 3 : n <= 13 ? 4 : 5,
+      d: d,
+      waves: (d <= 2 ? 2 : d <= 6 ? 3 : d <= 13 ? 4 : 5) + (cup ? 1 : 0),
       lanes: n >= LANE6_AT ? 6 : 5,
-      start: 150 + 15 * Math.min(n - 1, 8),
-      hp: 1 + 0.05 * (n - 1),
-      boss: n >= 2,
+      start: Math.round((150 + 15 * Math.min(d - 1, 8)) / 5) * 5 + (night ? 25 : 0),
+      hp: Math.round((1 + 0.05 * (d - 1)) * 100) / 100,
+      boss: n >= 3,
+      cup: cup,
+      kaptans: n >= 3 ? (cup && n >= 50 ? 2 : 1) : 0,
+      rain: rain,
+      mud: mud,
+      night: night,
       newFoe: nf,
-      newCards: n > 1 ? ORDER.filter(function (k) { return UNITS[k].unlock === n; }) : [],
+      newCards: news.filter(function (p) { return p[1] === "unit"; }).map(function (p) { return p[2]; }),
+      news: news.map(function (p) { return { kind: p[1], key: p[2] }; }),
     };
   }
 
   var W = 0, H = 0;
-  var state = "attract"; // attract | select | play | dying | won | lost
+  var state = "attract"; // attract | select | play | await (devam sorusu) | dying | won | lost
   var grid = []; // grid[lane][row] = unit | null
   var units = [], foes = [], shots = [], lobs = [], fballs = [], orbs = [], blasts = [], refs = [];
   var level = 1, info = levelInfo(1);
@@ -214,12 +343,17 @@
   var sunBump = 0, flashRed = 0, stateT = 0, goalFlash = 0, goalLane = 2, lostAt = -9;
   var uid = 0;
   var zaps = []; // güneş sayacına uçan ışıklar (ekran)
-  var pops = [], popAt = 0; // bölüm başı tanıtım kartları: {kind:"unit"|"foe"|"lane", key}
+  var pops = [], popAt = 0; // bölüm başı tanıtım kartları: {kind:"unit"|"foe"|"lane"|"feature", key}
   var press = {}; // kart basma anı (yaylı küçülme)
   var shownPts = 0, shownSun = 150;
   var result = null; // { won, stars, points, sent }
   var progress = { unlocked: 1, stars: {} };
-  var lastPicked = 1, lockShake = { n: 0, at: -9 };
+  var lastPicked = 1, lockShake = { n: 0, at: -9 }, selPage = 0;
+  var mud = {}; // çamurlu kareler: "koridor:sütun" → true
+  var continued = 0; // bu bölümde kullanılan devam hakkı
+  /** Bölüm modu (Lig Yolu): RN config ile gelir; start doğrudan bu bölümü oynatır. */
+  var lm = { on: false, level: 1, boosters: [] };
+  var BOOSTER_KEYS = { gunes: 1, duvar: 1 };
 
   /* ─────────────────────────── kalıcılık (RN) ─────────────────────────── */
 
@@ -267,7 +401,29 @@
   }
   function canPlace(type, lane, row) {
     if (!UNITS[type] || lane < 0 || row < 0 || lane >= LANES || row >= ROWS) return false;
-    return UNITS[type].instant ? true : !grid[lane][row];
+    return UNITS[type].instant ? true : !grid[lane][row] && !mud[lane + ":" + row];
+  }
+  /** Çevresinde (3×3) DAVULCU olan şutçu daha sık şut atar. */
+  function drummed(u) {
+    for (var l = Math.max(0, u.lane - 1); l <= Math.min(LANES - 1, u.lane + 1); l++)
+      for (var r = Math.max(0, u.row - 1); r <= Math.min(ROWS - 1, u.row + 1); r++) if (grid[l][r] && grid[l][r].type === "davulcu") return true;
+    return false;
+  }
+  /** Rakibin bulunduğu kare çamurlu mu (çamur rakibi ağırlaştırır). */
+  function inMud(f) {
+    return mud[f.lane + ":" + Math.floor((f.z - Z0) / CD)] === true;
+  }
+  /**
+   * Çamurlu kareler (bölüm tohumlu): 2–4 kare, sütun 1–5 arası (dikey 7 ve
+   * yatay 9 sütunlu sahada aynı kareler).
+   */
+  function mudCells(n, lanes) {
+    var out = {};
+    if (!levelInfo(n).mud) return out;
+    var rnd = A.seeded(n * 977 + 31);
+    var want = 2 + ((rnd() * 3) | 0), guard = 0;
+    while (Object.keys(out).length < want && guard++ < 40) out[((rnd() * lanes) | 0) + ":" + (1 + ((rnd() * 5) | 0))] = true;
+    return out;
   }
 
   /** Dünyayı n. bölüm için kurar (vitrin de 1. bölümün sahasını kullanır). */
@@ -276,6 +432,8 @@
     info = levelInfo(level);
     LANES = info.lanes;
     configureField();
+    mud = mudCells(level, LANES);
+    continued = 0;
     grid = [];
     for (var l = 0; l < LANES; l++) {
       grid.push([]);
@@ -324,11 +482,12 @@
     surged = false;
     var rnd = A.seeded(level * 131 + wave * 17 + 5);
     var last = wave === info.waves;
-    var base = (2.6 + level * 1.05 + Math.max(0, level - 9) * 0.7) * (LANES / 5);
+    var d = info.d;
+    var base = (2.6 + d * 1.05 + Math.max(0, d - 9) * 0.7) * (LANES / 5);
     var budget = base * (0.6 + (0.6 * (wave - 1)) / Math.max(1, info.waves - 1)) * (last ? 1.4 : 1);
     var surge = budget * (last ? 0.45 : 0.25);
-    var t = wave === 1 ? 14 + Math.min(level, 10) * 0.6 : 6;
-    var gap = Math.max(2.4, 9.5 - level * 0.3 - (wave - 1) * 0.6);
+    var t = wave === 1 ? 14 + Math.min(d, 10) * 0.6 : 6;
+    var gap = Math.max(2.4, 9.5 - d * 0.3 - (wave - 1) * 0.6);
     var lastLane = -1, streak = 0, count = 0;
     function lane() {
       var l = (rnd() * LANES) | 0;
@@ -337,10 +496,12 @@
       lastLane = l;
       return l;
     }
+    // Tür ağırlığı: tanıtıldıktan sonra yavaşça artar (4 bölümde ≈ eski 1 bölüm).
     var pool = [["hucum", 1]], sum = 1;
+    var WEIGHT = { santrfor: 0.6, dev: 0.35, kafile: 0.7 };
     for (var k in FOE_INTRO) {
       if (level < FOE_INTRO[k]) continue;
-      var w = Math.min(0.55, 0.28 + 0.05 * (level - FOE_INTRO[k])) * (k === "santrfor" ? 0.6 : 1);
+      var w = Math.min(0.55, 0.28 + 0.0125 * (level - FOE_INTRO[k])) * (WEIGHT[k] || 1);
       pool.push([k, w]);
       sum += w;
     }
@@ -369,16 +530,144 @@
       queue.push({ t: t + rnd() * span, type: ty2, lane: lane() });
       budget -= FOES[ty2].cost;
     }
-    if (last && info.boss) queue.push({ t: t + span * 0.5, type: "kaptan", lane: ((LANES - 1) / 2) | 0 });
+    if (last && info.boss) {
+      for (var kq = 0; kq < info.kaptans; kq++) queue.push({ t: t + span * (0.5 + kq * 0.35), type: "kaptan", lane: (((LANES - 1) / 2) | 0) + (kq ? (kq % 2 ? 2 : -2) : 0) });
+    }
     queue.sort(function (a, b) {
       return a.t - b.t;
     });
   }
 
   /** RN "start": tuvalde BÖLÜM SEÇ ekranı (arkada vitrin oynar). */
+  /**
+   * RN "start": bölüm modunda doğrudan config.level oynanır (seçim ekranı
+   * yok) ve seviye öncesi güçlendiriciler uygulanır; eski modda tuvalde
+   * BÖLÜM SEÇ ekranı açılır (arkada vitrin oynar).
+   */
   function start() {
+    if (lm.on) {
+      play(lm.level);
+      lm.boosters.forEach(function (k) {
+        applyBooster(k, true);
+      });
+      var g = goalText(level);
+      A.send("levelInfo", { level: level, goal: g.goal, tip: g.tip });
+      return;
+    }
     if (A.store) storeLoaded(A.store);
     goSelect();
+  }
+
+  /* ─────────────────────────── bölüm modu (Lig Yolu) ─────────────────────────── */
+
+  /** {type:"config", levelMode, level, boosters} — tekrar gelse de zararsız. */
+  function levelConfig(cmd) {
+    if (!cmd || typeof cmd !== "object") return;
+    if (cmd.levelMode != null) lm.on = !!cmd.levelMode;
+    var n = Math.floor(+cmd.level);
+    if (isFinite(n) && n >= 1) lm.level = Math.min(n, MAX_LEVEL);
+    if (Array.isArray(cmd.boosters))
+      lm.boosters = cmd.boosters.filter(function (k) {
+        return typeof k === "string" && BOOSTER_KEYS[k];
+      });
+  }
+  /** Başlangıç penceresi / RN için kısa hedef ve (yenilik varsa) ipucu. */
+  function goalText(n) {
+    var li = levelInfo(n);
+    var goal = li.waves + " dalgayı durdur" + (li.boss ? ", son hücumda " + (li.kaptans > 1 ? li.kaptans + " kaptan" : "kaptan") : "") + " · en çok 2 gol";
+    var tip = null;
+    li.news.forEach(function (p) {
+      var D = p.kind === "unit" ? UNITS[p.key] : p.kind === "foe" ? FOES[p.key] : FEATURES[p.key];
+      tip = (p.kind === "unit" ? "Yeni oyuncu: " : p.kind === "foe" ? "Yeni rakip: " : "Yeni: ") + D.name + " — " + D.desc;
+    });
+    return { goal: goal, tip: tip };
+  }
+  /**
+   * Güçlendirici: gunes +150 güneş; duvar en tehlikeli üç koridorun (rakibi
+   * kaleye en yakın olan; rakip yoksa ortadakiler) önüne bedava STOPER.
+   * pre: seviye öncesi (yazı/ses yok). Uygulandıysa true.
+   */
+  function applyBooster(key, pre) {
+    if (state !== "play" && state !== "await") return false;
+    if (key === "gunes") {
+      energy = Math.min(9990, energy + 150);
+      if (pre) shownSun = energy;
+      else {
+        sunBump = 1;
+        A.announce("+150 GÜNEŞ", "Güneş yağmuru!", SUN);
+      }
+    } else if (key === "duvar") {
+      var near = [];
+      for (var l = 0; l < LANES; l++) {
+        var z = 99;
+        foes.forEach(function (f) {
+          if (!f.dead && f.lane === l) z = Math.min(z, f.z);
+        });
+        near.push({ l: l, z: z, mid: Math.abs(l - (LANES - 1) / 2) });
+      }
+      near.sort(function (a, b) {
+        return a.z - b.z || a.mid - b.mid || a.l - b.l;
+      });
+      var put = 0;
+      for (var i = 0; i < near.length && put < 3; i++) {
+        // koridorun en öndeki boş karesi (rakibin önünde kalan)
+        for (var r = ROWS - 1; r >= 0; r--) {
+          if (cellZ(r) > near[i].z - 0.6 || !canPlace("stoper", near[i].l, r)) continue;
+          place("stoper", near[i].l, r, true);
+          put += 1;
+          break;
+        }
+      }
+      if (!put) return false;
+      if (!pre) A.announce("DUVAR!", put + " koridora STOPER dikildi", "#8EC5FF");
+    } else return false;
+    if (!pre) {
+      A.sound("power");
+      A.haptic("success");
+    }
+    return true;
+  }
+  /** Üçüncü gol: bölüm modunda devam hakkı varsa oyun bekler ve RN'ye sorar. */
+  function askContinue() {
+    state = "await";
+    stateT = 0;
+    selected = null;
+    dragging = false;
+    A.send("fail", { level: level, canContinue: true });
+  }
+  /** Reklamla devam: +1 hak; golün geldiği koridor ve kale ağzı temizlenir. */
+  function continueLevel() {
+    if (state !== "await") return;
+    continued += 1;
+    lives = 1;
+    foes.forEach(function (f) {
+      if (f.dead) return;
+      if (f.lane === goalLane || f.z < cellZ(1)) {
+        f.dead = true;
+        f.at = A.time;
+        blast("puff", f.lane, f.z);
+      } else f.frozen = Math.max(f.frozen, 2);
+    });
+    state = "play";
+    stateT = 0;
+    A.announce("DEVAM!", "Son hakkın · koridor temizlendi", GOOD);
+    A.sound("whistle");
+    A.haptic("success");
+  }
+  function giveUp() {
+    if (state !== "await" && state !== "play") return;
+    state = "dying";
+    stateT = 0;
+    selected = null;
+    dragging = false;
+  }
+  /** Oyuna özgü RN komutları (core.js varsayılan dalı). */
+  function command(cmd) {
+    if (!cmd) return;
+    if (cmd.type === "booster") applyBooster(String(cmd.key || ""), false);
+    else if (cmd.type === "continue") continueLevel();
+    else if (cmd.type === "giveUp") giveUp();
+    else if (cmd.type === "levelConfig") levelConfig(cmd);
   }
   function goSelect() {
     resetWorld(1);
@@ -388,6 +677,7 @@
     A.particles.length = 0;
     A.floaters.length = 0;
     lastPicked = Math.min(Math.max(lastPicked, 1), progress.unlocked);
+    selPage = Math.floor((lastPicked - 1) / PAGE);
   }
   /** n. bölümü başlatır (kilitli olsa da: testler ve "SONRAKİ BÖLÜM"). */
   function play(n) {
@@ -399,10 +689,8 @@
     A.floaters.length = 0;
     A.banner = null;
     A.sound("whistle");
-    info.newFoe && pops.push({ kind: "foe", key: info.newFoe });
-    if (level === LANE6_AT) pops.push({ kind: "lane", key: "lane" });
-    info.newCards.forEach(function (k) {
-      pops.push({ kind: "unit", key: k });
+    info.news.forEach(function (p) {
+      pops.push({ kind: p.kind, key: p.key });
     });
     popAt = A.time;
     if (pops.length) {
@@ -420,7 +708,7 @@
     hp = hp || F.hp;
     return {
       id: ++uid, type: type, lane: lane, z: z, hp: hp, hp0: hp, v: F.v, slow: 0, frozen: 0, wet: 0, hitAt: -9, eating: null, phase: Math.random() * 6, dead: false, at: 0,
-      shield: type === "kalkanli" ? 5 + Math.floor(level / 5) : 0, shield0: type === "kalkanli" ? 5 + Math.floor(level / 5) : 0, shieldHit: -9, jumped: false, leap: null, next: 0.8, kickAt: -9, aim: false,
+      shield: type === "kalkanli" ? 5 + Math.floor(info.d / 5) : 0, shield0: type === "kalkanli" ? 5 + Math.floor(info.d / 5) : 0, dodged: false, dodge: null, shieldHit: -9, jumped: false, leap: null, next: 0.8, kickAt: -9, aim: false,
     };
   }
 
@@ -510,6 +798,14 @@
     if (f.hp <= 0) {
       f.dead = true;
       f.at = A.time;
+      if (f.type === "kafile") {
+        // KAFİLE dağılır: iki HIZLI koşmaya devam eder
+        for (var kk = 0; kk < 2; kk++) {
+          var sp = newFoe("kanat", f.lane, f.z + 0.4 + kk * 0.7, Math.round(FOES.kanat.hp * info.hp * 0.6));
+          sp.v = FOES.kanat.v * (info.rain ? 1.12 : 1);
+          foes.push(sp);
+        }
+      }
       if (state === "play") {
         defeated += 1;
         points += FOES[f.type].pts;
@@ -540,10 +836,13 @@
     var bonus = 100 + 20 * level + 50 * stars;
     points += bonus;
     result = { won: true, stars: stars, bonus: bonus, sent: false, best: (progress.stars[level] || 0) < stars };
-    progress.stars[level] = Math.max(progress.stars[level] || 0, stars);
-    progress.unlocked = Math.max(progress.unlocked, Math.min(MAX_LEVEL, level + 1));
-    lastPicked = Math.min(MAX_LEVEL, level + 1);
-    saveStore();
+    if (!lm.on) {
+      // bölüm modunda ilerleme RN'nindir (kayıt yok)
+      progress.stars[level] = Math.max(progress.stars[level] || 0, stars);
+      progress.unlocked = Math.max(progress.unlocked, Math.min(MAX_LEVEL, level + 1));
+      lastPicked = Math.min(MAX_LEVEL, level + 1);
+      saveStore();
+    }
     state = "won";
     stateT = 0;
     selected = null;
@@ -577,6 +876,7 @@
       if (stateT > 1.4) sendOver();
       return;
     }
+    if (state === "await") return; // RN'nin devam / pes cevabını bekler
     var playing = state === "play";
     var demo = state === "attract" || state === "select";
 
@@ -630,9 +930,9 @@
         var q = queue.shift();
         if (q.lane >= LANES) q.lane = LANES - 1;
         var F = FOES[q.type];
-        var hp = Math.round(q.type === "kaptan" ? 800 + 100 * level : F.hp * (demo ? 1 : info.hp));
+        var hp = Math.round(q.type === "kaptan" ? (800 + 100 * info.d) * (info.cup ? 1.5 : 1) : F.hp * (demo ? 1 : info.hp));
         var nf = newFoe(q.type, q.lane, SPAWN_Z + Math.random() * 0.8, hp);
-        nf.v = F.v * A.rand(0.94, 1.06);
+        nf.v = F.v * A.rand(0.94, 1.06) * (info.rain && !demo ? 1.12 : 1);
         foes.push(nf);
       }
       if (playing && !queue.length && !foes.some(function (f) { return !f.dead; })) {
@@ -666,7 +966,7 @@
     if (playing) {
       skyT -= dt;
       if (skyT <= 0) {
-        skyT = A.rand(5.5, 7.5);
+        skyT = A.rand(5.5, 7.5) * (info.rain ? 1.4 : 1) * (info.night ? 1.5 : 1);
         skyN += 1;
         orbs.push({ id: ++uid, lane: ((Math.random() * LANES) | 0) + A.rand(-0.2, 0.2), z: cellZ((Math.random() * ROWS) | 0) + A.rand(-0.4, 0.4), y: 10, v: skyN % 5 === 0 ? SKY_V * 2 : SKY_V, born: A.time, taken: false, at: 0, sky: true });
       }
@@ -723,11 +1023,20 @@
             var mv = tgt.eating || tgt.frozen > 0 || tgt.aim ? 0 : tgt.v * (tgt.slow > 0 ? 0.5 : 1);
             lobs.push({ id: ++uid, lane: tgt.lane, z0: u.z + 0.4, l0: u.lane, z1: Math.max(GOAL_Z, tgt.z - mv * LOB_T), l1: tgt.lane, t: 0 });
             u.kickAt = A.time;
-            u.next = LOB_EVERY;
+            u.next = LOB_EVERY * (drummed(u) ? DRUM : 1);
             if (playing && Math.random() < 0.4) A.sound("kick");
           } else u.next = 0.25;
         }
-      } else if (ty3 === "forvet" || ty3 === "pres" || ty3 === "cift") {
+      } else if (ty3 === "doktor") {
+        // DOKTOR: 3×3 çevresindeki oyuncular iyileşir
+        for (var dl = Math.max(0, u.lane - 1); dl <= Math.min(LANES - 1, u.lane + 1); dl++)
+          for (var dr = Math.max(0, u.row - 1); dr <= Math.min(ROWS - 1, u.row + 1); dr++) {
+            var pt2 = grid[dl][dr];
+            if (!pt2 || pt2.hp >= pt2.hp0 || UNITS[pt2.type].trap || pt2.type === "fuze") continue;
+            pt2.hp = Math.min(pt2.hp0, pt2.hp + HEAL * dt);
+            pt2.healAt = A.time;
+          }
+      } else if (ty3 === "forvet" || ty3 === "pres" || ty3 === "cift" || ty3 === "frikik") {
         var threat = false;
         for (var tf = 0; tf < foes.length; tf++)
           if (!foes[tf].dead && foes[tf].lane === u.lane && foes[tf].z > u.z - 0.2 && foes[tf].z < SPAWN_Z - 1) {
@@ -737,9 +1046,10 @@
         if (threat && u.next <= 0.16 && u.kickAt < A.time - 0.6) u.kickAt = A.time;
         if (u.next <= 0) {
           if (threat) {
-            shots.push({ lane: u.lane, z: u.z + 0.6, z0: u.z + 0.6, slow: ty3 === "pres", dmg: SHOT_DMG, id: ++uid, kind: ty3 });
+            var fk = ty3 === "frikik";
+            shots.push({ lane: u.lane, z: u.z + 0.6, z0: u.z + 0.6, slow: ty3 === "pres", dmg: fk ? FK_DMG : SHOT_DMG, id: ++uid, kind: ty3, pierce: fk ? FK_PIERCE : 1, hits: fk ? {} : null });
             if (ty3 === "cift") u.second = 0.2;
-            u.next = FIRE;
+            u.next = (fk ? FK_EVERY : FIRE) * (drummed(u) ? DRUM : 1);
             if (playing && Math.random() < 0.25) A.sound("shoot");
           } else u.next = 0.2;
         }
@@ -760,10 +1070,16 @@
       var hit = null;
       for (var hf = 0; hf < foes.length; hf++) {
         var f2 = foes[hf];
-        if (f2.dead || f2.lane !== s.lane || f2.leap) continue;
+        if (f2.dead || f2.lane !== s.lane || f2.leap || (s.hits && s.hits[f2.id])) continue;
         if (Math.abs(f2.z - s.z) < 0.5 && (!hit || f2.z < hit.z)) hit = f2;
       }
-      if (hit) {
+      if (hit && s.hits) {
+        // FRİKİK: falso kalkanı aşar, top deler geçer
+        s.hits[hit.id] = true;
+        hurtFoe(hit, s.dmg, false);
+        blast("hit", s.lane, hit.z - 0.3, "frikik");
+        if (--s.pierce <= 0) shots.splice(si, 1);
+      } else if (hit) {
         if (hit.shield > 0) {
           hit.shield -= 1;
           hit.shieldHit = A.time;
@@ -840,7 +1156,7 @@
         }
       } else {
         // önündeki oyuncu (aynı koridor, temas mesafesinde); fıskiye ıslatır
-        var victim = null, jumpOver = null;
+        var victim = null, jumpOver = null, dribble = null;
         for (var r = ROWS - 1; r >= 0; r--) {
           var cand = grid[f.lane][r];
           if (!cand) continue;
@@ -856,6 +1172,10 @@
           var gap2 = f.z - cand.z;
           if (f.type === "ziplayan" && !f.jumped && gap2 < 1.3 && gap2 > -0.4) {
             jumpOver = cand;
+            break;
+          }
+          if (f.type === "calimci" && !f.dodged && gap2 < 1.1 && gap2 > -0.4) {
+            dribble = cand;
             break;
           }
           if (gap2 < 0.85 && gap2 > -0.4) {
@@ -880,6 +1200,30 @@
             continue;
           }
         }
+        if (dribble) {
+          f.dodged = true;
+          if (dribble.type === "stoper") {
+            // STOPER'a çalım atılmaz: düz hücumcu gibi oyalanır
+            blast("bonk", f.lane, dribble.z + 0.4);
+            if (playing) floatAt("BLOK!", dribble.z, f.lane, 3, "#8EC5FF", 18);
+          } else {
+            // komşu koridora çalım (tercihen o sütunu boş olana)
+            var side = f.id % 2 ? 1 : -1, to = -1;
+            for (var tr = 0; tr < 2 && to < 0; tr++) {
+              var cl = f.lane + (tr ? -side : side);
+              if (cl >= 0 && cl < LANES && !grid[cl][dribble.row]) to = cl;
+            }
+            if (to < 0) to = f.lane + side >= 0 && f.lane + side < LANES ? f.lane + side : f.lane - side;
+            f.dodge = { from: f.lane, at: A.time };
+            f.lane = to;
+            f.eating = null;
+            if (playing) {
+              A.sound("swish");
+              floatAt("ÇALIM!", f.z, to, 3, "#F9A8D4", 18);
+            }
+            continue;
+          }
+        }
         if (victim && victim.type === "kaleci" && victim.next <= 0) {
           victim.next = CHEW;
           victim.caught = A.time;
@@ -894,7 +1238,7 @@
         }
         f.eating = victim;
         if (victim) {
-          if (!demo) victim.hp -= EAT * dt * (f.type === "kaptan" ? 2 : f.type === "santrfor" ? 1.5 : 1);
+          if (!demo) victim.hp -= EAT * dt * (f.type === "kaptan" || f.type === "dev" ? 2 : f.type === "santrfor" ? 1.5 : 1);
           victim.hitAt = A.time;
         } else {
           // TOPÇU: menzildeki en yakın oyuncuya durup top atar
@@ -916,8 +1260,9 @@
               if (playing) A.sound("kick");
             }
           } else {
-            f.z -= f.v * (f.slow > 0 ? 0.5 : 1) * dt;
-            f.phase += dt * f.v * (f.slow > 0 ? 0.5 : 1) * 9;
+            var mv2 = f.v * (f.slow > 0 ? 0.5 : 1) * (inMud(f) ? 0.65 : 1);
+            f.z -= mv2 * dt;
+            f.phase += dt * mv2 * 9;
           }
         }
       }
@@ -936,6 +1281,10 @@
           A.sound("net");
           A.haptic("error");
           A.announce("GOL YEDİN!", lives > 0 ? "Kalan hak: " + lives : "Savunma çöktü", BAD);
+          if (lives <= 0 && lm.on && continued < CONTINUES) {
+            askContinue();
+            return;
+          }
           if (lives <= 0) {
             state = "dying";
             stateT = 0;
@@ -987,7 +1336,7 @@
         o.shovel = { x: x, y: y, w: shW, h: ch };
         trayTop = y - 9;
       } else {
-        var per = 5, ch2 = 70;
+        var per = n > 10 ? Math.ceil(n / 2) : 5, ch2 = 70;
         var cw2 = Math.min(72, (W - 24 - (per - 1) * gap) / per);
         var rows = Math.max(1, Math.ceil(n / per));
         var yb = H - 10 - rows * ch2 - (rows - 1) * gap;
@@ -1127,20 +1476,31 @@
   function usable(type) {
     return unlocked(type) && energy >= UNITS[type].cost && (ready[type] || 0) <= A.time;
   }
-  /** BÖLÜM SEÇ ızgarası: dikeyde 4, yatayda 7 sütun; ekrana sığar (kaydırma gerekmez). */
+  /**
+   * BÖLÜM SEÇ ızgarası (eski mod): 20'lik sayfalar, dikeyde 4, yatayda 7
+   * sütun; ekrana sığar. Altta ‹ › sayfa düğmeleri.
+   */
+  var PAGE = 20;
   function selectLayout() {
     var wide = W > H * 1.15;
-    var cols = wide ? 7 : 4, rows = Math.ceil(MAX_LEVEL / cols);
+    var pages = Math.ceil(MAX_LEVEL / PAGE);
+    selPage = A.clamp(selPage, 0, pages - 1);
+    var cols = wide ? 7 : 4, rows = Math.ceil(PAGE / cols);
     var slot = A.hudSlot(14);
     var top = wide ? 74 : Math.max(118, slot.top + 64);
-    var bottom = H - 16;
+    var bottom = H - 16 - 54;
     var cell = Math.min((W - 28) / cols, (bottom - top) / rows);
     var bw = Math.min(cell - 10, wide ? 86 : 84), bh = Math.min(cell - 10, bw * 0.92);
     var gx = (W - cols * cell) / 2, out = [];
-    for (var i = 0; i < MAX_LEVEL; i++) {
+    var first = selPage * PAGE;
+    for (var i = 0; i < PAGE && first + i < MAX_LEVEL; i++) {
       var c = i % cols, r = (i / cols) | 0;
-      out.push({ n: i + 1, x: gx + c * cell + (cell - bw) / 2, y: top + r * cell + (cell - bh) / 2, w: bw, h: bh });
+      out.push({ n: first + i + 1, x: gx + c * cell + (cell - bw) / 2, y: top + r * cell + (cell - bh) / 2, w: bw, h: bh });
     }
+    var py = Math.min(H - 60, top + rows * cell + 6);
+    out.prev = selPage > 0 ? { x: W / 2 - 120, y: py, w: 64, h: 44 } : null;
+    out.next = selPage < pages - 1 ? { x: W / 2 + 56, y: py, w: 64, h: 44 } : null;
+    out.pageLabel = { x: W / 2, y: py + 22, text: first + 1 + "–" + Math.min(MAX_LEVEL, first + PAGE) };
     out.top = top;
     out.wide = wide;
     return out;
@@ -1162,6 +1522,14 @@
     pointer = p;
     if (state === "select") {
       var bs = selectLayout();
+      var pg = inside(p, bs.prev, 6) ? -1 : inside(p, bs.next, 6) ? 1 : 0;
+      if (pg) {
+        selPage += pg;
+        press["pg" + pg] = A.time;
+        A.sound("tap");
+        A.haptic("light");
+        return;
+      }
       for (var i = 0; i < bs.length; i++) {
         if (!inside(p, bs[i], 4)) continue;
         press["lv" + bs[i].n] = A.time;
@@ -1179,7 +1547,7 @@
       return;
     }
     if (state === "won" || state === "lost") {
-      if (stateT < 0.6) return;
+      if (stateT < 0.6 || lm.on) return; // bölüm modunda sonuç penceresi RN'nin
       var R = resultLayout();
       var hitB = inside(p, R.main, 4) ? R.main : inside(p, R.alt, 4) ? R.alt : null;
       if (!hitB) return;
@@ -1996,17 +2364,51 @@
       var made = st.made != null ? A.time - st.made : 9;
       o = Object.assign(base, { kit: myKit(), pose: made < 0.7 ? "cheer" : "wave", t: made < 0.7 ? made * 3 : t, flagT: t, acc: { scarf: true, flag: true, cap: kitOf(captain).s } });
       drawPlayer(c, x, y, s, o);
-    } else if (type === "forvet" || type === "pres" || type === "cift" || type === "ortaci") {
-      var acc = { boots: type === "cift" ? "#FF8A1F" : type === "pres" ? "#38BDF8" : type === "ortaci" ? "#D946EF" : "#FFD400" };
+    } else if (type === "davulcu") {
+      // tribün davulcusu: kasket, atkı, önünde davul; tokmak vurdukça zıplar
+      var beat = Math.max(0, Math.sin(t * 7));
+      o = Object.assign(base, { kit: myKit(), pose: beat > 0.6 ? "cheer" : "idle", t: t, acc: { scarf: true, cap: "#F59E0B" } });
+      drawPlayer(c, x, y, s, o);
+      var dx = x + 9 * s, dy = y - 17 * s;
+      c.lineWidth = 2.2 * s;
+      c.strokeStyle = NAVY;
+      c.beginPath();
+      c.ellipse(dx, dy, 7.5 * s, 9 * s, 0, 0, Math.PI * 2);
+      c.fillStyle = "#F59E0B";
+      c.fill();
+      c.stroke();
+      c.beginPath();
+      c.ellipse(dx + 2.5 * s, dy, 4 * s, 8 * s, 0, 0, Math.PI * 2);
+      c.fillStyle = "#FFF7E0";
+      c.fill();
+      c.stroke();
+      limb(c, dx - 4 * s, dy - 12 * s - beat * 3 * s, dx + 2 * s, dy - 3 * s, 2 * s, "#8B5A2B", 1.6 * s);
+    } else if (type === "doktor") {
+      // takım doktoru: beyaz önlük, kırmızı haçlı çanta
+      o = Object.assign(base, { kit: { p: "#FFFFFF", s: "#EF4444", short: "#1B1648" }, pose: "idle", acc: { socks: "#FFFFFF", boots: "#EF4444" } });
+      drawPlayer(c, x, y, s, o);
+      var bx2 = x + 10 * s, by2 = y - 16 * s;
+      A.roundRect(c, bx2 - 7 * s, by2 - 6 * s, 14 * s, 11 * s, 3 * s);
+      c.fillStyle = "#EF4444";
+      c.fill();
+      c.lineWidth = 2 * s;
+      c.strokeStyle = NAVY;
+      c.stroke();
+      c.fillStyle = "#FFFFFF";
+      c.fillRect(bx2 - 1.3 * s, by2 - 4 * s, 2.6 * s, 7 * s);
+      c.fillRect(bx2 - 3.5 * s, by2 - 1.8 * s, 7 * s, 2.6 * s);
+    } else if (type === "forvet" || type === "pres" || type === "cift" || type === "ortaci" || type === "frikik") {
+      var acc = { boots: type === "cift" ? "#FF8A1F" : type === "pres" ? "#38BDF8" : type === "ortaci" ? "#D946EF" : type === "frikik" ? "#10B981" : "#FFD400" };
       if (type === "pres") acc.headband = "#38BDF8";
       if (type === "ortaci") acc.headband = "#D946EF";
       if (type === "cift") acc.headband = "#FF8A1F";
+      if (type === "frikik") acc.headband = "#10B981";
       var kt = st.kickAt != null ? (A.time - st.kickAt) / 0.42 : -1;
       var kicking = kt >= 0 && kt < 1;
       o = Object.assign(base, { kit: myKit(), pose: kicking ? "kick" : "ready", t: kicking ? kt : t, acc: acc });
       drawPlayer(c, x, y, s, o);
       var hide = kicking && kt >= 0.4;
-      var bc = type === "pres" ? "#BDEBFF" : type === "ortaci" ? "#F5C8FF" : type === "cift" ? "#FFD9B0" : "#FFFFFF";
+      var bc = type === "pres" ? "#BDEBFF" : type === "ortaci" ? "#F5C8FF" : type === "cift" ? "#FFD9B0" : type === "frikik" ? "#BBF7D0" : "#FFFFFF";
       if (!hide) flatBall(c, x + 13 * s, y - 4.6 * s, 4.6 * s, t * 0.3, bc);
       if (type === "cift" && !hide) flatBall(c, x + 21 * s, y - 4.2 * s, 4.2 * s, t * 0.2, "#FFD9B0");
     } else if (type === "stoper") {
@@ -2088,14 +2490,17 @@
     if (Math.abs(shownSun - energy) < 0.5) shownSun = energy;
     A.blit(paintBackground());
     drawGoalDanger(c);
+    drawMud(c);
     if (state === "play") drawSelection(c);
     drawGround(c);
     for (var l = 0; l < LANES; l++) drawLane(c, l);
+    drawNight(c);
     drawGoalFrame(c);
     drawShots(c);
     drawOrbs(c);
     drawBars(c);
     if (state === "play") drawIncoming(c);
+    drawRain(c);
     A.drawParticles(c);
     A.drawFloaters(c, dt);
     if (state !== "attract" && state !== "select") {
@@ -2109,8 +2514,67 @@
       c.fillStyle = "rgba(255,77,106," + (0.28 * flashRed).toFixed(3) + ")";
       c.fillRect(0, 0, W, H);
     }
+    if (state === "await") {
+      // RN devam penceresini açar; tuval kararır ve bekler
+      c.fillStyle = "rgba(10,8,40,0.55)";
+      c.fillRect(0, 0, W, H);
+      A.bigText(c, "SAVUNMA ÇÖKTÜ", W / 2, H * 0.4, 28, "#FF6B81", { stroke: NAVY });
+    }
     if (state === "select") drawSelect(c);
     if (state === "won" || state === "lost") drawResult(c);
+  }
+
+  /** ÇAMUR: kahverengi birikinti, kenarında kabarcıklar (oyuncu konmaz). */
+  function drawMud(c) {
+    for (var key in mud) {
+      var p = key.split(":"), l = +p[0], r = +p[1];
+      if (l >= LANES || r >= ROWS) continue;
+      var x = sx(cellZ(r)), y = laneY(l) + L.lh * 0.12;
+      c.fillStyle = "rgba(92,55,20,0.78)";
+      c.beginPath();
+      c.ellipse(x, y, L.cw * 0.47, L.lh * 0.33, 0, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = "rgba(161,98,7,0.85)";
+      c.beginPath();
+      c.ellipse(x - L.cw * 0.06, y - L.lh * 0.04, L.cw * 0.3, L.lh * 0.18, 0, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = "rgba(255,255,255,0.28)";
+      for (var b = 0; b < 3; b++) {
+        var bk = (A.time * 0.6 + b * 0.33 + l * 0.17) % 1;
+        c.beginPath();
+        c.arc(x + (b - 1) * L.cw * 0.18, y - bk * L.lh * 0.08, 1.5 + bk * 2, 0, Math.PI * 2);
+        c.fill();
+      }
+    }
+  }
+  /** GECE MAÇI: koşu yolu karanlık, ızgara projektör ışığında. */
+  function drawNight(c) {
+    if (!info.night || state === "attract" || state === "select") return;
+    var x0 = L.gridR + 4;
+    var g = c.createLinearGradient(x0 - 30, 0, x0 + 40, 0);
+    g.addColorStop(0, "rgba(6,5,28,0)");
+    g.addColorStop(1, "rgba(6,5,28,0.9)");
+    c.fillStyle = g;
+    c.fillRect(x0 - 30, L.ft - 10, W - x0 + 30, L.fb - L.ft + 20);
+    c.fillStyle = "rgba(10,10,60,0.16)";
+    c.fillRect(0, L.ft - 10, x0, L.fb - L.ft + 20);
+  }
+  /** YAĞMUR: çapraz çizgiler (azaltılmış harekette seyrek ve yavaş). */
+  function drawRain(c) {
+    if (!info.rain || state === "attract" || state === "select") return;
+    var n = A.reduceMotion ? 24 : 70, sp = A.reduceMotion ? 120 : 520;
+    c.save();
+    c.strokeStyle = "rgba(191,219,254,0.55)";
+    c.lineWidth = 1.6;
+    c.beginPath();
+    for (var i = 0; i < n; i++) {
+      var px = ((i * 97.3 + A.time * sp * 0.35) % (W + 40)) - 20;
+      var py = ((i * 53.7 + A.time * sp) % (H + 40)) - 20;
+      c.moveTo(px, py);
+      c.lineTo(px - 5, py + 14);
+    }
+    c.stroke();
+    c.restore();
   }
 
   function drawGoalDanger(c) {
@@ -2267,6 +2731,17 @@
       var st = { t: A.time + u.id, flash: hurt * 0.5, sq: sq, look: u.look, made: u.made, kickAt: u.kickAt, next: u.next, caught: u.caught, at: u.at, rot: weak > 0.5 && u.type !== "stoper" ? (weak - 0.5) * 0.25 : 0 };
       if (u.type === "fuze") st.flash = 0;
       drawUnitArt(c, u.type, x, y - drop, s, st);
+      if (u.healAt && A.time - u.healAt < 0.2) {
+        // DOKTOR iyileştiriyor: yükselen yeşil artı
+        var hk = (A.time * 1.4 + u.id * 0.37) % 1;
+        c.save();
+        c.globalAlpha = 1 - hk;
+        c.fillStyle = "#4ADE80";
+        var hx = x + 9 * s, hy = y - 40 * s - hk * 16 * s;
+        c.fillRect(hx - 1.5 * s, hy - 4.5 * s, 3 * s, 9 * s);
+        c.fillRect(hx - 4.5 * s, hy - 1.5 * s, 9 * s, 3 * s);
+        c.restore();
+      }
       if (u.type === "stoper" && weak > 0.35) {
         // yorgunluk: ter damlaları
         c.fillStyle = "#BDEBFF";
@@ -2326,6 +2801,16 @@
       acc.boots = "#E11D48";
     } else if (ty === "kalkanli") {
       acc.headband = "#2F80ED";
+    } else if (ty === "calimci") {
+      acc.headband = "#EC4899"; // ÇALIMCI: pembe bant + krampon
+      acc.boots = "#EC4899";
+    } else if (ty === "dev") {
+      acc.big = 1.32; // DEV: kocaman, kaşlı, gri kask
+      acc.cap = "#1F2937";
+      acc.boots = "#111827";
+    } else if (ty === "kafile") {
+      acc.stripes = true; // KAFİLE: çizgili forma + turuncu bant
+      acc.headband = "#F97316";
     } else if (f.id % 2) acc.stripes = true;
     return acc;
   }
@@ -2399,6 +2884,20 @@
   function drawFoe(c, f, at) {
     var F = FOES[f.type];
     var x = at ? at.x : sx(f.z), y = at ? at.y : footY(f.lane), s = (at ? at.s : L.cs) * F.k;
+    if (!at && f.dodge) {
+      // ÇALIM: eski koridordan yeni koridora kayarak geçer
+      var dk = A.clamp((A.time - f.dodge.at) / DODGE_T, 0, 1);
+      if (dk < 1) y += (f.dodge.from - f.lane) * L.lh * (1 - A.easeOut(dk));
+    }
+    if (!at && info.night && !f.dead && f.z > Z0 + ROWS * CD + 0.6 && state !== "attract" && state !== "select") {
+      // GECE: koşu yolundaki rakip yalnız parlayan gözleriyle seçilir
+      c.fillStyle = "rgba(255,240,170,0.85)";
+      c.beginPath();
+      c.arc(x - 3 * s, y - 40 * s, 1.8 * s, 0, Math.PI * 2);
+      c.arc(x + 3 * s, y - 40 * s, 1.8 * s, 0, Math.PI * 2);
+      c.fill();
+      return;
+    }
     var kit = foeKit();
     var acc = foeAcc(f, kit);
     var tint = null, tk = 0;
@@ -2462,12 +2961,15 @@
   function drawShots(c) {
     var s = L.cs;
     shots.forEach(function (sh) {
-      var x = sx(sh.z), y = footY(sh.lane) - 12 * s;
-      var col = sh.slow ? "#9BE3FF" : sh.kind === "cift" ? "#FFC58A" : "#FFFFFF";
-      var trail = Math.min(34 * s, (sh.z - sh.z0) * L.k);
+      var fk = sh.kind === "frikik";
+      // FRİKİK: falsolu yay (dalgalı yörünge), yeşil iz, iri top
+      var x = sx(sh.z), y = footY(sh.lane) - 12 * s - (fk ? Math.sin((sh.z - sh.z0) * 0.9) * 7 * s : 0);
+      var col = sh.slow ? "#9BE3FF" : sh.kind === "cift" ? "#FFC58A" : fk ? "#BBF7D0" : "#FFFFFF";
+      var tc = sh.slow ? "#38BDF8" : sh.kind === "cift" ? "#FF8A1F" : fk ? "#10B981" : "#FFE14D";
+      var trail = Math.min((fk ? 44 : 34) * s, (sh.z - sh.z0) * L.k);
       var g = c.createLinearGradient(x - trail, 0, x, 0);
-      g.addColorStop(0, rgba(sh.slow ? "#38BDF8" : sh.kind === "cift" ? "#FF8A1F" : "#FFE14D", 0));
-      g.addColorStop(1, rgba(sh.slow ? "#38BDF8" : sh.kind === "cift" ? "#FF8A1F" : "#FFE14D", 0.85));
+      g.addColorStop(0, rgba(tc, 0));
+      g.addColorStop(1, rgba(tc, 0.85));
       c.strokeStyle = g;
       c.lineWidth = 7 * s;
       c.lineCap = "round";
@@ -2475,7 +2977,7 @@
       c.moveTo(x - trail, y);
       c.lineTo(x, y);
       c.stroke();
-      flatBall(c, x, y, 5.4 * s, -A.time * 18 + sh.id, col);
+      flatBall(c, x, y, (fk ? 6.6 : 5.4) * s, -A.time * 18 + sh.id, col);
     });
     fballs.forEach(function (fb) {
       var x = sx(fb.z), y = footY(fb.lane) - 13 * s - Math.sin(A.clamp((fb.z0 - fb.z) / 3, 0, 1) * Math.PI) * 6 * s;
@@ -2581,6 +3083,7 @@
 
   /** Ekranın dışından gelen rakip: sağ kenarda okla uyarı rozeti (referans oklu daireler). */
   function drawIncoming(c) {
+    if (info.night) return; // gece maçı: uyarı oku yok
     var warn = {};
     foes.forEach(function (f) {
       if (!f.dead && sx(f.z) > W - 8) warn[f.lane] = Math.max(warn[f.lane] || 0, f.type === "kaptan" ? 2 : 1);
@@ -2822,7 +3325,7 @@
     c.clip();
     var s = Math.min(b.h / 76, b.w / 62);
     var art = b.key === "fuze" ? 1.25 : b.key === "fiskiye" ? 1.3 : b.key === "taraftar" ? 0.72 : 0.84;
-    var shift = b.key === "forvet" || b.key === "cift" || b.key === "pres" || b.key === "ortaci" ? -5 * s : b.key === "taraftar" ? 4 * s : 0;
+    var shift = b.key === "forvet" || b.key === "cift" || b.key === "pres" || b.key === "ortaci" || b.key === "frikik" || b.key === "davulcu" || b.key === "doktor" ? -5 * s : b.key === "taraftar" ? 4 * s : 0;
     drawUnitArt(c, b.key, cx + shift, y + b.h - 22, s * art, { t: A.time * 0.8 + ORDER.indexOf(b.key) });
     c.restore();
     // ad
@@ -3042,12 +3545,11 @@
     var age = A.time - popAt, life = 3.6;
     var inT = A.easeOutBack(A.clamp(age / 0.45, 0, 1));
     var out = A.clamp((life - age) / 0.3, 0, 1);
-    var foe = pop.kind === "foe", lane = pop.kind === "lane";
+    var foe = pop.kind === "foe", lane = pop.kind === "lane", feat = pop.kind === "feature";
     var key = pop.key;
-    var name = foe ? FOES[key].name : lane ? "6. KORİDOR" : UNITS[key].name;
-    var desc = foe ? FOES[key].desc : lane ? "Saha genişledi: altı koridoru da koru" : UNITS[key].desc;
-    var color = foe ? FOES[key].color : lane ? "#22C55E" : UNITS[key].color;
-    var title = foe ? "YENİ RAKİP!" : lane ? "YENİ KORİDOR!" : "YENİ OYUNCU!";
+    var D = foe ? FOES[key] : lane || feat ? FEATURES[key] : UNITS[key];
+    var name = D.name, desc = D.desc, color = D.color;
+    var title = foe ? "YENİ RAKİP!" : lane ? "YENİ KORİDOR!" : feat ? (key === "kupa" ? "BÜYÜK MAÇ!" : "SAHA DEĞİŞTİ!") : "YENİ OYUNCU!";
     c.save();
     c.globalAlpha = out;
     c.fillStyle = "rgba(10,8,40,0.68)";
@@ -3101,6 +3603,9 @@
         c.stroke();
       }
       label(c, "+1", lw / 2 + 4, -ch * 0.3 + 5 * (lh2 + 4) + lh2 / 2, 18, SUN, "left");
+    } else if (feat) {
+      c0 = c;
+      drawFeatureArt(c, key, 0, ch * 0.16, s, cw, ch);
     } else drawUnitArt(c, key, 0, ch * 0.16, s * (key === "fuze" || key === "fiskiye" ? 2 : 1.25), { t: A.time });
     c.font = A.font(22, 900);
     c.textAlign = "center";
@@ -3110,7 +3615,7 @@
     c.font = A.font(12.5, 700);
     c.fillStyle = "#4B4790";
     wrapText(c, desc, 0, ch * 0.4, cw - 24, 15);
-    if (!foe && !lane) {
+    if (!foe && !lane && !feat) {
       // maliyet
       var U = UNITS[key];
       A.roundRect(c, cw / 2 - 58, -ch / 2 - 12, 66, 28, 14);
@@ -3137,6 +3642,51 @@
       c.globalAlpha = out * (0.6 + 0.4 * Math.sin(A.time * 5));
       label(c, pops.length > 1 ? "Dokun, sıradaki" : "Dokun, başla", cx, cy + ch * 0.5 + 26, 13, "#FFFFFF");
       c.restore();
+    }
+  }
+  /** Saha özelliği kartının sanatı: kupa kaptanı, yağmur bulutu, çamur, ay. */
+  function drawFeatureArt(c, key, x, y, s, cw, ch) {
+    if (key === "kupa") {
+      showFoe("kaptan", x, y, s * 0.95, null);
+      return;
+    }
+    var cy = y - ch * 0.18;
+    if (key === "yagmur") {
+      blob(c, x - 18 * s, cy, 16 * s, "#CBD5E1", 2.5 * s);
+      blob(c, x + 6 * s, cy - 8 * s, 20 * s, "#E2E8F0", 2.5 * s);
+      blob(c, x + 26 * s, cy + 2 * s, 14 * s, "#CBD5E1", 2.5 * s);
+      c.strokeStyle = "#38BDF8";
+      c.lineWidth = 3 * s;
+      c.lineCap = "round";
+      for (var i = 0; i < 6; i++) {
+        var k = (A.time * 1.6 + i * 0.37) % 1;
+        var dx = x - 26 * s + i * 11 * s, dy = cy + 18 * s + k * 34 * s;
+        c.beginPath();
+        c.moveTo(dx, dy);
+        c.lineTo(dx - 3 * s, dy + 8 * s);
+        c.stroke();
+      }
+    } else if (key === "camur") {
+      c.fillStyle = "#5C3714";
+      c.beginPath();
+      c.ellipse(x, cy + 22 * s, 46 * s, 16 * s, 0, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = "#A16207";
+      c.beginPath();
+      c.ellipse(x - 6 * s, cy + 19 * s, 28 * s, 9 * s, 0, 0, Math.PI * 2);
+      c.fill();
+      flatBall(c, x + 14 * s, cy + 10 * s, 9 * s, 0.4, "#E7D3B0", "#7C4A12");
+    } else {
+      // gece: ay ve projektör
+      blob(c, x, cy, 24 * s, "#FDE68A", 2.5 * s);
+      blob(c, x + 11 * s, cy - 7 * s, 20 * s, "#FFFFFF", 0);
+      c.fillStyle = "rgba(99,102,241,0.25)";
+      c.beginPath();
+      c.moveTo(x - 40 * s, cy + 40 * s);
+      c.lineTo(x - 10 * s, cy + 10 * s);
+      c.lineTo(x + 40 * s, cy + 40 * s);
+      c.closePath();
+      c.fill();
     }
   }
   /** Ortalanmış, en çok iki satır. */
@@ -3267,12 +3817,12 @@
       var sr = Math.min(9, b.w * 0.12);
       for (var k = 0; k < 3; k++) star(c, (k - 1) * sr * 2.15, y + b.h * 0.8 - (k === 1 ? 2 : 0), sr, k < st);
       // yenilik rozetleri: yeni rakip / 6. koridor
-      var li2 = levelInfo(n), tag = li2.newFoe ? "YENİ" : n === LANE6_AT ? "6 KOR." : "";
+      var li2 = levelInfo(n), tag = li2.news.length ? "YENİ" : li2.cup ? "KUPA" : "";
       if (tag) {
         c.font = A.font(9, 900);
         var tw = c.measureText(tag).width + 12;
         A.roundRect(c, x - 6, y - 7, tw, 16, 8);
-        c.fillStyle = li2.newFoe ? BAD : "#14B8A6";
+        c.fillStyle = li2.news.length ? BAD : "#C27C00";
         c.fill();
         c.lineWidth = 2;
         c.strokeStyle = "#FFFFFF";
@@ -3284,6 +3834,25 @@
       }
       c.restore();
     }
+    // sayfa düğmeleri
+    [[bs.prev, -1], [bs.next, 1]].forEach(function (pb) {
+      var b2 = pb[0];
+      if (!b2) return;
+      navyPill(c, b2.x, b2.y, b2.w, b2.h, "#2C2580");
+      c.save();
+      c.strokeStyle = "#FFFFFF";
+      c.lineWidth = 4;
+      c.lineCap = "round";
+      c.lineJoin = "round";
+      var ax = b2.x + b2.w / 2, ay = b2.y + b2.h / 2, dd = pb[1] * 6;
+      c.beginPath();
+      c.moveTo(ax - dd, ay - 9);
+      c.lineTo(ax + dd, ay);
+      c.lineTo(ax - dd, ay + 9);
+      c.stroke();
+      c.restore();
+    });
+    label(c, bs.pageLabel.text, bs.pageLabel.x, bs.pageLabel.y, 15, "#FFFFFF");
     c.restore();
   }
 
@@ -3362,7 +3931,7 @@
       c.fillStyle = NAVY;
       c.fillText("Savunma " + wave + ". dalgada çöktü (" + info.waves + " dalga)", R.cx, midY + 34, R.w - 30);
     }
-    [R.main, R.alt].forEach(function (b, bi) {
+    (lm.on ? [] : [R.main, R.alt]).forEach(function (b, bi) {
       var pt = A.time - (press[b.act] || -9);
       var ps = pt < 0.35 ? 1 - 0.1 * Math.exp(-pt * 10) * Math.cos(pt * 18) : 1;
       var primary = bi === 0;
@@ -3396,7 +3965,8 @@
       defeated: defeated, conceded: conceded, placed: placed,
       units: units, foes: foes, shots: shots, lobs: lobs, fballs: fballs, hover: hover, selected: selected, R: null, orbs: orbs, queue: queue, waveState: waveState, gl: false,
       captain: captain.short, rival: rivalAt(level).team.name, UNITS: UNITS, FOES: FOES, LANES: LANES, ROWS: ROWS, ORDER: ORDER,
-      SPAWN_Z: SPAWN_Z, GOAL_Z: GOAL_Z, CD: CD, layout: L, pops: pops, levelInfo: levelInfo, MAX_LEVEL: MAX_LEVEL,
+      SPAWN_Z: SPAWN_Z, GOAL_Z: GOAL_Z, CD: CD, layout: L, pops: pops, levelInfo: levelInfo, MAX_LEVEL: MAX_LEVEL, LEVEL_COUNT: LEVEL_COUNT,
+      PLAN: PLAN, FEATURES: FEATURES, difficulty: difficulty, goalText: goalText, mud: mud, mudCells: mudCells, lm: lm, continued: continued, lanes: LANES,
       place: place, collect: collect, usable: usable, cards: cards, play: play, selectLayout: selectLayout, resultLayout: resultLayout,
       setEnergy: function (v) { energy = v; },
       setWave: function (w) {
@@ -3429,6 +3999,20 @@
     };
   }
 
-  A.register({ resize: resize, start: start, update: update, render: render, down: down, move: move, up: up, debug: debug, setRoster: setRoster, storeLoaded: storeLoaded });
+  A.register({ resize: resize, start: start, update: update, render: render, down: down, move: move, up: up, debug: debug, setRoster: setRoster, storeLoaded: storeLoaded, command: command, config: levelConfig });
+  /*
+   * core.js "config" komutunu oyuna iletmez (yalnız ses, kadro, kayıt…):
+   * bölüm modu alanlarını (levelMode, level, boosters) almak için köprü
+   * sarılır. core.js ileride game.config çağırırsa da zararsız (tekrar
+   * uygulamak aynı sonucu verir).
+   */
+  var baseCmd = window.ArenaCmd;
+  if (typeof baseCmd === "function" && !baseCmd.savunma) {
+    window.ArenaCmd = function (cmd) {
+      if (cmd && cmd.type === "config") levelConfig(cmd);
+      return baseCmd(cmd);
+    };
+    window.ArenaCmd.savunma = true;
+  }
   if (A.store) storeLoaded(A.store);
 })();

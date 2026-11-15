@@ -18,14 +18,16 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
-import { BottomSheet, Button, Reveal, Toggle, Touchable } from "@/components/ui";
+import { Reveal, Toggle, Touchable } from "@/components/ui";
 import { fmtEl, fmtPct, type City2Crest, type City2Prestige, type City2PrestigePreviewResult, type City2PrestigeResult } from "@/lib/puzzle/city2";
 import { CITY2_SEASON, CITY2_UI, CITY_UI } from "@/lib/puzzle/cityPalette";
-import { colors, fonts, hairline, radius, space, textScale, type } from "@/theme";
+import { fonts, hairline, radius, space, textScale, type } from "@/theme";
 
 import { useNow } from "./Academy";
 import { CrestBadge, PrestigeStars } from "./Season";
 import { cardStyle, fmt } from "./shared";
+import { CP } from "@/lib/puzzle/cityGamePalette";
+import { GameButton, GameSheet } from "./game/GamePaper";
 
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
@@ -76,7 +78,7 @@ export function PrestigeCard({ prestige, crest, busy, onStart }: { prestige: Cit
           <GainLine icon="shield" title="Armada prestij yıldızı ve prestij anıtı" value={`${next.level}.`} />
         </View>
       ) : null}
-      {!maxed ? <Button label="Prestiji önizle" icon="eye-outline" onPress={onStart} loading={busy} fullWidth haptic="medium" /> : null}
+      {!maxed ? <GameButton label="Prestiji önizle" icon="eye-outline" onPress={onStart} loading={busy} fullWidth haptic="medium" /> : null}
     </View>
   );
 }
@@ -114,7 +116,7 @@ export function PrestigeTeaser({ prestige, crest }: { prestige: City2Prestige; c
 /* ───────────────────────── Önizleme + onay ───────────────────────── */
 
 function Section({ icon, tone, title, children }: { icon: IconName; tone: "reset" | "keep" | "gain"; title: string; children: React.ReactNode }) {
-  const color = tone === "reset" ? colors.danger : tone === "keep" ? colors.win : colors.brandAccent;
+  const color = tone === "reset" ? CP.danger : tone === "keep" ? CP.win : CP.brandAccent;
   return (
     <View style={styles.section}>
       <View style={styles.sectionHead}>
@@ -179,7 +181,7 @@ export function PrestigeSheet({
   const expired = Boolean(preview) && left <= 0;
   const closing = p ? p.reset.buildings.filter((b) => b.before > b.after) : [];
   return (
-    <BottomSheet
+    <GameSheet
       visible={visible}
       onClose={onClose}
       title="Prestij"
@@ -188,7 +190,7 @@ export function PrestigeSheet({
         p ? (
           <View style={styles.footer}>
             {expired ? (
-              <Button label="Önizlemeyi yenile" icon="refresh" variant="secondary" onPress={onRefresh} loading={loading} fullWidth />
+              <GameButton label="Önizlemeyi yenile" icon="refresh" variant="secondary" onPress={onRefresh} loading={loading} fullWidth />
             ) : (
               <>
                 <Touchable feedback="row" onPress={() => setAgree((v) => !v)} style={styles.agree} accessibilityRole="switch" accessibilityState={{ checked: agree }} accessibilityLabel="Şehrimin yeniden kurulacağını ve bunun geri alınamayacağını anladım">
@@ -197,7 +199,7 @@ export function PrestigeSheet({
                   </Text>
                   <Toggle value={agree} onValueChange={setAgree} accessibilityLabel="Anladım" />
                 </Touchable>
-                <Button label={`${p.level.after}. prestiji onayla`} icon="star" variant="danger" onPress={() => token && onConfirm(token)} disabled={!agree || !token} loading={confirming} fullWidth haptic="success" />
+                <GameButton label={`${p.level.after}. prestiji onayla`} icon="star" variant="danger" onPress={() => token && onConfirm(token)} disabled={!agree || !token} loading={confirming} fullWidth haptic="success" />
                 <Text style={styles.expiry} {...textScale.badge}>
                   Onay {mmss(left)} içinde geçerli
                 </Text>
@@ -209,7 +211,7 @@ export function PrestigeSheet({
     >
       {!p ? (
         <View style={styles.loading}>
-          <ActivityIndicator color={colors.brandAccent} />
+          <ActivityIndicator color={CP.brandAccent} />
           <Text style={styles.loadingText} {...textScale.dense}>
             Önizleme hazırlanıyor…
           </Text>
@@ -217,7 +219,7 @@ export function PrestigeSheet({
       ) : (
         <View style={styles.sheetBody}>
           <View style={styles.warn}>
-            <Ionicons name="warning" size={18} color={colors.warn} />
+            <Ionicons name="warning" size={18} color={CP.warn} />
             <Text style={styles.warnText} {...textScale.long}>
               {p.warning}
             </Text>
@@ -241,7 +243,7 @@ export function PrestigeSheet({
 
           {p.reset.academy ? (
             <View style={styles.academy}>
-              <Ionicons name="school-outline" size={16} color={colors.textSecondary} />
+              <Ionicons name="school-outline" size={16} color={CP.textSecondary} />
               <Text style={styles.academyText} {...textScale.long}>
                 {p.reset.academy.text}
               </Text>
@@ -257,7 +259,7 @@ export function PrestigeSheet({
           </Section>
         </View>
       )}
-    </BottomSheet>
+    </GameSheet>
   );
 }
 
@@ -266,7 +268,7 @@ export function PrestigeSheet({
 export function PrestigeCelebration({ result, onClose }: { result: City2PrestigeResult | null; onClose: () => void }) {
   const r = result;
   return (
-    <BottomSheet visible={Boolean(r)} onClose={onClose} title="Yeni prestij yıldızı" footer={<Button label="Şehrimi yeniden kur" icon="hammer-outline" onPress={onClose} fullWidth haptic="success" />}>
+    <GameSheet visible={Boolean(r)} onClose={onClose} title="Yeni prestij yıldızı" footer={<GameButton label="Şehrimi yeniden kur" icon="hammer-outline" onPress={onClose} fullWidth haptic="success" />}>
       {r ? (
         <View style={styles.celebrate}>
           <Reveal scaleFrom={0.7}>
@@ -292,7 +294,7 @@ export function PrestigeCelebration({ result, onClose }: { result: City2Prestige
           </Reveal>
         </View>
       ) : null}
-    </BottomSheet>
+    </GameSheet>
   );
 }
 
@@ -312,29 +314,29 @@ const styles = StyleSheet.create({
   teaser: { ...cardStyle, flexDirection: "row", gap: space.md, padding: space.md },
   teaserIcon: { width: 36, height: 36, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: CITY2_UI.panel[1] },
   teaserHead: { flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" },
-  teaserTitle: { ...type.h3, color: colors.textPrimary },
-  teaserTag: { ...type.nano, color: colors.textTertiary },
-  teaserText: { ...type.caption, color: colors.textSecondary, marginTop: 2 },
-  teaserNow: { ...type.caption, fontFamily: fonts.semibold, color: colors.brandAccent, marginTop: space.xs },
+  teaserTitle: { ...type.h3, color: CP.textPrimary },
+  teaserTag: { ...type.nano, color: CP.textTertiary },
+  teaserText: { ...type.caption, color: CP.textSecondary, marginTop: 2 },
+  teaserNow: { ...type.caption, fontFamily: fonts.semibold, color: CP.brandAccent, marginTop: space.xs },
 
   loading: { alignItems: "center", gap: space.sm, paddingVertical: space.huge },
-  loadingText: { ...type.bodySm, color: colors.textSecondary },
+  loadingText: { ...type.bodySm, color: CP.textSecondary },
   sheetBody: { gap: space.md, paddingBottom: space.md },
-  warn: { flexDirection: "row", gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.warnDim, alignItems: "flex-start" },
-  warnText: { ...type.bodySm, fontFamily: fonts.semibold, color: colors.textPrimary, flex: 1 },
+  warn: { flexDirection: "row", gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: CP.warnDim, alignItems: "flex-start" },
+  warnText: { ...type.bodySm, fontFamily: fonts.semibold, color: CP.textPrimary, flex: 1 },
   section: { ...cardStyle, padding: space.md, gap: space.sm },
   sectionHead: { flexDirection: "row", alignItems: "center", gap: space.xs, marginBottom: space.xxs },
-  sectionTitle: { ...type.h3, color: colors.textPrimary },
+  sectionTitle: { ...type.h3, color: CP.textPrimary },
   row: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  dot: { width: 5, height: 5, borderRadius: radius.pill, backgroundColor: colors.textTertiary },
-  rowText: { ...type.bodySm, color: colors.textSecondary, flex: 1 },
-  rowValue: { ...type.numSmStrong, color: colors.textPrimary },
+  dot: { width: 5, height: 5, borderRadius: radius.pill, backgroundColor: CP.textTertiary },
+  rowText: { ...type.bodySm, color: CP.textSecondary, flex: 1 },
+  rowValue: { ...type.numSmStrong, color: CP.textPrimary },
   academy: { flexDirection: "row", gap: space.sm, paddingHorizontal: space.md, alignItems: "flex-start" },
-  academyText: { ...type.caption, color: colors.textSecondary, flex: 1 },
+  academyText: { ...type.caption, color: CP.textSecondary, flex: 1 },
   footer: { gap: space.sm },
-  agree: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surface2 },
-  agreeText: { ...type.labelSm, color: colors.textPrimary, flex: 1 },
-  expiry: { ...type.caption, color: colors.textTertiary, textAlign: "center" },
+  agree: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: CP.surface2 },
+  agreeText: { ...type.labelSm, color: CP.textPrimary, flex: 1 },
+  expiry: { ...type.caption, color: CP.textTertiary, textAlign: "center" },
 
   celebrate: { gap: space.md, paddingBottom: space.sm },
   celebrateHero: { alignItems: "center", gap: space.sm, paddingVertical: space.xl, paddingHorizontal: space.lg, borderRadius: radius.xxl, overflow: "hidden" },

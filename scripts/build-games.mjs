@@ -17,7 +17,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const GAMES = ["penalti", "slalom", "sektir", "savunma", "kadro", "sehir"];
+const GAMES = ["penalti", "slalom", "sektir", "savunma", "kadro", "sehir", "kariyer"];
 const SHARED = ["core.js", "scenery.js"];
 /**
  * 3B oyunlar: WebGL (three.js) sahnesi alttaki #gl tuvaline çizilir, HUD
@@ -33,7 +33,7 @@ const THREE_D = new Set([]);
  */
 const ARCADE = new Set([]);
 // Kulüp Şehri (sehir) oyun değil, canlı şehir sahnesi; o da yalnız mini futbolcu kullanır.
-const NO_ATHLETE = new Set(["savunma", "kadro", "sehir"]);
+const NO_ATHLETE = new Set(["savunma", "kadro", "sehir", "kariyer"]);
 export const kitFiles = (game) => [
   ...THREE_KIT.filter((file) => !(file === "athlete-data.js" && NO_ATHLETE.has(game))),
   ...(ARCADE.has(game) ? ["arcade3d.js"] : []),

@@ -4,9 +4,8 @@
  *   · TierMedal / CrestBadge — sezon dilimi madalyası; arma (sezon çerçevesi +
  *     prestij yıldızları). Yıldızlar Ionicons ile çizilir (sunucunun `stars_text`
  *     karakteri gösterilmez).
- *   · SeasonCard — şehir ekranındaki sezon kartı (sezon öncesi de).
  *   · SeasonParts — puan kırılımı (kalem, birim, tavan, puan).
- *   · SeasonHistoryList, RewardTiers — geçmiş sezonlar ve dilim kuralları.
+ *   · SeasonHistoryList — geçmiş sezonlar.
  *   · SeasonEndSheet — yeni bir sezon dilimi verildiğinde bir kez (cihazda
  *     "görüldü" olarak saklanır).
  *
@@ -19,22 +18,20 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 
-import { BottomSheet, Button, Reveal, Touchable } from "@/components/ui";
+import { Reveal } from "@/components/ui";
 import {
   SEASON_TIER_TITLE,
-  estimateTier,
-  seasonLeftText,
-  spanText,
   type City2Crest,
-  type City2Season,
   type City2SeasonHistory,
   type City2SeasonPart,
   type City2State,
 } from "@/lib/puzzle/city2";
 import { CITY2_UI, seasonTierStyle } from "@/lib/puzzle/cityPalette";
-import { colors, fonts, hairline, radius, space, textScale, type } from "@/theme";
+import { fonts, hairline, radius, space, textScale, type } from "@/theme";
 
 import { Bar, cardStyle, fmt } from "./shared";
+import { CP } from "@/lib/puzzle/cityGamePalette";
+import { GameButton, GameSheet } from "./game/GamePaper";
 
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
@@ -90,7 +87,7 @@ export function CrestBadge({ crest, size = 44, onDark }: { crest: City2Crest | n
         </LinearGradient>
       ) : (
         <View style={[styles.crestInner, onDark ? styles.crestPlainDark : styles.crestPlain, { width: size, height: size, borderRadius: size / 2 }]}>
-          <Ionicons name="shield" size={Math.round(size * 0.5)} color={onDark ? CITY2_UI.star : colors.brandAccent} />
+          <Ionicons name="shield" size={Math.round(size * 0.5)} color={onDark ? CITY2_UI.star : CP.brandAccent} />
         </View>
       )}
       {crest?.prestige_stars ? <PrestigeStars count={crest.prestige_stars} size={Math.max(9, Math.round(size * 0.24))} style={styles.crestStars} /> : null}
@@ -115,82 +112,6 @@ export function CrestChip({ crest }: { crest: City2Crest }) {
 }
 
 /* ───────────────────────── Şehir ekranındaki kart ───────────────────────── */
-
-export function SeasonCard({ season, crest, onPress }: { season: City2Season; crest: City2Crest | null | undefined; onPress: () => void }) {
-  const cur = season.current;
-  const est = estimateTier(season);
-  const last = season.history[0] ?? null;
-  if (!cur) {
-    const pre = season.preseason;
-    return (
-      <Touchable onPress={onPress} feedback="card" style={styles.card} accessibilityRole="button" accessibilityLabel={`${pre?.text ?? "Sezon yakında"}. Sezon ayrıntıları`}>
-        <View style={styles.cardHead}>
-          <TierMedal tier={null} size={44} icon="calendar" />
-          <View style={styles.flex}>
-            <Text style={styles.over} {...textScale.badge}>
-              SEZON
-            </Text>
-            <Text style={styles.cardTitle} numberOfLines={1} {...textScale.dense}>
-              {pre?.text ?? "Sezon yakında başlıyor"}
-            </Text>
-            {pre ? (
-              <Text style={styles.cardMeta} numberOfLines={1} {...textScale.dense}>
-                {pre.season.range_text}
-                {spanText(pre.starts_at) ? ` · ${spanText(pre.starts_at)} sonra` : ""}
-              </Text>
-            ) : null}
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
-        </View>
-      </Touchable>
-    );
-  }
-  const maxScore = cur.parts.reduce((a, p) => a + p.max_points, 0);
-  return (
-    <Touchable onPress={onPress} feedback="card" style={styles.card} accessibilityRole="button" accessibilityLabel={`${cur.title}, ${fmt(cur.score)} puan, ${seasonLeftText(cur)} kaldı. Sezon ayrıntıları`}>
-      <View style={styles.cardHead}>
-        <TierMedal tier={est?.tier ?? null} size={44} />
-        <View style={styles.flex}>
-          <Text style={styles.over} {...textScale.badge}>
-            {`${cur.title.toLocaleUpperCase("tr-TR")} · ${cur.name.toLocaleUpperCase("tr-TR")}`}
-          </Text>
-          <View style={styles.scoreLine}>
-            <Text style={styles.score} {...textScale.dense}>
-              {fmt(cur.score)}
-            </Text>
-            <Text style={styles.scoreUnit} {...textScale.dense}>
-              sezon puanı
-            </Text>
-          </View>
-        </View>
-        <View style={styles.left}>
-          <Text style={styles.leftValue} {...textScale.badge}>
-            {seasonLeftText(cur)}
-          </Text>
-          <Text style={styles.leftLabel} {...textScale.badge}>
-            kaldı
-          </Text>
-        </View>
-      </View>
-      <Bar value={maxScore ? cur.score / maxScore : 0} tone="brand" />
-      <View style={styles.cardFoot}>
-        <Text style={styles.cardMeta} numberOfLines={1} {...textScale.dense}>
-          {cur.rank != null && cur.ranked ? `${fmt(cur.rank)}. sıra · ${fmt(cur.ranked)} kişi` : "Sıraya girmek için 100 puan"}
-          {est ? ` · tahmini ${est.title.toLocaleLowerCase("tr-TR")}` : ""}
-        </Text>
-        {crest?.frame || last?.badge ? (
-          <View style={styles.badgeChip}>
-            <TierMedal tier={crest?.frame ?? last?.tier ?? null} size={18} icon="ribbon" />
-            <Text style={styles.badgeChipText} numberOfLines={1} {...textScale.badge}>
-              {`${season.badges.length} rozet`}
-            </Text>
-          </View>
-        ) : null}
-        <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
-      </View>
-    </Touchable>
-  );
-}
 
 /* ───────────────────────── Puan kırılımı ───────────────────────── */
 
@@ -218,7 +139,7 @@ export function SeasonParts({ parts }: { parts: City2SeasonPart[] }) {
         return (
           <View key={g.key} style={styles.group}>
             <View style={styles.groupHead}>
-              <Ionicons name={g.icon} size={15} color={colors.brandAccent} />
+              <Ionicons name={g.icon} size={15} color={CP.brandAccent} />
               <Text style={styles.groupTitle} {...textScale.dense}>
                 {g.title}
               </Text>
@@ -258,28 +179,6 @@ export function SeasonParts({ parts }: { parts: City2SeasonPart[] }) {
 }
 
 /* ───────────────────────── Dilimler ve geçmiş ───────────────────────── */
-
-export function RewardTiers({ season }: { season: City2Season }) {
-  const min = season.rewards[0]?.min_score ?? 100;
-  return (
-    <View style={styles.tiers}>
-      {season.rewards.map((r, i) => (
-        <View key={r.tier} style={styles.tierRow}>
-          <TierMedal tier={r.tier} size={34} />
-          <View style={styles.flex}>
-            <Text style={styles.tierTitle} {...textScale.dense}>
-              {r.title}
-            </Text>
-            <Text style={styles.tierMeta} numberOfLines={2} {...textScale.dense}>
-              {i === season.rewards.length - 1 || r.top_pct >= 1 ? `${fmt(min)} puanı geçen herkes` : `İlk %${Math.round(r.top_pct * 100)}`}
-              {" · rozet, arma çerçevesi ve sezon kupası"}
-            </Text>
-          </View>
-        </View>
-      ))}
-    </View>
-  );
-}
 
 export function SeasonHistoryList({ history }: { history: City2SeasonHistory[] }) {
   return (
@@ -342,14 +241,14 @@ export function SeasonEndSheet({ city2, onPlace }: { city2: City2State | undefin
   };
   const cup = city2?.landmarks.owned.find((l) => l.key.startsWith("sezon_kupasi") && l.id.endsWith(`-s${h.id}`)) ?? null;
   return (
-    <BottomSheet
+    <GameSheet
       visible={show}
       onClose={close}
       title={`${h.title} bitti`}
       footer={
         <View style={styles.sheetButtons}>
           {cup && !cup.slot && onPlace ? (
-            <Button
+            <GameButton
               label="Kupayı meydana koy"
               icon="location-outline"
               onPress={() => {
@@ -360,7 +259,7 @@ export function SeasonEndSheet({ city2, onPlace }: { city2: City2State | undefin
               haptic="success"
             />
           ) : null}
-          <Button label="Harika" variant={cup && !cup.slot && onPlace ? "secondary" : "primary"} onPress={close} fullWidth haptic="success" />
+          <GameButton label="Harika" variant={cup && !cup.slot && onPlace ? "secondary" : "primary"} onPress={close} fullWidth haptic="success" />
         </View>
       }
     >
@@ -388,7 +287,7 @@ export function SeasonEndSheet({ city2, onPlace }: { city2: City2State | undefin
           </View>
         </Reveal>
       </View>
-    </BottomSheet>
+    </GameSheet>
   );
 }
 
@@ -405,64 +304,64 @@ function GainRow({ icon, text, tier }: { icon: keyof typeof Ionicons.glyphMap; t
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  muted: { color: colors.textTertiary },
+  muted: { color: CP.textTertiary },
   medal: { alignItems: "center", justifyContent: "center", borderWidth: 1 },
   starsRow: { flexDirection: "row", alignItems: "center", gap: 1 },
   starsMore: { ...type.micro, fontFamily: fonts.bold, marginLeft: 2 },
   crestWrap: { alignItems: "center" },
   crestRing: { alignItems: "center", justifyContent: "center" },
   crestInner: { alignItems: "center", justifyContent: "center", backgroundColor: CITY2_UI.panel[1] },
-  crestPlain: { backgroundColor: colors.brandDim, borderWidth: hairline, borderColor: colors.brandBorder },
+  crestPlain: { backgroundColor: CP.brandDim, borderWidth: hairline, borderColor: CP.brandBorder },
   crestPlainDark: { backgroundColor: CITY2_UI.panelChip },
   crestStars: { marginTop: -space.xs, paddingHorizontal: space.xxs, paddingVertical: 1, borderRadius: radius.pill, backgroundColor: CITY2_UI.panel[1] },
 
-  crestChip: { flexDirection: "row", alignItems: "center", gap: space.xs, height: 26, paddingLeft: space.xxs, paddingRight: space.sm, borderRadius: radius.pill, backgroundColor: colors.overlay },
+  crestChip: { flexDirection: "row", alignItems: "center", gap: space.xs, height: 26, paddingLeft: space.xxs, paddingRight: space.sm, borderRadius: radius.pill, backgroundColor: CP.overlay },
   crestChipShield: { width: 20, height: 20, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
   card: { ...cardStyle, padding: space.md, gap: space.sm },
   cardHead: { flexDirection: "row", alignItems: "center", gap: space.md },
-  cardTitle: { ...type.h3, color: colors.textPrimary },
-  cardMeta: { ...type.caption, color: colors.textTertiary, flex: 1 },
+  cardTitle: { ...type.h3, color: CP.textPrimary },
+  cardMeta: { ...type.caption, color: CP.textTertiary, flex: 1 },
   cardFoot: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  over: { ...type.overline, color: colors.textTertiary },
+  over: { ...type.overline, color: CP.textTertiary },
   scoreLine: { flexDirection: "row", alignItems: "baseline", gap: space.xs },
-  score: { ...type.metricSm, color: colors.textPrimary },
-  scoreUnit: { ...type.caption, color: colors.textTertiary },
+  score: { ...type.metricSm, color: CP.textPrimary },
+  scoreUnit: { ...type.caption, color: CP.textTertiary },
   left: { alignItems: "flex-end" },
-  leftValue: { ...type.label, fontFamily: fonts.bold, color: colors.textPrimary },
-  leftLabel: { ...type.micro, color: colors.textTertiary },
-  badgeChip: { flexDirection: "row", alignItems: "center", gap: space.xxs, paddingRight: space.s, borderRadius: radius.pill, backgroundColor: colors.surface2 },
-  badgeChipText: { ...type.micro, fontFamily: fonts.bold, color: colors.textSecondary },
+  leftValue: { ...type.label, fontFamily: fonts.bold, color: CP.textPrimary },
+  leftLabel: { ...type.micro, color: CP.textTertiary },
+  badgeChip: { flexDirection: "row", alignItems: "center", gap: space.xxs, paddingRight: space.s, borderRadius: radius.pill, backgroundColor: CP.surface2 },
+  badgeChipText: { ...type.micro, fontFamily: fonts.bold, color: CP.textSecondary },
 
   parts: { gap: space.md },
   group: { ...cardStyle, padding: space.md, gap: space.md },
   groupHead: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  groupTitle: { ...type.h3, color: colors.textPrimary, flex: 1 },
-  groupSum: { ...type.numSmStrong, color: colors.brandAccent },
+  groupTitle: { ...type.h3, color: CP.textPrimary, flex: 1 },
+  groupSum: { ...type.numSmStrong, color: CP.brandAccent },
   part: { gap: space.xxs },
   partHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  partLabel: { ...type.labelSm, color: colors.textPrimary, flex: 1 },
-  partFull: { ...type.nano, color: colors.win },
-  partPoints: { ...type.numSmStrong, color: colors.textPrimary },
+  partLabel: { ...type.labelSm, color: CP.textPrimary, flex: 1 },
+  partFull: { ...type.nano, color: CP.win },
+  partPoints: { ...type.numSmStrong, color: CP.textPrimary },
   partBar: { height: 6 },
-  partMeta: { ...type.caption, color: colors.textTertiary },
+  partMeta: { ...type.caption, color: CP.textTertiary },
 
   tiers: { ...cardStyle, padding: space.md, gap: space.md },
   tierRow: { flexDirection: "row", alignItems: "center", gap: space.md },
-  tierTitle: { ...type.h4, color: colors.textPrimary },
-  tierMeta: { ...type.caption, color: colors.textTertiary },
+  tierTitle: { ...type.h4, color: CP.textPrimary },
+  tierMeta: { ...type.caption, color: CP.textTertiary },
 
   history: { ...cardStyle, padding: space.md, gap: space.md },
   historyRow: { flexDirection: "row", alignItems: "center", gap: space.md },
-  historyTitle: { ...type.h4, color: colors.textPrimary },
-  historyMeta: { ...type.caption, color: colors.textSecondary },
-  historyBadge: { ...type.caption, color: colors.textTertiary },
+  historyTitle: { ...type.h4, color: CP.textPrimary },
+  historyMeta: { ...type.caption, color: CP.textSecondary },
+  historyBadge: { ...type.caption, color: CP.textTertiary },
 
   sheetButtons: { gap: space.sm },
   endWrap: { gap: space.lg, paddingBottom: space.sm },
   endHero: { alignItems: "center", gap: space.sm, paddingTop: space.sm },
-  endTier: { ...type.display, color: colors.textPrimary, textAlign: "center" },
-  endSub: { ...type.body, color: colors.textSecondary, textAlign: "center" },
-  gains: { gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surface2, borderWidth: hairline, borderColor: colors.border },
+  endTier: { ...type.display, color: CP.textPrimary, textAlign: "center" },
+  endSub: { ...type.body, color: CP.textSecondary, textAlign: "center" },
+  gains: { gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: CP.surface2, borderWidth: hairline, borderColor: CP.border },
   gainRow: { flexDirection: "row", alignItems: "center", gap: space.md },
-  gainText: { ...type.labelSm, color: colors.textPrimary, flex: 1 },
+  gainText: { ...type.labelSm, color: CP.textPrimary, flex: 1 },
 });

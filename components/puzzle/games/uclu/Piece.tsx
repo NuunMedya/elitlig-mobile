@@ -1,30 +1,27 @@
 /**
  * Elit Üçlü taşları: statik çizim (PieceGlyph) + konumu canlandırılan taş (TileView).
  *
- * Her taş PARLAK ÇİZGİ FİLM FUTBOL TOPUDUR (arcade oyunlarıyla ortak dil):
- * hücreyi dolduran yuvarlak top, ince (kendi renginin koyu tonu) kenar, doygun gövde rengi,
- * aynı rengin koyu tonuyla çizilmiş klasik beşgen/altıgen panel deseni,
- * küresel gölgelendirme, iri parlak yansıma + alt kenarda "rim" ışığı ve
- * yumuşak bir yer gölgesi. İçte beyaz simge YOKTUR: eşleşme top rengine göre.
- * Renk körlüğü için komşu renklerin panel deseni farklıdır (klasik / girdap /
- * yıldız); hepsi sade bir top olarak okunur.
+ * Her taş türü PARLAK, TIKNAZ bir FUTBOL NESNESİDİR ve hem şekliyle hem
+ * rengiyle ayrılır: mavi top, kırmızı forma, yeşil krampon, sarı kaleci
+ * eldiveni, mor düdük, pembe köşe bayrağı. Çizim dili: kalın koyu kontur
+ * (kendi renginin en koyu tonu), küresel gradyan gövde, beyaz ayrıntılar,
+ * üst-solda iri parlama ve yumuşak yer gölgesi.
  *
- * Özel taşlar tek bakışta seçilir — hepsi yine toptur:
- *   · Füze Şut (h / v): topun üstünde kalın beyaz hız şeritleri + iki yanda
- *     yön gösteren hız çizgileri (v için 90° döner).
- *   · Röveşata (bomb): turuncu-altın patlama yıldızı halkası ve kıvılcımlar
- *     içinde top.
- *   · Altın Top (ball): metalik altın top, gökkuşağı renkli paneller, hale
- *     ve pırıltılar.
- *   · Şampiyonluk kupası: cam bir küre içinde altın kupa.
- * Hepsi tek SVG; ikon fontu kullanılmaz (çizgi kalınlığı ölçekle büyür).
+ * Özel taşlar RENKSİZDİR, tek bakışta seçilir:
+ *   · Füze (h / v): çift başlı kırmızı-beyaz füze (v için 90° döner).
+ *   · Dron: dört pervaneli taşıyıcı; patlayınca hedefe uçar.
+ *   · Röveşata (bomba): fitilli, altın panelli gece topu.
+ *   · Altın Top: metalik altın top, takım renkli paneller, hale.
+ * Engeller: şampiyonluk kupası (cam küre içinde) ve antrenman konisi.
+ * Hepsi tek SVG; ikon fontu kullanılmaz. Çizimler memo'ludur: aynı tür aynı
+ * düğüm ağacını üretir, taş yalnız kimliği değişince yeniden çizilir.
  */
 
 import React, { useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import Svg, { Circle, ClipPath, Defs, Ellipse, G, LinearGradient, Path, Polygon, RadialGradient, Rect, Stop } from "react-native-svg";
 import { duration } from "@/theme";
-import { UCLU_BOARD, UCLU_PIECE_COLORS, type UcluBallPattern } from "@/lib/puzzle/ucluPalette";
+import { UCLU_BOARD, UCLU_PIECE_COLORS, UCLU_SPECIAL, type UcluBallPattern, type UcluPieceColors } from "@/lib/puzzle/ucluPalette";
 import type { Special, Tile } from "@/lib/puzzle/ucluEngine";
 
 /* ───────────────────────────── geometri ───────────────────────────── */
@@ -43,6 +40,8 @@ const pts = (p: readonly Pt[]) => p.map((q) => `${q[0].toFixed(2)},${q[1].toFixe
 const CX = 50;
 const CY = 48;
 const R = 44;
+
+const STAR5 = (cx: number, cy: number, r: number) => pts(ring(cx, cy, 10, (i) => (i % 2 ? r * 0.45 : r)));
 
 /* ───────────────────────────── panel desenleri ───────────────────────────── */
 
@@ -214,49 +213,346 @@ function Sparkle({ x, y, r, fill }: { x: number; y: number; r: number; fill: str
   );
 }
 
-/* ───────────────────────────── özel işaretler ───────────────────────────── */
+/* ───────────────────────────── tıknaz nesne çizimi ───────────────────────────── */
 
-/** Füze: topun iki yanında hız çizgileri (topun arkasında çizilir). */
-function SpeedLines({ vertical }: { vertical: boolean }) {
-  const lines: [number, number, number][] = [
-    [36, 3, 11],
-    [48, 1, 13],
-    [60, 3, 11],
-  ];
+/**
+ * Tıknaz çizim tekniği: her parça İKİ KEZ çizilir — önce kalın koyu kontur
+ * (rim, kalın stroke), sonra parlak gradyan gövde. Böylece birbirine değen
+ * parçalar tek bir kalın dış çizgiyle okunur (çizgi film oyuncak dili).
+ */
+type Part =
+  | { t: "path"; d: string }
+  | { t: "rect"; x: number; y: number; w: number; h: number; rx: number; rot?: string }
+  | { t: "circle"; cx: number; cy: number; r: number };
+
+function PartEl({ p, fill, stroke, sw }: { p: Part; fill: string; stroke?: string; sw?: number }) {
+  const common = { fill, stroke, strokeWidth: sw, strokeLinejoin: "round" as const };
+  if (p.t === "path") return <Path d={p.d} {...common} />;
+  if (p.t === "rect") return <Rect x={p.x} y={p.y} width={p.w} height={p.h} rx={p.rx} transform={p.rot} {...common} />;
+  return <Circle cx={p.cx} cy={p.cy} r={p.r} {...common} />;
+}
+
+function Chunky({ id, parts, tones, outline = 7 }: { id: string; parts: Part[]; tones: BallTones; outline?: number }) {
   return (
-    <G transform={vertical ? `rotate(90 ${CX} ${CY})` : undefined}>
-      {[false, true].map((flip) => (
-        <G key={String(flip)} transform={flip ? `rotate(180 ${CX} ${CY})` : undefined}>
-          {lines.map(([y, x0, len]) => (
-            <G key={y}>
-              <Path d={`M${x0 + 1} ${y + (CY - 47)} L${x0 + len} ${y + (CY - 47)}`} stroke={UCLU_BOARD.iconShadow} strokeWidth={5} strokeLinecap="round" />
-              <Path d={`M${x0 + 1} ${y + (CY - 48)} L${x0 + len} ${y + (CY - 48)}`} stroke={UCLU_BOARD.speed} strokeWidth={4} strokeLinecap="round" />
-            </G>
-          ))}
-        </G>
+    <G>
+      <Defs>
+        <RadialGradient id={`${id}f`} cx="34%" cy="24%" r="88%">
+          <Stop offset="0" stopColor={tones.hi} />
+          <Stop offset="0.45" stopColor={tones.base} />
+          <Stop offset="1" stopColor={tones.lo} />
+        </RadialGradient>
+      </Defs>
+      {parts.map((p, i) => (
+        <PartEl key={`o${i}`} p={p} fill={tones.rim} stroke={tones.rim} sw={outline} />
+      ))}
+      {parts.map((p, i) => (
+        <PartEl key={`f${i}`} p={p} fill={`url(#${id}f)`} />
       ))}
     </G>
   );
 }
 
-/** Füze: topun üstünden geçen iki kalın beyaz hız şeridi (topa kırpılır). */
-function MotionStripes({ id, r, vertical }: { id: string; r: number; vertical: boolean }) {
+/** Üst-sol parlama: iri yumuşak leke + küçük nokta. */
+function Gloss({ x, y, rx, ry, rot = -32 }: { x: number; y: number; rx: number; ry: number; rot?: number }) {
   return (
-    <G clipPath={`url(#${id}c)`}>
-      <G transform={vertical ? `rotate(90 ${CX} ${CY})` : undefined}>
-        {[-0.34, 0.1].map((k) => (
-          <G key={k}>
-            <Rect x={0} y={CY + r * k + 1.5} width={100} height={r * 0.24} fill={UCLU_BOARD.iconShadow} />
-            <Rect x={0} y={CY + r * k + 0.5} width={100} height={r * 0.24 - 1} fill={UCLU_BOARD.speed} />
-          </G>
-        ))}
-      </G>
+    <G>
+      <Ellipse cx={x} cy={y} rx={rx} ry={ry} transform={`rotate(${rot} ${x} ${y})`} fill={UCLU_BOARD.beamCore} fillOpacity={0.85} />
+      <Circle cx={x - rx * 0.9} cy={y + ry * 1.9} r={Math.max(1.6, ry * 0.45)} fill={UCLU_BOARD.beamCore} fillOpacity={0.7} />
     </G>
   );
 }
 
-const BURST = ring(CX, CY, 14, (i) => (i % 2 ? 39 : 48.5));
-const BURST_IN = ring(CX, CY, 14, (i) => (i % 2 ? 36 : 42));
+const Shadow = ({ rx = 30 }: { rx?: number }) => <Ellipse cx={50} cy={94} rx={rx} ry={4.5} fill={UCLU_BOARD.shadow} />;
+
+/* ── forma ── */
+const JERSEY = "M30 15 L41 11 Q50 21 59 11 L70 15 L91 31 L80 47 L72 42 L72 86 Q50 93 28 86 L28 42 L20 47 L9 31 Z";
+function Jersey({ id, pal }: { id: string; pal: UcluPieceColors }) {
+  return (
+    <G>
+      <Shadow rx={28} />
+      <Defs>
+        <ClipPath id={`${id}c`}>
+          <Path d={JERSEY} />
+        </ClipPath>
+      </Defs>
+      <Chunky id={id} tones={pal} parts={[{ t: "path", d: JERSEY }]} />
+      <G clipPath={`url(#${id}c)`}>
+        <Path d="M14 27 L25 43" stroke={UCLU_BOARD.beamCore} strokeWidth={5} strokeLinecap="round" />
+        <Path d="M86 27 L75 43" stroke={UCLU_BOARD.beamCore} strokeWidth={5} strokeLinecap="round" />
+        <Path d="M28 82 Q50 90 72 82 L72 96 L28 96 Z" fill={pal.lo} opacity={0.6} />
+        <Path d="M30 42 L30 86" stroke={pal.rim} strokeOpacity={0.25} strokeWidth={2} />
+      </G>
+      <Path d="M40 10.5 Q50 27 60 10.5 L56 9.5 Q50 19 44 9.5 Z" fill={UCLU_BOARD.beamCore} stroke={pal.rim} strokeWidth={1.4} strokeLinejoin="round" />
+      <Circle cx={50} cy={55} r={12} fill={UCLU_BOARD.beamCore} stroke={pal.rim} strokeWidth={1.6} />
+      <Polygon points={STAR5(50, 55.5, 8.5)} fill={pal.panel} />
+      <Gloss x={38} y={28} rx={9} ry={4.5} />
+    </G>
+  );
+}
+
+/* ── krampon ── */
+const BOOT_UPPER = "M12 32 Q12 20 23 20 L40 20 Q44 34 57 40 L79 47 Q93 51 92 62 L92 66 L12 66 Z";
+const BOOT_SOLE = "M8 63 L94 63 Q97 74 86 75 L15 75 Q6 75 8 63 Z";
+function Boot({ id, pal }: { id: string; pal: UcluPieceColors }) {
+  return (
+    <G>
+      <Shadow rx={36} />
+      {[17, 31, 57, 72, 84].map((x) => (
+        <Rect key={x} x={x - 4} y={72} width={8} height={9} rx={2.5} fill={pal.panel} stroke={pal.rim} strokeWidth={2} />
+      ))}
+      <Chunky id={id} tones={pal} parts={[{ t: "path", d: BOOT_UPPER }]} />
+      <Path d={BOOT_SOLE} fill={UCLU_BOARD.beamCore} stroke={pal.rim} strokeWidth={4} strokeLinejoin="round" />
+      <Path d="M12 68 L92 68" stroke={UCLU_SPECIAL.rocketBodyLo} strokeWidth={2.4} />
+      <Ellipse cx={25} cy={21.5} rx={11} ry={4} fill={pal.rim} />
+      <Path d="M24 57 L42 44 L48 52 L70 41" fill="none" stroke={UCLU_BOARD.beamCore} strokeWidth={6} strokeLinecap="round" strokeLinejoin="round" />
+      <G stroke={UCLU_BOARD.beamCore} strokeWidth={3} strokeLinecap="round">
+        <Path d="M38 27 L46 24" />
+        <Path d="M41 32 L50 29" />
+        <Path d="M45 37 L54 34" />
+      </G>
+      <Gloss x={27} y={34} rx={8} ry={4} />
+    </G>
+  );
+}
+
+/* ── kaleci eldiveni ── */
+const GLOVE: Part[] = [
+  { t: "rect", x: 9, y: 40, w: 15, h: 30, rx: 7.5, rot: "rotate(-34 16 55)" },
+  { t: "rect", x: 26, y: 15, w: 12.5, h: 40, rx: 6.25 },
+  { t: "rect", x: 38.5, y: 9, w: 12.5, h: 44, rx: 6.25 },
+  { t: "rect", x: 51, y: 11, w: 12.5, h: 42, rx: 6.25 },
+  { t: "rect", x: 63.5, y: 18, w: 12, h: 36, rx: 6 },
+  { t: "rect", x: 25, y: 36, w: 52, h: 42, rx: 15 },
+];
+function Glove({ id, pal }: { id: string; pal: UcluPieceColors }) {
+  return (
+    <G>
+      <Shadow rx={26} />
+      <Chunky id={id} tones={pal} parts={GLOVE} />
+      <G stroke={pal.panel} strokeWidth={1.8} strokeLinecap="round">
+        <Path d="M38.5 22 L38.5 44" />
+        <Path d="M51 18 L51 44" />
+        <Path d="M63.5 24 L63.5 44" />
+      </G>
+      <Rect x={33} y={46} width={36} height={22} rx={10} fill={pal.hi} fillOpacity={0.5} />
+      <Rect x={27} y={72} width={48} height={19} rx={6} fill={pal.panel} stroke={pal.rim} strokeWidth={3.5} />
+      <Rect x={27} y={79} width={48} height={4.5} fill={UCLU_BOARD.beamCore} />
+      <Gloss x={33} y={24} rx={4} ry={8} rot={0} />
+    </G>
+  );
+}
+
+/* ── düdük ── */
+const WHISTLE: Part[] = [
+  { t: "rect", x: 38, y: 33, w: 54, h: 21, rx: 7 },
+  { t: "circle", cx: 40, cy: 60, r: 27 },
+];
+function Whistle({ id, pal }: { id: string; pal: UcluPieceColors }) {
+  return (
+    <G>
+      <Shadow rx={30} />
+      <Circle cx={21} cy={28} r={10} fill="none" stroke={pal.rim} strokeWidth={10} />
+      <Circle cx={21} cy={28} r={10} fill="none" stroke={UCLU_SPECIAL.rocketBodyLo} strokeWidth={4.5} />
+      <Chunky id={id} tones={pal} parts={WHISTLE} />
+      <Rect x={58} y={29} width={18} height={8} rx={3.5} fill={pal.rim} />
+      <Rect x={84} y={36} width={6} height={15} rx={3} fill={pal.panel} />
+      <Circle cx={40} cy={61} r={11} fill={pal.panel} />
+      <Circle cx={40} cy={61} r={5} fill={pal.rim} />
+      <Circle cx={36.5} cy={57.5} r={2.6} fill={pal.hi} />
+      <Gloss x={28} y={45} rx={9} ry={4.5} />
+    </G>
+  );
+}
+
+/* ── köşe bayrağı ── */
+const FLAG = "M28 14 Q46 6 62 14 Q76 21 90 14 L90 52 Q76 59 62 52 Q46 44 28 52 Z";
+function CornerFlag({ id, pal }: { id: string; pal: UcluPieceColors }) {
+  return (
+    <G>
+      <Ellipse cx={26} cy={91} rx={16} ry={5} fill={UCLU_BOARD.grassLo} />
+      <Path d="M14 91 Q18 82 20 90 Q24 80 27 90 Q31 81 34 90 Q37 84 39 91 Z" fill={UCLU_BOARD.grass} />
+      <Rect x={20} y={8} width={9} height={84} rx={4.5} fill={pal.rim} />
+      <Rect x={21.8} y={9} width={5.4} height={82} rx={2.7} fill={UCLU_BOARD.beamCore} />
+      <Defs>
+        <ClipPath id={`${id}c`}>
+          <Path d={FLAG} />
+        </ClipPath>
+      </Defs>
+      <Chunky id={id} tones={pal} parts={[{ t: "path", d: FLAG }]} outline={6} />
+      <G clipPath={`url(#${id}c)`} fill={UCLU_BOARD.beamCore} opacity={0.92}>
+        <Rect x={45} y={0} width={17} height={32} />
+        <Rect x={62} y={32} width={15} height={30} />
+        <Rect x={28} y={32} width={17} height={30} />
+        <Rect x={77} y={0} width={15} height={32} />
+      </G>
+      <Circle cx={24.5} cy={9} r={6} fill={UCLU_BOARD.gold} stroke={UCLU_BOARD.goldDeep} strokeWidth={2} />
+      <Gloss x={40} y={18} rx={7} ry={3} rot={-14} />
+    </G>
+  );
+}
+
+/* ── renksiz özel taşlar ── */
+
+const ROCKET_TONES: BallTones = {
+  hi: UCLU_SPECIAL.rocketBody,
+  base: UCLU_SPECIAL.rocketBody,
+  lo: UCLU_SPECIAL.rocketBodyLo,
+  rim: UCLU_SPECIAL.rocketRim,
+  panel: UCLU_SPECIAL.rocketNose,
+};
+const NOSE_TONES: BallTones = {
+  hi: UCLU_SPECIAL.rocketNoseHi,
+  base: UCLU_SPECIAL.rocketNose,
+  lo: UCLU_SPECIAL.rocketNoseLo,
+  rim: UCLU_SPECIAL.rocketRim,
+  panel: UCLU_SPECIAL.rocketNoseLo,
+};
+
+/** Çift başlı füze (yatay; dikey için 90° döner). */
+function Rocket({ vertical }: { vertical: boolean }) {
+  return (
+    <G transform={vertical ? `rotate(90 ${CX} ${CX})` : undefined}>
+      <Defs>
+        <RadialGradient id="urkglow" cx="50%" cy="50%" r="50%">
+          <Stop offset="0.3" stopColor={UCLU_BOARD.glowCool} stopOpacity={0.85} />
+          <Stop offset="1" stopColor={UCLU_BOARD.glowCool} stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+      <Ellipse cx={50} cy={50} rx={50} ry={34} fill="url(#urkglow)" />
+      <Chunky
+        id="urkfin"
+        tones={NOSE_TONES}
+        parts={[
+          { t: "path", d: "M38 39 L44 24 L56 24 L62 39 Z" },
+          { t: "path", d: "M38 61 L44 76 L56 76 L62 61 Z" },
+        ]}
+        outline={6}
+      />
+      <Chunky id="urkbody" tones={ROCKET_TONES} parts={[{ t: "rect", x: 22, y: 37, w: 56, h: 26, rx: 7 }]} outline={6} />
+      <Chunky
+        id="urknose"
+        tones={NOSE_TONES}
+        parts={[
+          { t: "path", d: "M24 36 Q7 41 5 50 Q7 59 24 64 Z" },
+          { t: "path", d: "M76 36 Q93 41 95 50 Q93 59 76 64 Z" },
+        ]}
+        outline={6}
+      />
+      <Rect x={44} y={35} width={12} height={30} rx={3} fill={UCLU_SPECIAL.rocketBand} stroke={UCLU_SPECIAL.rocketBandLo} strokeWidth={2} />
+      {[33, 67].map((x) => (
+        <G key={x}>
+          <Circle cx={x} cy={50} r={6} fill={UCLU_SPECIAL.droneHi} stroke={UCLU_SPECIAL.rocketRim} strokeWidth={2.4} />
+          <Circle cx={x - 1.8} cy={48} r={2} fill={UCLU_BOARD.beamCore} />
+        </G>
+      ))}
+      <Rect x={26} y={39.5} width={16} height={4} rx={2} fill={UCLU_BOARD.beamCore} fillOpacity={0.9} />
+    </G>
+  );
+}
+
+const BOMB_TONES: BallTones = {
+  hi: UCLU_SPECIAL.bombHi,
+  base: UCLU_SPECIAL.bomb,
+  lo: UCLU_SPECIAL.bombLo,
+  rim: UCLU_SPECIAL.bombLo,
+  panel: UCLU_SPECIAL.bombPanel,
+};
+
+/** Röveşata: fitilli, altın panelli gece topu. */
+function Bomb() {
+  return (
+    <G>
+      <Defs>
+        <RadialGradient id="ubmh" cx="50%" cy="55%" r="50%">
+          <Stop offset="0.45" stopColor={UCLU_BOARD.glowWarm} stopOpacity={0.9} />
+          <Stop offset="1" stopColor={UCLU_BOARD.glowWarm} stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+      <Circle cx={CX} cy={54} r={50} fill="url(#ubmh)" />
+      <Path d="M62 24 Q70 10 82 13" fill="none" stroke={UCLU_SPECIAL.bombLo} strokeWidth={8} strokeLinecap="round" />
+      <Path d="M62 24 Q70 10 82 13" fill="none" stroke={UCLU_SPECIAL.fuse} strokeWidth={4} strokeLinecap="round" />
+      <G transform="translate(0 6) scale(1)">
+        <Ellipse cx={50} cy={89} rx={28} ry={4} fill={UCLU_BOARD.shadow} />
+        <Ball id="ubomb" tones={BOMB_TONES} pattern="classic" r={37} stroke={3} />
+      </G>
+      <Rect x={53} y={17} width={16} height={11} rx={3} transform="rotate(35 61 22)" fill={UCLU_SPECIAL.bombHi} stroke={UCLU_SPECIAL.bombLo} strokeWidth={2.5} />
+      <Sparkle x={84} y={12} r={11} fill={UCLU_SPECIAL.sparkHot} />
+      <Sparkle x={84} y={12} r={6} fill={UCLU_SPECIAL.spark} />
+    </G>
+  );
+}
+
+const DRONE_TONES: BallTones = {
+  hi: UCLU_SPECIAL.droneHi,
+  base: UCLU_SPECIAL.droneBody,
+  lo: UCLU_SPECIAL.droneLo,
+  rim: UCLU_SPECIAL.droneRim,
+  panel: UCLU_SPECIAL.droneLo,
+};
+
+/** Dron: dört pervaneli, iri gözlü taşıyıcı. */
+export function DroneArt({ spin = 0 }: { spin?: number }) {
+  return (
+    <G>
+      <Ellipse cx={50} cy={93} rx={24} ry={4} fill={UCLU_BOARD.shadow} />
+      <G stroke={UCLU_SPECIAL.droneRim} strokeWidth={13} strokeLinecap="round">
+        <Path d="M22 24 L78 76" />
+        <Path d="M78 24 L22 76" />
+      </G>
+      <G stroke={UCLU_SPECIAL.droneArm} strokeWidth={7} strokeLinecap="round">
+        <Path d="M22 24 L78 76" />
+        <Path d="M78 24 L22 76" />
+      </G>
+      {[
+        [20, 22],
+        [80, 22],
+        [20, 76],
+        [80, 76],
+      ].map(([x, y]) => (
+        <G key={`${x}${y}`}>
+          <Ellipse cx={x} cy={y} rx={18} ry={6.5} transform={`rotate(${spin} ${x} ${y})`} fill={UCLU_SPECIAL.rotor} stroke={UCLU_SPECIAL.rotorEdge} strokeWidth={1.6} />
+          <Circle cx={x} cy={y} r={4.5} fill={UCLU_SPECIAL.droneArm} stroke={UCLU_SPECIAL.droneRim} strokeWidth={1.6} />
+        </G>
+      ))}
+      <Chunky id="udrn" tones={DRONE_TONES} parts={[{ t: "rect", x: 29, y: 31, w: 42, h: 38, rx: 15 }]} outline={6} />
+      <Circle cx={50} cy={53} r={10} fill={UCLU_BOARD.beamCore} stroke={UCLU_SPECIAL.droneRim} strokeWidth={2.4} />
+      <Circle cx={50} cy={54} r={6} fill={UCLU_SPECIAL.droneEye} />
+      <Circle cx={47.6} cy={51.6} r={2.2} fill={UCLU_BOARD.beamCore} />
+      <Circle cx={50} cy={36.5} r={3} fill={UCLU_SPECIAL.droneLed} />
+      <Gloss x={38} y={39} rx={6} ry={3} />
+    </G>
+  );
+}
+
+const CONE_TONES: BallTones = {
+  hi: UCLU_SPECIAL.coneHi,
+  base: UCLU_SPECIAL.cone,
+  lo: UCLU_SPECIAL.coneLo,
+  rim: UCLU_SPECIAL.coneRim,
+  panel: UCLU_SPECIAL.coneStripe,
+};
+const CONE = "M43 12 Q50 7 57 12 L79 80 L21 80 Z";
+
+/** Antrenman konisi: 2 katlıda iki beyaz şerit, 1 katlıda tek. */
+function Cone({ hp }: { hp: number }) {
+  return (
+    <G>
+      <Shadow rx={34} />
+      <Rect x={13} y={76} width={74} height={14} rx={5} fill={UCLU_SPECIAL.coneBase} stroke={UCLU_SPECIAL.coneRim} strokeWidth={3} />
+      <Defs>
+        <ClipPath id={`ucn${hp}c`}>
+          <Path d={CONE} />
+        </ClipPath>
+      </Defs>
+      <Chunky id={`ucn${hp}`} tones={CONE_TONES} parts={[{ t: "path", d: CONE }]} outline={6} />
+      <G clipPath={`url(#ucn${hp}c)`} fill={UCLU_SPECIAL.coneStripe}>
+        <Rect x={0} y={hp >= 2 ? 30 : 42} width={100} height={10} />
+        {hp >= 2 ? <Rect x={0} y={54} width={100} height={10} /> : null}
+      </G>
+      <Path d="M44 18 L36 70" stroke={UCLU_BOARD.beamCore} strokeOpacity={0.55} strokeWidth={4} strokeLinecap="round" />
+    </G>
+  );
+}
 
 /* ───────────────────────────── taş çizimi ───────────────────────────── */
 
@@ -265,44 +561,40 @@ export interface PieceGlyphProps {
   color: number;
   special: Special;
   size: number;
+  /** Koni canı. */
+  hp?: number;
 }
 
 /** Statik taş çizimi — HUD hedeflerinde ve uçan simgelerde de kullanılır. */
-export const PieceGlyph = React.memo(function PieceGlyph({ kind, color, special, size }: PieceGlyphProps) {
+export const PieceGlyph = React.memo(function PieceGlyph({ kind, color, special, size, hp }: PieceGlyphProps) {
   if (kind === "trophy") return <TrophyGlyph size={size} />;
   if (special === "ball") return <GoldenBall size={size} />;
-  const idx = Math.max(0, color) % UCLU_PIECE_COLORS.length;
-  const pal = UCLU_PIECE_COLORS[idx];
-  const rocket = special === "h" || special === "v";
-  const bomb = special === "bomb";
-  const id = `ub${idx}${special}`;
-  const r = rocket ? 40 : bomb ? 38 : R;
+  let body: React.ReactNode;
+  if (kind === "cone") body = <Cone hp={hp ?? 1} />;
+  else if (special === "h" || special === "v") body = <Rocket vertical={special === "v"} />;
+  else if (special === "bomb") body = <Bomb />;
+  else if (special === "drone") body = <DroneArt />;
+  else {
+    const idx = Math.max(0, color) % UCLU_PIECE_COLORS.length;
+    const pal = UCLU_PIECE_COLORS[idx];
+    const id = `up${idx}`;
+    if (pal.shape === "jersey") body = <Jersey id={id} pal={pal} />;
+    else if (pal.shape === "boot") body = <Boot id={id} pal={pal} />;
+    else if (pal.shape === "glove") body = <Glove id={id} pal={pal} />;
+    else if (pal.shape === "whistle") body = <Whistle id={id} pal={pal} />;
+    else if (pal.shape === "flag") body = <CornerFlag id={id} pal={pal} />;
+    else
+      body = (
+        <G>
+          <Ellipse cx={50} cy={95} rx={32} ry={4} fill={UCLU_BOARD.shadow} />
+          <Ball id={id} tones={pal} pattern={pal.pattern} r={R} stroke={3} />
+        </G>
+      );
+  }
   return (
     <View style={{ width: size, height: size }}>
       <Svg width={size} height={size} viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
-        {bomb ? (
-          <G>
-            <Defs>
-              <RadialGradient id={`${id}h`} cx="50%" cy="50%" r="50%">
-                <Stop offset="0.5" stopColor={UCLU_BOARD.glowWarm} stopOpacity={0.95} />
-                <Stop offset="1" stopColor={UCLU_BOARD.glowWarm} stopOpacity={0} />
-              </RadialGradient>
-            </Defs>
-            <Circle cx={CX} cy={CY} r={50} fill={`url(#${id}h)`} />
-            <Polygon points={pts(BURST)} fill={UCLU_BOARD.burstHot} stroke={UCLU_BOARD.burstHot} strokeWidth={3} strokeLinejoin="round" />
-            <Polygon points={pts(BURST_IN)} fill={UCLU_BOARD.comboWarm} />
-          </G>
-        ) : null}
-        {rocket ? <SpeedLines vertical={special === "v"} /> : null}
-        <Ellipse cx={50} cy={95} rx={r * 0.72} ry={4} fill={UCLU_BOARD.shadow} />
-        <Ball id={id} tones={pal} pattern={pal.pattern} r={r} />
-        {rocket ? <MotionStripes id={id} r={r} vertical={special === "v"} /> : null}
-        {bomb ? (
-          <G>
-            <Sparkle x={12} y={13} r={9} fill={UCLU_BOARD.goldHi} />
-            <Sparkle x={88} y={84} r={8} fill={UCLU_BOARD.beamCore} />
-          </G>
-        ) : null}
+        {body}
       </Svg>
     </View>
   );
@@ -339,7 +631,6 @@ function GoldenBall({ size }: { size: number }) {
 }
 
 const CUP = "M32 23 L68 23 L67 39 C66 51 59 59 50 59 C41 59 34 51 33 39 Z";
-const STAR5 = (cx: number, cy: number, r: number) => pts(ring(cx, cy, 10, (i) => (i % 2 ? r * 0.45 : r)));
 
 /** Kupa çizimi (iki geçiş: lacivert kontur, sonra altın dolgu). */
 function Cup({ outline }: { outline: boolean }) {
@@ -426,6 +717,8 @@ export interface TileViewProps {
   /** Tahtanın üstünden düşerek gelecekse başlangıç satırı (yalnız ilk çizimde okunur). */
   spawnRow?: number;
   dying: boolean;
+  /** Patlama gecikmesi (ms): füze / şok dalgası bu taşa ulaşınca söner. */
+  dieDelay?: number;
   selected: boolean;
   /** İpucu sallaması: yön ve tetik sayacı. */
   hintDx: number;
@@ -453,7 +746,7 @@ export function phased(v: Animated.Value, phase: number, lo: number, hi: number)
   return v.interpolate({ inputRange, outputRange });
 }
 
-function TileViewBase({ tile, row, col, cell, spawnRow, dying, selected, hintDx, hintDy, hintTick, idle, still }: TileViewProps) {
+function TileViewBase({ tile, row, col, cell, spawnRow, dying, dieDelay = 0, selected, hintDx, hintDy, hintTick, idle, still }: TileViewProps) {
   const startRow = spawnRow ?? row;
   const pos = useRef(new Animated.ValueXY({ x: col * cell, y: startRow * cell })).current;
   const scale = useRef(new Animated.Value(spawnRow === undefined ? 0.2 : 1)).current;
@@ -528,7 +821,7 @@ function TileViewBase({ tile, row, col, cell, spawnRow, dying, selected, hintDx,
   useEffect(() => {
     if (!dying) return;
     // Çizgi film "pop": önce yassılıp şişer (squash), sonra uzayıp küçülerek söner.
-    Animated.parallel([
+    const pop = Animated.parallel([
       Animated.sequence([
         Animated.timing(scale, {
           toValue: 1.26,
@@ -561,7 +854,9 @@ function TileViewBase({ tile, row, col, cell, spawnRow, dying, selected, hintDx,
         delay: 80,
         useNativeDriver: true,
       }),
-    ]).start();
+    ]);
+    (dieDelay > 0 ? Animated.sequence([Animated.delay(dieDelay), pop]) : pop).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dying, scale, squash, opacity]);
 
   useEffect(() => {
@@ -708,7 +1003,7 @@ function TileViewBase({ tile, row, col, cell, spawnRow, dying, selected, hintDx,
         },
       ]}
     >
-      <PieceGlyph kind={tile.kind} color={tile.color} special={tile.special} size={cell - inset * 2} />
+      <PieceGlyph kind={tile.kind} color={tile.color} special={tile.special} hp={tile.hp} size={cell - inset * 2} />
     </Animated.View>
   );
 }
@@ -722,6 +1017,7 @@ export const TileView = React.memo(
     a.col === b.col &&
     a.cell === b.cell &&
     a.dying === b.dying &&
+    a.dieDelay === b.dieDelay &&
     a.selected === b.selected &&
     a.hintTick === b.hintTick &&
     a.hintDx === b.hintDx &&

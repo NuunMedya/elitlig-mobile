@@ -82,6 +82,11 @@ import {
 } from "@/lib/game/quiz/questions";
 import { CARTOON } from "@/lib/game/cartoon";
 import { QUIZ, QUIZ_LETTER_TONES, QUIZ_TONES, QUIZ_TRIPLE_TONES, type QuizToneName } from "@/lib/game/quizPalette";
+import { isOfflineCacheMiss, withOfflineCache } from "@/lib/offline/cache";
+import type { LifeGameKey } from "@/lib/puzzle/api";
+import { useGameLives } from "@/lib/puzzle/useGameLives";
+import { LivesSheet } from "@/components/gamehome/HomeSheets";
+import { OfflinePill } from "@/components/offline/OfflineSync";
 import { useScope } from "@/providers/ScopeProvider";
 import { fonts, haptics, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
@@ -128,14 +133,16 @@ function useQuizPool(source: QuizConfig["source"], city: QuizCity, enabled: bool
     queryKey: ["quiz", source, cityId ?? "tr"],
     enabled,
     staleTime: 15 * 60_000,
-    queryFn: async () => {
-      if (source === "players") {
-        const data = await getPlayerRankings({ cityId }, "topScorers");
-        return { kind: "players", players: toPlayers(data?.players ?? []) };
-      }
-      const rows = await getMatches({ cityId, cityName: city?.label, status: "yayinlanmis", limit: 800, compact: true });
-      return { kind: "matches", matches: toMatches(rows ?? []) };
-    },
+    // Çevrimdışı (sözleşme §7): havuz çevrimiçiyken cihaza yazılır, ağ yokken oradan oynanır.
+    queryFn: () =>
+      withOfflineCache<QuizPool>(`quiz.${source}.${cityId ?? "tr"}`, async () => {
+        if (source === "players") {
+          const data = await getPlayerRankings({ cityId }, "topScorers");
+          return { kind: "players", players: toPlayers(data?.players ?? []) };
+        }
+        const rows = await getMatches({ cityId, cityName: city?.label, status: "yayinlanmis", limit: 800, compact: true });
+        return { kind: "matches", matches: toMatches(rows ?? []) };
+      }),
   });
 }
 
@@ -364,7 +371,7 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
 
   /* Tur bittiğinde skor bir kez gönderilir. */
   const finishedRef = useRef(false);
-  const { finish: finishRun, reset: resetRun } = run;
+  const { finish: finishRun } = run;
   useEffect(() => {
     if (phase === "over" && !finishedRef.current) {
       finishedRef.current = true;
@@ -373,11 +380,23 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
     }
   }, [phase, score, finishRun, correct, asked, bestStreak]);
 
-  const start = () => {
-    if (!pool || !enough) return;
+  const [livesOpen, setLivesOpen] = useState(false);
+  const gameLives = useGameLives(config.game === "gunun" ? null : (config.game as LifeGameKey));
+  const beginRun = run.begin;
+  const startingRef = useRef(false);
+  const start = async () => {
+    if (!pool || !enough || startingRef.current) return;
+    // Can kapısı (sözleşme §4): can yoksa tur başlamaz.
+    startingRef.current = true;
+    const begun = await beginRun().finally(() => {
+      startingRef.current = false;
+    });
+    if (!begun.ok) {
+      setLivesOpen(true);
+      return;
+    }
     clearTimers();
     finishedRef.current = false;
-    resetRun();
     recent.current = [];
     setScore(0);
     setLives(QUIZ_LIVES);
@@ -517,6 +536,7 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
         </View>
 
         <View style={styles.stage}>
+          {phase === "setup" ? <OfflinePill /> : null}
           {phase === "setup" ? (
             <SetupCard
               config={config}
@@ -524,10 +544,10 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
               city={city}
               onPickCity={() => setPickerOpen(true)}
               loading={!cityLoaded || poolQuery.isLoading}
-              error={poolQuery.isError}
+              error={poolQuery.isError ? (isOfflineCacheMiss(poolQuery.error) ? "İnternet gerekli · soruları bir kez çevrimiçi yükle" : "Sorular yüklenemedi · tekrar dene") : null}
               enough={enough}
               onRetry={() => void poolQuery.refetch()}
-              onStart={start}
+              onStart={() => void start()}
             />
           ) : null}
 
@@ -675,7 +695,7 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
               submit={run.submit}
               onRetrySubmit={run.retry}
               onSignIn={() => router.push("/giris")}
-              onRestart={start}
+              onRestart={() => void start()}
               secondary={{ label: "İl değiştir", icon: "location-outline", onPress: () => setPhase("setup") }}
               stars={run.stars}
               onCity={() => router.push("/kulup-sehri")}
@@ -716,6 +736,10 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
           />
         }
       />
+
+      {config.game !== "gunun" ? (
+        <LivesSheet visible={livesOpen} onClose={() => setLivesOpen(false)} game={config.game as LifeGameKey} lives={gameLives} title={config.title} />
+      ) : null}
 
       <QuizCityPicker
         visible={pickerOpen}
@@ -760,7 +784,8 @@ function SetupCard({
   city: QuizCity;
   onPickCity: () => void;
   loading: boolean;
-  error: boolean;
+  /** Hata metni (yoksa null). */
+  error: string | null;
   enough: boolean;
   onRetry: () => void;
   onStart: () => void;
@@ -830,7 +855,7 @@ function SetupCard({
             <Touchable feedback="button" onPress={onRetry} style={[styles.notice, styles.noticeBad]} accessibilityRole="button" accessibilityLabel="Tekrar dene">
               <Ionicons name="cloud-offline" size={16} color={CARTOON.redLip} />
               <Text style={styles.noticeText} {...textScale.dense}>
-                Sorular yüklenemedi · tekrar dene
+                {error}
               </Text>
             </Touchable>
           ) : !loading && !enough ? (
@@ -855,7 +880,7 @@ function SetupCard({
             tone="green"
             size="lg"
             loading={loading}
-            disabled={!enough || error}
+            disabled={!enough || Boolean(error)}
             onPress={() => onStart()}
             style={styles.stretch}
             accessibilityLabel={loading ? "Sorular hazırlanıyor" : "Başla"}

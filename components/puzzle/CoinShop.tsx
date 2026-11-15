@@ -4,6 +4,10 @@
  *   · Özel kulüp renkleri: şehirde formalar, çatılar, bayraklar (kozmetik)
  *   · Seri koruyucu jetonla: Günlük ödül penceresinde (kaçırılan gün varken)
  * Kurallar ve fiyatlar sunucuda (profile.coin_shop); eski sunucuda pencere boş kalır.
+ *
+ * `variant="game"`: Kulüp Şehri'nin içinden açılınca ahşap çerçeveli parşömen
+ * oyun penceresi (krem zemin, parlak düğmeler; iki temada aynı). Diğer
+ * ekranlarda (oyunlar ev ekranı, Lig Yolu) alttan açılan uygulama sayfasıdır.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -11,16 +15,23 @@ import { useQueryClient } from "@tanstack/react-query";
 import { StyleSheet, Text, View } from "react-native";
 
 import { useAdminMutation } from "@/components/admin";
+import { GameButton, GameSheet } from "@/components/city2/game/GamePaper";
 import { BottomSheet, Button } from "@/components/ui";
 import { buyClubKit, cityKeys, tradeCoinsForStars } from "@/lib/puzzle/api";
 import { city2Keys } from "@/lib/puzzle/city2";
+import { CP } from "@/lib/puzzle/cityGamePalette";
 import { PREMIUM_KITS } from "@/lib/puzzle/cityPalette";
 import { usePuzzleCache, usePuzzleMe } from "@/lib/puzzle/usePuzzle";
 import { colors, fonts, hairline, radius, space, textScale, type } from "@/theme";
 
 const fmt = (n: number) => n.toLocaleString("tr-TR");
 
-export function CoinShopSheet({ visible, onClose, onKitBought }: { visible: boolean; onClose: () => void; onKitBought?: (key: string) => void }) {
+export function CoinShopSheet({ visible, onClose, onKitBought, variant = "app" }: { visible: boolean; onClose: () => void; onKitBought?: (key: string) => void; variant?: "app" | "game" }) {
+  const game = variant === "game";
+  const C = game ? CP : colors;
+  const styles = game ? gameStyles : appStyles;
+  const Btn = game ? GameButton : Button;
+  const Sheet = game ? GameSheet : BottomSheet;
   const me = usePuzzleMe().data;
   const cache = usePuzzleCache();
   const queryClient = useQueryClient();
@@ -42,10 +53,10 @@ export function CoinShopSheet({ visible, onClose, onKitBought }: { visible: bool
   const shop = me?.profile.coin_shop;
   const coins = me?.profile.coins ?? 0;
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="Jeton mağazası" snap="full">
+    <Sheet visible={visible} onClose={onClose} title="Jeton mağazası" snap="full">
       <View style={styles.body}>
         <View style={styles.balance}>
-          <Ionicons name="disc" size={22} color={colors.yellowCard} />
+          <Ionicons name="disc" size={22} color={C.yellowCard} />
           <Text style={styles.balanceText} {...textScale.dense}>
             {fmt(coins)} jeton
           </Text>
@@ -58,7 +69,7 @@ export function CoinShopSheet({ visible, onClose, onKitBought }: { visible: bool
           <>
             <View style={styles.card}>
               <View style={styles.head}>
-                <Ionicons name="star" size={20} color={colors.yellowCard} />
+                <Ionicons name="star" size={20} color={C.yellowCard} />
                 <Text style={styles.title} {...textScale.dense}>
                   Yıldız takası
                 </Text>
@@ -69,7 +80,7 @@ export function CoinShopSheet({ visible, onClose, onKitBought }: { visible: bool
               <Text style={styles.lead} {...textScale.long}>
                 {fmt(shop.trade.coins)} jetonu {shop.trade.stars} Kulüp Şehri yıldızına çevir. Haftada en çok {shop.trade.per_week} kez; Pazartesi yenilenir.
               </Text>
-              <Button
+              <Btn
                 label={shop.trade.left < 1 ? "Bu haftanın hakkı bitti" : coins < shop.trade.coins ? `${fmt(shop.trade.coins - coins)} jeton eksik` : `${fmt(shop.trade.coins)} jeton → ${shop.trade.stars} yıldız`}
                 icon="swap-horizontal"
                 variant={shop.trade.left > 0 && coins >= shop.trade.coins ? "primary" : "secondary"}
@@ -81,7 +92,7 @@ export function CoinShopSheet({ visible, onClose, onKitBought }: { visible: bool
 
             <View style={styles.card}>
               <View style={styles.head}>
-                <Ionicons name="color-palette" size={20} color={colors.brandAccent} />
+                <Ionicons name="color-palette" size={20} color={C.brandAccent} />
                 <Text style={styles.title} {...textScale.dense}>
                   Özel kulüp renkleri
                 </Text>
@@ -94,8 +105,8 @@ export function CoinShopSheet({ visible, onClose, onKitBought }: { visible: bool
                 return (
                   <View key={k.key} style={styles.kitRow}>
                     <View style={styles.swatch}>
-                      <View style={[styles.half, { backgroundColor: look?.primary ?? colors.surface3 }]} />
-                      <View style={[styles.half, { backgroundColor: look?.secondary ?? colors.surface2 }]} />
+                      <View style={[styles.half, { backgroundColor: look?.primary ?? C.surface3 }]} />
+                      <View style={[styles.half, { backgroundColor: look?.secondary ?? C.surface2 }]} />
                     </View>
                     <Text style={styles.kitName} numberOfLines={1} {...textScale.dense}>
                       {k.title}
@@ -105,7 +116,7 @@ export function CoinShopSheet({ visible, onClose, onKitBought }: { visible: bool
                         SENDE
                       </Text>
                     ) : (
-                      <Button
+                      <Btn
                         label={fmt(k.price)}
                         icon="disc"
                         size="sm"
@@ -122,7 +133,7 @@ export function CoinShopSheet({ visible, onClose, onKitBought }: { visible: bool
 
             <View style={styles.card}>
               <View style={styles.head}>
-                <Ionicons name="shield-checkmark" size={20} color={colors.warn} />
+                <Ionicons name="shield-checkmark" size={20} color={C.warn} />
                 <Text style={styles.title} {...textScale.dense}>
                   Seri koruyucu
                 </Text>
@@ -134,22 +145,26 @@ export function CoinShopSheet({ visible, onClose, onKitBought }: { visible: bool
           </>
         )}
       </View>
-    </BottomSheet>
+    </Sheet>
   );
 }
 
-const styles = StyleSheet.create({
-  body: { gap: space.md, paddingBottom: space.lg },
-  balance: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  balanceText: { ...type.h2, color: colors.textPrimary },
-  card: { gap: space.sm, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
-  head: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  title: { ...type.h3, color: colors.textPrimary, flex: 1 },
-  meta: { ...type.numSmStrong, color: colors.textSecondary },
-  lead: { ...type.bodySm, color: colors.textSecondary },
-  kitRow: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 44 },
-  swatch: { width: 30, height: 30, borderRadius: radius.pill, overflow: "hidden", flexDirection: "row", borderWidth: hairline, borderColor: colors.border },
-  half: { flex: 1 },
-  kitName: { ...type.bodySm, fontFamily: fonts.semibold, color: colors.textPrimary, flex: 1 },
-  owned: { ...type.micro, fontFamily: fonts.bold, color: colors.win },
-});
+const makeStyles = (c: { textPrimary: string; textSecondary: string; surface1: string; border: string; win: string }, game: boolean) =>
+  StyleSheet.create({
+    body: { gap: space.md, paddingBottom: space.lg },
+    balance: { flexDirection: "row", alignItems: "center", gap: space.sm },
+    balanceText: { ...type.h2, color: c.textPrimary },
+    card: { gap: space.sm, padding: space.md, borderRadius: radius.xl, backgroundColor: c.surface1, borderWidth: game ? 2 : hairline, borderBottomWidth: game ? 4 : hairline, borderColor: c.border },
+    head: { flexDirection: "row", alignItems: "center", gap: space.sm },
+    title: { ...type.h3, color: c.textPrimary, flex: 1 },
+    meta: { ...type.numSmStrong, color: c.textSecondary },
+    lead: { ...type.bodySm, color: c.textSecondary },
+    kitRow: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 44 },
+    swatch: { width: 30, height: 30, borderRadius: radius.pill, overflow: "hidden", flexDirection: "row", borderWidth: hairline, borderColor: c.border },
+    half: { flex: 1 },
+    kitName: { ...type.bodySm, fontFamily: fonts.semibold, color: c.textPrimary, flex: 1 },
+    owned: { ...type.micro, fontFamily: fonts.bold, color: c.win },
+  });
+
+const appStyles = makeStyles(colors, false);
+const gameStyles = makeStyles(CP, true);

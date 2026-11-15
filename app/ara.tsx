@@ -25,6 +25,17 @@
  * yoksa "Ünye" yazan kullanıcı "unye"yi bulamaz. Katlama harf sayısını
  * değiştirmediği için vurgu konumu katlanmış metinden asıl metne taşınabilir.
  *
+ * İL → LİG → SEZON: aramanın kapsamı ekranın İÇİNDEKİ seçiciyle
+ * (components/search/SearchScopePanel) değiştirilir. Takımlar için il yerel
+ * bir süzgeçtir ("Tüm iller" varsayılan); oyuncular için il · lig · sezon
+ * küresel kapsamdır (kadrolar oradan gelir).
+ *
+ * DONMA DÜZELTMESİ (2026-11): bu ekran `presentation: "modal"` ile açılır.
+ * Eskiden "Değiştir" kökteki ScopeSheet'i (RN `<Modal>`) açıyordu; iOS'ta
+ * yerel modal sunulmuşken kökten ikinci modal sunulamaz, sayfa görünmeden
+ * dokunuşları yuttuğu için uygulama donmuş görünüyordu. Bu ekran artık
+ * `openScopeSheet` ÇAĞIRMAZ; seçici Modal'sız, ekranın kendi katmanıdır.
+ *
  * DERİN BAĞLANTI: `/ara?tip=takim | oyuncu` (varsayılan "takim"), `q=` ön dolgu.
  */
 
@@ -52,12 +63,13 @@ import {
   useToast,
 } from "@/components/ui";
 import { GroupSeparator, groupRowStyle } from "@/components/league/shared";
+import { SearchScopePanel, type SearchScopeMode } from "@/components/search/SearchScopePanel";
 import { getPlayerRankings } from "@/lib/api/players";
 import { getTeams } from "@/lib/api/teams";
 import { queryKeys } from "@/lib/queryKeys";
 import type { ApiTeam, PlayerRankRow } from "@/lib/types";
 import { useFavorite, type FavoriteTeam } from "@/providers/FavoriteProvider";
-import { useScope } from "@/providers/ScopeProvider";
+import { useScope, type ScopeStep } from "@/providers/ScopeProvider";
 import { colors, elevate, fonts, hairline, layout, radius, space, textScale, touchSlop, type, upperTR } from "@/theme";
 
 type SearchKind = "takim" | "oyuncu";
@@ -245,6 +257,21 @@ export default function SearchScreen() {
     return typeof raw === "string" ? raw : "";
   });
 
+  /* ── Kapsam seçici (ekran içi katman; Modal değil — bkz. dosya başı). ── */
+  const [picker, setPicker] = useState<{ mode: SearchScopeMode; step: ScopeStep } | null>(null);
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const openPicker = useCallback((mode: SearchScopeMode, step: ScopeStep) => {
+    setPicker({ mode, step });
+    setPickerVisible(true);
+  }, []);
+  const closePicker = useCallback(() => setPickerVisible(false), []);
+  /** Takım aramasının il süzgeci (null = tüm iller); küresel kapsamı değiştirmez. */
+  const [teamCityId, setTeamCityId] = useState<number | null>(null);
+  const teamCity = useMemo(
+    () => (teamCityId ? scope.cities.find((city) => city.id === teamCityId) ?? null : null),
+    [scope.cities, teamCityId],
+  );
+
   const query = term.trim();
   const enough = query.length >= MIN_QUERY;
   const needle = useMemo(() => fold(query), [query]);
@@ -275,7 +302,10 @@ export default function SearchScreen() {
 
   const teams = useMemo(() => {
     if (!enough) return [];
-    const matches = (teamsQuery.data ?? []).filter((team) => fold(team.team_name ?? "").includes(needle));
+    const cityNeedle = teamCity ? fold(teamCity.label) : "";
+    const inCity = (team: ApiTeam) =>
+      !teamCity || team.city_id === teamCity.id || (Boolean(team.city) && fold(team.city ?? "") === cityNeedle);
+    const matches = (teamsQuery.data ?? []).filter((team) => inCity(team) && fold(team.team_name ?? "").includes(needle));
     // Adı aramayla BAŞLAYANLAR önce: "kar" yazana "Karadeniz", "Okar"dan önce gelir.
     return matches
       .sort(
@@ -284,7 +314,7 @@ export default function SearchScreen() {
           Number(fold(a.team_name ?? "").startsWith(needle)),
       )
       .slice(0, 50);
-  }, [enough, needle, teamsQuery.data]);
+  }, [enough, needle, teamCity, teamsQuery.data]);
 
   const players = useMemo(() => {
     if (!enough) return [];
@@ -432,11 +462,17 @@ export default function SearchScreen() {
       emptyTitle={kind === "takim" ? "Takım bulunamadı" : "Oyuncu bulunamadı"}
       emptyBody={
         kind === "takim"
-          ? `"${query}" aramasına uyan takım yok. Yazımı kontrol et ya da daha kısa yaz.`
+          ? teamCity
+            ? `"${query}" aramasına uyan takım ${teamCity.label} ilinde yok. Tüm illerde aramayı dene.`
+            : `"${query}" aramasına uyan takım yok. Yazımı kontrol et ya da daha kısa yaz.`
           : `"${query}" bu kapsamın kadrolarında yok. Başka bir lig ya da sezonda olabilir.`
       }
       emptyAction={
-        kind === "oyuncu" ? { label: "Kapsamı değiştir", onPress: () => scope.openScopeSheet("league") } : undefined
+        kind === "oyuncu"
+          ? { label: "Kapsamı değiştir", onPress: () => openPicker("players", "league") }
+          : teamCity
+            ? { label: "Tüm illerde ara", onPress: () => setTeamCityId(null) }
+            : undefined
       }
       onClear={() => setTerm("")}
     />
@@ -525,6 +561,15 @@ export default function SearchScreen() {
               onSubmitEditing={() => remember(term)}
             />
             <SegmentedControl<SearchKind> items={SEGMENTS} value={kind} onChange={setKind} />
+            <ScopeBar
+              kind={kind}
+              teamCityLabel={teamCity?.label ?? null}
+              cityLabel={scope.cityLabel}
+              leagueLabel={scope.leagueLabel}
+              seasonLabel={scope.seasonLabel}
+              onPick={openPicker}
+              onClearTeamCity={() => setTeamCityId(null)}
+            />
           </View>
         }
       />
@@ -608,7 +653,7 @@ export default function SearchScreen() {
                 <Touchable
                   feedback="card"
                   haptic="selection"
-                  onPress={() => scope.openScopeSheet("league")}
+                  onPress={() => openPicker("players", "league")}
                   style={styles.scopeCard}
                   accessibilityRole="button"
                   accessibilityLabel={`Arama kapsamı: ${scopeLine}. Değiştir`}
@@ -645,7 +690,7 @@ export default function SearchScreen() {
                 icon="options-outline"
                 title="Lig seçilmedi"
                 body="Oyuncu araması seçili lig ve sezon kadrolarında yapılır."
-                action={{ label: "Kapsam seç", onPress: () => scope.openScopeSheet("city") }}
+                action={{ label: "Kapsam seç", onPress: () => openPicker("players", "city") }}
               />
             ) : enough ? (
               placeholder
@@ -660,9 +705,64 @@ export default function SearchScreen() {
           }
         />
       )}
+
+      {picker ? (
+        <SearchScopePanel
+          visible={pickerVisible}
+          mode={picker.mode}
+          initialStep={picker.step}
+          teamCityId={teamCityId}
+          onTeamCity={setTeamCityId}
+          onClose={closePicker}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
+
+/**
+ * Kapsam şeridi: Takımlar'da tek "İl" hapı (yerel süzgeç), Oyuncular'da
+ * İl · Lig · Sezon hapları (küresel kapsam). Her hap seçiciyi kendi adımında açar.
+ */
+const ScopeBar = React.memo(function ScopeBar({
+  kind,
+  teamCityLabel,
+  cityLabel,
+  leagueLabel,
+  seasonLabel,
+  onPick,
+  onClearTeamCity,
+}: {
+  kind: SearchKind;
+  teamCityLabel: string | null;
+  cityLabel: string;
+  leagueLabel: string;
+  seasonLabel: string;
+  onPick: (mode: SearchScopeMode, step: ScopeStep) => void;
+  onClearTeamCity: () => void;
+}) {
+  if (kind === "takim") {
+    return (
+      <View style={styles.scopeBar}>
+        <Chip
+          label={teamCityLabel ? `İl: ${teamCityLabel}` : "İl: Tümü"}
+          icon="location-outline"
+          size="sm"
+          selected={Boolean(teamCityLabel)}
+          onPress={() => onPick("teams", "city")}
+          onDismiss={teamCityLabel ? onClearTeamCity : undefined}
+        />
+      </View>
+    );
+  }
+  return (
+    <View style={styles.scopeBar}>
+      <Chip label={cityLabel || "İl seç"} icon="location-outline" size="sm" onPress={() => onPick("players", "city")} />
+      <Chip label={leagueLabel || "Lig seç"} icon="trophy-outline" size="sm" onPress={() => onPick("players", "league")} />
+      <Chip label={seasonLabel || "Sezon seç"} icon="calendar-outline" size="sm" onPress={() => onPick("players", "season")} />
+    </View>
+  );
+});
 
 const SearchHint = React.memo(function SearchHint() {
   return (
@@ -723,6 +823,11 @@ const playerKey = (item: PlayerRankRow) => String(item.id);
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  scopeBar: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.xs,
+  },
   controls: {
     gap: space.sm,
     paddingHorizontal: layout.screenPadding,

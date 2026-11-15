@@ -77,12 +77,67 @@ export function useVoiceRecorder() {
   };
 }
 
-/** Cihaz konumu. İzin yoksa hata fırlatır. */
+/** Konum alma süresi sınırı: GPS sinyali yoksa getCurrentPositionAsync hiç dönmeyebilir. */
+export const LOCATION_TIMEOUT_MS = 10_000;
+/** Bu kadar taze ve isabetli son bilinen konum beklemeden kullanılır. */
+const LAST_KNOWN_FRESH = { maxAge: 2 * 60 * 1000, requiredAccuracy: 200 };
+/** Zaman aşımında yedek olarak kabul edilen en eski son bilinen konum. */
+const LAST_KNOWN_FALLBACK = { maxAge: 30 * 60 * 1000 };
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve(null), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+const toLatLng = (position: Location.LocationObject) => ({ lat: position.coords.latitude, lng: position.coords.longitude });
+
+/**
+ * Cihaz konumu. İzin yoksa, konum servisleri kapalıysa ya da süre dolarsa
+ * açıklayıcı hata fırlatır; hiçbir adım sonsuza dek beklemez.
+ *
+ * 1) İzin: önce mevcut durum okunur, yalnız sorulabiliyorsa sistem penceresi açılır.
+ * 2) Taze son bilinen konum varsa anında döner (çoğu durumda GPS beklenmez).
+ * 3) Yoksa dengeli isabetle güncel konum istenir; 10 sn'de gelmezse daha eski
+ *    son bilinen konuma düşülür, o da yoksa hata.
+ */
 export async function getCurrentLocation(): Promise<{ lat: number; lng: number }> {
-  const permission = await Location.requestForegroundPermissionsAsync();
-  if (!permission.granted) throw new Error("Konum izni verilmedi. Ayarlardan izin verip tekrar deneyin.");
-  const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-  return { lat: position.coords.latitude, lng: position.coords.longitude };
+  let permission = await Location.getForegroundPermissionsAsync();
+  if (!permission.granted && permission.canAskAgain) permission = await Location.requestForegroundPermissionsAsync();
+  if (!permission.granted) {
+    throw new Error(
+      permission.canAskAgain
+        ? "Konum izni verilmedi. Konum paylaşmak için izin verin."
+        : "Konum izni kapalı. Ayarlar > ElitLig > Konum bölümünden izin verip tekrar deneyin.",
+    );
+  }
+  const servicesOn = await Location.hasServicesEnabledAsync().catch(() => true);
+  if (!servicesOn) throw new Error("Cihazın konum servisleri kapalı. Açıp tekrar deneyin.");
+
+  const fresh = await Location.getLastKnownPositionAsync(LAST_KNOWN_FRESH).catch(() => null);
+  if (fresh) return toLatLng(fresh);
+
+  let current: Location.LocationObject | null = null;
+  try {
+    current = await withTimeout(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }), LOCATION_TIMEOUT_MS);
+  } catch {
+    current = null;
+  }
+  if (current) return toLatLng(current);
+
+  const stale = await Location.getLastKnownPositionAsync(LAST_KNOWN_FALLBACK).catch(() => null);
+  if (stale) return toLatLng(stale);
+  throw new Error("Konum alınamadı. Açık alanda tekrar deneyin ya da listeden bir saha seçin.");
 }
 
 /** Konumu harita uygulamasında açar (iOS: Apple Haritalar, Android: geo:). */

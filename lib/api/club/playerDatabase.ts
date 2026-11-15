@@ -41,6 +41,8 @@ export interface DatabasePlayer {
   isOwnPlayer?: boolean;
   activeOfferPublicId?: string | null;
   canReceiveOffer?: boolean;
+  /** Teklif verilemiyorsa nedeni (ör. "Kendi oyuncunuz; teklif verilemez."). */
+  offerBlockedReason?: string | null;
   /* Sahiplenme */
   isClaimed?: boolean;
   hasPendingClaim?: boolean;

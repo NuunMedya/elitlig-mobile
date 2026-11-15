@@ -14,7 +14,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { BottomSheet, SegmentedControl, Touchable, type SegmentedItem } from "@/components/ui";
+import { Touchable } from "@/components/ui";
 import {
   grantText,
   landmarkLockText,
@@ -24,9 +24,11 @@ import {
   type City2Landmarks,
   type City2OwnedLandmark,
 } from "@/lib/puzzle/city2";
-import { colors, fonts, hairline, radius, space, textScale, type } from "@/theme";
+import { fonts, hairline, radius, space, textScale, type } from "@/theme";
 
 import { CostButton, LandmarkIcon, StarCost, cardStyle, fmt } from "./shared";
+import { CP } from "@/lib/puzzle/cityGamePalette";
+import { GameSegment, type GameSegmentItem, GameSheet } from "./game/GamePaper";
 
 export type LandmarkTab = "shop" | "depot" | "grid";
 
@@ -70,7 +72,7 @@ export function SlotGrid({
                 if (!open) {
                   return (
                     <View key={c} style={[styles.cell, styles.cellLocked, size]}>
-                      {c === 0 ? <Ionicons name="lock-closed" size={12} color={colors.textTertiary} /> : null}
+                      {c === 0 ? <Ionicons name="lock-closed" size={12} color={CP.textTertiary} /> : null}
                     </View>
                   );
                 }
@@ -86,7 +88,7 @@ export function SlotGrid({
                     {item ? (
                       <LandmarkIcon landmarkKey={item.key} tier={tierOf.get(item.key) ?? "sus"} size={cell - 4} />
                     ) : target ? (
-                      <Ionicons name="add" size={16} color={colors.brandAccent} />
+                      <Ionicons name="add" size={16} color={CP.brandAccent} />
                     ) : null}
                   </Touchable>
                 );
@@ -123,7 +125,7 @@ function ShopItem({
           {item.title}
         </Text>
         <View style={styles.itemMeta}>
-          <Ionicons name="sparkles" size={11} color={colors.brandAccent} />
+          <Ionicons name="sparkles" size={11} color={CP.brandAccent} />
           <Text style={styles.itemBeauty} {...textScale.dense}>
             +{fmt(item.beauty)} güzellik
           </Text>
@@ -135,7 +137,7 @@ function ShopItem({
         </View>
         {reason ? (
           <View style={styles.itemLock}>
-            <Ionicons name={item.lock?.code === "GRANT_ONLY" ? "flame" : item.lock?.code === "MAX_OWNED" ? "checkmark-done" : "lock-closed"} size={11} color={colors.textTertiary} />
+            <Ionicons name={item.lock?.code === "GRANT_ONLY" ? "flame" : item.lock?.code === "MAX_OWNED" ? "checkmark-done" : "lock-closed"} size={11} color={CP.textTertiary} />
             <Text style={styles.itemLockText} numberOfLines={1} {...textScale.dense}>
               {reason}
             </Text>
@@ -167,11 +169,11 @@ function OwnedRow({ l, tier, onPlace, onStore }: { l: City2OwnedLandmark; tier: 
       </View>
       {onStore ? (
         <Touchable feedback="icon" onPress={onStore} hitSlop={8} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel={`${l.title}: depoya kaldır`}>
-          <Ionicons name="archive-outline" size={18} color={colors.textSecondary} />
+          <Ionicons name="archive-outline" size={18} color={CP.textSecondary} />
         </Touchable>
       ) : null}
       <Touchable feedback="button" onPress={onPlace} style={styles.placeBtn} accessibilityRole="button" accessibilityLabel={`${l.title}: ${l.slot ? "taşı" : "yerleştir"}`}>
-        <Ionicons name={l.slot ? "move" : "location"} size={14} color={colors.brandAccent} />
+        <Ionicons name={l.slot ? "move" : "location"} size={14} color={CP.brandAccent} />
         <Text style={styles.placeText} {...textScale.badge}>
           {l.slot ? "Taşı" : "Yerleştir"}
         </Text>
@@ -218,17 +220,17 @@ export function LandmarkSheet({
   const unplaced = landmarks?.owned.filter((l) => !l.slot) ?? [];
   const placed = landmarks?.owned.filter((l) => l.slot) ?? [];
   const tierOf = new Map((landmarks?.catalogue ?? []).map((c) => [c.key, c.tier]));
-  const items: SegmentedItem<LandmarkTab>[] = [
+  const items: GameSegmentItem<LandmarkTab>[] = [
     { key: "shop", label: "Mağaza" },
     { key: "depot", label: unplaced.length ? `Depo · ${unplaced.length}` : "Depo" },
     { key: "grid", label: "Yerleşim" },
   ];
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="Sembol yapılar" snap="full">
+    <GameSheet visible={visible} onClose={onClose} title="Sembol yapılar" snap="full">
       {landmarks && ladder ? (
         <View style={styles.sheet}>
           <View style={styles.beauty}>
-            <Ionicons name="sparkles" size={18} color={colors.brandAccent} />
+            <Ionicons name="sparkles" size={18} color={CP.brandAccent} />
             <Text style={styles.beautyValue} {...textScale.dense}>
               {fmt(beauty)}
             </Text>
@@ -236,7 +238,7 @@ export function LandmarkSheet({
               güzellik puanı · yerleşik yapılar ve kurulan her aşama sayılır
             </Text>
           </View>
-          <SegmentedControl items={items} value={tab} onChange={onTab} stretch size="sm" />
+          <GameSegment items={items} value={tab} onChange={onTab} stretch size="sm" />
 
           {tab === "shop"
             ? landmarks.tiers.map((t) => {
@@ -284,7 +286,7 @@ export function LandmarkSheet({
             <View style={styles.group}>
               {placing ? (
                 <View style={styles.placing}>
-                  <Ionicons name="location" size={16} color={colors.brandAccent} />
+                  <Ionicons name="location" size={16} color={CP.brandAccent} />
                   <Text style={styles.placingText} numberOfLines={2} {...textScale.dense}>
                     {placing.title} için boş bir yuva seç
                   </Text>
@@ -307,27 +309,27 @@ export function LandmarkSheet({
           ) : null}
         </View>
       ) : null}
-    </BottomSheet>
+    </GameSheet>
   );
 }
 
 const styles = StyleSheet.create({
   sheet: { gap: space.lg, paddingBottom: space.lg },
-  beauty: { flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.brandDim },
-  beautyValue: { ...type.metricSm, color: colors.textPrimary },
-  beautyLabel: { ...type.caption, color: colors.textSecondary, flex: 1 },
+  beauty: { flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: CP.brandDim },
+  beautyValue: { ...type.metricSm, color: CP.textPrimary },
+  beautyLabel: { ...type.caption, color: CP.textSecondary, flex: 1 },
   group: { gap: space.sm },
   groupGap: { marginTop: space.md },
-  groupTitle: { ...type.overline, color: colors.textTertiary },
+  groupTitle: { ...type.overline, color: CP.textTertiary },
   item: { ...cardStyle, flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md },
   itemTexts: { flex: 1, gap: 2 },
-  itemTitle: { ...type.labelSm, color: colors.textPrimary },
-  itemSub: { ...type.caption, color: colors.textSecondary },
+  itemTitle: { ...type.labelSm, color: CP.textPrimary },
+  itemSub: { ...type.caption, color: CP.textSecondary },
   itemMeta: { flexDirection: "row", alignItems: "center", gap: 3 },
-  itemBeauty: { ...type.caption, color: colors.brandAccent },
-  itemOwned: { ...type.caption, color: colors.textTertiary },
+  itemBeauty: { ...type.caption, color: CP.brandAccent },
+  itemOwned: { ...type.caption, color: CP.textTertiary },
   itemLock: { flexDirection: "row", alignItems: "center", gap: 3 },
-  itemLockText: { ...type.caption, color: colors.textTertiary, flex: 1 },
+  itemLockText: { ...type.caption, color: CP.textTertiary, flex: 1 },
   iconBtn: { width: 34, height: 34, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
   placeBtn: {
     flexDirection: "row",
@@ -337,19 +339,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     borderRadius: radius.pill,
     borderWidth: hairline,
-    borderColor: colors.brandBorder,
-    backgroundColor: colors.brandDim,
+    borderColor: CP.brandBorder,
+    backgroundColor: CP.brandDim,
   },
-  placeText: { ...type.labelSm, color: colors.brandAccent },
-  empty: { ...type.bodySm, color: colors.textSecondary },
-  placing: { flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.brandDim },
-  placingText: { ...type.labelSm, color: colors.textPrimary, flex: 1 },
-  placingCancel: { ...type.label, fontFamily: fonts.semibold, color: colors.brandAccent },
+  placeText: { ...type.labelSm, color: CP.brandAccent },
+  empty: { ...type.bodySm, color: CP.textSecondary },
+  placing: { flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: CP.brandDim },
+  placingText: { ...type.labelSm, color: CP.textPrimary, flex: 1 },
+  placingCancel: { ...type.label, fontFamily: fonts.semibold, color: CP.brandAccent },
   grid: { gap: space.xs },
   gridRow: { flexDirection: "row" },
-  cell: { alignItems: "center", justifyContent: "center", backgroundColor: colors.surface2, borderWidth: hairline, borderColor: colors.border },
-  cellLocked: { backgroundColor: colors.surface3, borderColor: colors.surface3, opacity: 0.6 },
-  cellTarget: { backgroundColor: colors.brandDim, borderColor: colors.brandBorder },
-  cellMoving: { borderColor: colors.brandAccent, borderWidth: 2 },
-  gridNote: { ...type.caption, color: colors.textTertiary },
+  cell: { alignItems: "center", justifyContent: "center", backgroundColor: CP.surface2, borderWidth: hairline, borderColor: CP.border },
+  cellLocked: { backgroundColor: CP.surface3, borderColor: CP.surface3, opacity: 0.6 },
+  cellTarget: { backgroundColor: CP.brandDim, borderColor: CP.brandBorder },
+  cellMoving: { borderColor: CP.brandAccent, borderWidth: 2 },
+  gridNote: { ...type.caption, color: CP.textTertiary },
 });

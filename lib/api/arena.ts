@@ -57,8 +57,19 @@ export const ARENA_CLIENT_VERSION = 4;
  * Sunucu süreye bakarak skoru doğrular; yalnız doğrulanmış skor XP ve rozet
  * getirir. Oturum açılamazsa skor yine gönderilir (lider tablosuna girer).
  */
+/**
+ * Can (sözleşme §4): canı olan oyunlarda (slalom, sektir, seri, kimbu, tahmin)
+ * oturum açılırken 1 can düşer; can yoksa 409 `NO_LIVES` (`next_life_at` ile).
+ * Yanıttaki `lives`, düşüldükten sonraki can (canı olmayan oyunda yok).
+ */
+export interface ArenaSessionResponse {
+  sessionId: string;
+  game: string;
+  startedAt: string;
+  lives?: { lives: number; max_lives: number; next_life_at: string | null } | null;
+}
 export const startArenaSession = (game: ArenaGame) =>
-  post<{ sessionId: string; game: string; startedAt: string }>("/api/arena/sessions", { game }, { retry: false });
+  post<ArenaSessionResponse>("/api/arena/sessions", { game }, { retry: false });
 
 /**
  * Skor kaydının yanıtı. Rekor bilgisi SUNUCUDAN gelir (eski sunucuda yok):
@@ -76,6 +87,12 @@ export interface ArenaScoreEntry {
   first?: boolean;
   /** Kulüp Şehri'ne giden yıldız (doğrulanmış skor, günlük tavanlar içinde). */
   stars?: number;
+  /**
+   * Yıldız ayrıntısı (Ekonomi v3; eski sunucuda yok): rekor yıldızı (önceki
+   * en iyiyi geçince R(yeni) − R(eski)) ve katılım yıldızı (rekor yoksa,
+   * günde birkaç). `next_record_at`: bir sonraki rekor yıldızı için skor.
+   */
+  star_detail?: { record: number; participation: number; next_record_at: number | null; participation_left: number } | null;
 }
 
 /** Oyun sonu istatistiklerinden yalnız sonlu sayılar gider (görev ilerlemesi: bölüm, gol, metre…). */

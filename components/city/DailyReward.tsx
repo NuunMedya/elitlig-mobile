@@ -23,7 +23,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
 
 import { RewardedAdModal, type RewardedFlow } from "@/components/puzzle/RewardedLife";
-import { BottomSheet, Touchable, useReduceMotion, useToast } from "@/components/ui";
+import { Touchable, useReduceMotion, useToast } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { CARTOON } from "@/lib/game/cartoon";
 import { HUB } from "@/lib/game/hubPalette";
@@ -36,6 +36,7 @@ import { usePuzzleMe } from "@/lib/puzzle/usePuzzle";
 import { colors, fonts, hairline, radius, space, textScale, type } from "@/theme";
 
 import { ChunkyButton } from "./ChunkyButton";
+import { CitySheet } from "@/components/city2/game/GamePaper";
 
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
@@ -132,7 +133,7 @@ export function DailyRewardCard({ view, onPress, style }: { view: DailyView; onP
 
 /* ═══════════════════════ PENCERE ═══════════════════════ */
 
-export function DailyRewardSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+export function DailyRewardSheet({ visible, onClose, variant }: { visible: boolean; onClose: () => void; /** "game": şehrin oyun penceresi (ahşap çerçeve). */ variant?: "app" | "game" }) {
   const { view } = useDailyStatus();
   const puzzle = usePuzzleMe();
   const me = puzzle.data;
@@ -209,7 +210,7 @@ export function DailyRewardSheet({ visible, onClose }: { visible: boolean; onClo
   );
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title={result ? undefined : "Günlük ödül"} snap="full" footer={footer}>
+    <CitySheet variant={variant} visible={visible} onClose={onClose} title={result ? undefined : "Günlük ödül"} snap="full" footer={footer}>
       {result ? (
         <Celebration result={result} me={me} />
       ) : (
@@ -260,7 +261,7 @@ export function DailyRewardSheet({ visible, onClose }: { visible: boolean; onClo
           void queryClient.invalidateQueries({ queryKey: cityKeys.me() });
         }}
       />
-    </BottomSheet>
+    </CitySheet>
   );
 }
 

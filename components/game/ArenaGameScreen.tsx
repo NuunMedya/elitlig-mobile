@@ -18,6 +18,10 @@
  *     gönderilir; tur kaybolmaz.
  *
  * Ekran odaktan çıkınca (başka sayfaya geçiş) oyun duraklar, dönünce sürer.
+ *
+ * CAN (sözleşme §4): "Başla" önce turu açar (`run.begin`): sunucu 409
+ * NO_LIVES derse tur başlamaz, can penceresi açılır. ÇEVRİMDIŞI (§7): oturum
+ * açılamasa da tur başlar; skor kuyruğa yazılır.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -32,7 +36,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ArenaResultCard, ArenaShareSheet, formatCount, SCORE_UNIT, useArenaScore } from "@/components/game/ArenaResult";
 import { useGameRoster } from "@/components/game/useGameRoster";
 import { WebGame, type GameOverPayload, type WebGameHandle } from "@/components/game/WebGame";
+import { LivesSheet } from "@/components/gamehome/HomeSheets";
+import { OfflinePill } from "@/components/offline/OfflineSync";
 import { GameButton } from "@/components/puzzle/LevelSheets";
+import type { LifeGameKey } from "@/lib/puzzle/api";
+import { useGameLives } from "@/lib/puzzle/useGameLives";
 import { Touchable, useReduceMotion } from "@/components/ui";
 import { CARTOON } from "@/lib/game/cartoon";
 import { ARENA_CARD } from "@/lib/game/arenaPalette";
@@ -51,8 +59,8 @@ export interface ArenaGameRule {
 }
 
 export interface ArenaGameConfig {
-  /** Arena oyunu (Kulüp Şehri sahnesi `sehir` bir oyun değildir). */
-  game: Exclude<WebGameKey, "sehir">;
+  /** Arena oyunu (Kulüp Şehri sahnesi `sehir` oyun değil; Kariyer Yolu yalnız Lig Yolu bölüm oyunudur). */
+  game: Exclude<WebGameKey, "sehir" | "kariyer">;
   title: string;
   /** Başlığın altındaki tek satır. */
   subtitle: string;
@@ -185,12 +193,26 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
     if (phaseRef.current === "loading") setPhaseBoth("ready");
   }, [sound, reduceMotion, perks, roster]);
 
-  const start = () => {
-    setResult(null);
-    run.reset();
-    setPhaseBoth("playing");
-    game.current?.send({ type: "config", sound, reduceMotion, perks, roster });
-    game.current?.send({ type: "start" });
+  const lifeGame = (["slalom", "sektir"] as string[]).includes(config.game) ? (config.game as LifeGameKey) : null;
+  const lives = useGameLives(lifeGame);
+  const [livesOpen, setLivesOpen] = useState(false);
+  const starting = useRef(false);
+  const start = async () => {
+    if (starting.current) return;
+    starting.current = true;
+    try {
+      const begun = await run.begin();
+      if (!begun.ok) {
+        setLivesOpen(true);
+        return;
+      }
+      setResult(null);
+      setPhaseBoth("playing");
+      game.current?.send({ type: "config", sound, reduceMotion, perks, roster });
+      game.current?.send({ type: "start" });
+    } finally {
+      starting.current = false;
+    }
   };
 
   const toggleSound = useCallback(() => {
@@ -245,7 +267,7 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
             config={config}
             best={run.best}
             loading={phase === "loading"}
-            onStart={start}
+            onStart={() => void start()}
             onBoard={openBoard}
             setup={setup}
           />
@@ -262,7 +284,7 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
             submit={run.submit}
             onRetrySubmit={run.retry}
             onSignIn={() => router.push("/giris")}
-            onRestart={start}
+            onRestart={() => void start()}
             onBoard={openBoard}
             onShare={() => setShareOpen(true)}
             secondary={changeLabel ? { label: changeLabel, icon: "swap-horizontal", onPress: () => setPhaseBoth("ready") } : undefined}
@@ -314,6 +336,12 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
         ) : null}
       </View>
 
+      {phase !== "playing" ? (
+        <View style={styles.offlineHost} pointerEvents="none">
+          <OfflinePill />
+        </View>
+      ) : null}
+      {lifeGame ? <LivesSheet visible={livesOpen} onClose={() => setLivesOpen(false)} game={lifeGame} lives={lives} title={config.title} /> : null}
       <ArenaShareSheet
         visible={shareOpen}
         onClose={() => setShareOpen(false)}
@@ -412,6 +440,7 @@ const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
 
 const styles = StyleSheet.create({
+  offlineHost: { position: "absolute", top: space.huge + space.xxl, left: 0, right: 0, alignItems: "center" },
   screen: { flex: 1, backgroundColor: CARTOON.night[2] },
   flex: { flex: 1 },
 

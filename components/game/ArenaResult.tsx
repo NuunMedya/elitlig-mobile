@@ -31,6 +31,7 @@ import { Touchable, useToast, type SegmentedItem } from "@/components/ui";
 import {
   getArenaLeaderboard,
   getMyArenaRank,
+  ARENA_CLIENT_VERSION,
   startArenaSession,
   submitArenaScore,
   type ArenaEntry,
@@ -41,12 +42,25 @@ import { CartoonButton, CartoonPanel, IconBubble, PopIn, Ribbon } from "@/compon
 import { ARENA_RESULT } from "@/lib/game/arenaResultPalette";
 import { CARTOON } from "@/lib/game/cartoon";
 import { QUIZ } from "@/lib/game/quizPalette";
+import { ApiError } from "@/lib/http";
+import { spendMirrorLife } from "@/lib/offline/mirror";
+import { isOfflineError, monoNow, noteRequestError } from "@/lib/offline/net";
+import { enqueueOffline } from "@/lib/offline/queue";
+import { puzzleKeys, type LifeGameKey, type PuzzleMe } from "@/lib/puzzle/api";
+import { spendLocalLife } from "@/lib/puzzle/localLives";
 import { useGameSave } from "@/lib/puzzle/saves";
 import { instagramUrl } from "@/lib/socials";
 import { useAuth } from "@/providers/AuthProvider";
 import { fonts, radius, space, textScale, type, upperTR } from "@/theme";
 
-export type SubmitState = "idle" | "guest" | "sending" | "sent" | "failed";
+/** queued: çevrimdışı — skor cihazdaki kuyrukta, internet gelince gönderilir (sözleşme §7). */
+export type SubmitState = "idle" | "guest" | "sending" | "sent" | "failed" | "queued";
+
+/** Her turu 1 can olan skor oyunları (sözleşme §4; misafirde cihaz canı). */
+const LIFE_SCORE_GAMES = new Set<string>(["slalom", "sektir", "seri", "kimbu", "tahmin"]);
+
+/** Tur başlatma sonucu: can yoksa tur başlamaz. */
+export type BeginResult = { ok: true; offline: boolean } | { ok: false; reason: "NO_LIVES"; nextLifeAt: string | null };
 type Period = "weekly" | "alltime";
 
 export const SCORE_UNIT = "puan";
@@ -92,6 +106,8 @@ export function useArenaScore(game: ArenaGame) {
   const statsRef = useRef<Record<string, number> | null>(null);
   /** Bu turun oyun oturumu (Kariyer Modu doğrulaması); açılamazsa null. */
   const sessionRef = useRef<Promise<string | null> | null>(null);
+  /** Turun başlangıcı (çevrimdışı kuyruk olayının süresi için). */
+  const runStart = useRef({ wall: Date.now(), mono: monoNow() });
 
   const send = useCallback(
     (value: number) => {
@@ -127,7 +143,29 @@ export function useArenaScore(game: ArenaGame) {
           // Oyun görevleri ve XP: Görevler / Kariyer bir sonraki açılışta tazelensin.
           void queryClient.invalidateQueries({ queryKey: ["career"] });
         })
-        .catch(() => setSubmit("failed"));
+        .catch((error) => {
+          noteRequestError(error);
+          if (!isOfflineError(error) || !auth.user) {
+            setSubmit("failed");
+            return;
+          }
+          // Çevrimdışı: skor kuyruğa; bağlantı gelince /api/puzzle/sync ile gider.
+          if (sessionRef.current === pending) sessionRef.current = null;
+          const now = Date.now();
+          void enqueueOffline(auth.user.id, {
+            kind: "arena",
+            game,
+            score: value,
+            stats: statsRef.current,
+            v: ARENA_CLIENT_VERSION,
+            startedAt: runStart.current.wall,
+            finishedAt: now,
+            durationMs: Math.max(0, Math.round(monoNow() - runStart.current.mono)),
+          }).then(
+            () => setSubmit("queued"),
+            () => setSubmit("failed"),
+          );
+        });
     },
     [auth.user, game, queryClient, setBest],
   );
@@ -166,6 +204,54 @@ export function useArenaScore(game: ArenaGame) {
       : null;
   }, [auth.user, game]);
 
+  /**
+   * Turu başlat (can kapısı, sözleşme §4): girişliyse oyun oturumu açılır ve
+   * sunucu 1 can düşer — can yoksa 409 NO_LIVES ve tur BAŞLAMAZ. Ağ yoksa
+   * tur yine başlar (oturumsuz), can cihaz aynasında düşer. Misafirin canı
+   * cihazdadır.
+   */
+  const begin = useCallback(async (): Promise<BeginResult> => {
+    setScore(null);
+    setSubmit("idle");
+    setServerRecord(null);
+    setStars(0);
+    runStart.current = { wall: Date.now(), mono: monoNow() };
+    const lifeGame = LIFE_SCORE_GAMES.has(game) ? (game as LifeGameKey) : null;
+    if (!auth.user) {
+      sessionRef.current = null;
+      if (lifeGame && !(await spendLocalLife(lifeGame))) return { ok: false, reason: "NO_LIVES", nextLifeAt: null };
+      return { ok: true, offline: false };
+    }
+    const spendCached = () => {
+      if (!lifeGame) return;
+      queryClient.setQueryData<PuzzleMe>(puzzleKeys.me(), (cur) => (cur?.profile.lives_by_game?.[lifeGame] ? spendMirrorLife(cur, lifeGame) : cur));
+    };
+    try {
+      const data = await startArenaSession(game);
+      sessionRef.current = Promise.resolve(data.sessionId);
+      spendCached();
+      return { ok: true, offline: false };
+    } catch (error) {
+      sessionRef.current = null;
+      noteRequestError(error);
+      if (error instanceof ApiError && error.status === 409 && error.code === "NO_LIVES") {
+        const detail = (error.detail ?? {}) as { next_life_at?: string | null };
+        void queryClient.invalidateQueries({ queryKey: puzzleKeys.me() });
+        return { ok: false, reason: "NO_LIVES", nextLifeAt: detail.next_life_at ?? null };
+      }
+      if (isOfflineError(error)) {
+        // Çevrimdışı: can aynada; yoksa tur başlamaz.
+        const me = queryClient.getQueryData<PuzzleMe>(puzzleKeys.me());
+        const entry = lifeGame ? me?.profile.lives_by_game?.[lifeGame] : undefined;
+        if (entry && entry.lives < 1) return { ok: false, reason: "NO_LIVES", nextLifeAt: entry.next_life_at };
+        spendCached();
+        return { ok: true, offline: true };
+      }
+      // Başka hata (eski sunucu vb.): oturumsuz oynanır, skor yine gönderilir.
+      return { ok: true, offline: false };
+    }
+  }, [auth.user, game, queryClient]);
+
   return {
     best,
     score: score ?? 0,
@@ -175,6 +261,7 @@ export function useArenaScore(game: ArenaGame) {
     finish,
     retry: () => send(score ?? 0),
     reset,
+    begin,
   };
 }
 
@@ -543,6 +630,17 @@ function SubmitLine({ state, onRetry, onSignIn }: { state: SubmitState; onRetry:
           Skor gönderilemedi · tekrar dene
         </Text>
       </Touchable>
+    );
+  }
+
+  if (state === "queued") {
+    return (
+      <View style={styles.submitLine} accessibilityLiveRegion="polite">
+        <Ionicons name="cloud-offline" size={16} color={ARENA_RESULT.muted} />
+        <Text style={styles.submitInfo} {...textScale.dense}>
+          Çevrimdışı · skorun internet gelince kaydedilecek
+        </Text>
+      </View>
     );
   }
 

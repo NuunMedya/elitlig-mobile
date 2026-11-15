@@ -12,6 +12,13 @@
  * beyaz, yeşil numaralı, üstünde iğne ve altında yeşil OYNA; kilitliler gri.
  * Her 10. seviye ince altın halkalı kupa düğümü.
  *
+ * 2026-11 GÜZELLEŞTİRME (oyun ana sayfası, sözleşme §6): zeminde çim
+ * tutamları ve biçim şeritleri, satır başına 1–2 bölge dekoru (iki yanda),
+ * parlak şeker düğümler (üst parlaması), her 5. bölüm "Zor" (pembe), her 10.
+ * "Süper Zor" (mor, kupa halkası) ve yanında BÖLÜM SANDIĞI (geçilince açık);
+ * bulunduğun bölümde baş harflerinle avatar iğnesi ve hale. Açılışta harita
+ * bulunduğun bölüme yumuşakça kayar.
+ *
  * NEDEN TERS FLATLIST: yol aşağıdan yukarı okunur (seviye 1 en altta) ve
  * açılışta oyuncunun bulunduğu yere kaydırılır; sabit satır yüksekliği
  * (getItemLayout) 300+ seviyede de akıcı tutar. Her satır yolun kendi
@@ -67,6 +74,8 @@ export function LevelMap({
   onPlay,
   header,
   contentTop = 0,
+  contentBottom = 0,
+  avatar,
 }: {
   /** Geçilmiş son seviye. */
   cleared: number;
@@ -77,6 +86,10 @@ export function LevelMap({
   header?: React.ReactElement | null;
   /** Üst şeridin altında kalan boşluk (harita şeridin altından kayar). */
   contentTop?: number;
+  /** Alt şeridin (büyük OYNA düğmesi) kapladığı boşluk. */
+  contentBottom?: number;
+  /** Bulunduğun bölümün iğnesindeki baş harfler (yoksa top ikonu). */
+  avatar?: string | null;
 }) {
   const { width } = useWindowDimensions();
   const current = cleared + 1;
@@ -89,10 +102,23 @@ export function LevelMap({
   }, [current, stars]);
 
   const listRef = useRef<FlatList<Row>>(null);
+  const avatarRef = useRef(avatar ?? null);
+  avatarRef.current = avatar ?? null;
   const renderItem = useCallback(
-    ({ item }: { item: Row }) => <LevelRow row={item} width={width} current={current} onPlay={onPlay} />,
+    ({ item }: { item: Row }) => <LevelRow row={item} width={width} current={current} onPlay={onPlay} avatar={item.state === "current" ? avatarRef.current : null} />,
     [current, onPlay, width]
   );
+  // Bulunduğun bölüme yumuşak kaydırma: açılışta ve bölüm ilerleyince.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      try {
+        listRef.current?.scrollToIndex({ index: Math.max(0, current - 1), animated: true, viewPosition: 0.42 });
+      } catch {
+        /* liste henüz ölçülmedi */
+      }
+    }, 350);
+    return () => clearTimeout(id);
+  }, [current]);
   const zone = zoneOf(current);
 
   return (
@@ -110,7 +136,8 @@ export function LevelMap({
       removeClippedSubviews={false}
       windowSize={7}
       style={{ backgroundColor: zone.ground[1] }}
-      contentContainerStyle={{ paddingTop: 0, paddingBottom: contentTop }}
+      contentContainerStyle={{ paddingTop: contentBottom, paddingBottom: contentTop }}
+      onScrollToIndexFailed={() => undefined}
       ListHeaderComponent={<StartGate width={width} />}
       ListFooterComponent={header ?? <View style={{ height: ROW, backgroundColor: zoneOf(current + AHEAD).ground[0] }} />}
       showsVerticalScrollIndicator={false}
@@ -158,7 +185,7 @@ function rand(seed: number) {
 
 /* ═══════════════════════ satır ═══════════════════════ */
 
-const LevelRow = React.memo(function LevelRow({ row, width, current, onPlay }: { row: Row; width: number; current: number; onPlay: (level: number) => void }) {
+const LevelRow = React.memo(function LevelRow({ row, width, current, onPlay, avatar }: { row: Row; width: number; current: number; onPlay: (level: number) => void; avatar: string | null }) {
   const zone = zoneOf(row.level);
   const { h, xn, lower, upper, full } = roadPaths(row.level, width);
   const lowerDone = row.level <= current;
@@ -166,21 +193,37 @@ const LevelRow = React.memo(function LevelRow({ row, width, current, onPlay }: {
   const tierStart = (row.level - 1) % 20 === 0;
   const ground = zone.ground[row.level % 2];
 
-  // Dekor: seyrek — satırların ancak üçte birinde, yolun boş tarafına tek parça.
+  // Dekor: satır başına 1–2 parça; önce yolun boş tarafı, sonra karşı kenar.
+  // Bölüm sandığı olan satırda (her 10.) boş taraf sandığındır.
+  const chestRow = row.level % 10 === 0;
   const decor = useMemo(() => {
     const r = rand(row.level * 31 + 7);
-    if (r() > 0.36) return [];
+    const out: { kind: MapDecor; x: number; y: number; s: number }[] = [];
     const right = xn < width / 2;
-    const kind = zone.decor[Math.floor(r() * zone.decor.length)];
-    const span = right ? [width * 0.7, width * 0.9] : [width * 0.1, width * 0.3];
-    return [{ kind, x: span[0] + r() * (span[1] - span[0]), y: ROW * (0.35 + r() * 0.35), s: 0.8 + r() * 0.25 }];
-  }, [row.level, width, xn, zone]);
+    const free = right ? [width * 0.7, width * 0.92] : [width * 0.08, width * 0.3];
+    const far = right ? [width * 0.04, width * 0.16] : [width * 0.84, width * 0.96];
+    if (!chestRow && r() < 0.72) {
+      out.push({ kind: zone.decor[Math.floor(r() * zone.decor.length)], x: free[0] + r() * (free[1] - free[0]), y: ROW * (0.3 + r() * 0.4), s: 0.85 + r() * 0.3 });
+    }
+    if (r() < 0.45) {
+      out.push({ kind: zone.decor[Math.floor(r() * zone.decor.length)], x: far[0] + r() * (far[1] - far[0]), y: ROW * (0.2 + r() * 0.6), s: 0.65 + r() * 0.2 });
+    }
+    return out;
+  }, [chestRow, row.level, width, xn, zone]);
+  // Çim tutamları: zemine doku (ucuz: birkaç küçük yol).
+  const tufts = useMemo(() => {
+    const r = rand(row.level * 13 + 3);
+    return Array.from({ length: 4 }, () => ({ x: r() * width, y: 10 + r() * (ROW - 20), dark: r() < 0.4 }));
+  }, [row.level, width]);
 
   return (
     <View style={[styles.row, { height: h, backgroundColor: ground }]}>
       <Svg width={width} height={h} style={StyleSheet.absoluteFill}>
         {tierStart ? <Rect x={0} y={ROW} width={width} height={BANNER} fill={zoneOf(Math.max(1, row.level - 1)).ground[(row.level - 1) % 2]} /> : null}
         {zone.night ? <NightSky level={row.level} width={width} /> : null}
+        {tufts.map((t, i) => (
+          <Path key={`t${i}`} d={`M ${t.x - 5} ${t.y + 4} L ${t.x - 2} ${t.y - 3} L ${t.x} ${t.y + 4} L ${t.x + 3} ${t.y - 4} L ${t.x + 5} ${t.y + 4} Z`} fill={t.dark ? M.tuftDark : M.tuft} />
+        ))}
         {/* yol: yumuşak gölge, ince kenar, dolgu, orta çizgi */}
         <Path d={full} stroke={M.shadowSoft} strokeWidth={ROAD + 4} fill="none" strokeLinecap="butt" transform="translate(0 3)" />
         <Path d={full} stroke={zone.roadEdge} strokeWidth={ROAD + 3} fill="none" strokeLinecap="butt" />
@@ -190,21 +233,23 @@ const LevelRow = React.memo(function LevelRow({ row, width, current, onPlay }: {
         {decor.map((d, i) => (
           <Decor key={i} kind={d.kind} x={d.x} y={d.y} s={d.s} zone={zone} />
         ))}
+        {chestRow ? <LevelChest x={xn < width / 2 ? width * 0.78 : width * 0.22} y={ROW * 0.52} open={row.level < current} /> : null}
       </Svg>
       {tierStart ? <TierBanner level={row.level} zone={zone} /> : null}
-      <LevelNode row={row} x={xn} zone={zone} onPlay={onPlay} pinLeft={xn > width / 2} />
+      <LevelNode row={row} x={xn} zone={zone} onPlay={onPlay} pinLeft={xn > width / 2} avatar={avatar} />
     </View>
   );
 });
 
 /* ═══════════════════════ düğüm ═══════════════════════ */
 
-function LevelNode({ row, x, zone, onPlay, pinLeft }: { row: Row; x: number; zone: MapZone; onPlay: (level: number) => void; pinLeft: boolean }) {
+function LevelNode({ row, x, zone, onPlay, pinLeft, avatar }: { row: Row; x: number; zone: MapZone; onPlay: (level: number) => void; pinLeft: boolean; avatar: string | null }) {
   const reduce = useReduceMotion();
   const pulse = useRef(new Animated.Value(0)).current;
   const isCurrent = row.state === "current";
   const locked = row.state === "locked";
   const cup = row.level % 10 === 0;
+  const hard = !cup && row.level % 5 === 0;
 
   useEffect(() => {
     if (!isCurrent || reduce) return;
@@ -221,7 +266,8 @@ function LevelNode({ row, x, zone, onPlay, pinLeft }: { row: Row; x: number; zon
   const size = isCurrent ? NODE_CURRENT : NODE;
   const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.04] });
   const bob = pulse.interpolate({ inputRange: [0, 1], outputRange: [0, -4] });
-  const fill = locked ? M.locked : isCurrent ? M.current : zone.node;
+  const fill = locked ? M.locked : isCurrent ? M.current : cup ? M.superHard : hard ? M.hard : zone.node;
+  const lip = isCurrent ? M.currentLip : cup && !locked ? M.superLip : hard && !locked ? M.hardLip : fill[1];
   const gid = `n${row.level}`;
 
   return (
@@ -237,9 +283,14 @@ function LevelNode({ row, x, zone, onPlay, pinLeft }: { row: Row; x: number; zon
           <Svg width={46} height={54}>
             <Path d="M23 52 C 16 40, 3 33, 3 21 A 20 20 0 1 1 43 21 C 43 33, 30 40, 23 52 Z" fill={M.shadowSoft} transform="translate(0 3)" />
             <Path d="M23 52 C 16 40, 3 33, 3 21 A 20 20 0 1 1 43 21 C 43 33, 30 40, 23 52 Z" fill={M.pin} />
+            {avatar ? <Circle cx={23} cy={21} r={16} fill={M.avatar} stroke={M.avatarRing} strokeWidth={2.5} /> : null}
           </Svg>
           <View style={styles.pinIcon}>
-            <Ionicons name="football" size={22} color={M.pinInk} />
+            {avatar ? (
+              <Text style={styles.pinText} numberOfLines={1} {...textScale.badge}>{avatar}</Text>
+            ) : (
+              <Ionicons name="football" size={22} color={M.pinInk} />
+            )}
           </View>
         </Animated.View>
       ) : row.state === "done" ? (
@@ -252,13 +303,14 @@ function LevelNode({ row, x, zone, onPlay, pinLeft }: { row: Row; x: number; zon
         </View>
       ) : null}
       <Animated.View style={{ transform: [{ scale }] }}>
+        {isCurrent ? <View pointerEvents="none" style={[styles.halo, { width: size + 22, height: size + 22, left: -11, top: -11 }]} /> : null}
         <Touchable
           onPress={() => !locked && onPlay(row.level)}
           disabled={locked}
           haptic="selection"
           style={{ width: size, height: size + 6 }}
           accessibilityRole="button"
-          accessibilityLabel={`${row.level}. seviye${cup ? ", kupa maçı" : ""}${row.state === "done" ? `, ${row.stars} yıldız` : locked ? ", kilitli" : ", oyna"}`}
+          accessibilityLabel={`${row.level}. bölüm${cup ? ", süper zor, bölüm sandığı" : hard ? ", zor" : ""}${row.state === "done" ? `, ${row.stars} yıldız` : locked ? ", kilitli" : ", oyna"}`}
         >
           <Svg width={size} height={size + 6}>
             <Defs>
@@ -268,8 +320,9 @@ function LevelNode({ row, x, zone, onPlay, pinLeft }: { row: Row; x: number; zon
               </LinearGradient>
             </Defs>
             <Circle cx={size / 2} cy={size / 2 + 5} r={size / 2 - 1} fill={M.shadowSoft} />
-            <Circle cx={size / 2} cy={size / 2 + 3} r={size / 2 - 1} fill={isCurrent ? M.currentLip : fill[1]} />
+            <Circle cx={size / 2} cy={size / 2 + 3} r={size / 2 - 1} fill={lip} />
             <Circle cx={size / 2} cy={size / 2} r={size / 2 - 1} fill={`url(#${gid})`} />
+            {!locked ? <Ellipse cx={size / 2} cy={size * 0.26} rx={size * 0.3} ry={size * 0.12} fill={M.shine} /> : null}
             {cup && !locked ? <Circle cx={size / 2} cy={size / 2} r={size / 2 - 4} fill="none" stroke={M.cup} strokeWidth={2.5} /> : null}
           </Svg>
           <View style={[StyleSheet.absoluteFill, styles.nodeCenter, { height: size }]}>
@@ -305,6 +358,22 @@ function StarShape({ size, lit }: { size: number; lit: boolean }) {
     <Svg width={size} height={size + 2}>
       <Polygon points={pts.join(" ")} fill={lit ? M.star : M.starEmpty} stroke={lit ? M.starEdge : M.starEmpty} strokeWidth={1} strokeLinejoin="round" />
     </Svg>
+  );
+}
+
+/** Bölüm sandığı — her 10. bölümün yanında; bölüm geçilince kapak açık ve ışıklı. */
+function LevelChest({ x, y, open }: { x: number; y: number; open: boolean }) {
+  return (
+    <G transform={`translate(${x - 22} ${y - 22})`}>
+      <Ellipse cx={22} cy={40} rx={18} ry={4} fill={M.shadow} />
+      {open ? <Circle cx={22} cy={16} r={18} fill={M.glow} /> : null}
+      <Rect x={5} y={19} width={34} height={20} rx={3} fill={M.chest} />
+      {open ? <Path d="M 5 17 L 10 4 L 39 4 L 39 10 L 10 17 Z" fill={M.chest} /> : <Path d="M 5 20 Q 5 7 22 7 Q 39 7 39 20 Z" fill={M.chest} />}
+      <Rect x={19} y={open ? 4 : 7} width={6} height={open ? 13 : 32} fill={M.chestBand} />
+      <Rect x={18} y={22} width={8} height={8} rx={2} fill={M.chestBand} />
+      <Rect x={20.5} y={24.5} width={3} height={3} rx={1} fill={M.chestDeep} />
+      {open ? <Polygon points="22,0 24,5 29,5 25,8 27,13 22,10 17,13 19,8 15,5 20,5" fill={M.star} /> : null}
+    </G>
   );
 }
 
@@ -529,7 +598,9 @@ const styles = StyleSheet.create({
   starMid: { marginBottom: 5 },
   starSide: {},
   pin: { position: "absolute", width: 46, height: 56, alignItems: "center" },
-  pinIcon: { position: "absolute", top: 10, width: 46, alignItems: "center" },
+  pinIcon: { position: "absolute", top: 10, width: 46, height: 24, alignItems: "center", justifyContent: "center" },
+  pinText: { ...type.label, fontFamily: fonts.bold, color: M.white },
+  halo: { position: "absolute", borderRadius: radius.pill, backgroundColor: M.halo },
   playTag: {
     marginTop: -18,
     paddingHorizontal: space.md,

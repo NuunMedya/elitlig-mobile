@@ -18,7 +18,7 @@ import Svg, { Circle, Defs, LinearGradient, Rect, Stop } from "react-native-svg"
 import { fonts, radius, space, textScale, type } from "@/theme";
 import { UCLU_BOARD, UCLU_PIECE_COLORS } from "@/lib/puzzle/ucluPalette";
 import type { UcluGoalType } from "@/lib/puzzle/levels/uclu";
-import { PieceGlyph } from "./Piece";
+import { GoalIcon } from "./GoalIcon";
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -32,59 +32,25 @@ export interface HudGoal {
 export function goalLabel(g: { type: UcluGoalType; color: number }): string {
   switch (g.type) {
     case "color":
-      return UCLU_PIECE_COLORS[g.color]?.name ?? "Top";
+      return UCLU_PIECE_COLORS[g.color]?.name ?? "Taş";
     case "mud":
       return "Çamur";
     case "crate":
       return "Krampon kutusu";
     case "snow":
-      return "Kar";
+      return "Buz";
+    case "net":
+      return "Kale ağı";
+    case "turf":
+      return "Çim";
+    case "cone":
+      return "Antrenman konisi";
     default:
       return "Şampiyonluk kupası";
   }
 }
 
-export function GoalIcon({ type: kind, color, size }: { type: UcluGoalType; color: number; size: number }) {
-  if (kind === "color") return <PieceGlyph kind="gem" color={color} special="none" size={size} />;
-  if (kind === "trophy") return <PieceGlyph kind="trophy" color={-1} special="none" size={size} />;
-  const map: Record<string, { icon: IconName; tint: string; bg: string; edge: string }> = {
-    mud: {
-      icon: "water",
-      tint: UCLU_BOARD.woodHi,
-      bg: UCLU_BOARD.mud,
-      edge: UCLU_BOARD.mudDeep,
-    },
-    crate: {
-      icon: "cube",
-      tint: UCLU_BOARD.woodHi,
-      bg: UCLU_BOARD.woodLo,
-      edge: UCLU_BOARD.rimInner,
-    },
-    snow: {
-      icon: "snow",
-      tint: UCLU_BOARD.snowInk,
-      bg: UCLU_BOARD.snowEdge,
-      edge: UCLU_BOARD.snowInk,
-    },
-  };
-  const m = map[kind];
-  return (
-    <View
-      style={[
-        styles.iconTile,
-        {
-          width: size,
-          height: size,
-          borderRadius: size * 0.28,
-          backgroundColor: m.bg,
-          borderBottomColor: m.edge,
-        },
-      ]}
-    >
-      <Ionicons name={m.icon} size={Math.round(size * 0.66)} color={m.tint} />
-    </View>
-  );
-}
+export { GoalIcon };
 
 function GoalChip({
   goal,
@@ -218,7 +184,8 @@ function Panel({ width, height, id }: { width: number; height: number; id: strin
 
 export interface HudProps {
   level: number;
-  cup: boolean;
+  /** "ZOR" / "SÜPER ZOR" rozeti; normal seviyede null. */
+  tag: string | null;
   moves: number;
   goals: HudGoal[];
   /** HUD'un çizileceği genişlik ve (sabit) yükseklik. */
@@ -232,7 +199,7 @@ export interface HudProps {
 /** Başlık satırının (kurdele) yüksekliği. */
 const TITLE_H = 24;
 
-export const Hud = React.memo(function Hud({ level, cup, moves, goals, width, height, onGoalsPart, onGoalSlot }: HudProps) {
+export const Hud = React.memo(function Hud({ level, tag, moves, goals, width, height, onGoalsPart, onGoalSlot }: HudProps) {
   const pad = space.sm;
   const inner = height - 4 - pad * 2;
   const badge = inner;
@@ -252,11 +219,11 @@ export const Hud = React.memo(function Hud({ level, cup, moves, goals, width, he
               SEVİYE {level}
             </Text>
           </View>
-          {cup ? (
-            <View style={styles.cupBadge}>
-              <Ionicons name="trophy" size={12} color={UCLU_BOARD.hudText} />
+          {tag ? (
+            <View style={[styles.cupBadge, tag.length > 4 && styles.superBadge]}>
+              <Ionicons name={tag.length > 4 ? "flame" : "skull"} size={12} color={UCLU_BOARD.hudText} />
               <Text style={styles.cupText} {...textScale.badge}>
-                KUPA MAÇI
+                {tag}
               </Text>
             </View>
           ) : null}
@@ -582,8 +549,9 @@ const styles = StyleSheet.create({
     height: 22,
     paddingHorizontal: space.s,
     borderRadius: radius.pill,
-    backgroundColor: UCLU_BOARD.chromeHi,
+    backgroundColor: UCLU_BOARD.btnHammer,
   },
+  superBadge: { backgroundColor: UCLU_BOARD.lowLo },
   cupText: {
     ...type.micro,
     fontFamily: fonts.bold,
