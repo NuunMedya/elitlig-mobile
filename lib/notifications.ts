@@ -421,6 +421,7 @@ export type PushRegistrationState =
   | "simulator"       // gerçek cihaz değil (emülatör/simülatör)
   | "expo-go"         // Expo Go: uzak bildirim desteklenmiyor, derleme gerekir
   | "proje-yok"       // EAS projectId okunamadı
+  | "fcm-yok"         // Android derlemesinde Firebase (google-services.json) yok
   | "hata";           // beklenmeyen hata
 
 export interface PushRegistration {
@@ -436,6 +437,16 @@ export interface PushRegistration {
  * Expo Go'da uzak bildirim SDK 53'ten beri desteklenmiyor: token istendiğinde
  * modül hata fırlatır. Bunu "kurulum hatası" gibi göstermek yanıltıcı olurdu.
  */
+/**
+ * Android'de token Firebase üzerinden alınır. Derlemeye google-services.json
+ * girmediyse (app.config.js → android.googleServicesFile) hata metni Firebase'i
+ * anar. Bu bir ağ sorunu DEĞİLDİR, tekrar denemek düzeltmez: derleme eksiktir.
+ * Eskiden bu durum "internet bağlantınızı kontrol edin" diye gösteriliyordu.
+ */
+function isMissingFirebase(detail: string): boolean {
+  return Platform.OS === "android" && /FirebaseApp|fcm-credentials|google-services/i.test(detail);
+}
+
 function isExpoGo(): boolean {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -541,6 +552,16 @@ export async function registerForPush(): Promise<PushRegistration> {
         detail,
       };
     }
+    if (isMissingFirebase(detail)) {
+      return {
+        state: "fcm-yok",
+        token: null,
+        message:
+          "Bu sürümde Android anlık bildirim altyapısı (Firebase) eksik. Bildirimler yalnız " +
+          "uygulama açıkken görünür; uygulamanın güncel sürümünü yükleyin.",
+        detail,
+      };
+    }
     return {
       state: "hata",
       token: null,
@@ -579,4 +600,23 @@ export async function setupNotificationHandlers(): Promise<void> {
   } catch {
     // Expo Go'da sessizce geç
   }
+}
+
+/**
+ * Bu bildirim UZAK push mı (Expo → FCM/APNs), yoksa yerel köprünün kendi
+ * gösterdiği bir bildirim mi?
+ *
+ * Uzak bildirimin tetikleyicisi `{ type: "push" }`'tur; köprü ise yükünde
+ * `source: "bridge"` taşır. İkisi birlikte bakılır: köprü bildirimi hiçbir
+ * zaman "push çalışıyor" kanıtı sayılmamalı, yoksa köprü kendi gösterdiğini
+ * görüp susar ve push hiç çalışmayan cihazda bildirim tamamen kaybolurdu.
+ */
+export function isRemoteNotification(notification: {
+  request: { trigger?: unknown; content: { data?: unknown } };
+} | null | undefined): boolean {
+  if (!notification) return false;
+  const data = notification.request.content.data as Record<string, unknown> | undefined;
+  if (data?.source === "bridge") return false;
+  const trigger = notification.request.trigger as { type?: unknown } | null | undefined;
+  return trigger?.type === "push";
 }

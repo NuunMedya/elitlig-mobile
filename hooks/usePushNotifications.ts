@@ -17,8 +17,13 @@ import { useEffect, useRef } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import { useRouter } from "expo-router";
 import { runPushRegistration } from "@/hooks/usePushStatus";
-import { markDelivered } from "@/lib/notificationLedger";
-import { notificationIdFromNotif, routeFromNotif, setupNotificationHandlers } from "@/lib/notifications";
+import { markDelivered, markRemotePushSeen } from "@/lib/notificationLedger";
+import {
+  isRemoteNotification,
+  notificationIdFromNotif,
+  routeFromNotif,
+  setupNotificationHandlers,
+} from "@/lib/notifications";
 import { useAuth } from "@/providers/AuthProvider";
 
 export function usePushNotifications() {
@@ -79,6 +84,8 @@ export function usePushNotifications() {
            atlar; aksi hâlde push zinciri çalışan cihazlarda aynı bildirim
            telefonda iki kez belirirdi. */
         receivedRef.current = Notifications.addNotificationReceivedListener((notification) => {
+          // Uzak push telefona ulaştı: köprü "push çalışıyor" moduna geçsin.
+          if (isRemoteNotification(notification)) markRemotePushSeen();
           markDelivered(
             notificationIdFromNotif(
               notification.request.content.data as Record<string, unknown>,
@@ -89,6 +96,7 @@ export function usePushNotifications() {
         // Uygulama arka plandayken/açıkken gelen dokunuşlar.
         listenerRef.current = Notifications.addNotificationResponseReceivedListener((response) => {
           const data = response.notification.request.content.data as Record<string, unknown>;
+          if (isRemoteNotification(response.notification)) markRemotePushSeen();
           // Dokunulan bildirim de gösterilmiş sayılır: köprü onu tekrar
           // göstermeye çalışmasın.
           markDelivered(notificationIdFromNotif(data));
@@ -100,6 +108,10 @@ export function usePushNotifications() {
           coldStartHandled.current = true;
           const last = await Notifications.getLastNotificationResponseAsync();
           if (!cancelled && last) {
+            if (isRemoteNotification(last.notification)) markRemotePushSeen();
+            markDelivered(
+              notificationIdFromNotif(last.notification.request.content.data as Record<string, unknown>),
+            );
             openFrom(
               last.notification.request.content.data as Record<string, unknown>,
               last.notification.request.identifier
