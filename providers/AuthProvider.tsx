@@ -13,7 +13,7 @@ import { AppState, type AppStateStatus } from "react-native";
 import * as authApi from "@/lib/api/auth";
 import type { RegisterInput } from "@/lib/api/auth";
 import { ApiError, configureAuth } from "@/lib/http";
-import { resetPushSync } from "@/hooks/usePushStatus";
+import { resetPushSync, unregisterPushDevice } from "@/hooks/usePushStatus";
 import { clearLedger } from "@/lib/notificationLedger";
 import {
   clearSessionCache,
@@ -276,6 +276,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [adoptToken]);
 
   const signOut = useCallback(async () => {
+    // Cihaz kaydı jeton hâlâ geçerliyken kaldırılır; sonra oturum kapanır.
+    await unregisterPushDevice();
     try {
       await authApi.logout();
     } catch {

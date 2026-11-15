@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Platform } from "react-native";
-import { post } from "@/lib/http";
+import { del, post } from "@/lib/http";
 import { registerForPush, type PushRegistration } from "@/lib/notifications";
 
 /** Cihaz kaydının sunucuya yazılma durumu. */
@@ -47,6 +47,32 @@ const listeners = new Set<(value: PushStatus) => void>();
  * aynı cihaza giren yeni üye için kayıt mutlaka tekrarlansın.
  */
 let syncedToken: string | null = null;
+
+/** Anlık durum — hook dışından okumak için (yerel köprü push sağlığına bakar). */
+export function getPushStatus(): PushStatus {
+  return current;
+}
+
+/**
+ * Çıkışta cihazı sunucudaki hesaptan ayırır. resetPushSync'ten ÖNCE ve oturum
+ * jetonu hâlâ geçerliyken çağrılmalı (uç kimlik ister).
+ *
+ * NEDEN: token tabloda kalırsa çıkış yapan üyenin mesaj/teklif bildirimleri,
+ * aynı telefona başka biri girene dek bu cihaza düşmeye devam ederdi.
+ * En iyi çaba: ağ yoksa ya da yanıt gecikirse çıkış bekletilmez.
+ */
+export async function unregisterPushDevice(timeoutMs = 4000): Promise<void> {
+  const token = syncedToken ?? current.token;
+  if (!token) return;
+  try {
+    await Promise.race([
+      del("/api/users/push-token", { token }),
+      new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+    ]);
+  } catch {
+    // Silinemezse bir sonraki girişte kayıt zaten yeni sahibine devredilir.
+  }
+}
 
 /** Çıkışta çağrılır: bir sonraki girişte token yeniden yazılsın. */
 export function resetPushSync(): void {

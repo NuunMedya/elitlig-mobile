@@ -23,9 +23,23 @@
  * kapalıyken açılışta" teslim eder. Gerçek anlık teslimat için push zinciri
  * kurulmalıdır; köprü onun yerine geçmez, YOKLUĞUNDA devreye girer.
  *
- * ÇİFT GÖSTERİM: push zinciri çalışıyorsa aynı bildirim hem push hem köprü
- * yoluyla gelirdi. Bunu `lib/notificationLedger.ts` engeller — uzak push
- * geldiğinde kimlik deftere yazılır, köprü yazılmış kimlikleri atlar.
+ * ÇİFT GÖSTERİM — "AÇILIŞTA BİLDİRİMLER TOPLUCA DÜŞÜYOR": push zinciri
+ * çalışıyorsa aynı bildirim hem push hem köprü yoluyla gelirdi. Eskiden tek
+ * koruma, uzak push'un `addNotificationReceivedListener` ile deftere
+ * yazılmasıydı; ama o dinleyici YALNIZ UYGULAMA ÖN PLANDAYKEN çalışır. Arka
+ * planda/kapalıyken gelen push'lar deftere hiç yazılmıyor, kullanıcı
+ * uygulamayı açınca köprü hepsini "yeni" sanıp bir kez daha gösteriyordu.
+ * Artık üç katman var:
+ *   1. Her turda bildirim gölgesindeki uzak push'lar okunur
+ *      (getPresentedNotificationsAsync); kimlikleri deftere, tür + varlık
+ *      anahtarları ayrıca eşleştirmeye girer (toplu push'ta kimlik yoktur).
+ *   2. Cihaza son 14 günde gerçekten uzak push düştüyse ("kanıt", bkz.
+ *      lib/notificationLedger.ts → markRemotePushSeen) köprü SESSİZ moddadır:
+ *      bildirim göstermez, yalnız işaret ilerletir ve sayaçları tazeler.
+ *      Kullanıcının gölgeden sildiği bir push açılışta geri gelmez.
+ *   3. Push hiç çalışmıyorsa (ör. Firebase'siz Android derlemesi) köprü yedek
+ *      olarak gösterir; ama uzun aradan sonra birikmiş birden çok kaydı tek
+ *      tek patlatmak yerine TEK bir özet bildirimi gösterir.
  *
  * İLK ÇALIŞTIRMA: kullanıcı uygulamayı ilk kurduğunda bildirim merkezinde
  * zaten 50 kayıt olabilir. Bunların hepsini bildirim olarak göstermek telefonu
@@ -43,8 +57,20 @@ import { AppState, Platform, type AppStateStatus } from "react-native";
 
 import { getPanelNotifications, type PanelNotification } from "@/lib/api/panel";
 import { ApiError } from "@/lib/http";
-import { deliveredIds, markManyDelivered } from "@/lib/notificationLedger";
-import { CHANNELS, shouldPlaySoundFor } from "@/lib/notifications";
+import { getPushStatus } from "@/hooks/usePushStatus";
+import {
+  contentKeyOf,
+  deliveredIds,
+  lastRemotePushAt,
+  markManyDelivered,
+  markRemotePushSeen,
+} from "@/lib/notificationLedger";
+import {
+  CHANNELS,
+  isRemoteNotification,
+  notificationIdFromNotif,
+  shouldPlaySoundFor,
+} from "@/lib/notifications";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -52,8 +78,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 /** Ön planda yoklama aralığı. 45 sn: tazelik ile pil arasındaki denge. */
 const POLL_MS = 45_000;
 
-/** Tek turda en fazla kaç bildirim gösterilir. */
-const MAX_PER_ROUND = 5;
+/** Tek turda en fazla kaç bildirim TEK TEK gösterilir; fazlası özetlenir. */
+const MAX_INDIVIDUAL = 2;
+
+/** Bundan eski kayıt tek tek gösterilmez (özete girer): bayat haber bölmesin. */
+const STALE_MS = 6 * 60 * 60 * 1000;
+
+/** Son uzak push bu süreden yeniyse push zinciri "çalışıyor" sayılır. */
+const REMOTE_PROOF_MS = 14 * 24 * 60 * 60 * 1000;
 
 /** "En yüksek görülen kimlik" işareti — üye başına ayrı tutulur. */
 const watermarkKey = (userId: number | string) => `elitlig.notifBridge.watermark.${userId}`;
@@ -111,6 +143,74 @@ async function present(item: PanelNotification): Promise<boolean> {
   }
 }
 
+/** Birikmiş bildirimler için TEK özet bildirimi; dokununca bildirim merkezi açılır. */
+async function presentSummary(items: PanelNotification[]): Promise<boolean> {
+  try {
+    const Notifications = await import("expo-notifications");
+    const latest = [...items].sort((a, b) => Number(b.id) - Number(a.id));
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: `${items.length} yeni bildirim`,
+        body: latest.slice(0, 3).map((item) => item.title).join(" · "),
+        // Tanınmayan tür → routeFromNotif bildirim merkezine gider.
+        data: { type: "BRIDGE_SUMMARY", source: "bridge" },
+        sound: latest.some((item) => shouldPlaySoundFor({ type: item.type, entity_type: item.entity_type })),
+      },
+      trigger: Platform.OS === "android" ? { channelId: CHANNELS.PANEL.id } : null,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Bildirim gölgesindeki UZAK push'ları okur.
+ *
+ * Arka planda gelen push'lar JS'e hiç uğramaz; gölgede durdukları sürece
+ * buradan görülürler. Kimliği olanlar deftere yazılır, tür + varlık anahtarı
+ * ayrıca döner (toplu push'ta kimlik yoktur). Gölgede tek bir uzak push bile
+ * varsa bu, push zincirinin çalıştığının kanıtıdır.
+ */
+async function syncPresented(): Promise<ReadonlySet<string>> {
+  const keys = new Set<string>();
+  try {
+    const Notifications = await import("expo-notifications");
+    const presented = await Notifications.getPresentedNotificationsAsync();
+    const ids: number[] = [];
+    let remoteSeen = false;
+    for (const notification of presented) {
+      if (!isRemoteNotification(notification)) continue;
+      remoteSeen = true;
+      const data = notification.request.content.data as Record<string, unknown> | undefined;
+      const id = notificationIdFromNotif(data);
+      if (id) ids.push(id);
+      const key = contentKeyOf(data);
+      if (key) keys.add(key);
+    }
+    if (ids.length) markManyDelivered(ids);
+    if (remoteSeen) markRemotePushSeen();
+  } catch {
+    // Web hedefi ya da desteklenmeyen ortam: eşleştirme yapılmadan devam.
+  }
+  return keys;
+}
+
+/**
+ * Push zinciri bu cihazda çalışıyor mu?
+ *
+ * Token'ın sunucuya yazılması yetmez (EAS'te FCM/APNs kimliği eksikse Expo
+ * her gönderimi reddeder). Kanıt: son 14 günde telefona gerçekten bir uzak
+ * push düşmüş olması. Kayıt KESİN olarak bozuksa (izin yok, Firebase yok,
+ * Expo Go, token sunucuya yazılamadı) kanıt ne derse desin köprü devrededir.
+ */
+async function pushChainHealthy(): Promise<boolean> {
+  const status = getPushStatus();
+  if (!status.busy && (status.state !== "hazir" || status.server === "hata")) return false;
+  const last = await lastRemotePushAt();
+  return last !== null && Date.now() - last < REMOTE_PROOF_MS;
+}
+
 /** İzin gerçekten verilmiş mi? Verilmemişse yoklama boşuna çalışır. */
 async function hasPermission(): Promise<boolean> {
   try {
@@ -164,25 +264,51 @@ export function useNotificationBridge(): void {
         return;
       }
 
+      // Önce gölge: arka planda gelen push'lar deftere ve eşleştirmeye girsin.
+      const presentedKeys = await syncPresented();
       const ledger = await deliveredIds();
 
       const fresh = items
         .filter((item) => Number(item.id) > watermark)
         .filter((item) => !item.is_read) // Web'den okunmuşsa telefonu meşgul etme.
         .filter((item) => !ledger.has(Number(item.id))) // Push'la zaten geldiyse atla.
+        .filter((item) => {
+          // Toplu push kimlik taşımaz: tür + varlık ile eşleştir.
+          const contentKey = contentKeyOf({
+            type: item.type,
+            entity_type: item.entity_type,
+            entity_public_id: item.entity_public_id,
+          });
+          return !contentKey || !presentedKeys.has(contentKey);
+        })
         // Eskiden yeniye göster: bildirim gölgesinde en yeni en üstte kalsın.
-        .sort((a, b) => Number(a.id) - Number(b.id))
-        .slice(-MAX_PER_ROUND);
+        .sort((a, b) => Number(a.id) - Number(b.id));
 
-      const shown: number[] = [];
-      for (const item of fresh) {
-        // Sırayla: aynı anda beş bildirim planlamak bazı Android sürümlerinde
-        // yalnız sonuncuyu gösteriyor.
-        // eslint-disable-next-line no-await-in-loop
-        if (await present(item)) shown.push(Number(item.id));
+      /* PUSH ÇALIŞIYORSA GÖSTERME. Bu kayıtlar ya push'la zaten geldi (ve
+         kullanıcı gölgeden sildi) ya da üye o türün push'unu tercihlerinden
+         kapattı — iki durumda da yeniden göstermek yanlış. Sayaçlar yine de
+         aşağıda tazelenir. */
+      if (fresh.length && !(await pushChainHealthy())) {
+        const now = Date.now();
+        const allRecent = fresh.every((item) => {
+          const created = Date.parse(item.createdAt);
+          return !Number.isFinite(created) || now - created < STALE_MS;
+        });
+
+        if (fresh.length <= MAX_INDIVIDUAL && allRecent) {
+          const shown: number[] = [];
+          for (const item of fresh) {
+            // Sırayla: aynı anda birden çok bildirim planlamak bazı Android
+            // sürümlerinde yalnız sonuncuyu gösteriyor.
+            // eslint-disable-next-line no-await-in-loop
+            if (await present(item)) shown.push(Number(item.id));
+          }
+          if (shown.length) markManyDelivered(shown);
+        } else if (await presentSummary(fresh)) {
+          // Açılışta patlama yerine tek özet: kayıtlar bildirim merkezinde.
+          markManyDelivered(fresh.map((item) => Number(item.id)));
+        }
       }
-
-      if (shown.length) markManyDelivered(shown);
 
       /* İŞARET HER DURUMDA İLERLETİLİR — gösterilenlere göre değil, okunan en
          yüksek kimliğe göre. Aksi hâlde okunmuş ya da atlanmış bir bildirim

@@ -111,3 +111,55 @@ export async function clearLedger(): Promise<void> {
     // Silinemese bile bellek kopyası boş; oturum boyunca doğru davranır.
   }
 }
+
+/* =============================================================================
+   UZAK PUSH KANITI — "bu cihazda push zinciri gerçekten çalışıyor mu?"
+   -----------------------------------------------------------------------------
+   Token'ın alınıp sunucuya yazılması push'un TELEFONA ULAŞTIĞINI kanıtlamaz:
+   EAS'te FCM/APNs kimliği eksikse Expo her gönderimi reddeder, istemci bunu
+   hiç öğrenmez. Tek güvenilir kanıt, telefona gerçekten bir uzak push
+   düşmesidir. Köprü bu kanıta bakarak iki moddan birini seçer:
+     · push çalışıyor  → köprü bildirim GÖSTERMEZ (push zaten gösterdi; arka
+                         planda gelenler açılışta ikinci kez belirmesin);
+     · push çalışmıyor → köprü yedek olarak yerel bildirim gösterir.
+   Kanıt cihaza aittir, üyeye değil; çıkışta silinmez.
+   ========================================================================== */
+
+const REMOTE_SEEN_KEY = "elitlig.push.lastRemoteAt.v1";
+
+let remoteSeenCache: number | null = null;
+
+/** Bir uzak push'un telefona ulaştığını kaydeder. */
+export function markRemotePushSeen(at: number = Date.now()): void {
+  if (remoteSeenCache !== null && remoteSeenCache >= at) return;
+  remoteSeenCache = at;
+  AsyncStorage.setItem(REMOTE_SEEN_KEY, String(at)).catch(() => undefined);
+}
+
+/** Son uzak push'un zamanı (ms); hiç görülmediyse null. */
+export async function lastRemotePushAt(): Promise<number | null> {
+  if (remoteSeenCache !== null) return remoteSeenCache;
+  try {
+    const raw = Number(await AsyncStorage.getItem(REMOTE_SEEN_KEY));
+    remoteSeenCache = Number.isFinite(raw) && raw > 0 ? raw : null;
+  } catch {
+    remoteSeenCache = null;
+  }
+  return remoteSeenCache;
+}
+
+/**
+ * Bildirimin İÇERİK anahtarı (tür + varlık).
+ *
+ * NEDEN: toplu gönderimde (models/PanelNotification.js → afterBulkCreate)
+ * bildirim kimliği alıcıya göre değiştiği için push yükünde `notification_id`
+ * YOKTUR; deftere kimlikle yazılamaz. Köprü bu bildirimleri bildirim
+ * gölgesindeki push'larla tür + varlık üzerinden eşleştirir.
+ */
+export function contentKeyOf(data: Record<string, unknown> | null | undefined): string | null {
+  const type = String(data?.type ?? "").trim().toUpperCase();
+  if (!type) return null;
+  const entityType = String(data?.entity_type ?? "").trim().toUpperCase();
+  const entityId = String(data?.entity_public_id ?? "").trim();
+  return `${type}|${entityType}|${entityId}`;
+}
