@@ -1,7 +1,8 @@
 /**
- * OYUN ANA SAYFASI PENCERELERİ — can (sayaç · reklam · jeton), reklamla
- * ödüller (can · ücretsiz güçlendirici · günlük çark), çark, kurallar, seri
- * ve ayarlar. Hepsi aynı oyun kartı (`HomeModal`).
+ * OYUN ANA SAYFASI PENCERELERİ — can (sayaç · reklam · jeton), ödüller
+ * (günlük hediye · reklamla can · ücretsiz güçlendirici · günlük çark), çark,
+ * kurallar, seri, "Diğer" (mağaza · seri · kurallar) ve ayarlar. Hepsi aynı
+ * oyun kartı (`HomeModal`).
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -109,6 +110,7 @@ export function AdOffersSheet({
   lives,
   boosters,
   onSpin,
+  gift,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -117,11 +119,24 @@ export function AdOffersSheet({
   /** Bölümlü oyunlarda ücretsiz güçlendirici. */
   boosters: boolean;
   onSpin: () => void;
+  /** Günlük hediye satırı (girişliyse). */
+  gift?: { ready: boolean; onOpen: () => void } | null;
 }) {
   const offline = useOffline();
   const profile = lives.profile;
   return (
-    <HomeModal visible={visible} onClose={onClose} top="ÜCRETSİZ" title="Reklamla ödül">
+    <HomeModal visible={visible} onClose={onClose} top="ÜCRETSİZ" title="Ödüller">
+      {gift ? (
+        <Touchable onPress={gift.onOpen} haptic="selection" accessibilityRole="button" accessibilityLabel={gift.ready ? "Günlük hediye hazır, aç" : "Günlük hediye"}>
+          <ModalRow
+            icon="gift"
+            tint={GH.side.gift[1]}
+            title="Günlük hediye"
+            sub={gift.ready ? "Bugünkü hediyen hazır" : "Bugün alındı · yarın yine gel"}
+            right={<Ionicons name="chevron-forward" size={18} color={GH.cardSoft} />}
+          />
+        </Touchable>
+      ) : null}
       {!lives.signedIn ? (
         <Text style={styles.body} {...textScale.long}>Reklamla ödüller için giriş yap.</Text>
       ) : offline ? (
@@ -306,6 +321,53 @@ export function StreakSheet({ visible, onClose, streak }: { visible: boolean; on
   );
 }
 
+/* ═══════════════════════ DİĞER ═══════════════════════ */
+
+/** Ana sayfanın ikincil eylemleri: mağaza, seri, kurallar (+ oyunun ekledikleri). */
+export function MoreSheet({
+  visible,
+  onClose,
+  title,
+  onShop,
+  streak,
+  onStreak,
+  onRules,
+  extra,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  title: string;
+  onShop?: () => void;
+  /** undefined: oyunda seri yok; null: seri henüz başlamadı. */
+  streak?: PuzzleStreak | null;
+  onStreak: () => void;
+  onRules: () => void;
+  extra?: { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; sub?: string | null; onPress: () => void }[];
+}) {
+  const router = useRouter();
+  return (
+    <HomeModal visible={visible} onClose={onClose} top={title.toLocaleUpperCase("tr-TR")} title="Diğer">
+      {onShop ? <SettingsLink icon="flash" title="Güçlendirici mağazası" sub="Jetonla güçlendirici ve can" onPress={onShop} /> : null}
+      {streak !== undefined ? (
+        <SettingsLink icon="trophy" title="Galibiyet serisi" sub={streak && streak.tier > 0 ? `${streak.tier}/3 basamak · ${streak.wins} galibiyet` : "Üst üste kazan, ücretsiz güçlendirici al"} onPress={onStreak} />
+      ) : null}
+      <SettingsLink icon="book" title="Nasıl oynanır?" onPress={onRules} />
+      {(extra ?? []).map((x) => (
+        <SettingsLink key={x.key} icon={x.icon} title={x.label} sub={x.sub} onPress={x.onPress} />
+      ))}
+      <SettingsLink
+        icon="business"
+        title="Kulüp Şehri"
+        sub="Yıldızlarını harca"
+        onPress={() => {
+          onClose();
+          router.push("/kulup-sehri");
+        }}
+      />
+    </HomeModal>
+  );
+}
+
 /* ═══════════════════════ AYARLAR ═══════════════════════ */
 
 export function SettingsSheet({ visible, onClose, onRules, onBoard }: { visible: boolean; onClose: () => void; onRules: () => void; onBoard: () => void }) {
@@ -339,10 +401,10 @@ export function SettingsSheet({ visible, onClose, onRules, onBoard }: { visible:
   );
 }
 
-function SettingsLink({ icon, title, onPress }: { icon: keyof typeof Ionicons.glyphMap; title: string; onPress: () => void }) {
+function SettingsLink({ icon, title, sub, onPress }: { icon: keyof typeof Ionicons.glyphMap; title: string; sub?: string | null; onPress: () => void }) {
   return (
     <GameLinkRow onPress={onPress} label={title}>
-      <ModalRow icon={icon} tint={GH.side.settings[1]} title={title} right={<Ionicons name="chevron-forward" size={18} color={GH.cardSoft} />} />
+      <ModalRow icon={icon} tint={GH.side.settings[1]} title={title} sub={sub} right={<Ionicons name="chevron-forward" size={18} color={GH.cardSoft} />} />
     </GameLinkRow>
   );
 }

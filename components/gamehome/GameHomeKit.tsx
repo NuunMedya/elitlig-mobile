@@ -1,33 +1,43 @@
 /**
- * OYUN ANA SAYFASI PARÇALARI — Royal Match tarzı ev ekranının yapı taşları
- * (sözleşme §6). Renkler `lib/game/gameHomePalette.ts`.
+ * OYUN ANA SAYFASI PARÇALARI — ev ekranının yapı taşları (sözleşme §6).
+ * Renkler `lib/game/gameHomePalette.ts`.
  *
- *   · HomeTopBar   avatar / geri · jeton (+) · can (sayaç) · yıldız · ayarlar
- *   · SideButton   yuvarlak parlak yan düğme (rozetli, altında etiket)
- *   · PlayButton   büyük yeşil "Bölüm N" / "OYNA" düğmesi (+ Zor / Süper Zor rozeti)
- *   · ChestBar     etkinlik / sandık ilerleme çubuğu
+ *   · HomeTopBar   geri · can (sayaç) · jeton · yıldız · ayarlar (düz, ince)
+ *   · HomeActions  en çok 3 etiketli eylem çipi (Ödüller · Sıralama · Diğer)
+ *   · PlayButton   tek odak: düz yeşil "Bölüm N" / "OYNA" (zorluk alt satırda)
+ *   · ChestBar     ince ilerleme satırı (sandık / bugünkü yıldız)
  *   · ChestIcon    sandık çizimi (harita, çubuk ve hediye açılışı)
  *   · StreakCrowns seri basamakları (3 taç)
  *   · HomeModal    oyun içi pencere (karartılmış sahnede beyaz kart)
  *
- * Performans: her parça React.memo; animasyonlar yerel sürücüde ve sonlu.
+ * 2026-11 SADELEŞTİRME: parlama, kalın beyaz kenar, alt dudak ve nabız
+ * kaldırıldı; dört yanda yüzen yuvarlak düğmeler tek bir çip satırına indi.
+ * KIRPILMA KURALI: hiçbir rozet / nokta ebeveyninin dışına taşmaz (negatif
+ * konum yok); sayılar `adjustsFontSizeToFit`e güvenmez (web onu yok sayar),
+ * kısaltılır ve hap içeriğe göre genişler.
+ *
+ * Performans: her parça React.memo; animasyon yalnız pencere açılışında.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useRef } from "react";
-import { Animated, Easing, Modal, ScrollView, StyleSheet, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from "react-native";
+import { Animated, Modal, ScrollView, StyleSheet, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from "react-native";
 import Svg, { Ellipse, Path, Rect } from "react-native-svg";
 
 import { Touchable, useReduceMotion } from "@/components/ui";
 import { GH } from "@/lib/game/gameHomePalette";
-import { colors, fonts, radius, space, textScale, touchSlop, type } from "@/theme";
+import { fonts, radius, space, textScale, touchSlop, type } from "@/theme";
 
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
-const LEFT = { x: 0, y: 0.5 } as const;
-const RIGHT = { x: 1, y: 0.5 } as const;
-const fmt = (n: number) => n.toLocaleString("tr-TR");
+
+/** Sayı kısaltma: 10.000 ve üstü "12,5B" (dar telefonda hap kesilmesin). */
+export const fmtShort = (n: number) => {
+  if (n < 10_000) return n.toLocaleString("tr-TR");
+  if (n < 1_000_000) return `${(Math.floor(n / 100) / 10).toLocaleString("tr-TR", { maximumFractionDigits: n < 100_000 ? 1 : 0 })}B`;
+  return `${(Math.floor(n / 100_000) / 10).toLocaleString("tr-TR", { maximumFractionDigits: 1 })}M`;
+};
 
 /* ═══════════════════════ ÜST ŞERİT ═══════════════════════ */
 
@@ -39,7 +49,6 @@ export interface TopBarLives {
 
 export const HomeTopBar = React.memo(function HomeTopBar({
   onBack,
-  initials,
   coins,
   onCoins,
   lives,
@@ -49,8 +58,6 @@ export const HomeTopBar = React.memo(function HomeTopBar({
   onSettings,
 }: {
   onBack: () => void;
-  /** Avatar harfleri (girişliyse); yoksa geri oku. */
-  initials?: string | null;
   coins: number | null;
   onCoins?: () => void;
   lives: TopBarLives | null;
@@ -59,19 +66,11 @@ export const HomeTopBar = React.memo(function HomeTopBar({
   onStars?: () => void;
   onSettings: () => void;
 }) {
+  const timer = lives && lives.lives < lives.max && lives.label && lives.label !== "Dolu" ? lives.label : null;
   return (
     <View style={styles.topRow}>
-      <Touchable onPress={onBack} hitSlop={touchSlop(42)} accessibilityRole="button" accessibilityLabel="Geri" style={styles.round} haptic="light">
-        {initials ? (
-          <View style={styles.avatarWrap}>
-            <Text style={styles.avatarText} {...textScale.badge}>{initials}</Text>
-            <View style={styles.backBadge}>
-              <Ionicons name="chevron-back" size={12} color={GH.ink} />
-            </View>
-          </View>
-        ) : (
-          <Ionicons name="chevron-back" size={24} color={GH.white} />
-        )}
+      <Touchable onPress={onBack} hitSlop={touchSlop(36)} accessibilityRole="button" accessibilityLabel="Geri" style={styles.round} haptic="light">
+        <Ionicons name="chevron-back" size={20} color={GH.white} />
       </Touchable>
       <View style={styles.pills}>
         {lives ? (
@@ -79,17 +78,16 @@ export const HomeTopBar = React.memo(function HomeTopBar({
             icon="heart"
             tint={GH.heart}
             value={String(lives.lives)}
-            hint={lives.lives >= lives.max ? "Dolu" : lives.label}
-            plus={lives.lives < lives.max}
+            hint={timer}
             onPress={onLives}
-            label={`Can ${lives.lives}/${lives.max}${lives.label && lives.label !== "Dolu" ? `, sıradaki ${lives.label}` : ""}`}
+            label={`Can ${lives.lives}/${lives.max}${timer ? `, sıradaki ${timer}` : ""}`}
           />
         ) : null}
-        <TopPill icon="disc" tint={GH.coin} value={coins != null ? fmtCoins(coins) : "–"} wide plus={Boolean(onCoins)} onPress={onCoins} label={`Jeton ${coins ?? 0}`} />
-        <TopPill icon="star" tint={GH.star} value={stars != null ? fmt(stars) : "–"} onPress={onStars} label={`Yıldız ${stars ?? 0}`} />
+        <TopPill icon="disc" tint={GH.coin} value={coins != null ? fmtShort(coins) : "–"} onPress={onCoins} label={`Jeton ${coins ?? 0}`} />
+        <TopPill icon="star" tint={GH.star} value={stars != null ? fmtShort(stars) : "–"} onPress={onStars} label={`Yıldız ${stars ?? 0}`} />
       </View>
-      <Touchable onPress={onSettings} hitSlop={touchSlop(42)} accessibilityRole="button" accessibilityLabel="Ayarlar" style={styles.round} haptic="light">
-        <Ionicons name="settings-sharp" size={20} color={GH.white} />
+      <Touchable onPress={onSettings} hitSlop={touchSlop(36)} accessibilityRole="button" accessibilityLabel="Ayarlar" style={styles.round} haptic="light">
+        <Ionicons name="settings-sharp" size={18} color={GH.white} />
       </Touchable>
     </View>
   );
@@ -100,79 +98,61 @@ function TopPill({
   tint,
   value,
   hint,
-  plus,
   onPress,
   label,
-  wide,
 }: {
-  /** Jeton hapı: "+" düğmesi de taşıdığı için daha geniş (sayı kesilmesin). */
-  wide?: boolean;
   icon: keyof typeof Ionicons.glyphMap;
   tint: string;
   value: string;
+  /** Değerin altında küçük satır (can sayacı). */
   hint?: string | null;
-  plus?: boolean;
   onPress?: () => void;
   label: string;
 }) {
   return (
-    <Touchable onPress={onPress} disabled={!onPress} haptic="selection" style={[styles.pill, wide ? styles.pillWide : null]} accessibilityRole="button" accessibilityLabel={label}>
-      <View style={styles.pillIcon}>
-        <Ionicons name={icon} size={24} color={tint} />
-      </View>
+    <Touchable onPress={onPress} disabled={!onPress} haptic="selection" style={styles.pill} accessibilityRole="button" accessibilityLabel={label}>
+      <Ionicons name={icon} size={18} color={tint} />
       <View style={styles.pillTexts}>
-        <Text style={styles.pillValue} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>{value}</Text>
+        <Text style={styles.pillValue} numberOfLines={1} {...textScale.badge}>{value}</Text>
         {hint ? <Text style={styles.pillHint} numberOfLines={1} {...textScale.badge}>{hint}</Text> : null}
       </View>
-      {plus && onPress ? (
-        <LinearGradient colors={GH.pillPlus} start={TOP} end={BOTTOM} style={styles.plus}>
-          <Ionicons name="add" size={14} color={GH.white} />
-        </LinearGradient>
-      ) : null}
     </Touchable>
   );
 }
 
-/* ═══════════════════════ YAN DÜĞME ═══════════════════════ */
+/* ═══════════════════════ EYLEM ÇİPLERİ ═══════════════════════ */
 
-export type SideTone = keyof typeof GH.side;
-
-export const SideButton = React.memo(function SideButton({
-  icon,
-  label,
-  tone,
-  onPress,
-  badge,
-  dot,
-}: {
+export interface HomeAction {
+  key: string;
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
-  tone: SideTone;
   onPress: () => void;
-  badge?: string | number | null;
-  /** Kırmızı nokta: alınmayı bekleyen ödül. */
+  /** Küçük nokta: yalnız alınmayı bekleyen bir ödül varken. */
   dot?: boolean;
-}) {
+}
+
+/**
+ * Tek satır, eşit genişlikte etiketli çipler (en çok 3 önerilir). Dar
+ * telefonda (< 360) ikon etiketin üstüne geçer: "Sıralama" yan yana
+ * dizilişte 320px'te "Sırala…" diye kesiliyordu.
+ */
+export const HomeActions = React.memo(function HomeActions({ items }: { items: HomeAction[] }) {
+  const { width } = useWindowDimensions();
+  const stacked = width < 360;
   return (
-    <Touchable onPress={onPress} haptic="selection" style={styles.side} accessibilityRole="button" accessibilityLabel={badge != null ? `${label}, ${badge}` : label}>
-      <View style={styles.sideLip} />
-      <LinearGradient colors={GH.side[tone]} start={TOP} end={BOTTOM} style={styles.sideCircle}>
-        <View style={styles.sideShine} />
-        <Ionicons name={icon} size={26} color={GH.white} />
-      </LinearGradient>
-      {badge != null ? (
-        <View style={styles.sideBadge}>
-          <Text style={styles.sideBadgeText} {...textScale.badge}>{badge}</Text>
-        </View>
-      ) : dot ? (
-        <View style={styles.sideDot} />
-      ) : null}
-      <Text style={styles.sideLabel} numberOfLines={1} {...textScale.badge}>{label}</Text>
-    </Touchable>
+    <View style={styles.actions}>
+      {items.map((a) => (
+        <Touchable key={a.key} onPress={a.onPress} haptic="selection" style={[styles.action, stacked && styles.actionStacked]} accessibilityRole="button" accessibilityLabel={a.dot ? `${a.label}, alınacak ödül var` : a.label}>
+          <Ionicons name={a.icon} size={18} color={GH.white} />
+          <Text style={styles.actionText} numberOfLines={1} {...textScale.badge}>{a.label}</Text>
+          {a.dot ? <View style={styles.actionDot} /> : null}
+        </Touchable>
+      ))}
+    </View>
   );
 });
 
-/* ═══════════════════════ BÜYÜK OYNA DÜĞMESİ ═══════════════════════ */
+/* ═══════════════════════ OYNA DÜĞMESİ ═══════════════════════ */
 
 export type Difficulty = "hard" | "super" | null;
 
@@ -196,48 +176,36 @@ export const PlayButton = React.memo(function PlayButton({
   busy?: boolean;
   accessibilityLabel?: string;
 }) {
-  const reduce = useReduceMotion();
-  const pulse = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    if (reduce || disabled) return undefined;
-    // Sonlu nabız: dikkat çeker, pil yemez.
-    const anim = Animated.loop(Animated.sequence([Animated.timing(pulse, { toValue: 1, duration: 700, easing: Easing.out(Easing.quad), useNativeDriver: true }), Animated.timing(pulse, { toValue: 0, duration: 700, easing: Easing.in(Easing.quad), useNativeDriver: true })]), { iterations: 6 });
-    anim.start();
-    return () => anim.stop();
-  }, [disabled, pulse, reduce]);
-  const fill = difficulty === "super" ? GH.playSuper : difficulty === "hard" ? GH.playHard : GH.play;
-  const lip = difficulty === "super" ? GH.playSuperLip : difficulty === "hard" ? GH.playHardLip : GH.playLip;
-  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.035] });
-  const tagFill = difficulty === "super" ? GH.superHard : GH.hard;
+  const fill = difficulty === "super" ? GH.playFlatSuper : difficulty === "hard" ? GH.playFlatHard : GH.playFlat;
+  const edge = difficulty === "super" ? GH.playFlatSuperEdge : difficulty === "hard" ? GH.playFlatHardEdge : GH.playFlatEdge;
+  const tag = difficulty === "super" ? "SÜPER ZOR" : difficulty === "hard" ? "ZOR" : null;
   return (
-    <Animated.View style={[styles.playWrap, { transform: [{ scale }] }]}>
-      {difficulty ? (
-        <LinearGradient colors={tagFill} start={LEFT} end={RIGHT} style={styles.diffTag}>
-          <Ionicons name={difficulty === "super" ? "skull" : "flame"} size={14} color={GH.white} />
-          <Text style={styles.diffText} {...textScale.badge}>{difficulty === "super" ? "SÜPER ZOR" : "ZOR"}</Text>
-        </LinearGradient>
-      ) : null}
-      <Touchable
-        onPress={onPress}
-        disabled={disabled || busy}
-        haptic="medium"
-        accessibilityRole="button"
-        accessibilityLabel={accessibilityLabel ?? title}
-        accessibilityState={{ disabled: Boolean(disabled), busy: Boolean(busy) }}
-        style={[styles.play, { opacity: disabled ? 0.6 : 1 }]}
-      >
-        <View style={[styles.playLip, { backgroundColor: lip }]} />
-        <LinearGradient colors={fill} start={TOP} end={BOTTOM} style={styles.playFill}>
-          <View style={styles.playShine} />
-          <Text style={styles.playTitle} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
-            {busy ? "Hazırlanıyor…" : title}
-          </Text>
-          {sub && !busy ? (
+    <Touchable
+      onPress={onPress}
+      disabled={disabled || busy}
+      haptic="medium"
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? title}
+      accessibilityState={{ disabled: Boolean(disabled), busy: Boolean(busy) }}
+      style={[styles.play, { backgroundColor: fill, borderBottomColor: edge, opacity: disabled ? 0.6 : 1 }]}
+    >
+      <Text style={styles.playTitle} numberOfLines={1} {...textScale.badge}>
+        {busy ? "Hazırlanıyor…" : title}
+      </Text>
+      {(sub || tag) && !busy ? (
+        <View style={styles.playSubRow}>
+          {tag ? (
+            <View style={styles.playTag}>
+              <Ionicons name={difficulty === "super" ? "skull" : "flame"} size={11} color={GH.white} />
+              <Text style={styles.playTagText} {...textScale.badge}>{tag}</Text>
+            </View>
+          ) : null}
+          {sub ? (
             <Text style={styles.playSub} numberOfLines={1} {...textScale.badge}>{sub}</Text>
           ) : null}
-        </LinearGradient>
-      </Touchable>
-    </Animated.View>
+        </View>
+      ) : null}
+    </Touchable>
   );
 });
 
@@ -264,36 +232,32 @@ export const ChestIcon = React.memo(function ChestIcon({ size = 40, open = false
   );
 });
 
+/** İnce ilerleme satırı: ikon · başlık · ince çubuk · "16/40". */
 export const ChestBar = React.memo(function ChestBar({
   title,
   value,
   max,
   onPress,
   icon,
-  note,
 }: {
   title: string;
   value: number;
   max: number;
   onPress?: () => void;
-  /** Sol ikon yerine (ör. seri alevi); yoksa sandık. */
+  /** Sol ikon yerine (ör. yıldız); yoksa küçük sandık. */
   icon?: keyof typeof Ionicons.glyphMap;
-  note?: string | null;
 }) {
   const prog = Math.max(0, Math.min(1, value / Math.max(1, max)));
   return (
-    <Touchable onPress={onPress} disabled={!onPress} haptic="selection" style={styles.bar} accessibilityRole="button" accessibilityLabel={`${title}: ${value}/${max}`}>
-      <View style={styles.barIcon}>{icon ? <Ionicons name={icon} size={30} color={GH.coin} /> : <ChestIcon size={44} />}</View>
-      <View style={styles.barBody}>
-        <Text style={styles.barTitle} numberOfLines={1} {...textScale.badge}>{title}</Text>
-        <View style={styles.barTrack}>
-          <LinearGradient colors={GH.barFill} start={LEFT} end={RIGHT} style={[styles.barFill, { width: `${Math.max(6, prog * 100)}%` }]} />
-          <Text style={styles.barValue} {...textScale.badge}>
-            {fmt(Math.min(value, max))}/{fmt(max)}
-          </Text>
-        </View>
-        {note ? <Text style={styles.barNote} numberOfLines={1} {...textScale.badge}>{note}</Text> : null}
+    <Touchable onPress={onPress} disabled={!onPress} haptic="selection" style={styles.bar} accessibilityRole={onPress ? "button" : "text"} accessibilityLabel={`${title}: ${value}/${max}`}>
+      {icon ? <Ionicons name={icon} size={16} color={GH.coin} /> : <ChestIcon size={22} />}
+      <Text style={styles.barTitle} numberOfLines={1} {...textScale.badge}>{title}</Text>
+      <View style={styles.barTrack}>
+        <View style={[styles.barFill, { width: `${prog * 100}%` }]} />
       </View>
+      <Text style={styles.barValue} numberOfLines={1} {...textScale.badge}>
+        {fmtShort(Math.min(value, max))}/{fmtShort(max)}
+      </Text>
     </Touchable>
   );
 });
@@ -356,7 +320,7 @@ export function HomeModal({
             <ScrollView contentContainerStyle={styles.cardBody} bounces={false} showsVerticalScrollIndicator={false}>
               <View style={styles.cardHead} accessibilityRole="header">
                 {top ? <Text style={styles.cardTop} numberOfLines={1} {...textScale.badge}>{top}</Text> : null}
-                <Text style={styles.cardTitle} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>{title}</Text>
+                <Text style={styles.cardTitle} numberOfLines={2} {...textScale.badge}>{title}</Text>
               </View>
               {children}
             </ScrollView>
@@ -389,76 +353,83 @@ export function ModalRow({ icon, tint, title, sub, right }: { icon: keyof typeof
 
 /* ═══════════════════════ STİLLER ═══════════════════════ */
 
-/** Jeton: 100.000 ve üstü kısaltılır ("125B") ki dar telefonda kesilmesin. */
-const fmtCoins = (n: number) => (n >= 100_000 ? `${Math.floor(n / 1000)}B` : n.toLocaleString("tr-TR"));
-
-const shadowText = { textShadowColor: GH.inkShadow, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 2 };
-
 const styles = StyleSheet.create({
   topRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  round: { width: 44, height: 44, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: GH.pill, borderWidth: 2, borderColor: GH.pillEdge },
-  avatarWrap: { width: 40, height: 40, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brand },
-  avatarText: { ...type.label, fontFamily: fonts.bold, color: GH.white },
-  backBadge: { position: "absolute", left: -6, bottom: -4, width: 18, height: 18, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: GH.white },
-  pills: { flex: 1, flexDirection: "row", gap: space.xs },
+  round: { width: 36, height: 36, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: GH.hud, borderWidth: 1, borderColor: GH.hudEdge },
+  pills: { flex: 1, minWidth: 0, flexDirection: "row", gap: space.xs },
+  // Hap içeriğe göre genişler (flexBasis auto), kalan yer eşit paylaşılır: "3.6…" kesilmesi biter.
   pill: {
-    flex: 1,
-    minWidth: 0,
-    height: 40,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: "auto",
+    height: 36,
     flexDirection: "row",
     alignItems: "center",
-    gap: 2,
-    paddingRight: space.xxs,
+    justifyContent: "center",
+    gap: space.xs,
+    paddingHorizontal: space.sm,
     borderRadius: radius.pill,
-    backgroundColor: GH.pill,
-    borderWidth: 2,
-    borderColor: GH.pillEdge,
+    backgroundColor: GH.hud,
+    borderWidth: 1,
+    borderColor: GH.hudEdge,
   },
-  pillWide: { flex: 1.45 },
-  pillIcon: { marginLeft: -6, width: 28, alignItems: "center" },
-  pillTexts: { flex: 1, minWidth: 0 },
-  pillValue: { ...type.label, fontFamily: fonts.bold, color: GH.white, ...shadowText },
-  pillHint: { ...type.nano, fontFamily: fonts.bold, color: GH.white, opacity: 0.85 },
-  plus: { width: 22, height: 22, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: GH.white },
+  pillTexts: { flexShrink: 0, alignItems: "flex-start" },
+  pillValue: { ...type.tableNumStrong, color: GH.white },
+  pillHint: { ...type.nano, color: GH.hudSoft, marginTop: -2 },
 
-  side: { width: 70, alignItems: "center" },
-  sideLip: { position: "absolute", top: 5, width: 58, height: 58, borderRadius: radius.pill, backgroundColor: GH.inkShadow },
-  sideCircle: { width: 58, height: 58, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: GH.sideEdge, overflow: "hidden" },
-  sideShine: { position: "absolute", top: 4, left: 10, right: 10, height: 16, borderRadius: radius.pill, backgroundColor: GH.playShine },
-  sideBadge: { position: "absolute", top: -4, right: 2, minWidth: 22, height: 22, paddingHorizontal: 5, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: GH.badge, borderWidth: 2, borderColor: GH.white },
-  sideBadgeText: { ...type.micro, fontFamily: fonts.bold, color: GH.white },
-  sideDot: { position: "absolute", top: 0, right: 8, width: 16, height: 16, borderRadius: radius.pill, backgroundColor: GH.badge, borderWidth: 2, borderColor: GH.white },
-  sideLabel: { ...type.micro, fontFamily: fonts.bold, color: GH.sideLabel, marginTop: space.xxs, ...shadowText },
+  actions: { flexDirection: "row", gap: space.sm, alignSelf: "stretch" },
+  action: {
+    flex: 1,
+    minWidth: 0,
+    height: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.s,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.md,
+    backgroundColor: GH.hud,
+    borderWidth: 1,
+    borderColor: GH.hudEdge,
+  },
+  actionStacked: { flexDirection: "column", height: 48, gap: 1, paddingHorizontal: space.xs },
+  actionText: { ...type.labelSm, fontFamily: fonts.bold, color: GH.white, flexShrink: 1 },
+  // Nokta çipin İÇİNDE (taşan rozet kırpılıyordu).
+  actionDot: { position: "absolute", top: space.s, right: space.s, width: 8, height: 8, borderRadius: radius.pill, backgroundColor: GH.dot },
 
-  playWrap: { alignItems: "center", alignSelf: "center", width: "78%", maxWidth: 320 },
-  diffTag: { flexDirection: "row", alignItems: "center", gap: space.xxs, paddingHorizontal: space.md, paddingVertical: space.xxs, borderRadius: radius.pill, marginBottom: -10, zIndex: 2, borderWidth: 2, borderColor: GH.white },
-  diffText: { ...type.micro, fontFamily: fonts.bold, color: GH.white, letterSpacing: 1.2 },
-  play: { alignSelf: "stretch", height: 80 },
-  playLip: { position: "absolute", top: 8, left: 0, right: 0, height: 72, borderRadius: radius.xxl },
-  playFill: { height: 72, borderRadius: radius.xxl, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: GH.playEdge, overflow: "hidden" },
-  playShine: { position: "absolute", top: 5, left: 18, right: 18, height: 22, borderRadius: radius.pill, backgroundColor: GH.playShine },
-  playTitle: { ...type.display, fontFamily: fonts.bold, color: GH.white, letterSpacing: 0.5, ...shadowText },
-  playSub: { ...type.micro, fontFamily: fonts.bold, color: GH.white, opacity: 0.92, marginTop: -2 },
+  play: {
+    alignSelf: "stretch",
+    minHeight: 56,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.lg,
+    borderBottomWidth: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  playTitle: { ...type.h1, fontFamily: fonts.bold, color: GH.white },
+  playSubRow: { flexDirection: "row", alignItems: "center", gap: space.s, marginTop: space.xxs, maxWidth: "100%" },
+  playTag: { flexDirection: "row", alignItems: "center", gap: space.xxs, paddingHorizontal: space.s, paddingVertical: 1, borderRadius: radius.pill, backgroundColor: GH.hud },
+  playTagText: { ...type.micro, fontFamily: fonts.bold, color: GH.white },
+  playSub: { ...type.caption, color: GH.white, opacity: 0.9, flexShrink: 1 },
 
-  bar: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.xs, paddingHorizontal: space.sm, borderRadius: radius.xl, backgroundColor: GH.bar, borderWidth: 2, borderColor: GH.pillEdge },
-  barIcon: { width: 44, alignItems: "center", marginTop: -10 },
-  barBody: { flex: 1, gap: 3 },
-  barTitle: { ...type.micro, fontFamily: fonts.bold, color: GH.white, letterSpacing: 0.8 },
-  barTrack: { height: 20, borderRadius: radius.pill, backgroundColor: GH.barTrack, overflow: "hidden", justifyContent: "center" },
-  barFill: { position: "absolute", left: 0, top: 0, bottom: 0, borderRadius: radius.pill },
-  barValue: { ...type.micro, fontFamily: fonts.bold, color: GH.white, textAlign: "center", ...shadowText },
-  barNote: { ...type.nano, color: GH.white, opacity: 0.85 },
+  bar: { flexDirection: "row", alignItems: "center", gap: space.sm, height: 32, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: GH.hud, borderWidth: 1, borderColor: GH.hudEdge },
+  barTitle: { ...type.labelXs, fontFamily: fonts.bold, color: GH.white, flexShrink: 1 },
+  barTrack: { flex: 1, minWidth: 48, height: 6, borderRadius: radius.pill, backgroundColor: GH.hudTrack, overflow: "hidden" },
+  barFill: { height: 6, borderRadius: radius.pill, backgroundColor: GH.coin },
+  barValue: { ...type.numSmStrong, color: GH.white },
 
   crowns: { flexDirection: "row", gap: space.xs, justifyContent: "center" },
   crown: { width: 34, height: 34, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: GH.bar },
   crownOn: { borderWidth: 2, borderColor: GH.coin },
 
   dim: { flex: 1, backgroundColor: GH.dim, alignItems: "center", justifyContent: "center", paddingVertical: space.xl },
-  card: { borderRadius: radius.xxl, overflow: "hidden", elevation: 12, shadowColor: GH.inkShadow, shadowOpacity: 0.3, shadowRadius: 24, shadowOffset: { width: 0, height: 12 } },
+  card: { borderRadius: radius.xxl, overflow: "hidden", elevation: 8, shadowColor: GH.inkShadow, shadowOpacity: 0.25, shadowRadius: 18, shadowOffset: { width: 0, height: 8 } },
   cardBody: { paddingTop: space.xl, paddingHorizontal: space.lg, paddingBottom: space.md, gap: space.md },
-  cardHead: { alignItems: "center", gap: space.xxs, paddingHorizontal: space.xl },
-  cardTop: { ...type.micro, fontFamily: fonts.bold, color: GH.cardSoft, letterSpacing: 1.5 },
-  cardTitle: { ...type.display, fontFamily: fonts.bold, color: GH.cardInk },
+  // Yanlarda kapat düğmesi kadar boşluk: uzun başlık düğmenin altına girmesin.
+  cardHead: { alignItems: "center", gap: space.xxs, paddingHorizontal: space.xxxl },
+  cardTop: { ...type.overline, fontFamily: fonts.bold, color: GH.cardSoft },
+  cardTitle: { ...type.h1, fontFamily: fonts.bold, color: GH.cardInk, textAlign: "center" },
   cardFoot: { paddingHorizontal: space.lg, paddingBottom: space.lg, paddingTop: space.xs, gap: space.sm },
   close: { position: "absolute", top: space.md, right: space.md, width: 36, height: 36, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: GH.panel },
 

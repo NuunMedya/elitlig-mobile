@@ -1,11 +1,11 @@
 /**
  * LİG YOLU ▸ OYUN ANA SAYFASI — /lig-yolu/<oyun> (sözleşme §6)
  *
- * Royal Match tarzı ev: üstte avatar · can (sayaç) · jeton (+) · yıldız ·
- * ayarlar; altında yıldız sandığı çubuğu; yanlarda hediye, ücretsiz ödül,
- * çark, sıralama, mağaza, seri, kurallar; arkada bölge bölge güzelleşen
- * harita (LevelMap); altta büyük yeşil "Bölüm N" (her 5. "Zor", her 10.
- * "Süper Zor"). Düğüme ya da düğmeye basınca Başlangıç penceresi açılır
+ * Sade oyun evi: üstte ince şerit (geri · can sayacı · jeton · yıldız ·
+ * ayarlar) ve tek satırlık yıldız sandığı ilerlemesi; arkada bölge bölge
+ * renk değiştiren harita (LevelMap); altta üç çip (Ödüller · Sıralama ·
+ * Diğer) ve tek odak yeşil "Bölüm N" (her 5. "Zor", her 10. "Süper Zor").
+ * Düğüme ya da düğmeye basınca Başlangıç penceresi açılır
  * (hedefler + seviye öncesi güçlendirici + seri hediyesi); "Oyna" sunucuya
  * sorar (bölüm açık mı, can var mı) ve oyun ekranına geçer.
  *
@@ -51,7 +51,7 @@ export default function PuzzleHomeScreen() {
   const [selected, setSelected] = useState<string[]>([]);
   const [shop, setShop] = useState<"lives" | "all" | null>(null);
   const [busy, setBusy] = useState(false);
-  const [insets, setInsets] = useState({ top: 180, bottom: 140 });
+  const [insets, setInsets] = useState({ top: 100, bottom: 150 });
   // Bu oyunun canları (her oyunun kendi 5 canı var).
   const profile = livesFor(me?.profile, module?.key);
   const streak = module ? me?.profile.gifts?.streaks?.[module.key] : undefined;
@@ -154,14 +154,14 @@ export default function PuzzleHomeScreen() {
         onInsets={onInsets}
         eventBar={
           chest ? (
-            <ChestBar title="YILDIZ SANDIĞI" value={chest.progress} max={chest.every} note={`Bölüm yıldızı topla, sandığı aç · her ${chest.every} yıldızda bir`} />
+            <ChestBar title="Yıldız sandığı" value={chest.progress} max={chest.every} />
           ) : progress ? (
-            <ChestBar title="BÖLÜM SANDIĞI" value={progress.level % 10} max={10} note={`${Math.ceil(next / 10) * 10}. bölümde sandık seni bekliyor`} />
+            <ChestBar title={`${Math.ceil(next / 10) * 10}. bölüm sandığı`} value={progress.level % 10} max={10} />
           ) : null
         }
         play={{
           title: `Bölüm ${next}`,
-          sub: progress ? `${progress.total_stars} yıldız · ${module.title}` : module.tagline,
+          sub: progress ? `${module.title} · ${progress.total_stars} yıldız` : module.tagline,
           difficulty: diff,
           onPress: () => setLevel(next),
           disabled: !progress,

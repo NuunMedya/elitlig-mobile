@@ -1,19 +1,22 @@
 /**
- * OYUN ANA SAYFASI — her oyunun Royal Match tarzı evi (sözleşme §6).
+ * OYUN ANA SAYFASI — her oyunun evi (sözleşme §6).
  *
- *   ┌ avatar · can (sayaç) · jeton (+) · yıldız · ayarlar ┐
- *   │ çevrimdışı hapı · etkinlik / sandık çubuğu          │
- *   │ (hediye)                                 (sıralama) │
- *   │ (reklam)        harita / sahne           (kurallar) │
- *   │ (çark)                                   (seri)     │
- *   │              seri tacı · ZOR rozeti                 │
- *   └          [   BÖLÜM 24   ]  büyük yeşil düğme       ┘
+ *   ┌ ‹ · can (sayaç) · jeton · yıldız · ayarlar ┐   ince, düz üst şerit
+ *   │ çevrimdışı hapı · ince ilerleme satırı      │
+ *   │                                             │
+ *   │          harita / sahne (tam ekran)         │
+ *   │                                             │
+ *   │  [Ödüller]   [Sıralama]   [Diğer]           │   en çok 3 etiketli çip
+ *   └  [        Bölüm 24  · ZOR        ]         ┘   tek odak: OYNA
+ *
+ * 2026-11 SADELEŞTİRME: dört yanda yüzen yedi parlak düğme haritanın
+ * üstüne biniyor, etiketleri dekora ve düğümlere çarpıyordu; hepsi tek çip
+ * satırına indi. "Ödüller" günlük hediye + reklamla ödül + çarkı, "Diğer"
+ * mağaza + seri + kuralları açar. Nokta yalnız alınacak ödül varken.
  *
  * Arka plan (harita ya da sahne) `background` ile gelir ve tam ekrandır;
- * üst ve alt şerit onun üstünde sisli zeminde durur. Can kapısı burada:
+ * üst ve alt şerit onun üstünde hafif sisli zeminde durur. Can kapısı burada:
  * canı biten oyuncu OYNA'ya basınca oyun değil can penceresi açılır.
- * Pencereler (can, ayarlar, kurallar, reklamla ödül, çark, günlük hediye)
- * ana sayfanın kendisindedir; oyun yalnız `play` ve isteğe bağlı düğmeleri verir.
  */
 
 import { LinearGradient } from "expo-linear-gradient";
@@ -31,20 +34,19 @@ import { usePuzzleMe } from "@/lib/puzzle/usePuzzle";
 import { useAuth } from "@/providers/AuthProvider";
 import { layout, space } from "@/theme";
 
-import { HomeTopBar, PlayButton, SideButton, StreakCrowns, type Difficulty, type SideTone } from "./GameHomeKit";
-import { AdOffersSheet, LivesSheet, RulesSheet, SettingsSheet, SpinSheet, StreakSheet } from "./HomeSheets";
+import { HomeActions, HomeTopBar, PlayButton, type Difficulty, type HomeAction } from "./GameHomeKit";
+import { AdOffersSheet, LivesSheet, MoreSheet, RulesSheet, SettingsSheet, SpinSheet, StreakSheet } from "./HomeSheets";
 
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
 
+/** "Diğer" penceresine oyunun eklediği satır. */
 export interface HomeSide {
   key: string;
-  icon: React.ComponentProps<typeof SideButton>["icon"];
+  icon: HomeAction["icon"];
   label: string;
-  tone: SideTone;
+  sub?: string | null;
   onPress: () => void;
-  badge?: string | number | null;
-  dot?: boolean;
 }
 
 export interface GameHomeProps {
@@ -64,7 +66,7 @@ export interface GameHomeProps {
   streak?: PuzzleStreak | null;
   /** Ücretsiz güçlendirici reklamı gösterilsin mi (bölümlü). */
   adBoosters?: boolean;
-  /** Ek yan düğmeler (sağ sütunun sonuna). */
+  /** "Diğer" penceresine ek satırlar. */
   extraRight?: HomeSide[];
   /** Üst ve alt şeridin ölçüsü (haritanın kaydırma boşluğu için). */
   onInsets?: (top: number, bottom: number) => void;
@@ -76,8 +78,7 @@ export function GameHome({ title, livesGame, background, eventBar, play, rules, 
   const insets = useSafeAreaInsets();
   const me = usePuzzleMe().data;
   const lives = useGameLives(livesGame);
-  const [sheet, setSheet] = useState<null | "lives" | "settings" | "rules" | "ads" | "spin" | "gift" | "streak">(null);
-  const [topH, setTopH] = useState(0);
+  const [sheet, setSheet] = useState<null | "lives" | "settings" | "rules" | "ads" | "spin" | "gift" | "streak" | "more">(null);
   // Ölçüler ref'te de tutulur: iki onLayout aynı karede gelince eski değer okunmasın.
   const sizes = useRef({ top: 0, bottom: 0 });
 
@@ -95,33 +96,17 @@ export function GameHome({ title, livesGame, background, eventBar, play, rules, 
   }, [gated, play]);
 
   const back = useCallback(() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/oyunlar")), [router]);
-  const name = auth.user?.fullName || auth.user?.username || "";
-  const initials = name
-    ? name
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((w) => w[0]?.toLocaleUpperCase("tr-TR"))
-        .join("")
-    : null;
   const stars = me ? me.city?.stars.available ?? me.profile.stadium?.available ?? null : null;
-  const dailyReady = Boolean(me?.profile.daily?.available);
+  const dailyReady = Boolean(auth.user && me?.profile.daily?.available);
+  const spinLeft = Boolean(lives.profile?.ads?.spin?.left);
 
-  const left: HomeSide[] = [
-    ...(auth.user ? [{ key: "gift", icon: "gift" as const, label: "Hediye", tone: "gift" as const, onPress: () => setSheet("gift"), dot: dailyReady }] : []),
-    ...(livesGame
-      ? [
-          { key: "ad", icon: "play-circle" as const, label: "Ücretsiz", tone: "ad" as const, onPress: () => setSheet("ads"), dot: Boolean(lives.profile?.ads?.booster?.left || lives.profile?.ads?.life?.left) },
-          { key: "spin", icon: "sync-circle" as const, label: "Çark", tone: "spin" as const, onPress: () => setSheet("spin"), badge: lives.profile?.ads?.spin?.left || null },
-        ]
+  // En çok 3 çip. "Ödüller": canlı oyunda reklam/çark/hediye penceresi, Günün Testi'nde doğrudan günlük hediye.
+  const actions: HomeAction[] = [
+    ...(livesGame || auth.user
+      ? [{ key: "rewards", icon: "gift" as const, label: "Ödüller", onPress: () => setSheet(livesGame ? "ads" : "gift"), dot: dailyReady || (Boolean(livesGame) && spinLeft) }]
       : []),
-  ];
-  const right: HomeSide[] = [
-    { key: "board", icon: "podium", label: "Sıralama", tone: "board", onPress: onBoard },
-    ...(onShop ? [{ key: "shop", icon: "flash" as const, label: "Mağaza", tone: "shop" as const, onPress: onShop }] : []),
-    ...(streak !== undefined ? [{ key: "streak", icon: "trophy" as const, label: "Seri", tone: "streak" as const, onPress: () => setSheet("streak"), badge: streak?.tier || null }] : []),
-    { key: "rules", icon: "book", label: "Kurallar", tone: "rules", onPress: () => setSheet("rules") },
-    ...(extraRight ?? []),
+    { key: "board", icon: "podium", label: "Sıralama", onPress: onBoard },
+    { key: "more", icon: "grid", label: "Diğer", onPress: () => setSheet("more") },
   ];
 
   return (
@@ -135,15 +120,13 @@ export function GameHome({ title, livesGame, background, eventBar, play, rules, 
         onLayout={(e) => {
           const h = e.nativeEvent.layout.height;
           sizes.current.top = h;
-          setTopH(h);
           onInsets?.(h, sizes.current.bottom);
         }}
       >
         <LinearGradient colors={GH.scrimTop} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} pointerEvents="none" />
-        <View style={[styles.topInner, { paddingTop: insets.top + space.xs }]} pointerEvents="box-none">
+        <View style={[styles.topInner, { paddingTop: insets.top + space.sm, paddingLeft: insets.left + layout.screenPadding, paddingRight: insets.right + layout.screenPadding }]} pointerEvents="box-none">
           <HomeTopBar
             onBack={back}
-            initials={initials}
             coins={me ? me.profile.coins : null}
             onCoins={onShop ?? (auth.user ? () => router.push("/kulup-sehri") : undefined)}
             lives={livesGame ? { lives: lives.lives, max: lives.max, label: lives.label } : null}
@@ -157,19 +140,7 @@ export function GameHome({ title, livesGame, background, eventBar, play, rules, 
         </View>
       </View>
 
-      {/* Yan düğmeler */}
-      <View style={[styles.sideCol, styles.sideLeft, { top: topH + space.sm }]} pointerEvents="box-none">
-        {left.map((b) => (
-          <SideButton key={b.key} icon={b.icon} label={b.label} tone={b.tone} onPress={b.onPress} badge={b.badge} dot={b.dot} />
-        ))}
-      </View>
-      <View style={[styles.sideCol, styles.sideRight, { top: topH + space.sm }]} pointerEvents="box-none">
-        {right.map((b) => (
-          <SideButton key={b.key} icon={b.icon} label={b.label} tone={b.tone} onPress={b.onPress} badge={b.badge} dot={b.dot} />
-        ))}
-      </View>
-
-      {/* Alt: seri taçları + büyük düğme */}
+      {/* Alt: çip satırı + OYNA */}
       <View
         style={styles.bottom}
         pointerEvents="box-none"
@@ -180,8 +151,8 @@ export function GameHome({ title, livesGame, background, eventBar, play, rules, 
         }}
       >
         <LinearGradient colors={GH.scrimBottom} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} pointerEvents="none" />
-        <View style={[styles.bottomInner, { paddingBottom: insets.bottom + space.md }]} pointerEvents="box-none">
-          {streak ? <StreakCrowns tier={streak.tier} /> : null}
+        <View style={[styles.bottomInner, { paddingBottom: insets.bottom + space.md, paddingLeft: insets.left + layout.screenPadding, paddingRight: insets.right + layout.screenPadding }]} pointerEvents="box-none">
+          <HomeActions items={actions} />
           <PlayButton
             title={gated ? "CAN YOK" : play.title}
             sub={gated ? (lives.label ? `Sıradaki can ${lives.label}` : "Canını doldur") : play.sub}
@@ -196,9 +167,40 @@ export function GameHome({ title, livesGame, background, eventBar, play, rules, 
 
       {livesGame ? <LivesSheet visible={sheet === "lives"} onClose={() => setSheet(null)} game={livesGame} lives={lives} title={title} /> : null}
       {livesGame ? (
-        <AdOffersSheet visible={sheet === "ads"} onClose={() => setSheet(null)} game={livesGame} lives={lives} boosters={Boolean(adBoosters)} onSpin={() => setSheet("spin")} />
+        <AdOffersSheet
+          visible={sheet === "ads"}
+          onClose={() => setSheet(null)}
+          game={livesGame}
+          lives={lives}
+          boosters={Boolean(adBoosters)}
+          onSpin={() => setSheet("spin")}
+          gift={auth.user ? { ready: dailyReady, onOpen: () => setSheet("gift") } : null}
+        />
       ) : null}
       {livesGame ? <SpinSheet visible={sheet === "spin"} onClose={() => setSheet(null)} game={livesGame} lives={lives} /> : null}
+      <MoreSheet
+        visible={sheet === "more"}
+        onClose={() => setSheet(null)}
+        title={title}
+        onShop={
+          onShop
+            ? () => {
+                setSheet(null);
+                onShop();
+              }
+            : undefined
+        }
+        streak={streak === undefined ? undefined : streak}
+        onStreak={() => setSheet("streak")}
+        onRules={() => setSheet("rules")}
+        extra={(extraRight ?? []).map((x) => ({
+          ...x,
+          onPress: () => {
+            setSheet(null);
+            x.onPress();
+          },
+        }))}
+      />
       <SettingsSheet
         visible={sheet === "settings"}
         onClose={() => setSheet(null)}
@@ -218,10 +220,7 @@ export function GameHome({ title, livesGame, background, eventBar, play, rules, 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: GH.sceneSky[0] },
   top: { position: "absolute", top: 0, left: 0, right: 0 },
-  topInner: { paddingHorizontal: layout.screenPadding, paddingBottom: space.lg, gap: space.sm },
-  sideCol: { position: "absolute", gap: space.md },
-  sideLeft: { left: space.xs },
-  sideRight: { right: space.xs },
+  topInner: { paddingBottom: space.xl, gap: space.sm },
   bottom: { position: "absolute", left: 0, right: 0, bottom: 0 },
-  bottomInner: { paddingTop: space.xl, paddingHorizontal: layout.screenPadding, gap: space.sm, alignItems: "center" },
+  bottomInner: { paddingTop: space.xl, gap: space.md, alignItems: "stretch", alignSelf: "center", width: "100%", maxWidth: 480 },
 });

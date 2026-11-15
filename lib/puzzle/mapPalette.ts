@@ -172,9 +172,10 @@ export const MAP_COMMON = {
   currentInk: "#17994A",
   /** OYNA etiketi (birincil vurgu: yeşil). */
   play: "#1FB257",
-  /** Kilitli düğüm: taş. */
+  /** Kilitli düğüm: soluk taş (düz daire, ince halka). */
   locked: ["#C9CDD6", "#8D93A3"] as [string, string],
-  lockedInk: "#5B6170",
+  lockedInk: "#6B7180",
+  lockedRing: "rgba(255, 255, 255, 0.45)",
   /** Kupa düğümü halkası. */
   cup: "#FFD23F",
   cupDeep: "#C98A00",
@@ -189,7 +190,7 @@ export const MAP_COMMON = {
   inkShadow: "rgba(0, 0, 0, 0.25)",
   star: "#FFD23F",
   starEdge: "#C98A00",
-  starEmpty: "rgba(0, 0, 0, 0.18)",
+  starEmpty: "rgba(0, 0, 0, 0.2)",
   /** "SEN" iğnesi: beyaz, yeşil top ikonu. */
   pin: "#FFFFFF",
   pinInk: "#17994A",
@@ -213,10 +214,11 @@ export const MAP_COMMON = {
   shine: "rgba(255, 255, 255, 0.5)",
   tuft: "rgba(255, 255, 255, 0.16)",
   tuftDark: "rgba(0, 0, 0, 0.07)",
-  /** Bulunduğun bölümün avatar iğnesi. */
+  /** Bulunduğun bölümün "SEN" rozeti. */
   avatar: "#5A2FC8",
   avatarRing: "#FFD23F",
-  halo: "rgba(255, 255, 255, 0.35)",
+  pinTag: "rgba(16, 20, 40, 0.7)",
+  halo: "rgba(255, 255, 255, 0.3)",
   /** Bölüm sandığı (her 10 bölümde). */
   chest: "#C8772B",
   chestDeep: "#7A4413",

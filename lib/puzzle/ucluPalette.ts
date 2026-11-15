@@ -116,11 +116,31 @@ export const UCLU_BOARD = {
   /** Tahta çerçevesi ve zemini. */
   frame: "#1B1446",
   frameEdge: "#3A2E9E",
-  /** Saha: yatay biçim şeritleri (A/B) + hafif dama (C: açık kare katmanı). */
-  cellA: "#74DA64",
-  cellA2: "#79DE69",
-  cellB: "#58BE4B",
-  cellB2: "#5DC350",
+  /**
+   * SAKİN TAHTA: hücre başına kutu YOK. Zemin, iki yakın soluk lavanta
+   * tonunda yarı saydam bir damadır (A/B); altındaki yatak (well) koyu,
+   * kısık bir laciverttir. Böylece göz zemine değil, önündeki renkli
+   * taşlara gider.
+   */
+  cellA: "rgba(210, 220, 255, 0.40)",
+  cellB: "rgba(196, 206, 250, 0.29)",
+  /** Hücre yatağı (dama altı) ve çevresindeki ince koyu kenar / gölge. */
+  well: "#394276",
+  wellEdge: "rgba(10, 14, 40, 0.55)",
+  boardShadow: "rgba(4, 6, 24, 0.42)",
+  /** Tahta gölgesi için opak koyu ton (grup saydamlığıyla kullanılır). */
+  vignetteInk: "#04061A",
+  /** Dama üstüne düşen çok hafif üst ışık. */
+  cellGlow: "rgba(255, 255, 255, 0.10)",
+  /** Taşların yumuşak yer gölgesi. */
+  pieceShadow: "rgba(8, 10, 40, 0.5)",
+  /** Çim hedefi (sade): yarı saydam toprak ve çim, ince desen. */
+  turfDirt: "rgba(170, 122, 78, 0.50)",
+  turfDirtLo: "rgba(96, 60, 30, 0.45)",
+  turfDirtSpot: "rgba(255, 226, 186, 0.22)",
+  turfGrass: "rgba(86, 200, 108, 0.46)",
+  turfGrassHi: "rgba(176, 248, 176, 0.32)",
+  turfBlade: "rgba(26, 112, 50, 0.60)",
   cellLine: "rgba(255, 255, 255, 0.08)",
   /** Saha çizgileri (orta saha, orta yuvarlak, taç çizgisi). */
   pitchLine: "rgba(255, 255, 255, 0.7)",
@@ -244,10 +264,10 @@ export const UCLU_BOARD = {
   grassHi: "#8BF28C",
   grassLo: "#1E9A38",
   /** Tahta çerçevesi: kalın, parlak altın-ahşap kasa. */
-  frameWoodHi: "#FFD27A",
-  frameWood: "#E79A32",
-  frameWoodLo: "#9C5A12",
-  frameWoodRim: "#5E3208",
+  frameWoodHi: "#F4D48C",
+  frameWood: "#C99245",
+  frameWoodLo: "#8A5A22",
+  frameWoodRim: "#3A230E",
   frameInset: "#1A3B1F",
   rivet: "#FFF1C4",
   /** Hücre kutucuğu: hafif kabartma kenar. */
@@ -257,6 +277,42 @@ export const UCLU_BOARD = {
   comboGold: "#FFE066",
   comboDeep: "#B4560B",
   comboInk: "#3A1A00",
+  /** Çamur birikintisi (taşın altında). */
+  mudHi: "#C08A55",
+  mudGloss: "rgba(255, 236, 200, 0.45)",
+  /** Krampon kutusu: tahta damarı, metal köşe, çivi. */
+  woodGrain: "rgba(110, 58, 18, 0.45)",
+  woodDeep: "#5A3110",
+  metal: "#D9DEE8",
+  metalHi: "#FFFFFF",
+  metalLo: "#7E8798",
+  /** Buz kalıbı. */
+  iceHi: "rgba(255, 255, 255, 0.85)",
+  iceBody: "rgba(200, 232, 255, 0.50)",
+  iceLo: "rgba(120, 180, 240, 0.55)",
+  iceCrack: "rgba(255, 255, 255, 0.9)",
+  /** Kale ağı: ip ve direk. */
+  rope: "#F4F6FA",
+  ropeLo: "rgba(40, 50, 90, 0.55)",
+  post: "#FFFFFF",
+  postLo: "#9AA4BC",
+  /** HUD kartları (sakin): koyu yarı saydam lacivert, ince sıcak kenar. */
+  cardTop: "rgba(38, 44, 92, 0.94)",
+  cardLow: "rgba(20, 24, 60, 0.96)",
+  cardEdge: "#C99245",
+  cardEdgeHi: "#F4D48C",
+  cardTitle: "#F6E3B4",
+  cardWell: "rgba(0, 0, 0, 0.22)",
+  /** Orta arma (kulüp kalkanı). */
+  crestHi: "#6C8BF0",
+  crest: "#2F4DB8",
+  crestLo: "#16286E",
+  crestRibbon: "#D8473E",
+  crestRibbonLo: "#8E1F1A",
+  /** Yuvarlak güçlendirici düğmesi. */
+  orbHi: "#5B67B8",
+  orb: "#2E3678",
+  orbLo: "#161B48",
   /** Kartal bakışı ışın ve şok dalgası. */
   shock: "rgba(255, 236, 160, 0.55)",
   ballBeam: "#FFF6C8",
@@ -300,20 +356,28 @@ export const UCLU_SPECIAL = {
 
 /** Stadyum arka planı (tahtanın arkasındaki sahne). */
 export const UCLU_STADIUM = {
-  skyTop: "#0B1240",
-  skyMid: "#1C2A78",
-  skyLow: "#2D3FA0",
-  standFar: "#1A2163",
-  standNear: "#232C80",
-  standEdge: "#3443A8",
-  crowdA: "rgba(255, 255, 255, 0.22)",
-  crowdB: "rgba(255, 210, 90, 0.28)",
-  crowdC: "rgba(255, 90, 120, 0.24)",
-  roof: "#0E1650",
-  tower: "#2B336E",
-  lamp: "#FFFBE6",
-  lampGlow: "#FFF2B8",
-  beam: "rgba(255, 248, 210, 0.10)",
-  pitch: "#1F7A34",
-  pitchHi: "#2E9A45",
+  /*
+   * KISIK, SOLUK SAHNE: tahtanın arkasındaki stat bilinçli olarak
+   * doygunluğu düşük ve bulanık görünür; taşlarla yarışmaz.
+   */
+  skyTop: "#151A30",
+  skyMid: "#232A47",
+  skyLow: "#2F3656",
+  standFar: "#272D4B",
+  standNear: "#2E3557",
+  standEdge: "#3F4769",
+  crowdA: "rgba(255, 255, 255, 0.07)",
+  crowdB: "rgba(255, 220, 160, 0.07)",
+  crowdC: "rgba(170, 190, 255, 0.08)",
+  roof: "#10142A",
+  tower: "#363C5C",
+  lamp: "#FFF4D6",
+  lampGlow: "#FFE7B0",
+  beam: "rgba(255, 244, 214, 0.045)",
+  pitch: "#26392F",
+  pitchHi: "#33493D",
+  /** Bulanık sis bantları ve kenar kararması. */
+  haze: "rgba(160, 176, 230, 0.08)",
+  bokeh: "rgba(255, 236, 196, 0.10)",
+  vignette: "#04050E",
 } as const;

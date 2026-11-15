@@ -12,12 +12,16 @@
  * beyaz, yeşil numaralı, üstünde iğne ve altında yeşil OYNA; kilitliler gri.
  * Her 10. seviye ince altın halkalı kupa düğümü.
  *
- * 2026-11 GÜZELLEŞTİRME (oyun ana sayfası, sözleşme §6): zeminde çim
- * tutamları ve biçim şeritleri, satır başına 1–2 bölge dekoru (iki yanda),
- * parlak şeker düğümler (üst parlaması), her 5. bölüm "Zor" (pembe), her 10.
- * "Süper Zor" (mor, kupa halkası) ve yanında BÖLÜM SANDIĞI (geçilince açık);
- * bulunduğun bölümde baş harflerinle avatar iğnesi ve hale. Açılışta harita
- * bulunduğun bölüme yumuşakça kayar.
+ * 2026-11 SADELEŞTİRME (oyun ana sayfası, sözleşme §6): parlak şeker
+ * düğümler, çim tutamları ve satır başına iki dekor göz yoruyordu. Şimdi:
+ *   · düğümler DÜZ daire: geçilen = bölge renginde, ince beyaz halka, altında
+ *     üç küçük yıldız; sıradaki = büyük beyaz daire, kalın yeşil halka, yanında
+ *     baş harflerinle "SEN" rozeti; kilitli = soluk gri, kilit ikonu.
+ *   · her 10. bölüm ince altın halka + yolun boş yanında küçük BÖLÜM SANDIĞI.
+ *   · dekor seyrek: satır başına en çok bir, küçük, yolun boş yanında.
+ *   · her şey satırın İÇİNDE çizilir (yıldızlar düğümün altında, rozet
+ *     yanında): liste hücreleri taşanı kırpıyordu.
+ * Açılışta harita bulunduğun bölüme yumuşakça kayar.
  *
  * NEDEN TERS FLATLIST: yol aşağıdan yukarı okunur (seviye 1 en altta) ve
  * açılışta oyuncunun bulunduğu yere kaydırılır; sabit satır yüksekliği
@@ -28,19 +32,19 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
-import { Animated, Easing, FlatList, StyleSheet, Text, View, useWindowDimensions, type CellRendererProps } from "react-native";
-import Svg, { Circle, Defs, Ellipse, G, Line, LinearGradient, Path, Polygon, Rect, Stop } from "react-native-svg";
+import { FlatList, StyleSheet, Text, View, useWindowDimensions, type CellRendererProps } from "react-native";
+import Svg, { Circle, Ellipse, G, Line, Path, Polygon, Rect } from "react-native-svg";
 
-import { Touchable, useReduceMotion } from "@/components/ui";
+import { Touchable } from "@/components/ui";
 import { MAP_COMMON as M, zoneOf, type MapDecor, type MapZone } from "@/lib/puzzle/mapPalette";
 import { fonts, radius, space, textScale, type } from "@/theme";
 
-const ROW = 118;
-const NODE = 62;
-const NODE_CURRENT = 76;
-const ROAD = 38;
+const ROW = 104;
+const NODE = 50;
+const NODE_CURRENT = 62;
+const ROAD = 30;
 /** Bölge başlangıcındaki satırın altına eklenen pankart şeridi. */
-const BANNER = 44;
+const BANNER = 40;
 const rowHeight = (level: number) => ((level - 1) % 20 === 0 ? ROW + BANNER : ROW);
 /** index (0 = 1. seviye) satırının listedeki ofseti: her 20 satırda bir pankart şeridi. */
 const rowOffset = (index: number) => ROW * index + BANNER * Math.floor((index + 19) / 20);
@@ -192,156 +196,91 @@ const LevelRow = React.memo(function LevelRow({ row, width, current, onPlay, ava
   const upperDone = row.level < current;
   const tierStart = (row.level - 1) % 20 === 0;
   const ground = zone.ground[row.level % 2];
+  const right = xn < width / 2;
 
-  // Dekor: satır başına 1–2 parça; önce yolun boş tarafı, sonra karşı kenar.
-  // Bölüm sandığı olan satırda (her 10.) boş taraf sandığındır.
+  // Dekor: satırların ~üçte birinde, yolun BOŞ yanında tek küçük parça.
+  // Bölüm sandığı olan satırda (her 10.) o yan sandığındır.
   const chestRow = row.level % 10 === 0;
   const decor = useMemo(() => {
     const r = rand(row.level * 31 + 7);
-    const out: { kind: MapDecor; x: number; y: number; s: number }[] = [];
-    const right = xn < width / 2;
-    const free = right ? [width * 0.7, width * 0.92] : [width * 0.08, width * 0.3];
-    const far = right ? [width * 0.04, width * 0.16] : [width * 0.84, width * 0.96];
-    if (!chestRow && r() < 0.72) {
-      out.push({ kind: zone.decor[Math.floor(r() * zone.decor.length)], x: free[0] + r() * (free[1] - free[0]), y: ROW * (0.3 + r() * 0.4), s: 0.85 + r() * 0.3 });
-    }
-    if (r() < 0.45) {
-      out.push({ kind: zone.decor[Math.floor(r() * zone.decor.length)], x: far[0] + r() * (far[1] - far[0]), y: ROW * (0.2 + r() * 0.6), s: 0.65 + r() * 0.2 });
-    }
-    return out;
-  }, [chestRow, row.level, width, xn, zone]);
-  // Çim tutamları: zemine doku (ucuz: birkaç küçük yol).
-  const tufts = useMemo(() => {
-    const r = rand(row.level * 13 + 3);
-    return Array.from({ length: 4 }, () => ({ x: r() * width, y: 10 + r() * (ROW - 20), dark: r() < 0.4 }));
-  }, [row.level, width]);
+    if (chestRow || r() > 0.36) return null;
+    const lo = right ? width * 0.76 : width * 0.1;
+    const hi = right ? width * 0.9 : width * 0.24;
+    return { kind: zone.decor[Math.floor(r() * zone.decor.length)], x: lo + r() * (hi - lo), y: ROW * (0.4 + r() * 0.2), s: 0.62 + r() * 0.14 };
+  }, [chestRow, right, row.level, width, zone]);
 
   return (
     <View style={[styles.row, { height: h, backgroundColor: ground }]}>
       <Svg width={width} height={h} style={StyleSheet.absoluteFill}>
         {tierStart ? <Rect x={0} y={ROW} width={width} height={BANNER} fill={zoneOf(Math.max(1, row.level - 1)).ground[(row.level - 1) % 2]} /> : null}
-        {zone.night ? <NightSky level={row.level} width={width} /> : null}
-        {tufts.map((t, i) => (
-          <Path key={`t${i}`} d={`M ${t.x - 5} ${t.y + 4} L ${t.x - 2} ${t.y - 3} L ${t.x} ${t.y + 4} L ${t.x + 3} ${t.y - 4} L ${t.x + 5} ${t.y + 4} Z`} fill={t.dark ? M.tuftDark : M.tuft} />
-        ))}
-        {/* yol: yumuşak gölge, ince kenar, dolgu, orta çizgi */}
-        <Path d={full} stroke={M.shadowSoft} strokeWidth={ROAD + 4} fill="none" strokeLinecap="butt" transform="translate(0 3)" />
-        <Path d={full} stroke={zone.roadEdge} strokeWidth={ROAD + 3} fill="none" strokeLinecap="butt" />
+        {/* yol: ince kenar, dolgu, orta çizgi (geçilen kısım dolu, kalan soluk kesik) */}
+        <Path d={full} stroke={zone.roadEdge} strokeWidth={ROAD + 3} fill="none" strokeLinecap="butt" opacity={0.7} />
         <Path d={full} stroke={zone.road} strokeWidth={ROAD} fill="none" strokeLinecap="butt" />
-        <Path d={lower} stroke={lowerDone ? zone.roadDone : zone.roadLine} strokeWidth={lowerDone ? 5 : 3} strokeDasharray={lowerDone ? "12 10" : "6 12"} fill="none" strokeLinecap="round" opacity={lowerDone ? 0.95 : 0.55} />
-        <Path d={upper} stroke={upperDone ? zone.roadDone : zone.roadLine} strokeWidth={upperDone ? 5 : 3} strokeDasharray={upperDone ? "12 10" : "6 12"} fill="none" strokeLinecap="round" opacity={upperDone ? 0.95 : 0.55} />
-        {decor.map((d, i) => (
-          <Decor key={i} kind={d.kind} x={d.x} y={d.y} s={d.s} zone={zone} />
-        ))}
-        {chestRow ? <LevelChest x={xn < width / 2 ? width * 0.78 : width * 0.22} y={ROW * 0.52} open={row.level < current} /> : null}
+        <Path d={lower} stroke={lowerDone ? zone.roadDone : zone.roadLine} strokeWidth={lowerDone ? 4 : 2.5} strokeDasharray={lowerDone ? undefined : "5 10"} fill="none" strokeLinecap="round" opacity={lowerDone ? 0.85 : 0.45} />
+        <Path d={upper} stroke={upperDone ? zone.roadDone : zone.roadLine} strokeWidth={upperDone ? 4 : 2.5} strokeDasharray={upperDone ? undefined : "5 10"} fill="none" strokeLinecap="round" opacity={upperDone ? 0.85 : 0.45} />
+        {decor ? <Decor kind={decor.kind} x={decor.x} y={decor.y} s={decor.s} zone={zone} /> : null}
+        {chestRow ? <LevelChest x={right ? width * 0.8 : width * 0.2} y={ROW * 0.5} open={row.level < current} /> : null}
       </Svg>
       {tierStart ? <TierBanner level={row.level} zone={zone} /> : null}
-      <LevelNode row={row} x={xn} zone={zone} onPlay={onPlay} pinLeft={xn > width / 2} avatar={avatar} />
+      <LevelNode row={row} x={xn} zone={zone} onPlay={onPlay} pinLeft={!right} avatar={avatar} />
     </View>
   );
 });
 
 /* ═══════════════════════ düğüm ═══════════════════════ */
 
+/** Düğüm kutusu genişliği: rozet yan tarafa sığsın diye geniş. */
+const BOX = 150;
+
 function LevelNode({ row, x, zone, onPlay, pinLeft, avatar }: { row: Row; x: number; zone: MapZone; onPlay: (level: number) => void; pinLeft: boolean; avatar: string | null }) {
-  const reduce = useReduceMotion();
-  const pulse = useRef(new Animated.Value(0)).current;
   const isCurrent = row.state === "current";
   const locked = row.state === "locked";
+  const done = row.state === "done";
   const cup = row.level % 10 === 0;
-  const hard = !cup && row.level % 5 === 0;
-
-  useEffect(() => {
-    if (!isCurrent || reduce) return;
-    // Sonlu nabız: dikkat çeker ama pil yemez (tasarım kuralı: sonsuz döngü yok).
-    const beat = Animated.sequence([
-      Animated.timing(pulse, { toValue: 1, duration: 650, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-      Animated.timing(pulse, { toValue: 0, duration: 650, easing: Easing.in(Easing.quad), useNativeDriver: true }),
-    ]);
-    const anim = Animated.loop(beat, { iterations: 8 });
-    anim.start();
-    return () => anim.stop();
-  }, [isCurrent, pulse, reduce]);
-
   const size = isCurrent ? NODE_CURRENT : NODE;
-  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.04] });
-  const bob = pulse.interpolate({ inputRange: [0, 1], outputRange: [0, -4] });
-  const fill = locked ? M.locked : isCurrent ? M.current : cup ? M.superHard : hard ? M.hard : zone.node;
-  const lip = isCurrent ? M.currentLip : cup && !locked ? M.superLip : hard && !locked ? M.hardLip : fill[1];
-  const gid = `n${row.level}`;
+  const fill = locked ? M.locked[0] : isCurrent ? M.current[0] : zone.node[1];
+  const ring = isCurrent ? M.play : cup && !locked ? M.cup : locked ? M.lockedRing : M.rim;
+  const ringW = isCurrent ? 4 : cup ? 3 : 2;
+  // Düğüm satırda dikey ortalı; geçilende altına yıldız sırası (satırın içinde kalır).
+  const top = ROW / 2 - size / 2 - (done ? 7 : 0);
 
   return (
-    // Bulunduğun seviye: düğme + "OYNA" etiketi satırın İÇİNDE kalır, "SEN"
-    // iğnesi düğmenin yanında durur. Liste satırı dışına taşan çizim telefonda
-    // kesiliyordu (Android liste hücreleri taşanı kırpar).
-    <View pointerEvents="box-none" style={[styles.nodeWrap, { left: x - 60, top: isCurrent ? ROW / 2 - size / 2 - 8 : ROW / 2 - size / 2 }]}>
-      {isCurrent ? (
-        <Animated.View
-          pointerEvents="none"
-          style={[styles.pin, pinLeft ? { left: 60 - size / 2 - 50 } : { left: 60 + size / 2 + 4 }, { top: size / 2 - 30, transform: [{ translateY: bob }] }]}
-        >
-          <Svg width={46} height={54}>
-            <Path d="M23 52 C 16 40, 3 33, 3 21 A 20 20 0 1 1 43 21 C 43 33, 30 40, 23 52 Z" fill={M.shadowSoft} transform="translate(0 3)" />
-            <Path d="M23 52 C 16 40, 3 33, 3 21 A 20 20 0 1 1 43 21 C 43 33, 30 40, 23 52 Z" fill={M.pin} />
-            {avatar ? <Circle cx={23} cy={21} r={16} fill={M.avatar} stroke={M.avatarRing} strokeWidth={2.5} /> : null}
-          </Svg>
-          <View style={styles.pinIcon}>
-            {avatar ? (
-              <Text style={styles.pinText} numberOfLines={1} {...textScale.badge}>{avatar}</Text>
-            ) : (
-              <Ionicons name="football" size={22} color={M.pinInk} />
-            )}
-          </View>
-        </Animated.View>
-      ) : row.state === "done" ? (
-        <View pointerEvents="none" style={styles.starArc}>
+    <View pointerEvents="box-none" style={[styles.nodeWrap, { left: x - BOX / 2, top }]}>
+      {isCurrent ? <View pointerEvents="none" style={[styles.halo, { width: size + 14, height: size + 14, top: -7, left: BOX / 2 - size / 2 - 7 }]} /> : null}
+      <Touchable
+        onPress={() => !locked && onPlay(row.level)}
+        disabled={locked}
+        haptic="selection"
+        style={[styles.node, { width: size, height: size, backgroundColor: fill, borderColor: ring, borderWidth: ringW }]}
+        accessibilityRole="button"
+        accessibilityLabel={`${row.level}. bölüm${cup ? ", süper zor, bölüm sandığı" : row.level % 5 === 0 ? ", zor" : ""}${done ? `, ${row.stars} yıldız` : locked ? ", kilitli" : ", oyna"}`}
+      >
+        {locked ? (
+          <Ionicons name={cup ? "trophy" : "lock-closed"} size={16} color={M.lockedInk} />
+        ) : (
+          <Text style={[styles.nodeText, isCurrent && styles.nodeTextCurrent]} numberOfLines={1} {...textScale.badge}>
+            {row.level}
+          </Text>
+        )}
+      </Touchable>
+      {done ? (
+        <View pointerEvents="none" style={styles.stars}>
           {[1, 2, 3].map((n) => (
-            <View key={n} style={n === 2 ? styles.starMid : styles.starSide}>
-              <StarShape size={n === 2 ? 24 : 19} lit={n <= row.stars} />
-            </View>
+            <StarShape key={n} size={13} lit={n <= row.stars} />
           ))}
         </View>
       ) : null}
-      <Animated.View style={{ transform: [{ scale }] }}>
-        {isCurrent ? <View pointerEvents="none" style={[styles.halo, { width: size + 22, height: size + 22, left: -11, top: -11 }]} /> : null}
-        <Touchable
-          onPress={() => !locked && onPlay(row.level)}
-          disabled={locked}
-          haptic="selection"
-          style={{ width: size, height: size + 6 }}
-          accessibilityRole="button"
-          accessibilityLabel={`${row.level}. bölüm${cup ? ", süper zor, bölüm sandığı" : hard ? ", zor" : ""}${row.state === "done" ? `, ${row.stars} yıldız` : locked ? ", kilitli" : ", oyna"}`}
-        >
-          <Svg width={size} height={size + 6}>
-            <Defs>
-              <LinearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0" stopColor={fill[0]} />
-                <Stop offset="1" stopColor={fill[1]} />
-              </LinearGradient>
-            </Defs>
-            <Circle cx={size / 2} cy={size / 2 + 5} r={size / 2 - 1} fill={M.shadowSoft} />
-            <Circle cx={size / 2} cy={size / 2 + 3} r={size / 2 - 1} fill={lip} />
-            <Circle cx={size / 2} cy={size / 2} r={size / 2 - 1} fill={`url(#${gid})`} />
-            {!locked ? <Ellipse cx={size / 2} cy={size * 0.26} rx={size * 0.3} ry={size * 0.12} fill={M.shine} /> : null}
-            {cup && !locked ? <Circle cx={size / 2} cy={size / 2} r={size / 2 - 4} fill="none" stroke={M.cup} strokeWidth={2.5} /> : null}
-          </Svg>
-          <View style={[StyleSheet.absoluteFill, styles.nodeCenter, { height: size }]}>
-            {locked ? (
-              <Ionicons name={cup ? "trophy" : "lock-closed"} size={22} color={M.lockedInk} />
-            ) : cup ? (
-              <Ionicons name="trophy" size={isCurrent ? 34 : 26} color={isCurrent ? M.currentInk : M.white} />
+      {isCurrent ? (
+        <View pointerEvents="none" style={[styles.pin, { top: size / 2 - 16 }, pinLeft ? { right: BOX / 2 + size / 2 + 8 } : { left: BOX / 2 + size / 2 + 8 }]}>
+          <View style={styles.pinDot}>
+            {avatar ? (
+              <Text style={styles.pinText} numberOfLines={1} {...textScale.badge}>{avatar}</Text>
             ) : (
-              <Text style={[styles.nodeText, isCurrent && styles.nodeTextCurrent]} {...textScale.badge}>
-                {row.level}
-              </Text>
+              <Ionicons name="football" size={16} color={M.pinInk} />
             )}
           </View>
-        </Touchable>
-      </Animated.View>
-      {isCurrent ? (
-        <Touchable onPress={() => onPlay(row.level)} style={styles.playTag} haptic="medium" accessibilityRole="button" accessibilityLabel={`${row.level}. seviyeyi oyna`}>
-          <Text style={styles.playText} {...textScale.badge}>OYNA</Text>
-        </Touchable>
+          <Text style={styles.pinLabel} {...textScale.badge}>SEN</Text>
+        </View>
       ) : null}
     </View>
   );
@@ -351,28 +290,26 @@ function StarShape({ size, lit }: { size: number; lit: boolean }) {
   const pts: string[] = [];
   for (let i = 0; i < 10; i += 1) {
     const a = -Math.PI / 2 + (i * Math.PI) / 5;
-    const r = i % 2 ? size * 0.22 : size * 0.5;
-    pts.push(`${size / 2 + Math.cos(a) * r},${size / 2 + Math.sin(a) * r + 1}`);
+    const r = i % 2 ? size * 0.21 : size * 0.48;
+    pts.push(`${size / 2 + Math.cos(a) * r},${size / 2 + Math.sin(a) * r + 0.5}`);
   }
   return (
-    <Svg width={size} height={size + 2}>
-      <Polygon points={pts.join(" ")} fill={lit ? M.star : M.starEmpty} stroke={lit ? M.starEdge : M.starEmpty} strokeWidth={1} strokeLinejoin="round" />
+    <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <Polygon points={pts.join(" ")} fill={lit ? M.star : M.starEmpty} strokeLinejoin="round" />
     </Svg>
   );
 }
 
-/** Bölüm sandığı — her 10. bölümün yanında; bölüm geçilince kapak açık ve ışıklı. */
+/** Bölüm sandığı — her 10. bölümün yanında, küçük; bölüm geçilince kapak açık. */
 function LevelChest({ x, y, open }: { x: number; y: number; open: boolean }) {
   return (
-    <G transform={`translate(${x - 22} ${y - 22})`}>
-      <Ellipse cx={22} cy={40} rx={18} ry={4} fill={M.shadow} />
-      {open ? <Circle cx={22} cy={16} r={18} fill={M.glow} /> : null}
+    <G transform={`translate(${x - 15} ${y - 15}) scale(0.7)`} opacity={open ? 1 : 0.85}>
+      <Ellipse cx={22} cy={40} rx={16} ry={3} fill={M.shadowSoft} />
       <Rect x={5} y={19} width={34} height={20} rx={3} fill={M.chest} />
       {open ? <Path d="M 5 17 L 10 4 L 39 4 L 39 10 L 10 17 Z" fill={M.chest} /> : <Path d="M 5 20 Q 5 7 22 7 Q 39 7 39 20 Z" fill={M.chest} />}
       <Rect x={19} y={open ? 4 : 7} width={6} height={open ? 13 : 32} fill={M.chestBand} />
       <Rect x={18} y={22} width={8} height={8} rx={2} fill={M.chestBand} />
       <Rect x={20.5} y={24.5} width={3} height={3} rx={1} fill={M.chestDeep} />
-      {open ? <Polygon points="22,0 24,5 29,5 25,8 27,13 22,10 17,13 19,8 15,5 20,5" fill={M.star} /> : null}
     </G>
   );
 }
@@ -417,18 +354,6 @@ function StartGate({ width }: { width: number }) {
 }
 
 /* ═══════════════════════ zemin ve dekor ═══════════════════════ */
-
-function NightSky({ level, width }: { level: number; width: number }) {
-  const r = rand(level * 17 + 11);
-  const stars = Array.from({ length: 3 }, () => ({ x: r() * width, y: r() * ROW, s: 0.6 + r() * 1.1 }));
-  return (
-    <G>
-      {stars.map((s, i) => (
-        <Circle key={i} cx={s.x} cy={s.y} r={s.s} fill={M.white} opacity={0.4} />
-      ))}
-    </G>
-  );
-}
 
 function Decor({ kind, x, y, s, zone }: { kind: MapDecor; x: number; y: number; s: number; zone: MapZone }) {
   const t = `translate(${x} ${y}) scale(${s})`;
@@ -583,44 +508,26 @@ function Decor({ kind, x, y, s, zone }: { kind: MapDecor; x: number; y: number; 
 
 const styles = StyleSheet.create({
   row: { height: ROW, overflow: "visible" },
-  nodeWrap: { position: "absolute", width: 120, alignItems: "center" },
-  nodeCenter: { alignItems: "center", justifyContent: "center" },
-  nodeText: {
-    ...type.h2,
-    fontFamily: fonts.bold,
-    color: M.ink,
-    textShadowColor: M.inkShadow,
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  nodeTextCurrent: { ...type.display, fontFamily: fonts.bold, color: M.currentInk, textShadowColor: M.clear },
-  starArc: { position: "absolute", top: -22, flexDirection: "row", alignItems: "flex-end", gap: 1 },
-  starMid: { marginBottom: 5 },
-  starSide: {},
-  pin: { position: "absolute", width: 46, height: 56, alignItems: "center" },
-  pinIcon: { position: "absolute", top: 10, width: 46, height: 24, alignItems: "center", justifyContent: "center" },
-  pinText: { ...type.label, fontFamily: fonts.bold, color: M.white },
+  nodeWrap: { position: "absolute", width: BOX, alignItems: "center" },
+  node: { borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  nodeText: { ...type.h2, fontFamily: fonts.bold, color: M.ink },
+  nodeTextCurrent: { ...type.display, fontFamily: fonts.bold, color: M.currentInk },
+  stars: { flexDirection: "row", gap: 1, marginTop: space.xxs },
   halo: { position: "absolute", borderRadius: radius.pill, backgroundColor: M.halo },
-  playTag: {
-    marginTop: -18,
-    paddingHorizontal: space.md,
-    paddingVertical: space.xs,
-    borderRadius: radius.pill,
-    backgroundColor: M.play,
-    borderBottomWidth: 3,
-    borderBottomColor: M.currentLip,
-  },
-  playText: { ...type.label, fontFamily: fonts.bold, color: M.white, letterSpacing: 1.2 },
+  pin: { position: "absolute", alignItems: "center", gap: 1 },
+  pinDot: { width: 32, height: 32, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: M.avatar, borderWidth: 2, borderColor: M.white },
+  pinText: { ...type.labelXs, fontFamily: fonts.bold, color: M.white },
+  pinLabel: { ...type.micro, fontFamily: fonts.bold, color: M.white, paddingHorizontal: space.xs, borderRadius: radius.pill, backgroundColor: M.pinTag, overflow: "hidden" },
   banner: { position: "absolute", top: ROW + 8, left: 0, right: 0, alignItems: "center" },
   bannerBody: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.xs,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.xs,
+    paddingHorizontal: space.md,
+    paddingVertical: space.xxs,
     borderRadius: radius.pill,
   },
-  bannerText: { ...type.label, fontFamily: fonts.bold, color: M.ink, letterSpacing: 1.2 },
+  bannerText: { ...type.labelSm, fontFamily: fonts.bold, color: M.ink, letterSpacing: 0.8 },
   bannerSub: { ...type.micro, color: M.ink, opacity: 0.8 },
   gate: { height: 96 },
   gateLabel: { position: "absolute", top: 6, width: 120, alignItems: "center" },

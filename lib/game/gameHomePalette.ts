@@ -1,7 +1,13 @@
 /**
- * OYUN ANA SAYFASI — Royal Match tarzı ev ekranının renkleri (oyun verisi;
- * iki temada aynı dünya). components/gamehome/* bu dosyayı içe aktarır;
- * components/ ve app/ altında çıplak hex yazılmaz.
+ * OYUN ANA SAYFASI — ev ekranının renkleri (oyun verisi; iki temada aynı
+ * dünya). components/gamehome/* bu dosyayı içe aktarır; components/ ve app/
+ * altında çıplak hex yazılmaz.
+ *
+ * 2026-11 SADELEŞTİRME: ana sayfa "parlak ve iri" olmaktan çıktı. Üst ve alt
+ * şerit düz, yarı saydam koyu yüzeyler (`hud`); tek vurgu yeşil OYNA düğmesi
+ * (düz renk + ince alt kenar, parlama yok); renkler biraz daha yumuşak.
+ * Eski parlak anahtarlar (pill, side …) Kulüp Şehri ve pencereler kullandığı
+ * için duruyor.
  */
 
 export const GH = {
@@ -24,9 +30,26 @@ export const GH = {
   star: "#FFD23F",
   starDeep: "#C98A00",
 
-  /** Sis (harita / sahne üstünde üst ve alt şerit). */
-  scrimTop: ["rgba(10, 14, 30, 0.6)", "rgba(10, 14, 30, 0)"] as [string, string],
+  /** Sis (harita / sahne üstünde üst ve alt şerit) — hafif. */
+  scrimTop: ["rgba(10, 14, 30, 0.42)", "rgba(10, 14, 30, 0)"] as [string, string],
   scrimBottom: ["rgba(10, 14, 30, 0)", "rgba(10, 14, 30, 0.6)"] as [string, string],
+
+  /** Düz HUD yüzeyi: üst şerit hapları, eylem çipleri, ilerleme satırı. */
+  hud: "rgba(16, 20, 40, 0.8)",
+  hudEdge: "rgba(255, 255, 255, 0.14)",
+  hudSoft: "rgba(255, 255, 255, 0.72)",
+  hudTrack: "rgba(255, 255, 255, 0.2)",
+  /** Bildirim noktası (yalnız alınacak ödül varken). */
+  dot: "#FF5A6E",
+
+  /** OYNA düğmesi: düz yeşil + ince koyu alt kenar (tek odak). */
+  playFlat: "#2BAE4E",
+  playFlatEdge: "#1D8139",
+  /** Zor (her 5.) ve süper zor (her 10.) bölümde düğme rengi — yumuşak. */
+  playFlatHard: "#D9506E",
+  playFlatHardEdge: "#A8344F",
+  playFlatSuper: "#8957D8",
+  playFlatSuperEdge: "#6538B0",
 
   /** Büyük "Bölüm N" düğmesi: parlak yeşil, kalın alt dudak. */
   play: ["#8DF56E", "#39C447", "#1F9E33"] as [string, string, string],
@@ -79,12 +102,14 @@ export const GH = {
   panelEdge: "#DDE2EC",
   dim: "rgba(8, 10, 24, 0.66)",
 
-  /** Sonsuz / bilgi oyunu sahnesi (gece stadyumu). */
-  sceneSky: ["#1C2A7A", "#3B2B9E", "#7A3FC4"] as [string, string, string],
-  sceneGrass: ["#45C25A", "#2A9A41"] as [string, string],
-  sceneLine: "rgba(255, 255, 255, 0.55)",
-  sceneStand: "#2A1E6E",
-  sceneStandFar: "#3F2E96",
+  /** Sonsuz / bilgi oyunu sahnesi (sakin gece stadyumu). */
+  sceneSky: ["#1E2A5E", "#2B3274", "#39408A"] as [string, string, string],
+  sceneGrass: ["#3E9E58", "#348C4C"] as [string, string],
+  sceneLine: "rgba(255, 255, 255, 0.35)",
+  sceneStand: "#232A63",
+  sceneStandFar: "#2E3678",
+  /** Sahne ortasındaki bilgi kartı (rekor, bugünkü yıldız). */
+  sceneCard: "rgba(16, 20, 40, 0.55)",
   sceneCrowd: ["#FF7AA8", "#FFD23F", "#7FE3FF", "#FFFFFF", "#9BE15D"] as string[],
   sceneBeam: "rgba(255, 244, 196, 0.28)",
   sceneLamp: "#FFF2B0",
