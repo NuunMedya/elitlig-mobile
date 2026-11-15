@@ -35,8 +35,9 @@ const BOTTOM = { x: 0.5, y: 1 } as const;
 /** Sayı kısaltma: 10.000 ve üstü "12,5B" (dar telefonda hap kesilmesin). */
 export const fmtShort = (n: number) => {
   if (n < 10_000) return n.toLocaleString("tr-TR");
-  if (n < 1_000_000) return `${(Math.floor(n / 100) / 10).toLocaleString("tr-TR", { maximumFractionDigits: n < 100_000 ? 1 : 0 })}B`;
-  return `${(Math.floor(n / 100_000) / 10).toLocaleString("tr-TR", { maximumFractionDigits: 1 })}M`;
+  if (n < 100_000) return `${(Math.floor(n / 100) / 10).toLocaleString("tr-TR")}B`;
+  if (n < 1_000_000) return `${Math.floor(n / 1000)}B`;
+  return `${(Math.floor(n / 100_000) / 10).toLocaleString("tr-TR")}M`;
 };
 
 /* ═══════════════════════ ÜST ŞERİT ═══════════════════════ */

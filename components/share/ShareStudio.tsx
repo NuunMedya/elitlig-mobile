@@ -2,9 +2,10 @@
  * PAYLAŞIM STÜDYOSU — her sayfanın "paylaş" kapısı.
  *
  * NE: tam ekran pencere. Üstte canlı ÖNİZLEME (ekrana sığan ölçekte), altında
- * denetimler: boy (Story 1080×1920 · Post 1080×1350), görsel teması (Gece ·
- * Neon · Gündüz), tasarım seçici (yatay kaydırmalı küçük önizlemeler),
- * sayfaya özgü ayar yuvası (sıra aralığı, ölçüt, gün…) ve "Kaydet / Paylaş".
+ * denetimler: boy (Story 1080×1920 · Gönderi 1080×1350), stil (Gece · Saha ·
+ * Neon · Minimal — adlı haplar), tasarım seçici (gruplara ayrılmış yatay
+ * kaydırmalı küçük önizlemeler: "Skor", "Detay", "Oyuncu"…), sayfaya özgü
+ * ayar yuvası (sıra aralığı, ölçüt, gün…) ve "Kaydet / Paylaş".
  *
  * TAM ÇÖZÜNÜRLÜK: önizleme ölçeklenmiş bir KOPYADIR; yakalanan şey ondan
  * ayrı, ekranın arkasında duran görünmez bir kaptır. O kap 1080 px ÷
@@ -42,7 +43,7 @@ import { Aurora, Button, SegmentedControl, Touchable } from "@/components/ui";
 import { SHARE_FORMATS, type ShareFormat } from "@/lib/share/canvas";
 import { captureAndShare, shareFileName } from "@/lib/share/capture";
 import { SHARE_THEMES, shareTheme, type ShareThemeKey } from "@/lib/share/palette";
-import { colors, fonts, glowStyle, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { colors, fonts, glowStyle, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 import { makeFrame, type ShareTemplateDef } from "./canvas/types";
 
 export interface ShareStudioProps {
@@ -65,11 +66,11 @@ export interface ShareStudioProps {
 
 const FORMAT_ITEMS = (Object.keys(SHARE_FORMATS) as ShareFormat[]).map((key) => ({
   key,
-  label: key === "story" ? "Story 9:16" : "Post 4:5",
+  label: key === "story" ? "Story · 9:16" : "Gönderi · 4:5",
 }));
 
 /** Küçük resim genişliği (dp). */
-const THUMB_W = 62;
+const THUMB_W = 56;
 
 export function ShareStudio({
   visible,
@@ -93,6 +94,19 @@ export function ShareStudio({
 
   const theme = shareTheme(themeKey);
   const active = templates.find((item) => item.key === pickedKey) ?? templates[0] ?? null;
+
+  /* Seçici grupları: aynı `group` adını taşıyanlar ilk göründükleri sırada
+     yan yana toplanır. Tek grup (ya da hiç grup) varsa başlık çizilmez. */
+  const groups = useMemo(() => {
+    const out: { name: string; items: ShareTemplateDef[] }[] = [];
+    for (const item of templates) {
+      const name = item.group ?? "";
+      const found = out.find((g) => g.name === name);
+      if (found) found.items.push(item);
+      else out.push({ name, items: [item] });
+    }
+    return out.length > 1 ? out : out.map((g) => ({ ...g, name: "" }));
+  }, [templates]);
 
   // Şablon listesi değişirse (veri geldi, ayar değişti) seçim geçerli kalsın.
   useEffect(() => {
@@ -215,19 +229,19 @@ export function ShareStudio({
 
           {/* DENETİMLER */}
           <View style={[styles.panel, { paddingBottom: Math.max(insets.bottom, space.lg) }]}>
-            <View style={styles.row}>
-              <SegmentedControl items={FORMAT_ITEMS} value={fmt} onChange={setFmt} size="sm" style={styles.flex} />
-              <View style={styles.swatches} accessibilityRole="radiogroup" accessibilityLabel="Görsel teması">
-                {SHARE_THEMES.map((item) => (
-                  <Swatch
-                    key={item.key}
-                    colors={item.swatch}
-                    label={item.label}
-                    selected={item.key === themeKey}
-                    onPress={() => setThemeKey(item.key)}
-                  />
-                ))}
-              </View>
+            <SegmentedControl items={FORMAT_ITEMS} value={fmt} onChange={setFmt} size="sm" />
+
+            {/* STİL — dört yayın paketi; her biri adıyla (renk noktası tek başına okunmuyordu). */}
+            <View style={styles.styleRow} accessibilityRole="radiogroup" accessibilityLabel="Görsel stili">
+              {SHARE_THEMES.map((item) => (
+                <StylePill
+                  key={item.key}
+                  colors={item.swatch}
+                  label={item.label}
+                  selected={item.key === themeKey}
+                  onPress={() => setThemeKey(item.key)}
+                />
+              ))}
             </View>
 
             {templates.length > 0 && !status ? (
@@ -237,34 +251,45 @@ export function ShareStudio({
                 contentContainerStyle={styles.rail}
                 style={styles.railScroll}
               >
-                {templates.map((item) => {
-                  const selected = item.key === active?.key;
-                  return (
-                    <Touchable
-                      key={item.key}
-                      feedback="chip"
-                      haptic="selection"
-                      onPress={() => setPickedKey(item.key)}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected }}
-                      accessibilityLabel={`Tasarım: ${item.label}`}
-                      style={styles.thumbCell}
-                    >
-                      <View style={[styles.thumb, selected ? styles.thumbOn : null]}>
-                        <View style={{ width: thumbFrame.W, height: thumbFrame.H, overflow: "hidden", borderRadius: radius.xs }}>
-                          {item.render(thumbFrame)}
-                        </View>
-                      </View>
-                      <Text
-                        style={[styles.thumbLabel, selected ? styles.thumbLabelOn : null]}
-                        numberOfLines={1}
-                        {...textScale.badge}
-                      >
-                        {item.label}
+                {groups.map((group, gi) => (
+                  <View key={group.name || gi} style={[styles.group, gi > 0 ? styles.groupDivided : null]}>
+                    {group.name ? (
+                      <Text style={styles.groupLabel} numberOfLines={1} {...textScale.badge}>
+                        {upperTR(group.name)}
                       </Text>
-                    </Touchable>
-                  );
-                })}
+                    ) : null}
+                    <View style={styles.groupRow}>
+                      {group.items.map((item) => {
+                        const selected = item.key === active?.key;
+                        return (
+                          <Touchable
+                            key={item.key}
+                            feedback="chip"
+                            haptic="selection"
+                            onPress={() => setPickedKey(item.key)}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected }}
+                            accessibilityLabel={`Tasarım: ${item.label}`}
+                            style={styles.thumbCell}
+                          >
+                            <View style={[styles.thumb, selected ? styles.thumbOn : null]}>
+                              <View style={{ width: thumbFrame.W, height: thumbFrame.H, overflow: "hidden", borderRadius: radius.xs }}>
+                                {item.render(thumbFrame)}
+                              </View>
+                            </View>
+                            <Text
+                              style={[styles.thumbLabel, selected ? styles.thumbLabelOn : null]}
+                              numberOfLines={1}
+                              {...textScale.badge}
+                            >
+                              {item.label}
+                            </Text>
+                          </Touchable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ))}
               </ScrollView>
             ) : null}
 
@@ -293,8 +318,8 @@ export function ShareStudio({
   );
 }
 
-/** Görsel teması noktası: iki renkli degrade daire; seçiliyse mor halka. */
-function Swatch({
+/** Stil hapı: iki renkli degrade nokta + ad; seçiliyse marka çerçevesi. */
+function StylePill({
   colors: pair,
   label,
   selected,
@@ -313,9 +338,9 @@ function Swatch({
       onPress={onPress}
       accessibilityRole="radio"
       accessibilityState={{ selected }}
-      accessibilityLabel={`${label} teması`}
-      style={[styles.swatch, selected ? styles.swatchOn : null]}
-      hitSlop={6}
+      accessibilityLabel={`${label} stili`}
+      style={[styles.stylePill, selected ? styles.stylePillOn : null]}
+      hitSlop={4}
     >
       <Svg width={SWATCH} height={SWATCH}>
         <Defs>
@@ -324,13 +349,16 @@ function Swatch({
             <Stop offset="1" stopColor={pair[1]} />
           </LinearGradient>
         </Defs>
-        <Circle cx={SWATCH / 2} cy={SWATCH / 2} r={SWATCH / 2} fill={`url(#${id})`} />
+        <Circle cx={SWATCH / 2} cy={SWATCH / 2} r={SWATCH / 2 - 0.5} fill={`url(#${id})`} stroke={colors.border} strokeWidth={1} />
       </Svg>
+      <Text style={[styles.stylePillText, selected ? styles.stylePillTextOn : null]} numberOfLines={1} {...textScale.badge}>
+        {label}
+      </Text>
     </Touchable>
   );
 }
 
-const SWATCH = 22;
+const SWATCH = 14;
 
 const styles = StyleSheet.create({
   root: {
@@ -423,26 +451,50 @@ const styles = StyleSheet.create({
     paddingTop: space.lg,
     gap: space.md,
   },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.md,
-  },
-  flex: {
-    flex: 1,
-  },
-  swatches: {
+  styleRow: {
     flexDirection: "row",
     gap: space.s,
   },
-  swatch: {
-    padding: space.xxs,
+  stylePill: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.xs,
+    height: 32,
+    paddingHorizontal: space.s,
     borderRadius: radius.pill,
-    borderWidth: 2,
-    borderColor: "transparent",
+    borderWidth: hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface2,
   },
-  swatchOn: {
+  stylePillOn: {
     borderColor: colors.brand,
+    backgroundColor: colors.brandDim,
+  },
+  stylePillText: {
+    ...type.meta,
+    color: colors.textSecondary,
+  },
+  stylePillTextOn: {
+    fontFamily: fonts.semibold,
+    color: colors.brandAccent,
+  },
+  group: {
+    gap: space.xs,
+  },
+  groupDivided: {
+    paddingLeft: space.md,
+    borderLeftWidth: hairline,
+    borderLeftColor: colors.border,
+  },
+  groupLabel: {
+    ...type.nano,
+    color: colors.textTertiary,
+  },
+  groupRow: {
+    flexDirection: "row",
+    gap: space.sm,
   },
   railScroll: {
     marginHorizontal: -layout.screenPadding,

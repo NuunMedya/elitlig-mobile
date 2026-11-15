@@ -17,6 +17,8 @@ export interface ShareTemplateDef {
   key: string;
   /** Küçük resmin altındaki ad ("Sade", "Golcüler"…). */
   label: string;
+  /** Seçicideki grup başlığı ("Skor", "Detay", "Oyuncu"). Aynı gruptakiler yan yana durur. */
+  group?: string;
   render: (frame: ShareFrame) => ReactNode;
 }
 

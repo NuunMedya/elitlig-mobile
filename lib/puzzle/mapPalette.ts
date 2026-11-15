@@ -166,11 +166,10 @@ export const MAP_ZONES: readonly MapZone[] = [
 
 /** Bölgeden bağımsız ortak renkler. */
 export const MAP_COMMON = {
-  /** Sıradaki düğüm (oyna): beyaz düğme, yeşil dudak ve numara (tek vurgu). */
+  /** Sıradaki düğüm (oyna): beyaz daire, yeşil halka ve numara (tek vurgu). */
   current: ["#FFFFFF", "#EEF1F7"] as [string, string],
-  currentLip: "#13813B",
   currentInk: "#17994A",
-  /** OYNA etiketi (birincil vurgu: yeşil). */
+  /** Sıradaki düğümün halkası (birincil vurgu: yeşil). */
   play: "#1FB257",
   /** Kilitli düğüm: soluk taş (düz daire, ince halka). */
   locked: ["#C9CDD6", "#8D93A3"] as [string, string],
@@ -194,7 +193,6 @@ export const MAP_COMMON = {
   /** "SEN" iğnesi: beyaz, yeşil top ikonu. */
   pin: "#FFFFFF",
   pinInk: "#17994A",
-  pinDeep: "#9F1E50",
   /** Dekor ortakları. */
   white: "#FFFFFF",
   black: "#1F2333",
@@ -205,15 +203,6 @@ export const MAP_COMMON = {
   rockDeep: "#6F7585",
   roof: "#D9483B",
   wall: "#FFF4DE",
-  /** "Zor" (her 5.) ve "Süper Zor" (her 10.) bölüm düğümleri. */
-  hard: ["#FF8FA6", "#E0305A"] as [string, string],
-  hardLip: "#9E1638",
-  superHard: ["#D9A6FF", "#8B3DF0"] as [string, string],
-  superLip: "#4E1A9E",
-  /** Düğüm parlaması ve zemin dokusu. */
-  shine: "rgba(255, 255, 255, 0.5)",
-  tuft: "rgba(255, 255, 255, 0.16)",
-  tuftDark: "rgba(0, 0, 0, 0.07)",
   /** Bulunduğun bölümün "SEN" rozeti. */
   avatar: "#5A2FC8",
   avatarRing: "#FFD23F",

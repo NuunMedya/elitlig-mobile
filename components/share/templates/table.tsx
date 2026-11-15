@@ -15,7 +15,7 @@ import { num } from "@/lib/share/format";
 import { fonts } from "@/theme";
 import { defaultZoneRules, zoneColor, zoneForRank } from "@/theme/zones";
 import { Poster, Spacer } from "../canvas/Layout";
-import { CText, Crest, FillBox, FitName, FormRow, Glass, Overline, RankChip, SigBar } from "../canvas/Primitives";
+import { CText, Crest, FillBox, FitName, FormRow, Glass, Kicker, Overline, RankChip } from "../canvas/Primitives";
 import type { ShareFrame, ShareTemplateDef } from "../canvas/types";
 
 export interface TableRowData {
@@ -90,7 +90,7 @@ function TableLine({
   compact: boolean;
 }) {
   const { u, t } = f;
-  const h = compact ? 25 : 37;
+  const h = compact ? 25 : 33;
   const col = colWidth("O", compact);
   const zone = zoneOf(f, rank, total);
   const inner = (
@@ -150,9 +150,8 @@ function TitleBlock({ f, d, title }: { f: ShareFrame; d: TableShareData; title: 
   return (
     <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", marginTop: u(story ? 10 : 0) }}>
       <View>
-        <Overline f={f}>{d.season ? `${d.season}` : "Sezon"}</Overline>
-        <CText f={f} k="title" scale={story ? 1.15 : 0.82} style={{ marginTop: u(2) }}>{title}</CText>
-        <SigBar f={f} width={36} height={3} style={{ marginTop: u(story ? 8 : 5) }} />
+        <Kicker f={f}>{d.season ? `${d.season}` : "Sezon"}</Kicker>
+        <CText f={f} k="title" scale={story ? 1.15 : 0.82} style={{ marginTop: u(6) }}>{title}</CText>
       </View>
       <Glass f={f} radius={14} strong style={{ paddingHorizontal: u(10), paddingVertical: u(5), marginBottom: u(2) }}>
         <CText f={f} k="numStrong" scale={0.9}>
@@ -171,8 +170,8 @@ function StandingsTable({ f, d }: { f: ShareFrame; d: TableShareData }) {
   return (
     <Poster f={f} mood="top" title={d.league} meta={d.city} footer={d.footer} watermark={false}>
       <TitleBlock f={f} d={d} title="Puan durumu" />
-      <Spacer f={f} grow={story ? 0.6 : 0.2} min={story ? 14 : 8} />
-      <Glass f={f} radius={20} style={{ paddingTop: u(story ? 12 : 8), paddingBottom: u(story ? 6 : 4), paddingHorizontal: u(2) }}>
+      <Spacer f={f} grow={story ? 0.6 : 0.2} min={story ? 10 : 8} />
+      <Glass f={f} radius={20} style={{ paddingTop: u(story ? 10 : 8), paddingBottom: u(story ? 4 : 4), paddingHorizontal: u(2) }}>
         <HeadRow f={f} compact={compact} />
         {slice.map((row, index) => (
           <TableLine
@@ -247,9 +246,9 @@ function StandingsFocus({ f, d }: { f: ShareFrame; d: TableShareData }) {
         </View>
       </FillBox>
 
-      <Spacer f={f} grow={0.4} min={story ? 14 : 8} />
+      <Spacer f={f} grow={0.4} min={story ? 10 : 8} />
 
-      <View style={{ gap: u(story ? 3 : 1) }}>
+      <View style={{ gap: u(story ? 2 : 1) }}>
         {slice.map((row, index) => {
           const r = d.from + index;
           const isHero = r === rank;
@@ -259,7 +258,7 @@ function StandingsFocus({ f, d }: { f: ShareFrame; d: TableShareData }) {
               style={{
                 flexDirection: "row",
                 alignItems: "center",
-                height: u(story ? 28 : 21),
+                height: u(story ? 25 : 21),
                 paddingHorizontal: u(10),
                 borderRadius: u(10),
                 backgroundColor: isHero ? f.t.glassStrong : "transparent",

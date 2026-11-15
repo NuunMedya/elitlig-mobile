@@ -48,6 +48,8 @@ const BANNER = 40;
 const rowHeight = (level: number) => ((level - 1) % 20 === 0 ? ROW + BANNER : ROW);
 /** index (0 = 1. seviye) satırının listedeki ofseti: her 20 satırda bir pankart şeridi. */
 const rowOffset = (index: number) => ROW * index + BANNER * Math.floor((index + 19) / 20);
+/** Başlangıç kapısının yüksekliği (listenin en altı). */
+const GATE = 96;
 /** Haritada açık seviyenin ötesinde gösterilen kilitli seviye sayısı. */
 const AHEAD = 25;
 
@@ -95,7 +97,7 @@ export function LevelMap({
   /** Bulunduğun bölümün iğnesindeki baş harfler (yoksa top ikonu). */
   avatar?: string | null;
 }) {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const current = cleared + 1;
   const data = useMemo<Row[]>(() => {
     const total = current + AHEAD;
@@ -113,16 +115,17 @@ export function LevelMap({
     [current, onPlay, width]
   );
   // Bulunduğun bölüme yumuşak kaydırma: açılışta ve bölüm ilerleyince.
+  // scrollToIndex başlangıç kapısını (GATE) ve alt şerit boşluğunu bilmiyordu;
+  // düğüm üst şeridin altına sıkışıyordu. Ofset elle: düğüm, iki şerit
+  // arasındaki boş alanın ortasına (biraz altına) gelir.
   useEffect(() => {
     const id = setTimeout(() => {
-      try {
-        listRef.current?.scrollToIndex({ index: Math.max(0, current - 1), animated: true, viewPosition: 0.42 });
-      } catch {
-        /* liste henüz ölçülmedi */
-      }
+      const free = Math.max(ROW, height - contentTop - contentBottom);
+      const offset = rowOffset(current - 1) + GATE + rowHeight(current) - ROW / 2 - free * 0.45;
+      listRef.current?.scrollToOffset({ offset: Math.max(0, offset), animated: true });
     }, 350);
     return () => clearTimeout(id);
-  }, [current]);
+  }, [contentBottom, contentTop, current, height]);
   const zone = zoneOf(current);
 
   return (
@@ -338,7 +341,7 @@ function StartGate({ width }: { width: number }) {
   const x = nodeX(1, width);
   return (
     <View style={[styles.gate, { backgroundColor: zone.ground[0] }]}>
-      <Svg width={width} height={96} style={StyleSheet.absoluteFill}>
+      <Svg width={width} height={GATE} style={StyleSheet.absoluteFill}>
         <Rect x={x - ROAD / 2 - 1.5} y={0} width={ROAD + 3} height={40} fill={zone.roadEdge} />
         <Rect x={x - ROAD / 2} y={0} width={ROAD} height={40} fill={zone.road} />
         <Rect x={x - 70} y={40} width={140} height={10} rx={5} fill={zone.roadEdge} />
@@ -529,7 +532,7 @@ const styles = StyleSheet.create({
   },
   bannerText: { ...type.labelSm, fontFamily: fonts.bold, color: M.ink, letterSpacing: 0.8 },
   bannerSub: { ...type.micro, color: M.ink, opacity: 0.8 },
-  gate: { height: 96 },
+  gate: { height: GATE },
   gateLabel: { position: "absolute", top: 6, width: 120, alignItems: "center" },
   gateText: { ...type.micro, fontFamily: fonts.bold, color: M.black, letterSpacing: 1.5 },
 });

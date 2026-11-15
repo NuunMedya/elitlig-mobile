@@ -151,16 +151,18 @@ export function AdOffersSheet({
             right={null}
           />
           {lives.lives < lives.max ? (
-            profile?.ads?.life ? <RewardedAd kind="life" game={game} profile={profile} size="md" /> : profile?.ad_lives ? <WatchAdForLife profile={profile} size="md" /> : null
+            profile?.ads?.life ? <RewardedAd kind="life" game={game} profile={profile} size="md" label="Reklam izle · +1 can" /> : profile?.ad_lives ? <WatchAdForLife profile={profile} size="md" /> : null
           ) : null}
           {boosters ? (
             <>
               <ModalRow icon="flash" tint={GH.side.shop[1]} title="Ücretsiz güçlendirici" sub={profile?.ads?.booster ? `Bugün ${profile.ads.booster.left}/${profile.ads.booster.per_day} hak` : "Yakında"} />
+              {/* Kısa etiket: ödülü üstteki satır anlatıyor (uzun etiket 320px'te kesiliyordu). */}
               <RewardedAd
                 kind="booster"
                 game={game}
                 profile={profile}
                 size="md"
+                label="Reklam izle"
                 onRewarded={() => undefined}
               />
             </>

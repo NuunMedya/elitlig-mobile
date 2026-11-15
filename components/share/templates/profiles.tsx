@@ -268,8 +268,8 @@ function PlayerPoster({ f, d }: { f: ShareFrame; d: PlayerShareData }) {
         {story ? null : <Portrait f={f} image={d.image} name={d.name} size={110} halo />}
       </View>
       {story ? (
-        <View style={{ alignItems: "center", marginTop: u(18) }}>
-          <Portrait f={f} image={d.image} name={d.name} size={190} halo />
+        <View style={{ alignItems: "center", marginTop: u(6) }}>
+          <Portrait f={f} image={d.image} name={d.name} size={140} halo />
         </View>
       ) : null}
       <Spacer f={f} />

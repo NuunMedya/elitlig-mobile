@@ -12,7 +12,7 @@ import { View } from "react-native";
 
 import { clock, upper } from "@/lib/share/format";
 import { Poster, Spacer } from "../canvas/Layout";
-import { CText, Crest, FillBox, FitName, Glass, Overline, SigBar } from "../canvas/Primitives";
+import { CText, Crest, FitName, Glass, Kicker, Overline } from "../canvas/Primitives";
 import type { ShareFrame, ShareTemplateDef } from "../canvas/types";
 import type { ShareTeamRef } from "./match";
 
@@ -42,56 +42,68 @@ export interface FixturesShareData {
 function Heading({ f, d }: { f: ShareFrame; d: FixturesShareData }) {
   const { u, t, story } = f;
   return (
-    <View style={{ marginTop: u(story ? 8 : 0) }}>
-      <Overline f={f}>{d.kicker}</Overline>
-      <FitName f={f} k="title" text={d.title} room={16} lines={1} align="left" scale={story ? 1.05 : 0.8} style={{ marginTop: u(2) }} />
-      <View style={{ flexDirection: "row", alignItems: "center", gap: u(8), marginTop: u(story ? 8 : 5) }}>
-        <SigBar f={f} width={36} height={3} />
-        <CText f={f} k="body" color={t.inkMuted}>
-          {d.matches.length} maç{d.season ? ` · ${d.season}` : ""}
-        </CText>
-      </View>
+    <View style={{ marginTop: u(story ? 6 : 0) }}>
+      <Kicker f={f}>{d.kicker}</Kicker>
+      <FitName f={f} k="title" text={d.title} width={316} lines={1} align="left" scale={story ? 1.08 : 0.82} min={0.6} style={{ marginTop: u(6) }} />
+      <CText f={f} k="body" color={t.inkMuted} style={{ marginTop: u(4) }}>
+        {d.matches.length} maç{d.season ? ` · ${d.season}` : ""}
+      </CText>
     </View>
   );
 }
 
-function Middle({ f, m, scale = 1 }: { f: ShareFrame; m: FixtureItem; scale?: number }) {
-  const { u, t } = f;
-  if (m.finished) {
-    return (
-      <FillBox f={f} radius={10} style={{ paddingHorizontal: u(8 * scale), paddingVertical: u(4 * scale), minWidth: u(54 * scale), alignItems: "center" }}>
-        <CText f={f} k="numStrong" scale={1.1 * scale} color={t.onFill}>
-          {m.homeScore ?? "-"} – {m.awayScore ?? "-"}
-        </CText>
-      </FillBox>
-    );
-  }
-  return (
-    <Glass f={f} radius={10} strong style={{ paddingHorizontal: u(8 * scale), paddingVertical: u(4 * scale), minWidth: u(54 * scale), alignItems: "center" }}>
-      <CText f={f} k="numStrong" scale={1.1 * scale} color={t.accent}>
-        {clock(m.time) || "—"}
-      </CText>
-    </Glass>
-  );
-}
-
+/**
+ * Yayın akışı satırı — solda saat (oynanmamış) ya da "MS" (bitmiş) ve saha;
+ * sağda iki takım alt alta (arma + ad), bitmişse her takımın skoru satırın
+ * sonunda. Kazanan tam mürekkep, kaybeden sönük.
+ */
 function ProgramRow({ f, m, h }: { f: ShareFrame; m: FixtureItem; h: number }) {
   const { u, t, story } = f;
-  const crest = story ? 26 : 20;
-  return (
-    <View style={{ height: u(h), justifyContent: "center", paddingHorizontal: u(10) }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: u(8) }}>
-        <FitName f={f} k="row" text={m.home.name} room={13} lines={2} caps align="right" scale={story ? 1 : 0.9} min={0.7} style={{ flex: 1 }} />
-        <Crest f={f} logo={m.home.logo} name={m.home.name} size={crest} />
-        <Middle f={f} m={m} scale={story ? 1 : 0.85} />
-        <Crest f={f} logo={m.away.logo} name={m.away.name} size={crest} />
-        <FitName f={f} k="row" text={m.away.name} room={13} lines={2} caps align="left" scale={story ? 1 : 0.9} min={0.7} style={{ flex: 1 }} />
-      </View>
-      {story && m.venue ? (
-        <CText f={f} k="body" scale={0.82} color={t.inkMuted} align="center" style={{ marginTop: u(4) }}>
-          {upper(m.venue)}
+  const crest = story ? 22 : 17;
+  const hs = m.homeScore ?? 0;
+  const as = m.awayScore ?? 0;
+  const line = (team: ShareTeamRef, score: number | null, lost: boolean, win: boolean) => (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: u(8) }}>
+      <Crest f={f} logo={team.logo} name={team.name} size={crest} />
+      <FitName
+        f={f}
+        k="row"
+        text={team.name}
+        width={story ? 170 : 180}
+        lines={1}
+        caps
+        align="left"
+        scale={story ? 1.02 : 0.9}
+        min={0.6}
+        color={lost ? t.inkSoft : t.ink}
+        style={{ flex: 1 }}
+      />
+      {m.finished ? (
+        <CText f={f} k="numStrong" scale={story ? 1.35 : 1.1} color={win ? t.accent : lost ? t.inkMuted : t.ink} align="right" style={{ minWidth: u(20) }}>
+          {score ?? "-"}
         </CText>
       ) : null}
+    </View>
+  );
+  return (
+    <View style={{ height: u(h), flexDirection: "row", alignItems: "center", paddingHorizontal: u(12), gap: u(12) }}>
+      <View style={{ width: u(story ? 58 : 50), alignItems: "flex-start" }}>
+        {m.finished ? (
+          <Overline f={f} color={t.inkMuted} scale={0.95}>Maç sonu</Overline>
+        ) : (
+          <CText f={f} k="numStrong" scale={story ? 1.5 : 1.25} color={t.accent}>
+            {clock(m.time) || "—"}
+          </CText>
+        )}
+        {m.venue ? (
+          <FitName f={f} k="micro" text={upper(m.venue)} width={story ? 58 : 50} lines={2} align="left" color={t.inkMuted} min={0.8} style={{ marginTop: u(3) }} />
+        ) : null}
+      </View>
+      <View style={{ width: Math.max(1, u(0.7)), alignSelf: "stretch", marginVertical: u(h * 0.18), backgroundColor: t.line }} />
+      <View style={{ flex: 1, gap: u(story ? 7 : 5) }}>
+        {line(m.home, m.homeScore, m.finished && hs < as, m.finished && hs > as)}
+        {line(m.away, m.awayScore, m.finished && as < hs, m.finished && as > hs)}
+      </View>
     </View>
   );
 }
@@ -99,11 +111,11 @@ function ProgramRow({ f, m, h }: { f: ShareFrame; m: FixtureItem; h: number }) {
 function FixturesProgram({ f, d }: { f: ShareFrame; d: FixturesShareData }) {
   const { u, t, story } = f;
   // Taşma satırı ("+n maç daha") da yer kaplar: sığmayan varsa bir maç az.
-  const fit = story ? 8 : 5;
+  const fit = story ? 7 : 4;
   const cap = d.matches.length > fit ? fit - 1 : fit;
   const shown = d.matches.slice(0, cap);
   const rest = d.matches.length - shown.length;
-  const h = story ? (shown.length > 6 ? 48 : 58) : 46;
+  const h = story ? (shown.length > 5 ? 56 : 64) : 52;
   return (
     <Poster f={f} mood="top" title={d.league} meta={d.city} footer={d.footer}>
       <Heading f={f} d={d} />
@@ -155,7 +167,7 @@ function FixtureCard({ f, m, wide }: { f: ShareFrame; m: FixtureItem; wide?: boo
 
 function FixturesCards({ f, d }: { f: ShareFrame; d: FixturesShareData }) {
   const { u, t, story } = f;
-  const cap = d.matches.length > (story ? 8 : 6) ? (story ? 6 : 4) : story ? 8 : 6;
+  const cap = d.matches.length > (story ? 8 : 6) ? (story ? 7 : 5) : story ? 8 : 6;
   const shown = d.matches.slice(0, cap);
   const rest = d.matches.length - shown.length;
   return (
@@ -164,7 +176,7 @@ function FixturesCards({ f, d }: { f: ShareFrame; d: FixturesShareData }) {
       <Spacer f={f} grow={0.4} min={story ? 14 : 8} />
       <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: u(story ? 8 : 6) }}>
         {shown.map((m) => (
-          <FixtureCard key={m.id} f={f} m={m} wide={story && shown.length <= 3} />
+          <FixtureCard key={m.id} f={f} m={m} wide={story && shown.length <= 4} />
         ))}
       </View>
       {rest > 0 ? (

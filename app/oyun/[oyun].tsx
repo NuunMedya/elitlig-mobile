@@ -16,7 +16,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 
-import { ArenaScene } from "@/components/gamehome/ArenaScene";
+import { ArenaScene, type ArenaStat } from "@/components/gamehome/ArenaScene";
 import { GameHome } from "@/components/gamehome/GameHome";
 import { fmtShort } from "@/components/gamehome/GameHomeKit";
 import { getMyArenaSummary } from "@/lib/api/arena";
@@ -78,14 +78,16 @@ export default function ScoreGameHome() {
           title={def.title}
           top={insets.top}
           bottom={insets.bottom}
-          stats={[
+          stats={([
             daily
-              ? { icon: "checkmark-done", label: "Bugün", value: today ? `${today.correct}/10` : "–" }
+              ? { icon: "checkmark-done", label: "Bugünkü test", value: today ? `${today.correct}/10` : "–/10" }
               : { icon: "trophy", label: "Rekor", value: best != null ? fmtShort(best) : "–" },
             !daily && signedIn && city
               ? { icon: "star", label: "Bugünkü yıldız", value: `${fmtShort(Math.min(city.stars.arena_today ?? 0, ARENA_DAILY_CAP))}/${ARENA_DAILY_CAP}` }
-              : { icon: "star", label: "Toplam yıldız", value: gameStars != null ? fmtShort(gameStars) : "–" },
-          ]}
+              : gameStars != null
+                ? { icon: "star", label: "Toplam yıldız", value: fmtShort(gameStars) }
+                : null,
+          ] as (ArenaStat | null)[]).filter((x): x is ArenaStat => x != null)}
         />
       }
       play={{

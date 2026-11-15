@@ -15,7 +15,7 @@ import React, { useRef, useState } from "react";
 import { Image, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg";
 
-import { CANVAS_TYPE, font, fitScale, type CanvasTypeKey } from "@/lib/share/canvas";
+import { CANVAS_TYPE, SAFE, font, fitScale, type CanvasTypeKey } from "@/lib/share/canvas";
 import { formLetters, upper } from "@/lib/share/format";
 import { alpha } from "@/lib/share/palette";
 import { fonts } from "@/theme";
@@ -146,16 +146,24 @@ export function Overline({
 export type BackdropMood = "top" | "center" | "split" | "low";
 
 const MOODS: Record<BackdropMood, [number, number, number][]> = {
-  // [x oranı, y oranı, yarıçap (genişlik oranı)] — A (mor), B (camgöbeği), C (pembe)
-  top: [[0.08, 0.06, 0.95], [1.02, 0.46, 0.72], [0.12, 1.0, 0.62]],
-  center: [[0.5, 0.42, 0.9], [1.0, 0.04, 0.58], [0.0, 0.9, 0.6]],
-  split: [[0.0, 0.2, 0.95], [1.0, 0.8, 0.95], [0.5, 0.5, 0.32]],
-  low: [[0.9, 0.86, 0.95], [0.04, 0.32, 0.62], [0.62, 0.02, 0.5]],
+  // [x oranı, y oranı, yarıçap (genişlik oranı)] — A, B, C ışıkları
+  top: [[0.1, 0.1, 0.9], [1.02, 0.5, 0.66], [0.1, 1.0, 0.56]],
+  center: [[0.5, 0.42, 0.86], [1.0, 0.06, 0.54], [0.0, 0.92, 0.56]],
+  split: [[0.0, 0.22, 0.9], [1.0, 0.78, 0.9], [0.5, 0.5, 0.3]],
+  low: [[0.9, 0.86, 0.9], [0.06, 0.3, 0.58], [0.62, 0.04, 0.46]],
 };
 
 /**
- * Gece sahnesi: dikey zemin geçişi + üç aurora ışığı + ince ızgara + imza
- * çizgileri + kenar karartması. Tuvalin ilk çocuğu olarak çizilir.
+ * Sahne zemini — stilin dokusuna göre üç ayrı çizim:
+ *
+ *   aurora (gece, neon): dikey geçiş + kısık iki-üç ışık + üst yarıda
+ *     çapraz ince tarama (aşağı doğru söner) + tek çapraz ışık kuşağı +
+ *     kenar karartması. Gürültü yok: tarama %3–4 saydamlıktadır.
+ *   pitch (saha): biçilmiş çim bantları (dikey, iki ton) + sahanın orta
+ *     çizgisi ve santra yayı tebeşirle, alt yarıda kısmen görünür.
+ *   paper (minimal): düz kâğıt; üst kenarda ince imza şeridi. Işık yok.
+ *
+ * Hepsinde büyük, çok soluk ElitLig filigranı sağ altta durur (isteğe bağlı).
  */
 export function Backdrop({
   f,
@@ -175,20 +183,24 @@ export function Backdrop({
   const [a, b, c] = MOODS[mood];
   const p = t.glowPower;
 
-  let gridPath = "";
-  if (grid) {
-    const step = u(24);
-    for (let x = step; x < W; x += step) gridPath += `M${x.toFixed(1)} 0V${H.toFixed(1)}`;
-    for (let y = step; y < H; y += step) gridPath += `M0 ${y.toFixed(1)}H${W.toFixed(1)}`;
-  }
-
   const glow = (gid: string, color: string, strength: number) => (
     <RadialGradient id={gid} cx="50%" cy="50%" r="50%">
-      <Stop offset="0" stopColor={color} stopOpacity={0.62 * strength * p} />
-      <Stop offset="0.45" stopColor={color} stopOpacity={0.22 * strength * p} />
+      <Stop offset="0" stopColor={color} stopOpacity={0.5 * strength * p} />
+      <Stop offset="0.5" stopColor={color} stopOpacity={0.16 * strength * p} />
       <Stop offset="1" stopColor={color} stopOpacity={0} />
     </RadialGradient>
   );
+
+  /* Çapraz tarama: 45° ince çizgiler, yalnız tuvalin üst yarısında. */
+  let hatch = "";
+  if (grid && t.texture === "aurora") {
+    const step = u(7);
+    const reach = H * 0.55;
+    for (let x = -reach; x < W; x += step) hatch += `M${x.toFixed(1)} ${reach.toFixed(1)}L${(x + reach).toFixed(1)} 0`;
+  }
+
+  /* Çim bantları: tuval genişliğinde 9 dikey şerit. */
+  const bands = t.texture === "pitch" ? 9 : 0;
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -199,29 +211,61 @@ export function Backdrop({
             <Stop offset="1" stopColor={t.bgBottom} />
           </LinearGradient>
           {glow(`${id}a`, t.glowA, 1)}
-          {glow(`${id}b`, t.glowB, 0.8)}
-          {glow(`${id}c`, t.glowC, 0.55)}
+          {glow(`${id}b`, t.glowB, 0.75)}
+          {glow(`${id}c`, t.glowC, 0.45)}
+          <LinearGradient id={`${id}h`} x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={t.grid} stopOpacity={1} />
+            <Stop offset="1" stopColor={t.grid} stopOpacity={0} />
+          </LinearGradient>
           <LinearGradient id={`${id}s`} x1="0" y1="0" x2="1" y2="0">
             <Stop offset="0" stopColor={t.sigA} stopOpacity={0} />
-            <Stop offset="0.5" stopColor={t.sigA} stopOpacity={0.55} />
+            <Stop offset="0.5" stopColor={t.sigA} stopOpacity={t.dark ? 0.16 : 0.08} />
             <Stop offset="1" stopColor={t.sigB} stopOpacity={0} />
+          </LinearGradient>
+          <LinearGradient id={`${id}k`} x1="0" y1="0" x2="1" y2="0">
+            <Stop offset="0" stopColor={t.sigA} />
+            <Stop offset="1" stopColor={t.sigB} />
           </LinearGradient>
           <RadialGradient id={`${id}v`} cx="50%" cy="45%" r="75%">
             <Stop offset="0.55" stopColor={t.bgBottom} stopOpacity={0} />
-            <Stop offset="1" stopColor={t.bgBottom} stopOpacity={t.dark ? 0.7 : 0.35} />
+            <Stop offset="1" stopColor={t.bgBottom} stopOpacity={t.dark ? 0.75 : 0} />
           </RadialGradient>
         </Defs>
         <Rect x={0} y={0} width={W} height={H} fill={`url(#${id}bg)`} />
-        <Circle cx={a[0] * W} cy={a[1] * H} r={a[2] * W} fill={`url(#${id}a)`} />
-        <Circle cx={b[0] * W} cy={b[1] * H} r={b[2] * W} fill={`url(#${id}b)`} />
-        <Circle cx={c[0] * W} cy={c[1] * H} r={c[2] * W} fill={`url(#${id}c)`} />
-        {grid ? <Path d={gridPath} stroke={t.grid} strokeWidth={u(0.6)} /> : null}
-        {streaks ? (
+
+        {bands
+          ? Array.from({ length: bands }, (_, i) =>
+              i % 2 ? <Rect key={i} x={(W / bands) * i} y={0} width={W / bands} height={H} fill={t.ink} opacity={0.03} /> : null,
+            )
+          : null}
+
+        {p > 0 ? (
           <>
-            <Path d={`M${-0.1 * W} ${0.7 * H} L${1.1 * W} ${0.44 * H}`} stroke={`url(#${id}s)`} strokeWidth={u(1.2)} />
-            <Path d={`M${-0.1 * W} ${0.73 * H} L${1.1 * W} ${0.47 * H}`} stroke={`url(#${id}s)`} strokeWidth={u(0.6)} opacity={0.6} />
+            <Circle cx={a[0] * W} cy={a[1] * H} r={a[2] * W} fill={`url(#${id}a)`} />
+            <Circle cx={b[0] * W} cy={b[1] * H} r={b[2] * W} fill={`url(#${id}b)`} />
+            <Circle cx={c[0] * W} cy={c[1] * H} r={c[2] * W} fill={`url(#${id}c)`} />
           </>
         ) : null}
+
+        {hatch ? <Path d={hatch} stroke={`url(#${id}h)`} strokeWidth={Math.max(0.5, u(0.5))} /> : null}
+
+        {t.texture === "pitch" && grid ? (
+          <>
+            <Path d={`M0 ${H * 0.78}H${W}`} stroke={t.grid} strokeWidth={u(1.2)} />
+            <Circle cx={W / 2} cy={H * 0.78} r={W * 0.2} stroke={t.grid} strokeWidth={u(1.2)} fill="none" />
+            <Circle cx={W / 2} cy={H * 0.78} r={u(2.4)} fill={t.grid} />
+          </>
+        ) : null}
+
+        {streaks && t.texture !== "paper" ? (
+          <Path
+            d={`M${-0.1 * W} ${0.74 * H} L${1.1 * W} ${0.4 * H} L${1.1 * W} ${0.46 * H} L${-0.1 * W} ${0.8 * H} Z`}
+            fill={`url(#${id}s)`}
+          />
+        ) : null}
+
+        {t.texture === "paper" ? <Rect x={0} y={0} width={W} height={u(3)} fill={`url(#${id}k)`} /> : null}
+
         <Rect x={0} y={0} width={W} height={H} fill={`url(#${id}v)`} />
       </Svg>
       {watermark ? (
@@ -230,13 +274,13 @@ export function Backdrop({
           resizeMode="contain"
           style={{
             position: "absolute",
-            width: W * 1.05,
-            height: W * 1.05,
-            right: -W * 0.42,
-            bottom: f.story ? H * 0.04 : -W * 0.3,
-            opacity: t.dark ? 0.035 : 0.05,
+            width: W * 1.1,
+            height: W * 1.1,
+            right: -W * 0.44,
+            bottom: f.story ? H * 0.08 : -W * 0.32,
+            opacity: t.dark ? 0.04 : 0.045,
             tintColor: t.logoTint ?? undefined,
-            transform: [{ rotate: "-12deg" }],
+            transform: [{ rotate: "-10deg" }],
           }}
         />
       ) : null}
@@ -246,89 +290,123 @@ export function Backdrop({
 
 /* ══════════════════════════ MARKA ══════════════════════════ */
 
+/*
+ * Logo görseli (1024²) çizimin çevresinde boşluk taşır: solda %15, üstte
+ * %18, altta %18. Künyede çizim kenar çizgisine otursun diye bu pay negatif
+ * kenar boşluğuyla geri alınır.
+ */
+const LOGO_PAD_X = 0.15;
+const LOGO_PAD_Y = 0.18;
+
 /** ElitLig logosu (beyaz çizim; açık zeminde marka moruna boyanır). */
-export function Logo({ f, size }: { f: ShareFrame; size: number }) {
+export function Logo({ f, size, tint }: { f: ShareFrame; size: number; tint?: string }) {
   return (
     <Image
       source={LOGO}
       resizeMode="contain"
-      style={{ width: f.u(size), height: f.u(size), tintColor: f.t.logoTint ?? undefined }}
+      style={{ width: f.u(size), height: f.u(size), tintColor: tint ?? f.t.logoTint ?? undefined }}
       accessible={false}
     />
   );
 }
 
-/** Üst bant: logo solda; lig ve sezon sağda. */
+/** Logo — çizimin kendi iç boşluğu kırpılmış hâli (kenar çizgisine oturur). */
+export function LogoMark({ f, size, tint }: { f: ShareFrame; size: number; tint?: string }) {
+  const s = f.u(size);
+  return (
+    <View style={{ marginHorizontal: -s * LOGO_PAD_X, marginVertical: -s * LOGO_PAD_Y }}>
+      <Logo f={f} size={size} tint={tint} />
+    </View>
+  );
+}
+
+/**
+ * MARKA KÜNYESİ — her görselin sol üstü: ElitLig logosu | ince dikey çizgi |
+ * lig adı (kalın) ve şehir · sezon (sönük). Sağ üst bilerek boş bırakılır;
+ * şablon isterse oraya kısa bir etiket (`tag`: "MAÇ SONU") koyar.
+ * Logo story'de 1080 px tuvalde ~190 px genişliğindedir — her paylaşımda
+ * ilk okunan marka işaretidir.
+ */
 export function BrandHeader({
   f,
   title,
   meta,
+  tag,
   style,
 }: {
   f: ShareFrame;
   title?: string | null;
   meta?: string | null;
+  tag?: string | null;
   style?: StyleProp<ViewStyle>;
 }) {
-  const { u, t } = f;
+  const { u, t, story } = f;
+  const size = story ? 74 : 60;
   return (
     <View
       style={[
         {
           flexDirection: "row",
           alignItems: "center",
-          justifyContent: "space-between",
-          paddingHorizontal: u(18),
-          paddingTop: u(f.story ? 18 : 10),
+          paddingHorizontal: u(SAFE[f.fmt].side),
+          paddingTop: u(SAFE[f.fmt].top),
         },
         style,
       ]}
     >
-      {/* Logo görselinin kendi iç boşluğu (%15) dengelenir: çizim kenar
-          çizgisine otursun. */}
-      <View style={{ marginLeft: -u(8), marginVertical: -u(8) }}>
-        <Logo f={f} size={f.story ? 64 : 56} />
-      </View>
-      <View style={{ alignItems: "flex-end", flexShrink: 1, marginLeft: u(12) }}>
-        {title ? (
-          <FitName f={f} k="label" text={title} room={26} lines={1} caps scale={1.15} align="right" color={t.ink} />
-        ) : null}
-        {meta ? (
-          <FitName
-            f={f}
-            k="label"
-            text={meta}
-            room={30}
-            lines={1}
-            caps
-            align="right"
-            color={t.inkMuted}
-            style={{ marginTop: u(3) }}
-          />
-        ) : null}
-      </View>
+      <LogoMark f={f} size={size} />
+      {title || meta ? (
+        <>
+          <View style={{ width: Math.max(1, u(0.8)), height: u(story ? 30 : 26), backgroundColor: t.line, marginHorizontal: u(story ? 12 : 10) }} />
+          <View style={{ flexShrink: 1, flexGrow: 1 }}>
+            {title ? <FitName f={f} k="label" text={title} width={story ? 150 : 170} lines={1} caps scale={1.12} align="left" color={t.ink} /> : null}
+            {meta ? (
+              <FitName f={f} k="label" text={meta} width={story ? 160 : 180} lines={1} caps align="left" color={t.inkMuted} style={{ marginTop: u(3) }} />
+            ) : null}
+          </View>
+        </>
+      ) : (
+        <View style={{ flex: 1 }} />
+      )}
+      {tag ? (
+        <View
+          style={{
+            paddingHorizontal: u(9),
+            paddingVertical: u(4),
+            borderRadius: u(20),
+            borderWidth: Math.max(1, u(0.8)),
+            borderColor: t.glassLine,
+            backgroundColor: t.glass,
+            marginLeft: u(8),
+          }}
+        >
+          <Overline f={f} color={t.ink} scale={0.92}>
+            {tag}
+          </Overline>
+        </View>
+      ) : null}
     </View>
   );
 }
 
-/** Alt bant: elitlig.com + sağda kısa not (lig, hashtag, instagram). */
+/** Alt bant: imza çizgisi + elitlig.com solda; sağda kısa not (instagram, şehir). */
 export function Footer({ f, right }: { f: ShareFrame; right?: string | null }) {
   const { u, t } = f;
   return (
     <View
       style={{
         position: "absolute",
-        left: u(20),
-        right: u(20),
-        bottom: u(f.story ? 18 : 12),
+        left: u(SAFE[f.fmt].side),
+        right: u(SAFE[f.fmt].side),
+        bottom: u(SAFE[f.fmt].bottom - (f.story ? 16 : 2)),
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
       }}
     >
-      <View style={{ flexDirection: "row", alignItems: "center", gap: u(6) }}>
-        <SigBar f={f} width={18} height={2.4} />
-        <CText f={f} k="body" color={t.ink} style={{ fontFamily: fonts.bold }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: u(7) }}>
+        <SigBar f={f} width={16} height={2.4} />
+        <CText f={f} k="body" color={t.ink} style={{ fontFamily: fonts.bold, letterSpacing: u(0.4) }}>
           elitlig.com
         </CText>
       </View>
@@ -337,6 +415,35 @@ export function Footer({ f, right }: { f: ShareFrame; right?: string | null }) {
           {upper(right)}
         </CText>
       ) : null}
+    </View>
+  );
+}
+
+/**
+ * Bölüm başlığı — "— MAÇ SONU" gibi: kısa imza çizgisi + büyük harf etiket.
+ * Bütün şablonlarda başlığın üstündeki tek tip giriş.
+ */
+export function Kicker({
+  f,
+  children,
+  color,
+  align = "left",
+  style,
+}: {
+  f: ShareFrame;
+  children: string;
+  color?: string;
+  align?: "left" | "center";
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { u } = f;
+  return (
+    <View style={[{ flexDirection: "row", alignItems: "center", gap: u(7), alignSelf: align === "center" ? "center" : "flex-start" }, style]}>
+      <SigBar f={f} width={14} height={2.4} />
+      <Overline f={f} color={color} scale={1.05}>
+        {children}
+      </Overline>
+      {align === "center" ? <SigBar f={f} width={14} height={2.4} /> : null}
     </View>
   );
 }
@@ -481,6 +588,7 @@ export function Crest({
   name,
   size,
   halo = false,
+  haloColor,
   dim = false,
 }: {
   f: ShareFrame;
@@ -488,6 +596,8 @@ export function Crest({
   name?: string | null;
   size: number;
   halo?: boolean;
+  /** Hale rengi (karşılaştırmada taraf rengi). */
+  haloColor?: string;
   dim?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
@@ -496,7 +606,7 @@ export function Crest({
   const r = s * 0.3;
   return (
     <View style={{ width: s, height: s, alignItems: "center", justifyContent: "center", opacity: dim ? 0.55 : 1 }}>
-      {halo ? <Halo f={f} size={size * 2.1} /> : null}
+      {halo ? <Halo f={f} size={size * 2.1} color={haloColor} /> : null}
       {uri ? (
         <View
           style={{
@@ -537,6 +647,7 @@ export function Portrait({
   name,
   size,
   ring = "sig",
+  ringColor,
   halo = false,
 }: {
   f: ShareFrame;
@@ -544,6 +655,8 @@ export function Portrait({
   name?: string | null;
   size: number;
   ring?: "sig" | "gold" | "none";
+  /** Halka tek renk (karşılaştırmada taraf rengi). */
+  ringColor?: string;
   halo?: boolean;
 }) {
   const id = useSvgId("pr");
@@ -553,10 +666,10 @@ export function Portrait({
   const stroke = ring === "none" ? 0 : Math.max(1.5, s * 0.035);
   const gap = ring === "none" ? 0 : stroke * 1.1;
   const inner = s - (stroke + gap) * 2;
-  const [c1, c2] = ring === "gold" ? f.t.gold : [f.t.sigA, f.t.sigB];
+  const [c1, c2] = ringColor ? [ringColor, ringColor] : ring === "gold" ? f.t.gold : [f.t.sigA, f.t.sigB];
   return (
     <View style={{ width: s, height: s, alignItems: "center", justifyContent: "center" }}>
-      {halo ? <Halo f={f} size={size * 1.9} color={ring === "gold" ? f.t.gold[1] : undefined} /> : null}
+      {halo ? <Halo f={f} size={size * 1.9} color={ringColor ?? (ring === "gold" ? f.t.gold[1] : undefined)} /> : null}
       {ring !== "none" ? (
         <Svg width={s} height={s} style={StyleSheet.absoluteFill}>
           <Defs>
