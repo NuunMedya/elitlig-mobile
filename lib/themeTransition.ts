@@ -22,6 +22,14 @@ import { DevSettings, Platform } from "react-native";
 
 export const THEME_SNAPSHOT_KEY = "elitlig.themeSnapshot.v1";
 
+/**
+ * Yeniden yüklemenin tema değişiminden geldiğini işaretler. Açılışta
+ * `index.js` okur ve siler; işaret varsa logo açılış animasyonu
+ * (components/IntroSplash.tsx) OYNAMAZ — kullanıcı uygulamayı yeni açmadı,
+ * yalnız tema değiştirdi. Görüntü alınamasa bile (web, hata) işaret yazılır.
+ */
+export const THEME_RELOAD_KEY = "elitlig.themeReload.v1";
+
 /** Ekranın görüntüsünü alır ve yolunu saklar. Hata yutulur. */
 async function captureSnapshot(): Promise<void> {
   if (Platform.OS === "web") return;
@@ -40,6 +48,7 @@ async function captureSnapshot(): Promise<void> {
  */
 export async function reloadForTheme(): Promise<boolean> {
   await captureSnapshot();
+  await AsyncStorage.setItem(THEME_RELOAD_KEY, "1").catch(() => {});
   if (__DEV__) {
     DevSettings.reload();
     return true;
@@ -49,7 +58,7 @@ export async function reloadForTheme(): Promise<boolean> {
     await Updates.reloadAsync();
     return true;
   } catch {
-    await AsyncStorage.removeItem(THEME_SNAPSHOT_KEY).catch(() => {});
+    await AsyncStorage.multiRemove([THEME_SNAPSHOT_KEY, THEME_RELOAD_KEY]).catch(() => {});
     return false;
   }
 }
