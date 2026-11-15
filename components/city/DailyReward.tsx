@@ -99,7 +99,7 @@ export function DailyRewardCard({ view, onPress, style }: { view: DailyView; onP
         ) : null}
       </View>
       <View style={styles.cardTexts}>
-        <Text style={styles.cardTitle} numberOfLines={1} {...textScale.dense}>
+        <Text style={styles.cardTitle} numberOfLines={2} {...textScale.dense}>
           {title}
         </Text>
         <Text style={styles.cardSub} numberOfLines={2} {...textScale.dense}>
