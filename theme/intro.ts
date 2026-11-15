@@ -12,20 +12,22 @@
 export const introColors = {
   /** Yerel splash zemini — app.json ile eş. */
   stage: "#2E1065",
-  /** Sahnenin kenarlarına doğru koyulaşan derin mor. */
-  deep: "#14062E",
+  /** Vinyetin kenarı: neredeyse siyah mor. */
+  deep: "#0C0420",
   /** Merkezdeki menekşe ışık. */
   violet: "#7C3AED",
   /** Logonun hemen arkasındaki parlak çekirdek. */
   core: "#A78BFA",
-  /** Işık hüzmeleri ve halkalar — açık lavanta. */
-  lavender: "#C4B5FD",
-  /** Işık süpürmesi beklerken logonun "sönük" tonu. */
-  logoDim: "#BBA8FF",
-  /** Logonun yanık hâli ve parlama çizgisi. */
+  /** Projektör ışığı, şok dalgası, ışık çizgisi — açık lavanta. */
+  lavender: "#DDD6FE",
+  /** Logo ve parlama. */
   white: "#FFFFFF",
-  /** Kıvılcımlar — lavanta ağırlıklı, az pembe ve camgöbeği vurgu. */
-  sparks: ["#EDE9FE", "#C4B5FD", "#F0ABFC", "#A5F3FC"] as const,
-  /** Alt satır metni (beyazın %72'si). */
-  tagline: "rgba(237, 233, 254, 0.78)",
+  /** Çarpma anındaki renk sapması (kromatik kenar) kopyaları. */
+  chromaCyan: "#22D3EE",
+  chromaPink: "#F472B6",
+  /** "Elit" vurgusu — mor sahnede altın. */
+  gold: "#FCD34D",
+  goldGlow: "rgba(252, 211, 77, 0.55)",
+  /** Alt satırın geri kalanı. */
+  tagline: "rgba(237, 233, 254, 0.92)",
 } as const;

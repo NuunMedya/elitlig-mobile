@@ -15,15 +15,17 @@
  * Görsel BÜYÜK ölçüde yerleşir ve küçültülerek başlar; büyürken rasterin
  * kendisi büyütülmez, 3x ekranda da keskin kalır (kaynak 1024px).
  *
- * SAHNE (~2 sn):
- *   0–120     yerel splash'in birebir devamı (bekleme)
- *   120–760   logo yaylı büyüyerek yerine oturur; mor ışık ve hüzmeler açılır,
- *             logo bu sırada hafif lavantaya söner ("ışıklar kapalı")
- *   640–1500  oturma anında iki halka dalgası, kıvılcım patlaması, çekirdek
- *             parlaması
- *   780–1260  çapraz ışık süpürmesi logoyu soldan sağa yeniden beyaza yakar
- *   900–1300  alt satır yükselerek belirir
- *   1560–2000 sahne hafifçe büyüyüp saydamlaşır, altta uygulama görünür
+ * SAHNE — "maç gecesi yayını" (~2.1 sn), az öğe, sert vuruş:
+ *   0–110     yerel splash'in birebir devamı
+ *   110–420   stadyum projektörleri köşelerden SIRAYLA, titreyerek yanar;
+ *             sahne derin bir vinyete kararır, logo geri çekilip "yüklenir"
+ *   ~470      ÇARPMA: logo sıkı bir aşmayla yerine kilitlenir — tek keskin
+ *             şok dalgası, kısa beyaz flaş, renk sapmalı (camgöbeği/pembe)
+ *             kenar, logonun çizgisinden geçen yatay ışık yarığı ve hafif
+ *             kamera sarsıntısı
+ *   820–1340  Türkiye'nin En "Elit" Ligi — harf aralığı daralarak oturur,
+ *             "Elit" altın vurgulu
+ *   1660–2100 sahne hafifçe büyüyüp saydamlaşır, altta uygulama görünür
  *
  * "Hareketi azalt" açıksa: ilk kare kısa bir süre durur ve yalnız solar.
  * Ekrana dokunmak sahneyi anında kapatır (kısa bir solma ile).
@@ -36,9 +38,9 @@ import React, { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Animated, {
   Easing,
+  Extrapolation,
   cancelAnimation,
   interpolate,
-  Extrapolation,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -47,7 +49,7 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from "react-native-reanimated";
-import Svg, { Defs, Ellipse, Path, RadialGradient, Rect, Stop } from "react-native-svg";
+import Svg, { Defs, Ellipse, RadialGradient, Rect, Stop } from "react-native-svg";
 
 import { introColors, type } from "@/theme";
 
@@ -57,13 +59,13 @@ const LOGO = require("../assets/images/splash-icon.png");
 const NATIVE_IMAGE_WIDTH = 72;
 
 /* — Zaman çizelgesi (ms) — */
-const HOLD = 120;
-const GROW = 640;
-const LAND = HOLD + GROW - 120; // halkalar logo tam otururken patlar
-const SWEEP_AT = 780;
-const SWEEP_MS = 480;
-const TAGLINE_AT = 900;
-const EXIT_AT = 1560;
+const HOLD = 110;
+const PULL = 190; // geri çekilme (yüklenme)
+const SLAM = 170; // hızlanarak çarpma
+const IMPACT = HOLD + PULL + SLAM; // ≈ 470
+const LIGHTS_STAGGER = 70;
+const TAGLINE_AT = 820;
+const EXIT_AT = 1660;
 const EXIT_MS = 440;
 const TOTAL = EXIT_AT + EXIT_MS;
 
@@ -72,12 +74,13 @@ const REDUCED_HOLD = 260;
 const REDUCED_FADE = 300;
 const SKIP_FADE = 220;
 
-/** Hüzme sayısı ve kıvılcım sayısı. */
-const RAYS = 18;
-const SPARKS = 22;
-
-/** Süpürme penceresinin eğimi. */
-const SWEEP_ANGLE = 22;
+/** Projektörler: köşe + yanma sırası. */
+const FLOODLIGHTS = [
+  { x: 0, y: 0 },
+  { x: 1, y: 0 },
+  { x: 1, y: 1 },
+  { x: 0, y: 1 },
+] as const;
 
 /** Aynı JS ömründe ikinci kez oynamasın. */
 let played = false;
@@ -91,34 +94,29 @@ const ease = {
   out: Easing.bezier(0.16, 1, 0.3, 1),
   inOut: Easing.bezier(0.65, 0, 0.35, 1),
   in: Easing.bezier(0.55, 0, 1, 0.45),
+  slam: Easing.bezier(0.7, 0, 0.84, 0),
 };
-
-/**
- * Sabit sözde-rastgele: kıvılcımlar her açılışta aynı yerde doğar
- * (Math.random her açılışta farklı bir "kaza" görüntüsü üretir).
- */
-function seeded(i: number, salt: number): number {
-  const x = Math.sin(i * 12.9898 + salt * 78.233) * 43758.5453;
-  return x - Math.floor(x);
-}
 
 export const IntroSplash = memo(function IntroSplash({ onDone }: { onDone: () => void }) {
   const { width: W, height: H } = useWindowDimensions();
   const reduce = useReducedMotion();
 
   /* Logonun son ölçüsü; görsel kare (1024×1024). */
-  const L = Math.round(Math.min(W * 0.54, 230));
+  const L = Math.round(Math.min(W * 0.56, 236));
   const startScale = NATIVE_IMAGE_WIDTH / L;
 
-  /* Ana zaman ekseni değerleri. */
-  const grow = useSharedValue(0); // 0 → 1: logo büyür
-  const stage = useSharedValue(0); // 0 → 1: ışık/hüzme açılır
-  const burst = useSharedValue(0); // 0 → 1: halka ve kıvılcım
-  const sweep = useSharedValue(0); // 0 → 1: ışık süpürmesi
+  const logoScale = useSharedValue(startScale);
+  const dark = useSharedValue(0); // 0 → 1: vinyet sahnesi
+  const impact = useSharedValue(0); // 0 → 1: çarpma anı efektleri (doğrusal)
   const tagline = useSharedValue(0);
-  const spin = useSharedValue(0); // hüzmelerin yavaş dönüşü
-  const exit = useSharedValue(0); // 0 → 1: çıkış
-  const fade = useSharedValue(1); // kökün opaklığı
+  const spacing = useSharedValue(0); // 0 → 1: harf aralığı daralır
+  const exit = useSharedValue(0);
+  const fade = useSharedValue(1);
+  const l0 = useSharedValue(0);
+  const l1 = useSharedValue(0);
+  const l2 = useSharedValue(0);
+  const l3 = useSharedValue(0);
+  const lights = [l0, l1, l2, l3];
 
   const [mounted, setMounted] = useState(true);
   const doneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -141,14 +139,36 @@ export const IntroSplash = memo(function IntroSplash({ onDone }: { onDone: () =>
       finish(REDUCED_HOLD + REDUCED_FADE + 40);
       return;
     }
-    grow.value = withDelay(HOLD, withTiming(1, { duration: GROW, easing: Easing.bezier(0.34, 1.36, 0.5, 1) }));
-    stage.value = withDelay(HOLD, withTiming(1, { duration: 560, easing: ease.out }));
-    spin.value = withDelay(HOLD, withTiming(1, { duration: TOTAL - HOLD, easing: Easing.linear }));
-    burst.value = withDelay(LAND, withTiming(1, { duration: 900, easing: Easing.linear }));
-    sweep.value = withDelay(SWEEP_AT, withTiming(1, { duration: SWEEP_MS, easing: ease.inOut }));
-    tagline.value = withDelay(TAGLINE_AT, withTiming(1, { duration: 420, easing: ease.out }));
+    // Logo: geri çekil → hızlanarak çarp → sıkı aşma → otur.
+    logoScale.value = withDelay(
+      HOLD,
+      withSequence(
+        withTiming(startScale * 0.8, { duration: PULL, easing: ease.inOut }),
+        withTiming(1.13, { duration: SLAM, easing: ease.slam }),
+        withTiming(0.97, { duration: 90, easing: ease.out }),
+        withTiming(1, { duration: 160, easing: ease.out }),
+      ),
+    );
+    dark.value = withDelay(HOLD, withTiming(1, { duration: 320, easing: ease.out }));
+    // Projektörler sırayla, titreyerek yanar; çarpmadan sonra sakin bir seviyeye iner.
+    lights.forEach((l, i) => {
+      l.value = withDelay(
+        HOLD + 40 + i * LIGHTS_STAGGER,
+        withSequence(
+          withTiming(1, { duration: 40 }),
+          withTiming(0.2, { duration: 50 }),
+          withTiming(0.9, { duration: 50 }),
+          withTiming(0.45, { duration: 40 }),
+          withTiming(1, { duration: 60 }),
+          withTiming(0.6, { duration: 700, easing: ease.out }),
+        ),
+      );
+    });
+    impact.value = withDelay(IMPACT, withTiming(1, { duration: 700, easing: Easing.linear }));
+    tagline.value = withDelay(TAGLINE_AT, withTiming(1, { duration: 320, easing: ease.out }));
+    spacing.value = withDelay(TAGLINE_AT, withTiming(1, { duration: 560, easing: ease.out }));
     exit.value = withDelay(EXIT_AT, withTiming(1, { duration: EXIT_MS, easing: ease.in }));
-    fade.value = withDelay(EXIT_AT, withSequence(withTiming(1, { duration: 80 }), withTiming(0, { duration: EXIT_MS - 80, easing: ease.out })));
+    fade.value = withDelay(EXIT_AT + 60, withTiming(0, { duration: EXIT_MS - 60, easing: ease.out }));
     finish(TOTAL + 40);
     return () => {
       if (doneTimer.current) clearTimeout(doneTimer.current);
@@ -166,49 +186,86 @@ export const IntroSplash = memo(function IntroSplash({ onDone }: { onDone: () =>
 
   const rootStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
 
-  /* Arka plan ışığı: düz splash renginden radyal mor sahneye. */
-  const glowStyle = useAnimatedStyle(() => ({
-    opacity: stage.value,
-    transform: [{ scale: interpolate(stage.value, [0, 1], [1.25, 1]) + exit.value * 0.08 }],
-  }));
+  const vignetteStyle = useAnimatedStyle(() => ({ opacity: dark.value }));
 
-  const raysStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(stage.value, [0, 1], [0, 1]) * interpolate(exit.value, [0, 1], [1, 0]),
-    transform: [
-      { rotate: `${interpolate(spin.value, [0, 1], [-8, 14])}deg` },
-      { scale: interpolate(stage.value, [0, 1], [0.6, 1]) },
-    ],
-  }));
-
-  const logoStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: interpolate(grow.value, [0, 1], [startScale, 1]) * (1 + exit.value * 0.1) }],
-  }));
-
-  /* Logo büyürken lavantaya söner; süpürme onu yeniden beyaza yakar. */
-  const whiteBaseStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(grow.value, [0.15, 0.7], [1, 0], Extrapolation.CLAMP),
-  }));
-
-  /* Logonun arkasındaki çekirdek parlaması: oturma anında nabız. */
-  const coreStyle = useAnimatedStyle(() => {
-    const pulse = interpolate(burst.value, [0, 0.12, 0.6], [0, 1, 0.45], Extrapolation.CLAMP);
+  /* Kamera sarsıntısı: çarpmada kısa, sönümlü titreşim (yalnız sahne, zemin değil). */
+  const shakeStyle = useAnimatedStyle(() => {
+    const p = interpolate(impact.value, [0, 0.36], [0, 1], Extrapolation.CLAMP);
+    const damp = p >= 1 ? 0 : 1 - p;
     return {
-      opacity: Math.max(stage.value * 0.45, pulse) * interpolate(exit.value, [0, 1], [1, 0.4]),
-      transform: [{ scale: interpolate(burst.value, [0, 0.15, 1], [0.8, 1.15, 1], Extrapolation.CLAMP) }],
+      transform: [
+        { translateX: Math.sin(p * Math.PI * 7) * 6 * damp },
+        { translateY: Math.sin(p * Math.PI * 5 + 0.6) * 3.5 * damp },
+        { scale: 1 + exit.value * 0.06 },
+      ],
+    };
+  });
+
+  const logoStyle = useAnimatedStyle(() => ({ transform: [{ scale: logoScale.value }] }));
+
+  /* Renk sapması: çarpmada iki renkli kopya yana kayar ve hızla logoya geri oturur. */
+  const chromaA = useAnimatedStyle(() => {
+    const p = interpolate(impact.value, [0, 0.3], [0, 1], Extrapolation.CLAMP);
+    return {
+      opacity: impact.value <= 0 ? 0 : interpolate(p, [0, 0.1, 1], [0, 0.9, 0]),
+      transform: [{ translateX: interpolate(p, [0, 1], [-9, 0]) }],
+    };
+  });
+  const chromaB = useAnimatedStyle(() => {
+    const p = interpolate(impact.value, [0, 0.3], [0, 1], Extrapolation.CLAMP);
+    return {
+      opacity: impact.value <= 0 ? 0 : interpolate(p, [0, 0.1, 1], [0, 0.9, 0]),
+      transform: [{ translateX: interpolate(p, [0, 1], [9, 0]) }],
+    };
+  });
+
+  /* Çekirdek ışık: çarpmada parlar, sonra sakin bir hâleye iner. */
+  const coreStyle = useAnimatedStyle(() => ({
+    opacity:
+      Math.max(dark.value * 0.35, interpolate(impact.value, [0, 0.06, 0.6], [0, 1, 0.55], Extrapolation.CLAMP)) *
+      interpolate(exit.value, [0, 1], [1, 0.3]),
+    transform: [{ scale: interpolate(impact.value, [0, 0.1, 1], [0.7, 1.12, 1], Extrapolation.CLAMP) }],
+  }));
+
+  /* Tek keskin şok dalgası. */
+  const ringStyle = useAnimatedStyle(() => {
+    const p = interpolate(impact.value, [0, 0.55], [0, 1], Extrapolation.CLAMP);
+    const eased = 1 - Math.pow(1 - p, 4);
+    return {
+      opacity: impact.value <= 0 ? 0 : interpolate(p, [0, 0.05, 1], [0, 1, 0]),
+      transform: [{ scale: interpolate(eased, [0, 1], [0.5, 3.2]) }],
+    };
+  });
+
+  /* Kısa beyaz flaş. */
+  const flashStyle = useAnimatedStyle(() => ({
+    opacity: impact.value <= 0 ? 0 : interpolate(impact.value, [0, 0.03, 0.22], [0, 0.32, 0], Extrapolation.CLAMP),
+  }));
+
+  /* Yatay ışık yarığı: logonun alt çizgisinden ortadan dışa açılır ve söner. */
+  const slashStyle = useAnimatedStyle(() => {
+    const p = interpolate(impact.value, [0, 0.7], [0, 1], Extrapolation.CLAMP);
+    return {
+      opacity: impact.value <= 0 ? 0 : interpolate(p, [0, 0.06, 0.45, 1], [0, 1, 0.7, 0]),
+      transform: [{ scaleX: interpolate(1 - Math.pow(1 - p, 3), [0, 1], [0.1, 1]) }],
     };
   });
 
   const taglineStyle = useAnimatedStyle(() => ({
     opacity: tagline.value * interpolate(exit.value, [0, 0.6], [1, 0], Extrapolation.CLAMP),
-    transform: [{ translateY: interpolate(tagline.value, [0, 1], [10, 0]) }],
+    letterSpacing: interpolate(spacing.value, [0, 1], [9, 0.4]),
+    transform: [{ translateY: interpolate(tagline.value, [0, 1], [8, 0]) }],
   }));
 
   if (!mounted) return null;
 
   const cx = W / 2;
   const cy = H / 2;
-  const R = Math.hypot(W, H) * 0.62; // hüzme yarıçapı: ekran köşelerine taşar
-  const tagTop = cy + L * 0.44; // logo çiziminin alt kenarı ≈ merkez + 0.32L
+  const ringSize = L * 0.9;
+  /* Logonun yatay çizgisi görselin ~%41 yüksekliğindedir: yarık oradan geçer. */
+  const slashY = cy - L * 0.09;
+  const slashW = W * 1.3;
+  const tagTop = cy + L * 0.42;
 
   return (
     <Animated.View style={[StyleSheet.absoluteFill, styles.root, rootStyle]}>
@@ -219,13 +276,13 @@ export const IntroSplash = memo(function IntroSplash({ onDone }: { onDone: () =>
         accessibilityLabel="ElitLig"
         accessibilityHint="Açılış animasyonunu geçer"
       >
-        {/* 1 · Radyal sahne: merkezde menekşe, kenarda derin mor. */}
-        <Animated.View style={[StyleSheet.absoluteFill, glowStyle]} pointerEvents="none">
+        {/* 1 · Derin vinyet: merkezde menekşe, kenarda neredeyse siyah. */}
+        <Animated.View style={[StyleSheet.absoluteFill, vignetteStyle]} pointerEvents="none">
           <Svg width={W} height={H}>
             <Defs>
-              <RadialGradient id="introStage" cx="50%" cy="50%" rx="75%" ry="60%" fx="50%" fy="50%">
-                <Stop offset="0" stopColor={introColors.violet} stopOpacity={0.95} />
-                <Stop offset="0.38" stopColor={introColors.stage} stopOpacity={1} />
+              <RadialGradient id="introStage" cx="50%" cy="50%" rx="70%" ry="55%" fx="50%" fy="50%">
+                <Stop offset="0" stopColor={introColors.violet} stopOpacity={0.7} />
+                <Stop offset="0.42" stopColor={introColors.stage} stopOpacity={1} />
                 <Stop offset="1" stopColor={introColors.deep} stopOpacity={1} />
               </RadialGradient>
             </Defs>
@@ -233,219 +290,140 @@ export const IntroSplash = memo(function IntroSplash({ onDone }: { onDone: () =>
           </Svg>
         </Animated.View>
 
-        {/* 2 · Işık hüzmeleri: stadyum projektörü gibi merkezden yayılan sönük kamalar. */}
-        <Animated.View
-          pointerEvents="none"
-          style={[styles.abs, { left: cx - R, top: cy - R, width: R * 2, height: R * 2 }, raysStyle]}
-        >
-          <Rays radius={R} />
-        </Animated.View>
-
-        {/* 3 · Halka dalgaları ve kıvılcımlar. */}
-        <Ring progress={burst} cx={cx} cy={cy} size={L * 1.1} delay={0} />
-        <Ring progress={burst} cx={cx} cy={cy} size={L * 1.1} delay={0.16} />
-        {Array.from({ length: SPARKS }, (_, i) => (
-          <Spark key={i} i={i} progress={burst} cx={cx} cy={cy} L={L} />
+        {/* 2 · Stadyum projektörleri: köşelerden merkeze uzanan ışık konileri. */}
+        {FLOODLIGHTS.map((f, i) => (
+          <Floodlight key={i} index={i} corner={f} W={W} H={H} level={lights[i]} exit={exit} />
         ))}
 
-        {/* 4 · Logo: çekirdek ışık + lavanta taban + beyaz taban + süpürme. */}
-        <Animated.View
-          pointerEvents="none"
-          style={[styles.abs, { left: cx - L, top: cy - L, width: L * 2, height: L * 2 }, styles.center, coreStyle]}
-        >
-          <Svg width={L * 2} height={L * 2}>
-            <Defs>
-              <RadialGradient id="introCore" cx="50%" cy="50%" rx="50%" ry="50%">
-                <Stop offset="0" stopColor={introColors.core} stopOpacity={0.85} />
-                <Stop offset="0.4" stopColor={introColors.violet} stopOpacity={0.45} />
-                <Stop offset="1" stopColor={introColors.violet} stopOpacity={0} />
-              </RadialGradient>
-            </Defs>
-            <Ellipse cx={L} cy={L} rx={L} ry={L} fill="url(#introCore)" />
-          </Svg>
-        </Animated.View>
+        {/* 3 · Sarsılan sahne: hâle, şok dalgası, logo, yarık, alt satır. */}
+        <Animated.View style={[StyleSheet.absoluteFill, shakeStyle]} pointerEvents="none">
+          <Animated.View
+            style={[styles.abs, { left: cx - L, top: cy - L, width: L * 2, height: L * 2 }, coreStyle]}
+          >
+            <Svg width={L * 2} height={L * 2}>
+              <Defs>
+                <RadialGradient id="introCore" cx="50%" cy="50%" rx="50%" ry="50%">
+                  <Stop offset="0" stopColor={introColors.core} stopOpacity={0.8} />
+                  <Stop offset="0.38" stopColor={introColors.violet} stopOpacity={0.4} />
+                  <Stop offset="1" stopColor={introColors.violet} stopOpacity={0} />
+                </RadialGradient>
+              </Defs>
+              <Ellipse cx={L} cy={L} rx={L} ry={L} fill="url(#introCore)" />
+            </Svg>
+          </Animated.View>
 
-        <Animated.View
-          pointerEvents="none"
-          style={[styles.abs, { left: cx - L / 2, top: cy - L / 2, width: L, height: L }, logoStyle]}
-        >
-          <Image source={LOGO} style={[styles.fill, { tintColor: introColors.logoDim }]} resizeMode="contain" />
-          <Animated.View style={[StyleSheet.absoluteFill, whiteBaseStyle]}>
+          <Animated.View
+            style={[
+              styles.abs,
+              styles.ring,
+              {
+                left: cx - ringSize / 2,
+                top: cy - ringSize / 2,
+                width: ringSize,
+                height: ringSize,
+                borderRadius: ringSize / 2,
+              },
+              ringStyle,
+            ]}
+          />
+
+          <Animated.View style={[styles.abs, { left: cx - L / 2, top: cy - L / 2, width: L, height: L }, logoStyle]}>
+            <Animated.View style={[StyleSheet.absoluteFill, chromaA]}>
+              <Image source={LOGO} style={[styles.fill, { tintColor: introColors.chromaCyan }]} resizeMode="contain" />
+            </Animated.View>
+            <Animated.View style={[StyleSheet.absoluteFill, chromaB]}>
+              <Image source={LOGO} style={[styles.fill, { tintColor: introColors.chromaPink }]} resizeMode="contain" />
+            </Animated.View>
             <Image source={LOGO} style={styles.fill} resizeMode="contain" />
           </Animated.View>
-          <SweepReveal progress={sweep} L={L} />
+
+          <Animated.View
+            style={[styles.abs, { left: cx - slashW / 2, top: slashY - 14, width: slashW, height: 28 }, slashStyle]}
+          >
+            <Svg width={slashW} height={28}>
+              <Defs>
+                <RadialGradient id="introSlashSoft" cx="50%" cy="50%" rx="50%" ry="50%">
+                  <Stop offset="0" stopColor={introColors.lavender} stopOpacity={0.55} />
+                  <Stop offset="1" stopColor={introColors.lavender} stopOpacity={0} />
+                </RadialGradient>
+                <RadialGradient id="introSlashCore" cx="50%" cy="50%" rx="50%" ry="50%">
+                  <Stop offset="0" stopColor={introColors.white} stopOpacity={1} />
+                  <Stop offset="0.6" stopColor={introColors.lavender} stopOpacity={0.6} />
+                  <Stop offset="1" stopColor={introColors.lavender} stopOpacity={0} />
+                </RadialGradient>
+              </Defs>
+              <Ellipse cx={slashW / 2} cy={14} rx={slashW / 2} ry={14} fill="url(#introSlashSoft)" />
+              <Ellipse cx={slashW / 2} cy={14} rx={slashW * 0.42} ry={1.6} fill="url(#introSlashCore)" />
+            </Svg>
+          </Animated.View>
+
+          <View style={[styles.abs, styles.taglineWrap, { top: tagTop }]}>
+            <Animated.Text style={[styles.tagline, taglineStyle]} allowFontScaling={false}>
+              Türkiye'nin En <Text style={styles.elit}>"Elit"</Text> Ligi
+            </Animated.Text>
+          </View>
         </Animated.View>
 
-        {/* 5 · Alt satır. */}
-        <Animated.View pointerEvents="none" style={[styles.abs, styles.taglineWrap, { top: tagTop }, taglineStyle]}>
-          <Text style={styles.tagline} allowFontScaling={false}>
-            ŞEHRİNDEKİ AMATÖR LİG, CEBİNDE
-          </Text>
-        </Animated.View>
+        {/* 4 · Çarpma flaşı. */}
+        <Animated.View style={[StyleSheet.absoluteFill, styles.flash, flashStyle]} pointerEvents="none" />
       </Pressable>
     </Animated.View>
   );
 });
 
 /**
- * Logoyu soldan sağa yeniden beyaza yakan çapraz ışık.
- *
- * Maske kütüphanesi kullanılmaz: kare, `SWEEP_ANGLE` kadar döndürülmüş ve
- * taşanı kırpan bir kutudur; içindeki pencere sağa doğru açılır, pencerenin
- * içindeki logo ise kutunun dönüşünü ve pencerenin kaymasını TERS yönde
- * uygular — böylece logo yerinde durur, yalnız çapraz bir kenarla açığa
- * çıkar. Açılan kenarda yumuşak bir parlama çizgisi koşar.
+ * Tek projektör: köşeden ekran merkezine uzanan, köşede parlak ve uca doğru
+ * sönen dar bir ışık konisi. Titreme `level` değerinden gelir.
  */
-function SweepReveal({ progress, L }: { progress: SharedValue<number>; L: number }) {
-  const S = L * 1.6; // dönen kutunun kenarı: döndürüldüğünde logoyu tümüyle örter
-  const off = (S - L) / 2;
-  const band = L * 0.34;
-
-  const windowStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: interpolate(progress.value, [0, 1], [-S, 0]) }],
-  }));
-  const innerStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: interpolate(progress.value, [0, 1], [S, 0]) }],
-  }));
-  const bandStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(progress.value, [0, 0.08, 0.85, 1], [0, 1, 1, 0]),
-    transform: [{ translateX: interpolate(progress.value, [0, 1], [-band / 2, S - band / 2]) }],
-  }));
-
-  return (
-    <View
-      pointerEvents="none"
-      style={[styles.abs, { left: -off, top: -off, width: S, height: S }, styles.clip, { transform: [{ rotate: `${SWEEP_ANGLE}deg` }] }]}
-    >
-      <Animated.View style={[styles.abs, { left: 0, top: 0, width: S, height: S }, styles.clip, windowStyle]}>
-        <Animated.View style={[styles.abs, { left: 0, top: 0, width: S, height: S }, innerStyle]}>
-          <Image
-            source={LOGO}
-            resizeMode="contain"
-            style={[styles.abs, { left: off, top: off, width: L, height: L, transform: [{ rotate: `${-SWEEP_ANGLE}deg` }] }]}
-          />
-        </Animated.View>
-      </Animated.View>
-      <Animated.View style={[styles.abs, { left: 0, top: 0, width: band, height: S }, bandStyle]}>
-        <Svg width={band} height={S}>
-          <Defs>
-            <RadialGradient id="introBand" cx="50%" cy="50%" rx="50%" ry="50%">
-              <Stop offset="0" stopColor={introColors.white} stopOpacity={0.75} />
-              <Stop offset="0.45" stopColor={introColors.lavender} stopOpacity={0.28} />
-              <Stop offset="1" stopColor={introColors.lavender} stopOpacity={0} />
-            </RadialGradient>
-          </Defs>
-          <Ellipse cx={band / 2} cy={S / 2} rx={band / 2} ry={S / 2} fill="url(#introBand)" />
-        </Svg>
-      </Animated.View>
-    </View>
-  );
-}
-
-/** Merkezden yayılan, uca doğru sönen ince kamalar. */
-const Rays = memo(function Rays({ radius }: { radius: number }) {
-  const d: string[] = [];
-  for (let i = 0; i < RAYS; i += 1) {
-    const a = (i / RAYS) * Math.PI * 2;
-    // Kama genişliği hafifçe değişir: düzenli bir "güneş" değil, ışık hissi.
-    const half = (0.012 + seeded(i, 3) * 0.022) * Math.PI;
-    const x1 = radius + Math.cos(a - half) * radius;
-    const y1 = radius + Math.sin(a - half) * radius;
-    const x2 = radius + Math.cos(a + half) * radius;
-    const y2 = radius + Math.sin(a + half) * radius;
-    d.push(`M${radius} ${radius}L${x1.toFixed(1)} ${y1.toFixed(1)}L${x2.toFixed(1)} ${y2.toFixed(1)}Z`);
-  }
-  return (
-    <Svg width={radius * 2} height={radius * 2}>
-      <Defs>
-        <RadialGradient id="introRay" cx="50%" cy="50%" rx="50%" ry="50%">
-          <Stop offset="0.06" stopColor={introColors.lavender} stopOpacity={0.2} />
-          <Stop offset="0.3" stopColor={introColors.lavender} stopOpacity={0.07} />
-          <Stop offset="0.75" stopColor={introColors.lavender} stopOpacity={0} />
-        </RadialGradient>
-      </Defs>
-      <Path d={d.join("")} fill="url(#introRay)" />
-    </Svg>
-  );
-});
-
-/** Logodan dışa doğru genişleyip sönen ince halka. */
-function Ring({
-  progress,
-  cx,
-  cy,
-  size,
-  delay,
+function Floodlight({
+  index,
+  corner,
+  W,
+  H,
+  level,
+  exit,
 }: {
-  progress: SharedValue<number>;
-  cx: number;
-  cy: number;
-  size: number;
-  delay: number;
+  index: number;
+  corner: { x: number; y: number };
+  W: number;
+  H: number;
+  level: SharedValue<number>;
+  exit: SharedValue<number>;
 }) {
-  const style = useAnimatedStyle(() => {
-    const p = interpolate(progress.value, [delay, delay + 0.75], [0, 1], Extrapolation.CLAMP);
-    const eased = 1 - Math.pow(1 - p, 3);
-    return {
-      opacity: p <= 0 ? 0 : interpolate(p, [0, 0.15, 1], [0, 0.85, 0]),
-      transform: [{ scale: interpolate(eased, [0, 1], [0.55, 2.3]) }],
-    };
-  });
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[
-        styles.abs,
-        styles.ring,
-        { left: cx - size / 2, top: cy - size / 2, width: size, height: size, borderRadius: size / 2 },
-        style,
-      ]}
-    />
-  );
-}
+  const style = useAnimatedStyle(() => ({
+    opacity: level.value * interpolate(exit.value, [0, 1], [1, 0]),
+  }));
 
-/** Oturma anında merkezden saçılan tek bir kıvılcım. */
-function Spark({
-  i,
-  progress,
-  cx,
-  cy,
-  L,
-}: {
-  i: number;
-  progress: SharedValue<number>;
-  cx: number;
-  cy: number;
-  L: number;
-}) {
-  const angle = (i / SPARKS) * Math.PI * 2 + seeded(i, 1) * 0.5;
-  const from = L * (0.28 + seeded(i, 2) * 0.12);
-  const to = L * (0.75 + seeded(i, 4) * 0.65);
-  const size = 2 + Math.round(seeded(i, 5) * 3);
-  const lag = seeded(i, 6) * 0.18;
-  const color = introColors.sparks[i % introColors.sparks.length];
-  const dx = Math.cos(angle);
-  const dy = Math.sin(angle);
-
-  const style = useAnimatedStyle(() => {
-    const p = interpolate(progress.value, [lag, lag + 0.8], [0, 1], Extrapolation.CLAMP);
-    const eased = 1 - Math.pow(1 - p, 3);
-    const r = from + (to - from) * eased;
-    return {
-      opacity: p <= 0 ? 0 : interpolate(p, [0, 0.12, 0.7, 1], [0, 1, 0.7, 0]),
-      transform: [{ translateX: dx * r }, { translateY: dy * r + p * 10 }, { scale: 1 - p * 0.4 }],
-    };
-  });
+  const x0 = corner.x * W;
+  const y0 = corner.y * H;
+  const dx = W / 2 - x0;
+  const dy = H / 2 - y0;
+  const len = Math.hypot(dx, dy) * 1.05;
+  const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const id = `introBeam${index}`;
 
   return (
-    <Animated.View
-      pointerEvents="none"
-      style={[
-        styles.abs,
-        { left: cx - size / 2, top: cy - size / 2, width: size, height: size, borderRadius: size / 2, backgroundColor: color },
-        style,
-      ]}
-    />
+    <Animated.View style={[StyleSheet.absoluteFill, style]} pointerEvents="none">
+      <Svg width={W} height={H}>
+        <Defs>
+          {/* Odak elipsin köşe ucunda: ışık kaynağı orada, koni merkeze doğru söner. */}
+          <RadialGradient id={id} cx="50%" cy="50%" rx="50%" ry="50%" fx="2%" fy="50%">
+            <Stop offset="0" stopColor={introColors.white} stopOpacity={0.5} />
+            <Stop offset="0.18" stopColor={introColors.lavender} stopOpacity={0.2} />
+            <Stop offset="0.6" stopColor={introColors.lavender} stopOpacity={0.05} />
+            <Stop offset="1" stopColor={introColors.lavender} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Ellipse
+          cx={x0 + len / 2}
+          cy={y0}
+          rx={len / 2}
+          ry={W * 0.13}
+          fill={`url(#${id})`}
+          transform={`rotate(${angle.toFixed(2)} ${x0} ${y0})`}
+        />
+      </Svg>
+    </Animated.View>
   );
 }
 
@@ -456,12 +434,13 @@ const styles = StyleSheet.create({
     elevation: 1000,
   },
   abs: { position: "absolute" },
-  center: { alignItems: "center", justifyContent: "center" },
   fill: { width: "100%", height: "100%" },
-  clip: { overflow: "hidden" },
   ring: {
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: introColors.lavender,
+  },
+  flash: {
+    backgroundColor: introColors.white,
   },
   taglineWrap: {
     left: 0,
@@ -469,8 +448,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   tagline: {
-    ...type.labelSm,
-    letterSpacing: 2.2,
+    ...type.h1,
     color: introColors.tagline,
+  },
+  elit: {
+    color: introColors.gold,
+    textShadowColor: introColors.goldGlow,
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 12,
   },
 });
