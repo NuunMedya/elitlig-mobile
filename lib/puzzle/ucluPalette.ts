@@ -122,10 +122,10 @@ export const UCLU_BOARD = {
    * kısık bir laciverttir. Böylece göz zemine değil, önündeki renkli
    * taşlara gider.
    */
-  cellA: "rgba(210, 220, 255, 0.40)",
-  cellB: "rgba(196, 206, 250, 0.29)",
+  cellA: "rgba(206, 220, 255, 0.42)",
+  cellB: "rgba(190, 204, 252, 0.31)",
   /** Hücre yatağı (dama altı) ve çevresindeki ince koyu kenar / gölge. */
-  well: "#394276",
+  well: "#37427E",
   wellEdge: "rgba(10, 14, 40, 0.55)",
   boardShadow: "rgba(4, 6, 24, 0.42)",
   /** Tahta gölgesi için opak koyu ton (grup saydamlığıyla kullanılır). */
@@ -339,8 +339,8 @@ export const UCLU_SPECIAL = {
   rotorEdge: "rgba(255, 255, 255, 0.9)",
   droneEye: "#1B1446",
   droneLed: "#FF4D5E",
-  bombHi: "#6D7BA8",
-  bomb: "#2D3557",
+  bombHi: "#8A98C8",
+  bomb: "#3A4470",
   bombLo: "#121733",
   bombPanel: "#FFC93C",
   fuse: "#C8A06A",

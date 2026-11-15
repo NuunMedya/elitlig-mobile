@@ -17,6 +17,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import Svg, { Circle, ClipPath, Defs, Ellipse, G, Line, LinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg";
+import { radius } from "@/theme";
 import { UCLU_BOARD } from "@/lib/puzzle/ucluPalette";
 
 /* ───────────────────────────── engeller ───────────────────────────── */
@@ -170,7 +171,13 @@ function CellViewBase({ row, col, cell, mud, crate, turf }: CellViewProps) {
     prev.current = { mud, crate, turf };
     if (was.turf !== turf && turf === 2) {
       grow.setValue(0.4);
-      Animated.spring(grow, { toValue: 1, damping: 7, stiffness: 260, mass: 0.6, useNativeDriver: true }).start();
+      Animated.spring(grow, {
+        toValue: 1,
+        damping: 7,
+        stiffness: 260,
+        mass: 0.6,
+        useNativeDriver: true,
+      }).start();
     }
     if (was.mud === mud && was.crate === crate) return;
     shake.setValue(0);
@@ -221,6 +228,16 @@ export const CellView = React.memo(CellViewBase);
 
 /* ───────────────────────────── tahta yatağı ve çerçeve ───────────────────────────── */
 
+/** Köşe başına yuvarlatılabilen dikdörtgen yolu (sıra: sol-üst, sağ-üst, sağ-alt, sol-alt). */
+function roundRect(x: number, y: number, w: number, h: number, rx: number, round: readonly boolean[]) {
+  const [a, b, c, d] = round.map((v) => (v ? rx : 0));
+  return (
+    `M${x + a} ${y} L${x + w - b} ${y} Q${x + w} ${y} ${x + w} ${y + b} ` +
+    `L${x + w} ${y + h - c} Q${x + w} ${y + h} ${x + w - c} ${y + h} ` +
+    `L${x + d} ${y + h} Q${x} ${y + h} ${x} ${y + h - d} L${x} ${y + a} Q${x} ${y} ${x + a} ${y} Z`
+  );
+}
+
 /**
  * Tahtanın tamamı tek, durağan SVG: her dolu hücre için büyütülmüş
  * dikdörtgenler üst üste çizilir; birleşimleri tahtanın ŞEKLİNİ izleyen
@@ -229,31 +246,38 @@ export const CellView = React.memo(CellViewBase);
  * `mask` ("1" dolu, "0" delik) ve hücre boyu değişmedikçe yeniden çizilmez.
  * Çekiç seçiliyken çerçeve vurgu renginde yanar (hedef seçme kipi).
  */
-export const BoardBed = React.memo(function BoardBed({
-  cols,
-  cell,
-  pad,
-  mask,
-  hammer,
-}: {
-  cols: number;
-  cell: number;
-  pad: number;
-  mask: string;
-  hammer: boolean;
-}) {
+export const BoardBed = React.memo(function BoardBed({ cols, cell, pad, mask, hammer }: { cols: number; cell: number; pad: number; mask: string; hammer: boolean }) {
   const rows = Math.ceil(mask.length / cols);
   const w = cols * cell + pad * 2;
   const h = rows * cell + pad * 2;
-  const on: { x: number; y: number; r: number; c: number }[] = [];
+  const filled = (r: number, c: number) => r >= 0 && c >= 0 && r < rows && c < cols && mask[r * cols + c] === "1";
+  const on: {
+    x: number;
+    y: number;
+    r: number;
+    c: number;
+    round: [boolean, boolean, boolean, boolean];
+  }[] = [];
   for (let i = 0; i < mask.length; i++) {
     if (mask[i] !== "1") continue;
     const r = Math.floor(i / cols);
     const c = i % cols;
-    on.push({ x: pad + c * cell, y: pad + r * cell, r, c });
+    const up = filled(r - 1, c);
+    const dn = filled(r + 1, c);
+    const lf = filled(r, c - 1);
+    const rt = filled(r, c + 1);
+    // Yalnız dışa bakan (dışbükey) köşeler yuvarlanır; komşuya bitişik köşeler
+    // düz kalır, böylece birleşim kenarlarında çentik oluşmaz.
+    on.push({
+      x: pad + c * cell,
+      y: pad + r * cell,
+      r,
+      c,
+      round: [!up && !lf, !up && !rt, !dn && !rt, !dn && !lf],
+    });
   }
   const grow = (e: number, rx: number, fill: string, dy = 0) =>
-    on.map((q, k) => <Rect key={k} x={q.x - e} y={q.y - e + dy} width={cell + e * 2} height={cell + e * 2} rx={rx} fill={fill} />);
+    on.map((q, k) => <Path key={k} d={roundRect(q.x - e, q.y - e + dy, cell + e * 2, cell + e * 2, rx, q.round)} fill={fill} />);
   return (
     <Svg width={w} height={h} style={StyleSheet.absoluteFill} pointerEvents="none">
       <Defs>
@@ -268,11 +292,11 @@ export const BoardBed = React.memo(function BoardBed({
         </LinearGradient>
       </Defs>
       {/* Yumuşak gölge (grup saydamlığı: üst üste binen kareler koyulaşmaz). */}
-      <G opacity={0.5}>{grow(Math.min(pad, 10), 14, UCLU_BOARD.vignetteInk, 4)}</G>
-      <G>{grow(Math.min(pad - 1, 8), 12, UCLU_BOARD.frameWoodRim)}</G>
-      <G>{grow(Math.min(pad - 2, 6.5), 10.5, "url(#ubframe)")}</G>
-      <G>{grow(2.6, 7, UCLU_BOARD.frameWoodRim)}</G>
-      <G>{grow(1.4, 6, UCLU_BOARD.well)}</G>
+      <G opacity={0.5}>{grow(Math.min(pad, 10), radius.md, UCLU_BOARD.vignetteInk, 4)}</G>
+      <G>{grow(Math.min(pad - 2, 7), radius.sm + 2, UCLU_BOARD.frameWoodRim)}</G>
+      <G>{grow(Math.min(pad - 3, 5.6), radius.sm + 0.5, "url(#ubframe)")}</G>
+      <G>{grow(2.4, radius.xs, UCLU_BOARD.frameWoodRim)}</G>
+      <G>{grow(1.2, radius.xs - 1, UCLU_BOARD.well)}</G>
       {on.map((q, k) => (
         <Rect key={k} x={q.x} y={q.y} width={cell} height={cell} fill={(q.r + q.c) % 2 === 0 ? UCLU_BOARD.cellA : UCLU_BOARD.cellB} />
       ))}
@@ -394,9 +418,7 @@ export function NetLock({ size }: { size: number }) {
           </React.Fragment>
         ))}
       </G>
-      <G fill={UCLU_BOARD.rope}>
-        {lines.map((x) => lines.map((y) => <Circle key={`${x}-${y}`} cx={x} cy={y} r={2.6} />))}
-      </G>
+      <G fill={UCLU_BOARD.rope}>{lines.map((x) => lines.map((y) => <Circle key={`${x}-${y}`} cx={x} cy={y} r={2.6} />))}</G>
       <Rect x={5} y={5} width={90} height={90} rx={12} fill="none" stroke={UCLU_BOARD.ropeLo} strokeWidth={7} transform="translate(0.8 1.4)" />
       <Rect x={5} y={5} width={90} height={90} rx={12} fill="none" stroke={UCLU_BOARD.post} strokeWidth={5} />
       <Rect x={9} y={7} width={40} height={2.4} rx={1.2} fill={UCLU_BOARD.beamCore} />

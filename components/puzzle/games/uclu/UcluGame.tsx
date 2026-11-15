@@ -263,10 +263,10 @@ export default function UcluGame(props: PuzzleGameProps) {
     const bx = hudPos.current.x + rightPos.current.x + rowPos.current.x;
     const by = hudPos.current.y + rightPos.current.y + rowPos.current.y;
     if (!slot) return { x: bx + 20, y: by + 20 };
-    // Çipin solundaki simgenin merkezi (simge çip yüksekliğinde kare).
+    // Yuvanın üstündeki simgenin merkezi (altında sayı satırı, ~18 px).
     return {
-      x: bx + slot.x + Math.min(slot.w, slot.h) / 2,
-      y: by + slot.y + slot.h / 2,
+      x: bx + slot.x + slot.w / 2,
+      y: by + slot.y + Math.max(0, slot.h - 18) / 2,
     };
   }, []);
 
