@@ -59,8 +59,8 @@ export interface ArenaGameRule {
 }
 
 export interface ArenaGameConfig {
-  /** Arena oyunu (Kulüp Şehri sahnesi `sehir` bir oyun değildir). */
-  game: Exclude<WebGameKey, "sehir">;
+  /** Arena oyunu (Kulüp Şehri sahnesi `sehir` oyun değil; Kariyer Yolu yalnız Lig Yolu bölüm oyunudur). */
+  game: Exclude<WebGameKey, "sehir" | "kariyer">;
   title: string;
   /** Başlığın altındaki tek satır. */
   subtitle: string;

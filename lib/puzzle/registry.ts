@@ -14,7 +14,7 @@ import { ucluModule } from "@/components/puzzle/games/uclu";
 
 import type { PuzzleGameKey, PuzzleGameModule } from "./types";
 
-// Bölümlü arcade (sözleşme §1): Penaltı, Kadro Koşusu, Savunma Hattı — WebView bölüm modu.
+// Bölümlü arcade (sözleşme §1): Penaltı, Kadro Koşusu, Savunma Hattı, Kariyer Yolu — WebView bölüm modu.
 export const PUZZLE_GAMES: readonly PuzzleGameModule[] = [kariyerModule, ucluModule, ucleModule, soyunmaModule, kantinModule, penaltiModule, kadroModule, savunmaModule];
 
 const BY_KEY = new Map<string, PuzzleGameModule>(PUZZLE_GAMES.map((m) => [m.key, m]));

@@ -22,7 +22,7 @@ yönlenir. Bu üç oyunun arena skorları rekor tablosu için gönderilmeye deva
 edebilir ama `ECONOMY_V3_FROM` sonrasında **arena yıldızı vermez** (yıldızı
 bölüm verir; çift sayım olmaz).
 
-## 2. WebView bölüm modu (penalti · kadro · savunma)
+## 2. WebView bölüm modu (penalti · kadro · savunma · kariyer)
 
 Oyun modülünün `Game` bileşeni (`components/puzzle/games/<oyun>/`) bir
 `WebGame` açar ve TEK bir bölüm oynatır.
@@ -57,7 +57,7 @@ Oyun → RN:
   yeni özelliğin/karakterin açıldığı (`UNLOCKS`). JS oyunundaki tablolarla
   AYNI olmalıdır (kontrol betiği karşılaştırır ya da tek kaynak üretilir).
 
-Bölüm sayıları (en az): kadro **250**, savunma **100**, penalti **150**,
+Bölüm sayıları (en az): kadro **250**, savunma **100**, penalti **150**, kariyer **150**,
 uclu **100** (genişletilebilir: yeni bölüm eklemek = seviye tablosuna satır
 eklemek / üreteç aralığını büyütmek; mevcut bölümler DEĞİŞMEZ).
 

@@ -9,7 +9,8 @@
  *
  *   0. `lib/game/web/games.generated.ts` kaynaklarla güncel; 3B futbolcu modeli
  *      (iskelet, gövde, koşu/bekleme klipleri) eksiksiz.
- *   1. Beş oyun da vitrin modunda ve oyunda hatasız güncellenip çizilir.
+ *   1. Bütün oyunlar vitrin modunda ve oyunda hatasız güncellenip çizilir
+ *      (Kariyer Yolu'nun kural / adalet denetimi: scripts/check-kariyer.mjs).
  *   2. SEKTİR (Flappy futbol): dokunmazsan top yere düşer ve tur biter;
  *      boşluğu izleyen oyuncu gol atar ve seviye atlar; hız artar, boşluk
  *      daralır; alçak top baraja, yüksek top direğe takılır; gol sayısı
@@ -202,7 +203,7 @@ function window_cmd(A, cmd) {
 
 /* ── 1) Beş oyun da hatasız döner ─────────────────────────────────────────── */
 
-for (const game of ["penalti", "slalom", "sektir", "savunma", "kadro", "sehir"]) {
+for (const game of ["penalti", "slalom", "sektir", "savunma", "kadro", "sehir", "kariyer"]) {
   let error = null;
   try {
     const { A, run, log } = boot(game);
