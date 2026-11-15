@@ -48,7 +48,7 @@ import {
   type Step,
 } from "@/lib/puzzle/ucluEngine";
 import { StadiumBackdrop } from "./Backdrop";
-import { BoardLight, CellView, FrameTrim, LockView, ShineSweep } from "./BoardLayers";
+import { BoardBed, CellView, LockView, ShineSweep } from "./BoardLayers";
 import { FxLayer, type Fx, type FlyGlyph, type FxInput } from "./Effects";
 import { BoosterBar, HintBubble, Hud, type HudGoal, type LiveBooster } from "./Hud";
 import { TileView, phased, type IdleAnim } from "./Piece";
@@ -89,8 +89,8 @@ const LIVE_BOOSTERS = [
     icon: "shuffle",
   },
 ] as const;
-/** Çizgi film çerçevenin bir kenarı (tahta bu kadar içeride başlar). */
-const PAD = 14;
+/** İnce tahta çerçevesinin bir kenarı (tahta bu kadar içeride başlar). */
+const PAD = 10;
 /** HUD ve güçlendirici çubuğunun en küçük yükseklikleri; ekran uzunsa büyürler. */
 const HUD_MIN = 88;
 const HUD_MAX = 116;
@@ -855,6 +855,13 @@ export default function UcluGame(props: PuzzleGameProps) {
     return out;
   }, [board]);
 
+  /** Tahta şekli ("1" dolu, "0" delik): delikler oyun boyunca değişmez. */
+  const holeMask = useMemo(
+    () => S().cells.map((c) => (c.hole ? "0" : "1")).join(""),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
   const lockCells = useMemo(() => {
     const out: number[] = [];
     S().cells.forEach((c, i) => {
@@ -899,7 +906,7 @@ export default function UcluGame(props: PuzzleGameProps) {
       </View>
 
       <Animated.View onLayout={onBoardLayout} style={[styles.frame, { width: framePx, height: framePx, transform: [{ translateX: shake }, { translateY: Animated.multiply(shake, 0.5) }] }]}>
-        <FrameTrim width={framePx} height={framePx} pad={PAD} hammer={hammer} />
+        <BoardBed cols={W} cell={cell} pad={PAD} mask={holeMask} hammer={hammer} />
         <View
           style={{ width: boardPx, height: boardPx }}
           {...pan.panHandlers}
@@ -909,7 +916,6 @@ export default function UcluGame(props: PuzzleGameProps) {
         >
           <View pointerEvents="none" style={StyleSheet.absoluteFill}>
             {board.cells.map((c, i) => (c.hole ? null : <CellView key={i} row={Math.floor(i / W)} col={i % W} cell={cell} mud={c.mud} crate={c.crate} turf={c.turf} />))}
-            <BoardLight size={boardPx} />
           </View>
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.clip]}>
             {tiles.map(({ tile, i, dying }) => {
@@ -983,8 +989,8 @@ const styles = StyleSheet.create({
   stage: { overflow: "hidden", borderRadius: radius.xxl },
   selectRing: {
     position: "absolute",
-    borderRadius: radius.md,
-    borderWidth: 4,
+    borderRadius: radius.lg,
+    borderWidth: 3,
     borderColor: UCLU_BOARD.select,
     backgroundColor: UCLU_BOARD.selectGlow,
   },
