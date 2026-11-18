@@ -260,7 +260,18 @@ export const submitObjection = (publicId: string, text: string, side: string) =>
  * Sözlükler sunucudaki constants/penalty.js ile birebir.
  */
 export type AppealStatus = "pending" | "in_review" | "accepted" | "partially_accepted" | "rejected";
-export type AppealCategory = "match_result" | "referee" | "eligibility" | "forfeit" | "organization" | "other";
+export type AppealCategory =
+  | "rule_error"
+  | "referee_error"
+  | "ineligible_player"
+  | "suspended_player"
+  | "unlicensed_player"
+  | "match_result"
+  | "forfeit"
+  | "unsporting"
+  | "organization"
+  | "schedule"
+  | "other";
 
 export const APPEAL_STATUS_LABELS: Record<AppealStatus, string> = {
   pending: "Değerlendirme bekliyor",
@@ -270,12 +281,21 @@ export const APPEAL_STATUS_LABELS: Record<AppealStatus, string> = {
   rejected: "Reddedildi",
 };
 
+/**
+ * İtiraz nedeni (sunucudaki constants/penalty.js ile birebir). Herkese açık
+ * disiplin sayfasında başvurunun yalnızca bu nedeni görünür.
+ */
 export const APPEAL_CATEGORIES: { key: AppealCategory; label: string }[] = [
-  { key: "match_result", label: "Maç sonucu" },
-  { key: "referee", label: "Hakem kararı" },
-  { key: "eligibility", label: "Oyuncu uygunluğu / lisans" },
-  { key: "forfeit", label: "Hükmen sonuç / maça çıkmama" },
-  { key: "organization", label: "Saha ve organizasyon" },
+  { key: "rule_error", label: "Kural hatası itirazı" },
+  { key: "referee_error", label: "Hakem hatası itirazı" },
+  { key: "ineligible_player", label: "Kural dışı oyuncu oynatılması" },
+  { key: "suspended_player", label: "Cezalı oyuncu oynatılması" },
+  { key: "unlicensed_player", label: "Lisanssız / kadroda olmayan oyuncu oynatılması" },
+  { key: "match_result", label: "Maç sonucu / skor tesciline itiraz" },
+  { key: "forfeit", label: "Hükmen karara itiraz" },
+  { key: "unsporting", label: "Sportmenlik dışı davranış / saha olayları" },
+  { key: "organization", label: "Saha, ekipman ve organizasyon" },
+  { key: "schedule", label: "Maç tarihi / erteleme kararına itiraz" },
   { key: "other", label: "Diğer" },
 ];
 
@@ -298,6 +318,12 @@ export const APPEAL_ATTACHMENT_LIMIT = 10;
 export interface Appeal {
   public_id: string;
   city_id: number | null;
+  league_id?: number | null;
+  season_id?: number | null;
+  /** team: takım gönderdi · admin: kurul elle kaydetti (yalnız özel görünümde). */
+  source?: "team" | "admin";
+  /** Başvuru üzerine açılan ceza dosyası (yalnız kurul görünümünde). */
+  linked_penalty_public_id?: string | null;
   team_id: number;
   team_name: string | null;
   match_id: number | null;
@@ -328,6 +354,30 @@ export interface AppealMatch {
   label: string;
   date: string | null;
 }
+
+/** Herkese açık başvuru: yalnız neden, taraflar ve aşama (metin ve ekler gelmez). */
+export interface PublicAppeal {
+  public_id: string;
+  city_id: number | null;
+  league_id: number | null;
+  season_id: number | null;
+  team_name: string | null;
+  opponent_team_name: string | null;
+  match_label: string | null;
+  match_date: string | null;
+  category: AppealCategory;
+  category_label: string;
+  /** Sonuç yayımlanmadıysa "decided" (kabul / ret bilgisi gizlidir). */
+  status: AppealStatus | "decided";
+  status_label: string;
+  is_decided: boolean;
+  decision_text: string | null;
+  decided_at: string | null;
+  createdAt: string;
+}
+
+export const getPublicAppeals = (cityId: number) =>
+  get<{ items: PublicAppeal[] }>("/api/penalties/public/appeals", { city_id: cityId }).then((d) => d.items ?? []);
 
 export const getMyAppeals = () => get<{ items: Appeal[]; can_submit: boolean }>("/api/penalties/appeals/mine");
 

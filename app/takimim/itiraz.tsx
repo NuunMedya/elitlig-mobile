@@ -81,7 +81,7 @@ export default function TeamAppealScreen() {
   const { scrollY, scrollProps } = useHeaderScroll();
 
   const [composing, setComposing] = useState(false);
-  const [category, setCategory] = useState<AppealCategory>("match_result");
+  const [category, setCategory] = useState<AppealCategory>("rule_error");
   const [matchId, setMatchId] = useState<number | null>(null);
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
@@ -108,7 +108,7 @@ export default function TeamAppealScreen() {
     mutationFn: () => createAppeal({ category, match_id: matchId, subject: subject.trim(), description: description.trim(), attachments }),
     onSuccess: () => {
       setComposing(false);
-      setCategory("match_result");
+      setCategory("rule_error");
       setMatchId(null);
       setSubject("");
       setDescription("");
@@ -261,7 +261,7 @@ export default function TeamAppealScreen() {
         <View style={styles.sheetBody}>
           <View style={styles.field}>
             <Text style={styles.fieldLabel} {...textScale.dense}>
-              İtiraz konusu
+              İtiraz nedeni
             </Text>
             <ChipGroup>
               {APPEAL_CATEGORIES.map((option) => (
