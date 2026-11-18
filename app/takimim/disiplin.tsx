@@ -9,6 +9,9 @@
  * itiraz metni dosya ekranında (`/ceza/[id]`) yazılır; o ekran sıfat seçimini
  * zaten `available_sides` ile yapar.
  *
+ * Başlıktaki "İtiraz Başvurusu" kartı ceza dosyasına bağlı OLMAYAN itirazlar
+ * içindir (maç sonucu, hakem kararı…) ve `/takimim/itiraz` ekranını açar.
+ *
  * "Süre işliyor" kuralı Kulübüm'deki dikkat kartıyla AYNIDIR
  * (useClubSignals.penaltyNeedsAction) — iki yerde farklı sayı çıkmaz.
  *
@@ -107,6 +110,26 @@ export default function TeamDisciplineScreen() {
                 <MetricTile label="Toplam dosya" value={String(teamItems.length)} icon="folder-open" />
               </MetricGrid>
             ) : null}
+            {/* Ceza dosyasından bağımsız itirazlar (maç sonucu, hakem kararı…). */}
+            <Touchable
+              onPress={() => router.push("/takimim/itiraz" as Href)}
+              feedback="card"
+              accessibilityRole="button"
+              accessibilityLabel="İtiraz başvurusu"
+              accessibilityHint="Maç sonucu, hakem kararı gibi konularda disiplin kuruluna itiraz et"
+              style={styles.appealEntry}
+            >
+              <IconTile icon="scale" tone="violet" size={40} glow={false} />
+              <View style={styles.texts}>
+                <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
+                  İtiraz Başvurusu
+                </Text>
+                <Text style={styles.meta} numberOfLines={2} {...textScale.dense}>
+                  Maç sonucu, hakem kararı ve benzeri konularda kurula itiraz et
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+            </Touchable>
             <SegmentedControl
               items={[
                 { key: "aksiyon", label: `Süre işleyen${actionable.length ? ` (${actionable.length})` : ""}` },
@@ -217,6 +240,16 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   cardAction: { borderColor: colors.glassLine },
+  appealEntry: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
   stripe: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3, backgroundColor: colors.danger },
   top: { flexDirection: "row", alignItems: "center", gap: space.md },
   texts: { flex: 1, minWidth: 0, gap: space.xxs },

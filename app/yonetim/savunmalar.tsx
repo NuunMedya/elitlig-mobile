@@ -82,7 +82,10 @@ export default function DefenseInboxScreen() {
       subtitle="Merkez Disiplin Kurulu"
       permission={["penalties.review"]}
       scroll={false}
-      actions={[{ icon: "hammer-outline", onPress: () => router.push("/yonetim/cezalar" as Href), accessibilityLabel: "Ceza yönetimi" }]}
+      actions={[
+        { icon: "scale-outline", onPress: () => router.push("/yonetim/itirazlar" as Href), accessibilityLabel: "Takım itirazları" },
+        { icon: "hammer-outline", onPress: () => router.push("/yonetim/cezalar" as Href), accessibilityLabel: "Ceza yönetimi" },
+      ]}
     >
       <AdminList<PenaltySubmission>
         data={items}
