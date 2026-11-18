@@ -1,4 +1,4 @@
-import { get, patch, post } from "../../http";
+import { del, get, patch, post } from "../../http";
 
 /**
  * Disiplin (ceza) yönetim uçları — elitlig-server routes/penalties.js +
@@ -128,6 +128,8 @@ export interface PenaltyEvent {
 
 /** services/penalty serializePenalty. */
 export interface Penalty {
+  /** Kurul dosyayı arşive aldı (yalnız yönetim görünümünde). */
+  is_archived?: boolean;
   public_id: string;
   status: PenaltyStatus;
   status_label: string;
@@ -185,6 +187,8 @@ export interface PenaltyListParams {
   city_id?: number | null;
   league_id?: number | null;
   season_id?: number | null;
+  /** "only": yalnız arşiv · "all": hepsi · boş: arşiv dışı (varsayılan). */
+  archived?: "only" | "all" | "";
   limit?: number;
 }
 
@@ -216,6 +220,13 @@ const enc = (value: string | number) => encodeURIComponent(String(value));
 
 export const listPenalties = (params: PenaltyListParams = {}) =>
   get<{ items: Penalty[] }>("/api/penalties", { ...params, limit: params.limit ?? 500 }).then((d) => d.items ?? []);
+
+/** Arşive al / arşivden çıkar (geri alınabilir; ceza geçerliliğini korur). */
+export const archivePenalty = (publicId: string, archived = true) =>
+  post<{ penalty: Penalty; message?: string }>(`/api/penalties/${enc(publicId)}/archive`, { archived }).then((d) => d.penalty);
+
+/** Kalıcı silme — sunucu yalnız admin rolüne izin verir; ceza da kalkar. */
+export const deletePenalty = (publicId: string) => del<{ message?: string }>(`/api/penalties/${enc(publicId)}`);
 
 export const getPenalty = (publicId: string) =>
   get<{ penalty: Penalty }>(`/api/penalties/${enc(publicId)}`).then((d) => d.penalty);
@@ -305,7 +316,8 @@ export const APPEAL_VISIBILITY_OPTIONS: { value: AppealVisibility; label: string
 ];
 
 /** "open": henüz sonuçlanmamış (bekleyen + incelenen) başvurular. */
-export type AppealFilter = AppealStatus | "open" | "";
+/** "archived": arşive alınan başvurular (diğer süzgeçler arşivi içermez). */
+export type AppealFilter = AppealStatus | "open" | "archived" | "";
 
 export const APPEAL_DECISIONS: { value: Exclude<AppealStatus, "pending">; label: string; hint: string }[] = [
   { value: "accepted", label: "İtirazı kabul et", hint: "Takım haklı bulundu; itiraza konu karar düzeltilecek." },
@@ -324,8 +336,18 @@ export const listAppealTeamMatches = (teamId: number) =>
 export const adminCreateAppeal = (body: { team_id: number; match_id: number | null; category: string; subject: string; description: string }) =>
   post<{ appeal: Appeal; message?: string }>("/api/penalties/admin/appeals", body).then((d) => d.appeal);
 
-export const listAppeals = (params: { status?: AppealFilter } = {}) =>
-  get<{ items: Appeal[] }>("/api/penalties/admin/appeals", params).then((d) => d.items ?? []);
+/** Arşive al / arşivden çıkar (geri alınabilir). */
+export const archiveAppeal = (publicId: string, archived = true) =>
+  post<{ appeal: Appeal; message?: string }>(`/api/penalties/admin/appeals/${enc(publicId)}/archive`, { archived });
+
+/** Kalıcı silme — sunucu yalnız admin rolüne izin verir. */
+export const deleteAppeal = (publicId: string) => del<{ message?: string }>(`/api/penalties/admin/appeals/${enc(publicId)}`);
+
+export const listAppeals = ({ status }: { status?: AppealFilter } = {}) => {
+  const params = status === "archived" ? { archived: "only" } : { status };
+  return get<{ items: Appeal[] }>("/api/penalties/admin/appeals", params).then((d) => d.items ?? []);
+};
+
 
 export const reviewAppeal = (publicId: string, body: { status: Exclude<AppealStatus, "pending">; decision_text: string | null; visibility?: AppealVisibility }) =>
   post<{ appeal: Appeal; message?: string }>(`/api/penalties/admin/appeals/${enc(publicId)}/review`, body);

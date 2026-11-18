@@ -18,7 +18,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 
-import { AdminScreen, useAdminMutation } from "@/components/admin";
+import { AdminScreen, confirmAction, useAdminMutation } from "@/components/admin";
 import { durationBody, PenaltyDecisionFields, PenaltyTimeline, STATUS_ICON, type DecisionValue } from "@/components/admin/penalties/PenaltyBits";
 import { FactRow, GroupCard, IdentityStage, ListLine, StagePill } from "@/components/admin/team/ManageKit";
 import { SubmissionReviewSheet } from "@/components/admin/penalties/SubmissionReviewSheet";
@@ -35,6 +35,8 @@ import {
   PENALTY_STATUS_SHORT,
   SIDE_LABELS,
   SUBMISSION_TYPE_LABELS,
+  archivePenalty,
+  deletePenalty,
   updatePenalty,
   type Penalty,
   type PenaltyEvent,
@@ -62,6 +64,28 @@ export default function PenaltyDetailScreen() {
   const [timelineMode, setTimelineMode] = useState<"ozet" | "tumu">("ozet");
   const [editing, setEditing] = useState(false);
   const [reviewing, setReviewing] = useState<PenaltyEvent | null>(null);
+
+  // Arşive al: dosya listelerden ve herkese açık sayfadan kalkar; ceza geçerli
+  // kalır, geri alınabilir. Sil: kalıcıdır, cezayı da kaldırır; yalnız admin rolü.
+  const isAdmin = auth.user?.role === "admin";
+  const archive = useAdminMutation(() => archivePenalty(publicId, !penalty?.is_archived), {
+    success: () => (penalty?.is_archived ? "Dosya arşivden çıkarıldı." : "Dosya arşive alındı."),
+    invalidate: [["admin", "penalties"]],
+  });
+  const remove = useAdminMutation(() => deletePenalty(publicId), {
+    success: "Ceza dosyası kalıcı olarak silindi.",
+    invalidate: [["admin", "penalties"]],
+    onSuccess: () => router.back(),
+  });
+  const confirmRemove = async () => {
+    const sure = await confirmAction({
+      title: "Ceza dosyası silinsin mi?",
+      message: "Süreç kayıtları, savunma ve itirazlar kalıcı olarak silinir ve ceza kalkar; geri getirilemez. Yalnızca listeden kaldırmak için arşive alabilirsin.",
+      confirmLabel: "Kalıcı olarak sil",
+      destructive: true,
+    });
+    if (sure) remove.mutate(undefined);
+  };
 
   const events = useMemo(() => penalty?.events ?? [], [penalty?.events]);
   const submissions = useMemo(() => events.filter((e) => e.is_submission).reverse(), [events]);
@@ -223,6 +247,23 @@ export default function PenaltyDetailScreen() {
             ) : null}
           </View>
           {canUpdate ? <Button label="Kararı güncelle" icon="create-outline" size="lg" onPress={() => setEditing(true)} fullWidth /> : null}
+          {canUpdate || isAdmin ? (
+            <View style={styles.actions}>
+              {canUpdate ? (
+                <Button
+                  label={penalty.is_archived ? "Arşivden çıkar" : "Arşive al"}
+                  icon={penalty.is_archived ? "arrow-undo-outline" : "archive-outline"}
+                  variant="secondary"
+                  onPress={() => archive.mutate(undefined)}
+                  loading={archive.isPending}
+                  style={styles.grow}
+                />
+              ) : null}
+              {isAdmin ? (
+                <Button label="Sil" icon="trash-outline" variant="danger" onPress={confirmRemove} loading={remove.isPending} style={styles.grow} />
+              ) : null}
+            </View>
+          ) : null}
         </>
       )}
 
