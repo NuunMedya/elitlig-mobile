@@ -1,419 +1,188 @@
 /**
- * DİSİPLİN — kamuya açık disiplin sayfası: iki sekme.
- *   Cezalar     oyuncu ceza kararları (aşağıda anlatılan liste)
- *   Başvurular  takımların disiplin başvuruları: İncelemede / Kararlar
- *               (components/discipline/PublicAppeals.tsx; yalnız itiraz nedeni görünür)
+ * DİSİPLİN — herkese açık disiplin sayfası (web'deki Disiplin sayfasının karşılığı).
+ * `/cezalar` (Menü ▸ Disiplin). Oturum gerektirmez.
  *
- * CEZALAR sekmesi — kamuya açık disiplin kararları (sitedeki disiplin sayfası).
+ * İki sekme:
+ *   SÜREÇLER    Kurulun yürüttüğü disiplin süreçleri, tek listede üç tür:
+ *                 · oyuncu sevki  (kurula sevk → kurul kararı → CAS değerlendirmesi → CAS kararı)
+ *                 · maç incelemesi   (inceleme başlatıldı → karar)
+ *                 · konu incelemesi  (ör. "11.11.2026 tarihli Instagram paylaşımları")
+ *               Her kart tek cümleyle ne olduğunu söyler; dokununca karar ve
+ *               aşamalar alt sayfada açılır.
+ *   BAŞVURULAR  Takımların başvuruları: yalnız neden, taraflar ve aşama
+ *               (components/discipline/PublicAppeals.tsx).
  *
- * VERİ: haber akışındaki `kind === "penalty"` girdileri. Sunucu bu girdileri
- * `newsService.penaltyItems` içinde YALNIZ sonuçlanmış dosyalardan üretir
- * (`status ∈ {kurul_karari, cas_karari}`) ve her birine bir `meta` nesnesi
- * ekler: oyuncu, takım, maç etiketi, ceza türü, maç sayısı, aşama. Eski ekran
- * bu zenginliği hiç okumuyor, her kaydı "CEZALI" etiketli bir kart olarak
- * gösteriyordu; ekranda ne cezanın türü, ne süresi, ne de kimin aldığı
- * ayrıştırılabiliyordu.
- *
- * NE DEĞİŞTİ:
- *   1. `meta` tiplenerek okunur (`PenaltyFeedItem`) — oyuncu adı başlık, takım
- *      ve ceza türü/süresi alt satır, karar tarihi sağdaki değer olur.
- *   2. Durum çipleri: aşama (Kurul / CAS) ve ceza türü (Süresiz / Maç cezası)
- *      üstünden süzme. Çip sayaçları görünür kayıtlardan hesaplanır.
- *   3. Kapsam başlığın altındaki tek lig seçicide (`LeaguePicker`).
- *   4. Satır → dosya. Kayıt KULLANICININ KENDİ dosyasıysa `/ceza/[id]` açılır
- *      (savunma/itiraz orada yapılır); değilse karar özeti alt sayfada gösterilir.
- *
- * NEDEN "KENDİ DOSYASI" AYRIMI: `/ceza/[id]` ekranı dosyayı
- * `GET /api/penalties/mine` listesinden bulur; tekil uç yalnız `penalties.view`
- * yetkisine açıktır. Yabancı bir dosya için o ekran "dosya bulunamadı" derdi.
- * Bu yüzden oturum varsa kendi dosyalarının `public_id` kümesi çekilir ve satır
- * ancak o kümedeyse detay ekranına yönlendirilir. Aynı önbellek anahtarı
- * (`["panel","penalties"]`) `app/cezalarim.tsx` ile paylaşılır: iki ekran tek
- * veriyi kullanır, ikinci istek atılmaz.
+ * VERİ: GET /api/penalties/public, /public/inquiries, /public/appeals (il kapsamı);
+ * lig / sezon seçimi istemcide uygulanır (eşleşen ya da o seviyesi boş kayıtlar).
+ * Savunma ve itiraz metinleri bu uçlardan hiç gelmez.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import { useRouter, type Href } from "expo-router";
+import React, { useMemo, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { PublicAppeals } from "@/components/discipline/PublicAppeals";
+import { LeaguePicker } from "@/components/LeaguePicker";
 import {
-  Avatar,
   Badge,
   BottomSheet,
-  Button,
   Chip,
   ChipGroup,
   EmptyState,
   ErrorState,
   IconTile,
-  Input,
-  KeyValueRow,
-  Reveal,
   ScreenHeader,
   SegmentedControl,
-  SectionHeader,
-  SkeletonCard,
-  SkeletonHero,
+  Skeleton,
   Touchable,
-  toneColors,
-  useHeaderScroll,
   useRefresh,
-  withAlpha,
+  type IconTileTone,
   type Tone,
 } from "@/components/ui";
-import { SignatureStripe, StageCard, StageStat } from "@/components/league/kit";
-import { PublicAppeals } from "@/components/discipline/PublicAppeals";
-import { LeaguePicker } from "@/components/LeaguePicker";
-import { getMyPenalties } from "@/lib/api/panel";
-import { getNewsFeed } from "@/lib/api/news";
-import { formatDateLong, formatDateShort, mediaUrl, stripHtml } from "@/lib/format";
-import { queryKeys } from "@/lib/queryKeys";
-import type { NewsItem } from "@/lib/types";
+import { getPublicInquiries, getPublicPenalties, type Inquiry, type PublicPenalty } from "@/lib/api/panel";
+import { formatDateShort } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import {
-  colors,
-  elevate,
-  fonts,
-  hairline,
-  layout,
-  radius,
-  space,
-  textScale,
-  type,
-  upperTR,
-} from "@/theme";
+import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
 
-/* ============================ SABİTLER / TİPLER ============================ */
+type TabKey = "surecler" | "basvurular";
+type ProcessType = "player" | "match" | "topic";
+type TypeFilter = "all" | ProcessType;
 
-/**
- * Disiplin duyurusunun `meta` alanı — sunucudaki `penaltyItems` ile birebir.
- * `NewsItem` tipi ortak akış tipidir ve `meta` taşımaz; bu yüzden burada
- * genişletilir (lib/types.ts başka bir ajanın dosyası, imzası büyütülmedi).
- */
-interface PenaltyMeta {
-  public_id?: string | null;
-  player_name?: string | null;
-  team_name?: string | null;
-  match_label?: string | null;
-  /** constants/penalty.js DURATION_TYPE: "suresiz" | "mac" */
-  duration_type?: string | null;
-  match_count?: number | null;
-  /** PENALTY_STATUS: "kurul_karari" | "cas_karari" */
-  status?: string | null;
-  /** true: girdi bir takım itirazı kararıdır (ceza dosyası değil). */
-  appeal?: boolean;
-}
-
-type PenaltyFeedItem = NewsItem & { meta?: PenaltyMeta | null };
-
-/** Aşama etiketleri ve tonları — `app/cezalarim.tsx` ile aynı dil. */
-const STAGE_META: Record<string, { label: string; tone: Tone }> = {
-  kurul_karari: { label: "Kurul kararı", tone: "danger" },
-  cas_karari: { label: "CAS kararı", tone: "neutral" },
-  cas_basvuru: { label: "CAS'ta", tone: "info" },
-  sevk: { label: "Sevk", tone: "warn" },
+const TYPE_META: Record<ProcessType, { label: string; icon: keyof typeof Ionicons.glyphMap; tone: IconTileTone }> = {
+  player: { label: "Oyuncu sevki", icon: "person", tone: "violet" },
+  match: { label: "Maç incelemesi", icon: "football", tone: "cyan" },
+  topic: { label: "Konu incelemesi", icon: "document-text", tone: "gold" },
 };
 
-const stageOf = (status?: string | null) =>
-  STAGE_META[String(status ?? "")] ?? { label: "Disiplin kararı", tone: "neutral" as Tone };
+const PENALTY_STEPS = ["Kurula sevk", "Kurul kararı", "CAS değerlendirmesi", "CAS kararı"];
+const PENALTY_ORDER = ["sevk", "kurul_karari", "cas_basvuru", "cas_karari"];
+const INQUIRY_STEPS = ["İnceleme başlatıldı", "Karar"];
 
-type PenaltyFilter = "tumu" | "kurul" | "cas" | "suresiz" | "mac";
-
-/** Liste öğeleri: zaman kümesi başlığı ya da karar kartı. */
-type PenaltyEntry =
-  | { kind: "head"; key: string; title: string; count: number }
-  | { kind: "item"; key: string; item: PenaltyFeedItem; order: number };
-
-interface FilterDef {
-  key: PenaltyFilter;
-  label: string;
-  match: (item: PenaltyFeedItem) => boolean;
+/** Oyuncu dosyası ve incelemeler listede ortak biçime gelir. */
+interface Process {
+  key: string;
+  type: ProcessType;
+  open: boolean;
+  date: string | null;
+  headline: string;
+  meta: string;
+  steps: string[];
+  step: number;
+  outcome: { label: string; note?: string | null; tone: Tone };
+  decision: string | null;
+  description: string | null;
 }
 
-const FILTERS: FilterDef[] = [
-  { key: "tumu", label: "Tümü", match: () => true },
-  { key: "kurul", label: "Kurul kararı", match: (i) => i.meta?.status === "kurul_karari" },
-  { key: "cas", label: "CAS kararı", match: (i) => i.meta?.status === "cas_karari" },
-  { key: "suresiz", label: "Süresiz", match: (i) => i.meta?.duration_type === "suresiz" },
-  { key: "mac", label: "Maç cezası", match: (i) => i.meta?.duration_type === "mac" },
-];
+/** Lig / sezon seçimine uyan ya da o seviyesi boş kalan kayıtlar. */
+const fits = (value: number | null | undefined, selected: number | null | undefined) => value == null || selected == null || Number(value) === Number(selected);
 
-/* ============================== SAF YARDIMCILAR =========================== */
-
-/** Türkçe arama katlaması (İ/I/ı tek harfe iner). */
-function fold(value: string): string {
-  return value.toLocaleLowerCase("tr-TR").replace(/\u0307/g, "").replace(/[ıî]/g, "i");
+function penaltyProcess(penalty: PublicPenalty): Process {
+  const state = penalty.ban_state ?? {};
+  const amount = state.duration_type === "suresiz" ? "Süresiz ihraç" : state.duration_type === "mac" ? `${state.matches_required ?? penalty.match_count ?? "—"} maç men` : null;
+  const outcome: Process["outcome"] =
+    state.active === true
+      ? { label: amount ?? "Cezalı", note: state.duration_type === "mac" && state.matches_remaining ? `kalan ${state.matches_remaining} maç` : "ceza sürüyor", tone: "danger" }
+      : state.active === false
+        ? { label: amount ?? "Ceza", note: "ceza sona erdi", tone: "win" }
+        : { label: "Karar bekleniyor", tone: "warn" };
+  return {
+    key: `p-${penalty.public_id}`,
+    type: "player",
+    open: penalty.status === "sevk" || penalty.status === "cas_basvuru",
+    date: penalty.createdAt ?? penalty.match_date,
+    headline: `${penalty.player_name ?? "Oyuncu"} disiplin kuruluna sevk edildi`,
+    meta: [penalty.team_name, penalty.match_label].filter(Boolean).join(" · "),
+    steps: PENALTY_STEPS,
+    step: Math.max(0, PENALTY_ORDER.indexOf(penalty.status)),
+    outcome,
+    decision: penalty.disiplin_karari ?? state.summary ?? null,
+    description: null,
+  };
 }
 
-/** "3 maç men" / "Süresiz ihraç" / null. */
-function durationText(meta?: PenaltyMeta | null): string | null {
-  if (!meta) return null;
-  if (meta.duration_type === "suresiz") return "Süresiz ihraç";
-  if (meta.duration_type === "mac") {
-    const count = Number(meta.match_count);
-    return Number.isFinite(count) && count > 0 ? `${count} maç men` : "Maç cezası";
-  }
-  return null;
+function inquiryProcess(inquiry: Inquiry): Process {
+  return {
+    key: `i-${inquiry.public_id}`,
+    type: inquiry.kind,
+    open: !inquiry.is_decided,
+    date: inquiry.decided_at ?? inquiry.createdAt,
+    headline: inquiry.headline,
+    meta: inquiry.kind === "match" && inquiry.match_date ? `Maç tarihi ${formatDateShort(inquiry.match_date)}` : "",
+    steps: INQUIRY_STEPS,
+    step: inquiry.is_decided ? 1 : 0,
+    outcome: inquiry.is_decided ? { label: "Karar açıklandı", tone: "win" } : { label: "İnceleme sürüyor", tone: "warn" },
+    decision: inquiry.decision_text,
+    description: inquiry.description,
+  };
 }
 
-/** Satır rozeti için kısa ceza: "3 maç" / "Süresiz" / null. */
-function durationShort(meta?: PenaltyMeta | null): string | null {
-  if (!meta) return null;
-  if (meta.duration_type === "suresiz") return "Süresiz";
-  if (meta.duration_type === "mac") {
-    const count = Number(meta.match_count);
-    return Number.isFinite(count) && count > 0 ? `${count} maç` : "Maç cezası";
-  }
-  return null;
-}
-
-/**
- * Akış kimliği `penalty-<public_id>` biçimindedir. `meta.public_id` doluysa o
- * kullanılır; değilse önek kırpılır — iki yol da aynı değeri üretmelidir.
- */
-function penaltyPublicId(item: PenaltyFeedItem): string {
-  const fromMeta = item.meta?.public_id?.trim();
-  if (fromMeta) return fromMeta;
-  return String(item.id ?? "").replace(/^penalty-/, "");
-}
-
-function rowPosition(index: number, total: number): "single" | "first" | "middle" | "last" {
-  if (total <= 1) return "single";
-  if (index === 0) return "first";
-  if (index === total - 1) return "last";
-  return "middle";
-}
-
-/* ================================= EKRAN ================================== */
-
-export default function PenaltiesScreen() {
+export default function DisciplineScreen() {
   const scope = useScope();
   const auth = useAuth();
   const router = useRouter();
-  const { scrollY, scrollProps } = useHeaderScroll();
+  const [tab, setTab] = useState<TabKey>("surecler");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [onlyOpen, setOnlyOpen] = useState(false);
+  const [detail, setDetail] = useState<Process | null>(null);
 
-  const [tab, setTab] = useState<"cezalar" | "basvurular">("cezalar");
-  const [filter, setFilter] = useState<PenaltyFilter>("tumu");
-  const [search, setSearch] = useState("");
-  const [detail, setDetail] = useState<PenaltyFeedItem | null>(null);
-
-  const scopeKey = {
-    cityId: scope.cityId ?? undefined,
-    leagueId: scope.leagueId ?? undefined,
-    seasonId: scope.seasonId ?? undefined,
-  };
-
-  const query = useQuery({
-    queryKey: queryKeys.newsFeed(scopeKey),
-    queryFn: () => getNewsFeed(scopeKey),
+  const cityId = scope.cityId ?? null;
+  const penalties = useQuery({
+    queryKey: ["public", "penalties", cityId],
+    queryFn: () => getPublicPenalties(cityId!),
+    enabled: cityId != null,
     staleTime: 2 * 60_000,
   });
-
-  /**
-   * Kendi dosyalarım — yalnız oturum varken. Hata alırsa (yetki/ağ) küme boş
-   * kalır ve her satır alt sayfada açılır; ekranın ana işlevi bozulmaz.
-   */
-  const mine = useQuery({
-    queryKey: ["panel", "penalties"],
-    queryFn: getMyPenalties,
-    enabled: Boolean(auth.user),
-    staleTime: 60_000,
+  const inquiries = useQuery({
+    queryKey: ["public", "inquiries", cityId],
+    queryFn: () => getPublicInquiries(cityId!),
+    enabled: cityId != null,
+    staleTime: 2 * 60_000,
     retry: false,
   });
-
-  const ownIds = useMemo(
-    () => new Set((mine.data?.items ?? []).map((penalty) => penalty.public_id)),
-    [mine.data],
-  );
-
-  const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching });
-
-  const penalties = useMemo(
-    // Yayımlanan takım itirazı kararları da akışa "penalty" türüyle girer
-    // (meta.appeal); onlar Başvurular sekmesinde gösterilir.
-    () => ((query.data?.items ?? []) as PenaltyFeedItem[]).filter((item) => item.kind === "penalty" && !item.meta?.appeal),
-    [query.data],
-  );
-
-  const counts = useMemo(() => {
-    const result: Record<PenaltyFilter, number> = {
-      tumu: penalties.length,
-      kurul: 0,
-      cas: 0,
-      suresiz: 0,
-      mac: 0,
-    };
-    for (const item of penalties) {
-      for (const def of FILTERS) {
-        if (def.key !== "tumu" && def.match(item)) result[def.key] += 1;
-      }
-    }
-    return result;
-  }, [penalties]);
-
-  const visible = useMemo(() => {
-    const def = FILTERS.find((item) => item.key === filter) ?? FILTERS[0];
-    const needle = fold(search.trim());
-    return penalties.filter(
-      (item) =>
-        def.match(item) &&
-        (!needle ||
-          fold(`${item.meta?.player_name ?? item.title} ${item.meta?.team_name ?? ""} ${item.meta?.match_label ?? ""}`).includes(needle)),
-    );
-  }, [filter, penalties, search]);
-
-  /** Özet sayıları: toplam karar, verilen toplam maç cezası, süresiz ihraç. */
-  const totals = useMemo(() => {
-    let matches = 0;
-    let lifetime = 0;
-    for (const item of penalties) {
-      if (item.meta?.duration_type === "suresiz") lifetime += 1;
-      else if (item.meta?.duration_type === "mac") matches += Math.max(0, Number(item.meta.match_count) || 0);
-    }
-    return { matches, lifetime };
-  }, [penalties]);
-
-  /** Kartlar zamana göre üç kümeye ayrılır: bu hafta · geçen hafta · daha önce. */
-  const rows = useMemo<PenaltyEntry[]>(() => {
-    const now = Date.now();
-    const buckets: { title: string; items: PenaltyFeedItem[] }[] = [
-      { title: "Bu hafta", items: [] },
-      { title: "Geçen hafta", items: [] },
-      { title: "Daha önce", items: [] },
-    ];
-    for (const item of visible) {
-      const age = (now - new Date(item.published_at ?? 0).getTime()) / 86_400_000;
-      buckets[age <= 7 ? 0 : age <= 14 ? 1 : 2].items.push(item);
-    }
-    const out: PenaltyEntry[] = [];
-    let order = 0;
-    buckets.forEach((bucket) => {
-      if (!bucket.items.length) return;
-      out.push({ kind: "head", key: `h-${bucket.title}`, title: bucket.title, count: bucket.items.length });
-      bucket.items.forEach((item) => out.push({ kind: "item", key: String(item.id), item, order: order++ }));
-    });
-    return out;
-  }, [visible]);
-
-  const openItem = useCallback(
-    (item: PenaltyFeedItem) => {
-      const publicId = penaltyPublicId(item);
-      // Kendi dosyam → savunma/itiraz ekranı; başkasınınki → karar özeti.
-      if (publicId && ownIds.has(publicId)) {
-        router.push(`/ceza/${publicId}`);
-        return;
-      }
-      setDetail(item);
+  const refresh = useRefresh(
+    async () => {
+      await Promise.all([penalties.refetch(), inquiries.refetch()]);
     },
-    [ownIds, router],
+    { refreshing: penalties.isRefetching || inquiries.isRefetching },
   );
 
-  const closeDetail = useCallback(() => setDetail(null), []);
+  const all = useMemo(() => {
+    const inScope = <T extends { league_id: number | null; season_id: number | null }>(row: T) => fits(row.league_id, scope.leagueId) && fits(row.season_id, scope.seasonId);
+    return [...(penalties.data ?? []).filter(inScope).map(penaltyProcess), ...(inquiries.data ?? []).filter(inScope).map(inquiryProcess)].sort(
+      // Süren süreçler önce, ardından en yeni.
+      (a, b) => Number(b.open) - Number(a.open) || new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime(),
+    );
+  }, [penalties.data, inquiries.data, scope.leagueId, scope.seasonId]);
 
-  const goToMyPenalties = useCallback(() => {
-    setDetail(null);
-    router.push("/cezalarim");
-  }, [router]);
-
-  const renderItem = useCallback(
-    ({ item }: { item: PenaltyEntry }) =>
-      item.kind === "head" ? (
-        <SectionHeader title={item.title} meta={String(item.count)} inset="flush" style={styles.groupHead} />
-      ) : (
-        <Reveal index={item.order} limit={7}>
-          <PenaltyCard item={item.item} own={ownIds.has(penaltyPublicId(item.item))} onPress={openItem} />
-        </Reveal>
-      ),
-    [openItem, ownIds],
-  );
-
-  const listHeader = (
-    <View style={styles.headerBlock}>
-      {/* ÖZET SAHNESİ — kapsamın disiplin tablosu üç sayıda. */}
-      <Reveal>
-        <StageCard style={styles.hero}>
-          <View style={styles.heroTop}>
-            <IconTile icon="shield-half" tone="red" size={36} />
-            <View style={styles.heroTitleBox}>
-              <Text style={styles.heroOver} {...textScale.badge}>
-                {upperTR("Disiplin kurulu")}
-              </Text>
-              <Text style={styles.heroTitle} numberOfLines={1} {...textScale.dense}>
-                {[scope.cityLabel || "Tüm şehirler", scope.leagueLabel].filter(Boolean).join(" · ")}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.heroStats}>
-            <StageStat label="Karar" value={penalties.length} />
-            <View style={styles.heroDivider} />
-            <StageStat label="Maç men" value={totals.matches} accent />
-            <View style={styles.heroDivider} />
-            <StageStat label="Süresiz" value={totals.lifetime} />
-          </View>
-        </StageCard>
-      </Reveal>
-
-      <Input
-        variant="search"
-        value={search}
-        onChangeText={setSearch}
-        placeholder="Oyuncu, takım ya da maç ara"
-        autoCorrect={false}
-        returnKeyType="search"
-        accessibilityLabel="Kararlarda ara"
-      />
-
-      <ChipGroup style={styles.chips}>
-        {FILTERS.filter((def) => def.key === "tumu" || def.key === filter || counts[def.key] > 0).map((def) => (
-          <Chip
-            key={def.key}
-            label={def.label}
-            selected={def.key === filter}
-            count={def.key === "tumu" ? undefined : counts[def.key]}
-            onPress={() => setFilter(def.key)}
-          />
-        ))}
-      </ChipGroup>
-
-      {query.isError && penalties.length > 0 ? (
-        <ErrorState error={query.error} onRetry={query.refetch} variant="banner" />
-      ) : null}
-    </View>
-  );
+  const count = (key: TypeFilter) => (key === "all" ? all.length : all.filter((item) => item.type === key).length);
+  const visible = all.filter((item) => (typeFilter === "all" || item.type === typeFilter) && (!onlyOpen || item.open));
+  const loading = penalties.isLoading || inquiries.isLoading;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
         title="Disiplin"
-        subtitle={tab === "cezalar" ? "Ceza kararları" : "Disiplin başvuruları"}
+        subtitle="Merkez Disiplin Kurulu"
         back
-        scrollY={scrollY}
         actions={
           auth.user
-            ? [
-                {
-                  icon: "folder-open-outline",
-                  onPress: goToMyPenalties,
-                  accessibilityLabel: "Kendi disiplin dosyalarım",
-                },
-              ]
+            ? [{ icon: "folder-open-outline", onPress: () => router.push("/cezalarim" as Href), accessibilityLabel: "Kendi disiplin dosyalarım" }]
             : undefined
         }
-        /* Kapsam uygulamanın tek lig seçicisinde: boş listeden kullanıcı tek
-           dokunuşla başka il/lige geçebilsin. */
         bottom={
           <View style={styles.headerBottom}>
             <LeaguePicker />
             <SegmentedControl
               items={[
-                { key: "cezalar", label: "Cezalar" },
+                { key: "surecler", label: "Süreçler" },
                 { key: "basvurular", label: "Başvurular" },
               ]}
               value={tab}
-              onChange={(next) => setTab(next as "cezalar" | "basvurular")}
+              onChange={(next) => setTab(next as TabKey)}
             />
           </View>
         }
@@ -421,400 +190,167 @@ export default function PenaltiesScreen() {
 
       {tab === "basvurular" ? (
         <PublicAppeals cityId={scope.cityId} leagueId={scope.leagueId} seasonId={scope.seasonId} />
-      ) : query.isLoading ? (
-        <View style={styles.loading}>
-          <SkeletonHero />
-          <SkeletonCard lines={2} />
-          <SkeletonCard lines={2} />
-          <SkeletonCard lines={2} />
-        </View>
-      ) : query.isError && penalties.length === 0 ? (
-        <ErrorState error={query.error} onRetry={query.refetch} />
-      ) : penalties.length === 0 ? (
-        <EmptyState
-          icon="shield-checkmark-outline"
-          title="Ceza kaydı yok"
-          body={`${scope.cityLabel || "Bu kapsam"} için sonuçlanmış disiplin kararı bulunmuyor — centilmenlik kazanıyor.`}
-          action={{ label: "Şehri değiştir", onPress: () => scope.openScopeSheet("city"), haptic: "light" }}
-        />
       ) : (
         <FlatList
-          {...scrollProps}
-          data={rows}
+          data={loading ? [] : visible}
           keyExtractor={(item) => item.key}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          renderItem={renderItem}
-          ListHeaderComponent={listHeader}
-          ListEmptyComponent={
-            <EmptyState
-              icon="funnel-outline"
-              title={search.trim() ? "Eşleşen karar yok" : "Bu süzgeçte kayıt yok"}
-              body={search.trim() ? "Aramayı kısalt ya da başka bir ad dene." : "Başka bir durum çipini seçebilirsin."}
-              variant="inline"
-              compact
-            />
-          }
-          contentContainerStyle={styles.content}
           refreshControl={refresh.control}
-          initialNumToRender={12}
+          contentContainerStyle={styles.content}
+          ListHeaderComponent={
+            <View style={styles.filters}>
+              <ChipGroup scrollable contentPadding={0}>
+                <Chip label="Tümü" count={count("all")} size="sm" selected={typeFilter === "all"} onPress={() => setTypeFilter("all")} />
+                <Chip label="Oyuncu" icon="person" count={count("player")} size="sm" selected={typeFilter === "player"} onPress={() => setTypeFilter("player")} />
+                <Chip label="Maç" icon="football" count={count("match")} size="sm" selected={typeFilter === "match"} onPress={() => setTypeFilter("match")} />
+                <Chip label="Konu" icon="document-text" count={count("topic")} size="sm" selected={typeFilter === "topic"} onPress={() => setTypeFilter("topic")} />
+                <Chip label="Yalnız süren" size="sm" tone="warn" selected={onlyOpen} onPress={() => setOnlyOpen((value) => !value)} />
+              </ChipGroup>
+            </View>
+          }
+          ListEmptyComponent={
+            loading ? (
+              <View style={styles.skeleton}>
+                <Skeleton height={104} radius="xl" />
+                <Skeleton height={104} radius="xl" />
+                <Skeleton height={104} radius="xl" />
+              </View>
+            ) : penalties.isError && all.length === 0 ? (
+              <ErrorState variant="inline" error={penalties.error} onRetry={penalties.refetch} />
+            ) : (
+              <EmptyState
+                variant="inline"
+                icon="shield-checkmark-outline"
+                title={all.length ? "Bu süzgeçte kayıt yok" : "Disiplin süreci yok"}
+                body={all.length ? undefined : `${scope.cityLabel || "Bu kapsam"} için yayımlanmış bir disiplin süreci bulunmuyor.`}
+              />
+            )
+          }
+          ItemSeparatorComponent={Gap}
+          renderItem={({ item }) => <ProcessCard item={item} onPress={() => setDetail(item)} />}
         />
       )}
 
-      <PenaltySheet
-        item={detail}
-        onClose={closeDetail}
-        onOpenMine={auth.user ? goToMyPenalties : undefined}
-      />
+      <BottomSheet visible={detail != null} onClose={() => setDetail(null)} title={detail ? TYPE_META[detail.type].label : "Süreç"} snap="content">
+        {detail ? (
+          <View style={styles.sheet}>
+            <Text style={styles.sheetTitle} {...textScale.dense}>
+              {detail.headline}
+            </Text>
+            {detail.meta ? (
+              <Text style={styles.meta} {...textScale.dense}>
+                {detail.meta}
+              </Text>
+            ) : null}
+            <Badge label={[detail.outcome.label, detail.outcome.note].filter(Boolean).join(" · ")} tone={detail.outcome.tone} size="sm" />
+            <StepList steps={detail.steps} current={detail.step} />
+            {detail.description ? (
+              <View style={styles.block}>
+                <Text style={styles.blockLabel} {...textScale.badge}>
+                  KAPSAM
+                </Text>
+                <Text style={styles.blockText} {...textScale.long}>
+                  {detail.description}
+                </Text>
+              </View>
+            ) : null}
+            <View style={styles.block}>
+              <Text style={styles.blockLabel} {...textScale.badge}>
+                KARAR
+              </Text>
+              <Text style={styles.blockText} {...textScale.long}>
+                {detail.decision ?? (detail.open ? "Süreç devam ediyor. Karar açıklandığında burada yayımlanır." : "Karar metni yayımlanmadı.")}
+              </Text>
+            </View>
+          </View>
+        ) : null}
+      </BottomSheet>
     </SafeAreaView>
   );
 }
 
-/* ============================== ALT BİLEŞENLER ============================ */
+function Gap() {
+  return <View style={styles.gap} />;
+}
 
-/**
- * Karar kartı. SOLDA CEZA BLOĞU kartın kahramanıdır: maç cezasında dev rakam
- * + "MAÇ", süresiz ihraçta sonsuz işareti — kırmızı (süresiz) ya da amber
- * (maç) zeminde. Sağda kişi → takım → maç; dipte karar tarihi ve aşama.
- * Kullanıcının kendi dosyası imza şeridi ve "Dosyam" rozetiyle işaretlenir.
- */
-const PenaltyCard = React.memo(function PenaltyCard({
-  item,
-  own,
-  onPress,
-}: {
-  item: PenaltyFeedItem;
-  own: boolean;
-  onPress: (item: PenaltyFeedItem) => void;
-}) {
-  const handlePress = useCallback(() => onPress(item), [item, onPress]);
+/** Aşamalar: tamamlanan, güncel ve bekleyen adımlar dikey listede. */
+function StepList({ steps, current }: { steps: string[]; current: number }) {
+  return (
+    <View style={styles.steps} accessibilityLabel={`Aşama: ${steps[current] ?? ""}`}>
+      {steps.map((label, index) => {
+        const done = index < current;
+        const now = index === current;
+        return (
+          <View key={label} style={styles.stepRow}>
+            <Ionicons name={done ? "checkmark-circle" : now ? "radio-button-on" : "ellipse-outline"} size={16} color={now ? colors.brand : done ? colors.textSecondary : colors.textTertiary} />
+            <Text style={[styles.stepText, now ? styles.stepNow : done ? styles.stepDone : null]} {...textScale.dense}>
+              {label}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
 
-  const meta = item.meta;
-  const stage = stageOf(meta?.status);
-  const lifetime = meta?.duration_type === "suresiz";
-  const count = Number(meta?.match_count);
-  const hasCount = meta?.duration_type === "mac" && Number.isFinite(count) && count > 0;
-  const tone = toneColors(lifetime ? "danger" : "warn");
-  const player = meta?.player_name?.trim() || item.title;
-
+const ProcessCard = React.memo(function ProcessCard({ item, onPress }: { item: Process; onPress: () => void }) {
+  const meta = TYPE_META[item.type];
   return (
     <Touchable
+      onPress={onPress}
       feedback="card"
-      haptic="selection"
-      onPress={handlePress}
       accessibilityRole="button"
-      accessibilityLabel={[player, meta?.team_name, durationText(meta), stage.label].filter(Boolean).join(", ")}
-      style={[styles.card, own ? styles.cardOwn : null]}
+      accessibilityLabel={[item.headline, item.outcome.label, `aşama ${item.steps[item.step]}`].join(", ")}
+      style={styles.card}
     >
-      {own ? <SignatureStripe /> : null}
-      <View style={[styles.verdict, { backgroundColor: tone.dim, borderColor: withAlpha(tone.fg, 0.35) }]}>
-        {lifetime ? (
-          <Ionicons name="infinite" size={26} color={tone.fg} />
-        ) : (
-          <Text style={[styles.verdictValue, { color: tone.fg }]} {...textScale.dense}>
-            {hasCount ? count : "—"}
+      <View style={styles.cardTop}>
+        <IconTile icon={meta.icon} tone={meta.tone} size={40} glow={false} />
+        <View style={styles.texts}>
+          <Text style={styles.kind} {...textScale.badge}>
+            {meta.label.toLocaleUpperCase("tr-TR")} · {formatDateShort(item.date)}
           </Text>
-        )}
-        <Text style={[styles.verdictUnit, { color: tone.fg }]} {...textScale.badge}>
-          {lifetime ? "SÜRESİZ" : "MAÇ"}
-        </Text>
+          <Text style={styles.title} numberOfLines={3} {...textScale.dense}>
+            {item.headline}
+          </Text>
+          {item.meta ? (
+            <Text style={styles.meta} numberOfLines={2} {...textScale.dense}>
+              {item.meta}
+            </Text>
+          ) : null}
+        </View>
       </View>
-
-      <View style={styles.cardBody}>
-        <View style={styles.cardTitleRow}>
-          <Text style={styles.cardTitle} numberOfLines={1} {...textScale.dense}>
-            {player}
-          </Text>
-          {own ? <Badge label="Dosyam" tone="brand" size="xs" /> : null}
-        </View>
-        {meta?.team_name ? (
-          <View style={styles.cardLine}>
-            <Ionicons name="shield-outline" size={12} color={colors.textTertiary} />
-            <Text style={styles.cardTeam} numberOfLines={1} {...textScale.dense}>
-              {meta.team_name.trim()}
-            </Text>
-          </View>
-        ) : null}
-        {meta?.match_label ? (
-          <View style={styles.cardLine}>
-            <Ionicons name="football-outline" size={12} color={colors.textTertiary} />
-            <Text style={styles.cardMeta} numberOfLines={1} {...textScale.dense}>
-              {meta.match_label.replace(/\s+/g, " ").trim()}
-            </Text>
-          </View>
-        ) : null}
-        <View style={styles.cardFoot}>
-          <Text style={styles.cardDate} {...textScale.dense}>
-            {formatDateShort(item.published_at)}
-          </Text>
-          <Badge label={stage.label} tone={meta?.status === "cas_karari" ? "info" : "neutral"} size="xs" />
-        </View>
+      <View style={styles.cardFoot}>
+        <Badge label={[item.outcome.label, item.outcome.note].filter(Boolean).join(" · ")} tone={item.outcome.tone} size="sm" />
+        <Text style={styles.stage} numberOfLines={1} {...textScale.dense}>
+          {item.step + 1}/{item.steps.length} · {item.steps[item.step]}
+        </Text>
       </View>
     </Touchable>
   );
 });
 
-/**
- * Karar özeti alt sayfası — kullanıcının TARAF OLMADIĞI dosyalar için.
- * Savunma/itiraz burada yoktur; o eylemler yalnız kendi dosyanda ve
- * `/ceza/[id]` ekranında yapılabilir (sunucu da öyle korur).
- */
-const PenaltySheet = React.memo(function PenaltySheet({
-  item,
-  onClose,
-  onOpenMine,
-}: {
-  item: PenaltyFeedItem | null;
-  onClose: () => void;
-  onOpenMine?: () => void;
-}) {
-  const meta = item?.meta;
-  const decision = item ? item.summary?.trim() || stripHtml(item.content, 600) : "";
-  const duration = durationText(meta);
-
-  const rows: { label: string; value: string }[] = [];
-  if (meta?.player_name) rows.push({ label: "Oyuncu", value: meta.player_name });
-  if (meta?.team_name) rows.push({ label: "Takım", value: meta.team_name });
-  if (meta?.match_label) rows.push({ label: "Maç", value: meta.match_label });
-  if (duration) rows.push({ label: "Ceza", value: duration });
-  rows.push({ label: "Aşama", value: stageOf(meta?.status).label });
-  if (item?.published_at) {
-    rows.push({ label: "Karar tarihi", value: formatDateLong(item.published_at) });
-  }
-
-  return (
-    <BottomSheet
-      visible={Boolean(item)}
-      onClose={onClose}
-      title="Disiplin kararı"
-      snap="content"
-      footer={
-        onOpenMine ? (
-          <Button
-            label="Kendi dosyalarım"
-            icon="folder-open-outline"
-            variant="secondary"
-            fullWidth
-            onPress={onOpenMine}
-          />
-        ) : undefined
-      }
-    >
-      {item ? (
-        <View style={styles.sheet}>
-          <View style={styles.sheetHero}>
-            <Avatar name={meta?.player_name ?? item.title} image={mediaUrl(item.cover_image_url)} size={48} />
-            <View style={styles.sheetHeroText}>
-              <Text style={styles.sheetName} numberOfLines={2} {...textScale.dense}>
-                {meta?.player_name?.trim() || item.title}
-              </Text>
-              {duration ? (
-                <Badge
-                  label={duration}
-                  tone={meta?.duration_type === "suresiz" ? "danger" : "warn"}
-                  icon={meta?.duration_type === "suresiz" ? "infinite" : "ban"}
-                />
-              ) : null}
-            </View>
-          </View>
-          {rows.map((row, index) => (
-            <KeyValueRow
-              key={row.label}
-              label={row.label}
-              value={row.value}
-              position={rowPosition(index, rows.length)}
-            />
-          ))}
-
-          {decision ? (
-            <Text style={styles.decision} {...textScale.long}>
-              {decision}
-            </Text>
-          ) : null}
-
-          <Text style={styles.note} {...textScale.long}>
-            Savunma ve itiraz yalnız dosyanın tarafı olan oyuncu ya da takım
-            yetkilisi tarafından, süre penceresi açıkken gönderilebilir.
-          </Text>
-        </View>
-      ) : null}
-    </BottomSheet>
-  );
-});
-
-/* ================================ STİLLER ================================= */
-
 const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.bg },
   headerBottom: { gap: space.sm },
-  screen: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
-  content: {
-    paddingHorizontal: layout.screenPadding,
-    paddingBottom: space.giant,
-    flexGrow: 1,
-  },
-  loading: {
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: space.md,
-    gap: space.md,
-  },
-  headerBlock: {
-    paddingTop: space.md,
-    paddingBottom: space.xs,
-    gap: space.md,
-  },
-  /** ChipGroup kendi yatay boşluğunu taşır; listenin boşluğu geri alınır. */
-  chips: {
-    marginHorizontal: -layout.screenPadding,
-  },
-  groupHead: {
-    marginTop: space.md,
-    marginBottom: space.sm,
-  },
-
-  /* — Sahne — */
-  hero: {
-    padding: space.lg,
-    gap: space.md,
-  },
-  heroTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.md,
-  },
-  heroTitleBox: {
-    flex: 1,
-    minWidth: 0,
-    gap: space.xxs,
-  },
-  heroOver: {
-    ...type.overline,
-    color: colors.brandOnDark,
-  },
-  heroTitle: {
-    ...type.h2,
-    color: colors.onDark,
-  },
-  heroStats: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: space.sm,
-    borderRadius: radius.lg,
-    backgroundColor: colors.inkTile,
-    borderWidth: hairline,
-    borderColor: colors.inkTileBorder,
-  },
-  heroDivider: {
-    width: hairline,
-    alignSelf: "stretch",
-    backgroundColor: colors.borderOnDark,
-  },
-
-  /* — Karar kartı — */
-  card: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    gap: space.md,
-    padding: space.m,
-    marginBottom: space.sm,
-    borderRadius: radius.xl,
-    backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    overflow: "hidden",
-    ...elevate(1),
-  },
-  cardOwn: {
-    backgroundColor: colors.brandDim,
-    borderColor: colors.brandBorder,
-  },
-  verdict: {
-    width: 64,
-    borderRadius: radius.md,
-    borderWidth: hairline,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: space.sm,
-    gap: space.xxs,
-  },
-  verdictValue: {
-    ...type.scoreLg,
-  },
-  verdictUnit: {
-    ...type.micro,
-  },
-  cardBody: {
-    flex: 1,
-    minWidth: 0,
-    gap: space.xs,
-  },
-  cardTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-  },
-  cardTitle: {
-    ...type.h3,
-    color: colors.textPrimary,
-    flexShrink: 1,
-  },
-  cardLine: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.xs,
-  },
-  cardTeam: {
-    ...type.labelSm,
-    color: colors.textSecondary,
-    flexShrink: 1,
-  },
-  cardMeta: {
-    ...type.caption,
-    color: colors.textTertiary,
-    flexShrink: 1,
-  },
-  cardFoot: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: space.sm,
-    marginTop: space.xxs,
-    paddingTop: space.s,
-    borderTopWidth: hairline,
-    borderTopColor: colors.separator,
-  },
-  cardDate: {
-    ...type.numSmStrong,
-    color: colors.textTertiary,
-  },
-
-  /* — Alt sayfa — */
-  sheet: {
-    gap: space.md,
-  },
-  sheetHero: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.md,
-  },
-  sheetHeroText: {
-    flex: 1,
-    gap: space.xs,
-    alignItems: "flex-start",
-  },
-  sheetName: {
-    ...type.h2,
-    color: colors.textPrimary,
-  },
-  decision: {
-    ...type.bodyLg,
-    color: colors.textPrimary,
-  },
-  note: {
-    ...type.bodySm,
-    color: colors.textTertiary,
-    fontFamily: fonts.medium,
-  },
+  content: { paddingHorizontal: layout.screenPadding, paddingBottom: space.giant },
+  filters: { paddingVertical: space.md },
+  skeleton: { gap: space.sm },
+  gap: { height: space.sm },
+  card: { gap: space.md, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
+  cardTop: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
+  texts: { flex: 1, minWidth: 0, gap: space.xxs },
+  kind: { ...type.nano, color: colors.textTertiary },
+  title: { ...type.h4, color: colors.textPrimary },
+  meta: { ...type.caption, color: colors.textTertiary },
+  cardFoot: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm, flexWrap: "wrap" },
+  stage: { ...type.caption, color: colors.textSecondary, flexShrink: 1 },
+  sheet: { gap: space.md, alignItems: "flex-start" },
+  sheetTitle: { ...type.h3, color: colors.textPrimary },
+  steps: { gap: space.xs, alignSelf: "stretch" },
+  stepRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  stepText: { ...type.label, color: colors.textTertiary },
+  stepDone: { color: colors.textSecondary },
+  stepNow: { color: colors.textPrimary },
+  block: { alignSelf: "stretch", gap: space.xs, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surface2 },
+  blockLabel: { ...type.nano, color: colors.textTertiary },
+  blockText: { ...type.label, color: colors.textPrimary },
 });

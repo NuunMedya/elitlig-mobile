@@ -140,6 +140,7 @@ export const ADMIN_MODULE_GROUPS: AdminModuleGroup[] = [
     modules: [
       { key: "cezalar", title: "Cezalar", description: "Disiplin kararları ve sevkler", icon: "hammer-outline", route: "/yonetim/cezalar", permission: ["penalties.view", "penalties.create"] },
       { key: "ceza-yeni", title: "Yeni ceza", description: "Disiplin sevki oluştur", icon: "add-outline", route: "/yonetim/ceza-yeni", permission: ["penalties.create"] },
+      { key: "incelemeler", title: "İncelemeler", description: "Maç ve konu incelemesi başlat, karar açıkla", icon: "search-outline", route: "/yonetim/incelemeler", permission: ["penalties.view", "penalties.create"] },
       { key: "savunmalar", title: "Savunma ve itirazlar", description: "Gelen savunma ve itirazları incele", icon: "document-attach-outline", route: "/yonetim/savunmalar", permission: ["penalties.review"] },
       { key: "itirazlar", title: "Takım itirazları", description: "Takımların itiraz başvurularını değerlendir", icon: "scale-outline", route: "/yonetim/itirazlar", permission: ["penalties.review"] },
     ],

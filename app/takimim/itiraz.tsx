@@ -53,6 +53,7 @@ import {
   createAppeal,
   uploadAppealFile,
   type AppealAttachment,
+  getAppealMatchPlayers,
   getAppealMatches,
   getMyAppeals,
   type Appeal,
@@ -83,6 +84,8 @@ export default function TeamAppealScreen() {
   const [composing, setComposing] = useState(false);
   const [category, setCategory] = useState<AppealCategory>("rule_error");
   const [matchId, setMatchId] = useState<number | null>(null);
+  // Başvuruda adı geçen oyuncu (isteğe bağlı): kurul tek dokunuşla sevk edebilsin.
+  const [playerId, setPlayerId] = useState<number | null>(null);
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
   const [attachments, setAttachments] = useState<AppealAttachment[]>([]);
@@ -102,14 +105,26 @@ export default function TeamAppealScreen() {
     enabled: composing,
     staleTime: 5 * 60_000,
   });
+  // Seçilen maçın iki takımının kadrosu ("ilgili oyuncu" seçimi).
+  const players = useQuery({
+    queryKey: ["panel", "appeals", "players", matchId],
+    queryFn: () => getAppealMatchPlayers(matchId!),
+    enabled: composing && matchId != null,
+    staleTime: 5 * 60_000,
+  });
+  const pickMatch = (id: number | null) => {
+    setMatchId(id);
+    setPlayerId(null);
+  };
   const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching });
 
   const mutation = useMutation({
-    mutationFn: () => createAppeal({ category, match_id: matchId, subject: subject.trim(), description: description.trim(), attachments }),
+    mutationFn: () => createAppeal({ category, match_id: matchId, player_id: playerId, subject: subject.trim(), description: description.trim(), attachments }),
     onSuccess: () => {
       setComposing(false);
       setCategory("rule_error");
       setMatchId(null);
+      setPlayerId(null);
       setSubject("");
       setDescription("");
       setAttachments([]);
@@ -275,14 +290,14 @@ export default function TeamAppealScreen() {
               İlgili maç (varsa)
             </Text>
             <ChipGroup scrollable contentPadding={0}>
-              <Chip label="Belirli bir maç yok" size="sm" selected={matchId === null} onPress={() => setMatchId(null)} />
+              <Chip label="Belirli bir maç yok" size="sm" selected={matchId === null} onPress={() => pickMatch(null)} />
               {(matches.data ?? []).map((match) => (
                 <Chip
                   key={match.id}
                   label={[match.label, match.date ? formatDateShort(match.date) : null].filter(Boolean).join(" · ")}
                   size="sm"
                   selected={matchId === match.id}
-                  onPress={() => setMatchId(match.id)}
+                  onPress={() => pickMatch(match.id)}
                 />
               ))}
             </ChipGroup>
@@ -292,6 +307,31 @@ export default function TeamAppealScreen() {
               </Text>
             ) : null}
           </View>
+
+          {matchId != null ? (
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel} {...textScale.dense}>
+                İlgili oyuncu (varsa)
+              </Text>
+              <ChipGroup scrollable contentPadding={0}>
+                <Chip label="Belirli bir oyuncu yok" size="sm" selected={playerId === null} onPress={() => setPlayerId(null)} />
+                {(players.data ?? []).map((player) => (
+                  <Chip
+                    key={player.player_id}
+                    label={[player.player_name, player.team_name].filter(Boolean).join(" · ")}
+                    size="sm"
+                    selected={playerId === player.player_id}
+                    onPress={() => setPlayerId(player.player_id)}
+                  />
+                ))}
+              </ChipGroup>
+              {players.isLoading ? (
+                <Text style={styles.privacyText} {...textScale.dense}>
+                  Kadro yükleniyor…
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
 
           <Input label="Başlık" value={subject} onChangeText={setSubject} placeholder="Örn. 2. yarıdaki gol kararına itiraz" maxLength={200} />
           <Input
@@ -349,7 +389,7 @@ function Gap() {
 
 const AppealCard = React.memo(function AppealCard({ appeal }: { appeal: Appeal }) {
   const tone = STATUS_TONE[appeal.status] ?? "neutral";
-  const meta = [appeal.category_label, appeal.match_label, formatDateShort(appeal.createdAt)].filter(Boolean).join(" · ");
+  const meta = [appeal.category_label, appeal.match_label, appeal.player_name, formatDateShort(appeal.createdAt)].filter(Boolean).join(" · ");
   const own = appeal.is_own !== false;
   const title = own ? appeal.subject ?? appeal.category_label : `${appeal.team_name ?? "Rakip takım"} takımının itirazı`;
   return (
