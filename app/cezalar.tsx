@@ -1,5 +1,10 @@
 /**
- * CEZALAR — kamuya açık disiplin kararları (sitedeki disiplin sayfası).
+ * DİSİPLİN — kamuya açık disiplin sayfası: iki sekme.
+ *   Cezalar     oyuncu ceza kararları (aşağıda anlatılan liste)
+ *   Başvurular  takımların disiplin başvuruları: İncelemede / Kararlar
+ *               (components/discipline/PublicAppeals.tsx; yalnız itiraz nedeni görünür)
+ *
+ * CEZALAR sekmesi — kamuya açık disiplin kararları (sitedeki disiplin sayfası).
  *
  * VERİ: haber akışındaki `kind === "penalty"` girdileri. Sunucu bu girdileri
  * `newsService.penaltyItems` içinde YALNIZ sonuçlanmış dosyalardan üretir
@@ -47,6 +52,7 @@ import {
   KeyValueRow,
   Reveal,
   ScreenHeader,
+  SegmentedControl,
   SectionHeader,
   SkeletonCard,
   SkeletonHero,
@@ -58,6 +64,7 @@ import {
   type Tone,
 } from "@/components/ui";
 import { SignatureStripe, StageCard, StageStat } from "@/components/league/kit";
+import { PublicAppeals } from "@/components/discipline/PublicAppeals";
 import { LeaguePicker } from "@/components/LeaguePicker";
 import { getMyPenalties } from "@/lib/api/panel";
 import { getNewsFeed } from "@/lib/api/news";
@@ -96,6 +103,8 @@ interface PenaltyMeta {
   match_count?: number | null;
   /** PENALTY_STATUS: "kurul_karari" | "cas_karari" */
   status?: string | null;
+  /** true: girdi bir takım itirazı kararıdır (ceza dosyası değil). */
+  appeal?: boolean;
 }
 
 type PenaltyFeedItem = NewsItem & { meta?: PenaltyMeta | null };
@@ -186,6 +195,7 @@ export default function PenaltiesScreen() {
   const router = useRouter();
   const { scrollY, scrollProps } = useHeaderScroll();
 
+  const [tab, setTab] = useState<"cezalar" | "basvurular">("cezalar");
   const [filter, setFilter] = useState<PenaltyFilter>("tumu");
   const [search, setSearch] = useState("");
   const [detail, setDetail] = useState<PenaltyFeedItem | null>(null);
@@ -222,7 +232,9 @@ export default function PenaltiesScreen() {
   const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching });
 
   const penalties = useMemo(
-    () => ((query.data?.items ?? []) as PenaltyFeedItem[]).filter((item) => item.kind === "penalty"),
+    // Yayımlanan takım itirazı kararları da akışa "penalty" türüyle girer
+    // (meta.appeal); onlar Başvurular sekmesinde gösterilir.
+    () => ((query.data?.items ?? []) as PenaltyFeedItem[]).filter((item) => item.kind === "penalty" && !item.meta?.appeal),
     [query.data],
   );
 
@@ -375,8 +387,8 @@ export default function PenaltiesScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
-        title="Cezalar"
-        subtitle="Disiplin kararları"
+        title="Disiplin"
+        subtitle={tab === "cezalar" ? "Ceza kararları" : "Disiplin başvuruları"}
         back
         scrollY={scrollY}
         actions={
@@ -392,10 +404,24 @@ export default function PenaltiesScreen() {
         }
         /* Kapsam uygulamanın tek lig seçicisinde: boş listeden kullanıcı tek
            dokunuşla başka il/lige geçebilsin. */
-        bottom={<LeaguePicker />}
+        bottom={
+          <View style={styles.headerBottom}>
+            <LeaguePicker />
+            <SegmentedControl
+              items={[
+                { key: "cezalar", label: "Cezalar" },
+                { key: "basvurular", label: "Başvurular" },
+              ]}
+              value={tab}
+              onChange={(next) => setTab(next as "cezalar" | "basvurular")}
+            />
+          </View>
+        }
       />
 
-      {query.isLoading ? (
+      {tab === "basvurular" ? (
+        <PublicAppeals cityId={scope.cityId} leagueId={scope.leagueId} seasonId={scope.seasonId} />
+      ) : query.isLoading ? (
         <View style={styles.loading}>
           <SkeletonHero />
           <SkeletonCard lines={2} />
@@ -619,6 +645,7 @@ const PenaltySheet = React.memo(function PenaltySheet({
 /* ================================ STİLLER ================================= */
 
 const styles = StyleSheet.create({
+  headerBottom: { gap: space.sm },
   screen: {
     flex: 1,
     backgroundColor: colors.bg,

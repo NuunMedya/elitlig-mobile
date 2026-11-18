@@ -12,6 +12,11 @@
  * takım, ilgili takımlar (rakip dahil) ya da herkese açık (disiplin sayfası +
  * haberler). Takımın gerekçe metni ve ekleri hiçbir durumda yayımlanmaz.
  *
+ * BAŞVURU EKLE: kurul, panel dışından iletilen ya da kendiliğinden ele aldığı
+ * bir başvuruyu takım adına elle kaydeder (takım → maç → neden → metin).
+ * DOSYA AÇ: başvuru bir oyuncu hakkında işlem gerektiriyorsa karar sayfasından
+ * ceza dosyası açılır; kapsam ve maç başvurudan doldurulur, dosya başvuruya bağlanır.
+ *
  * VERİ: GET /api/penalties/admin/appeals?status=
  *       POST /api/penalties/admin/appeals/:publicId/review
  */
@@ -21,7 +26,7 @@ import { useRouter, type Href } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { AdminList, AdminScreen, useAdminMutation, type FilterOption } from "@/components/admin";
+import { AdminList, AdminScreen, SelectField, useAdminMutation, type FilterOption } from "@/components/admin";
 import { RadioGroup } from "@/components/admin/penalties/RadioRow";
 import { AppealAttachments } from "@/components/discipline/AppealAttachments";
 import { CountStrip, DangerNote, FactRow, GroupCard, RequestCard } from "@/components/admin/team/ManageKit";
@@ -29,17 +34,21 @@ import { Badge, BottomSheet, Button, Chip, ChipGroup, IconTile, Input, type Tone
 import { errorText } from "@/lib/admin/errors";
 import { formatDate, formatDateTime, timeAgo } from "@/lib/admin/format";
 import {
+  adminCreateAppeal,
   APPEAL_DECISIONS,
   APPEAL_STATUS_LABELS,
   APPEAL_VISIBILITY_LABELS,
   APPEAL_VISIBILITY_OPTIONS,
   listAppeals,
+  listAppealTeamMatches,
   reviewAppeal,
+  searchAppealTeams,
   type Appeal,
   type AppealFilter,
   type AppealStatus,
   type AppealVisibility,
 } from "@/lib/api/admin/penalties";
+import { APPEAL_CATEGORIES, type AppealCategory } from "@/lib/api/panel";
 import { colors, radius, space, textScale, type } from "@/theme";
 
 const FILTERS: { key: AppealFilter; label: string }[] = [
@@ -65,6 +74,7 @@ export default function AppealInboxScreen() {
   const [filter, setFilter] = useState<AppealFilter>("open");
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<Appeal | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const query = useQuery({
     queryKey: ["admin", "penalties", "appeals", filter],
@@ -95,7 +105,10 @@ export default function AppealInboxScreen() {
       subtitle="Merkez Disiplin Kurulu"
       permission={["penalties.review"]}
       scroll={false}
-      actions={[{ icon: "document-attach-outline", onPress: () => router.push("/yonetim/savunmalar" as Href), accessibilityLabel: "Savunma ve itirazlar" }]}
+      actions={[
+        { icon: "add", onPress: () => setCreating(true), accessibilityLabel: "Başvuru ekle" },
+        { icon: "document-attach-outline", onPress: () => router.push("/yonetim/savunmalar" as Href), accessibilityLabel: "Savunma ve itirazlar" },
+      ]}
     >
       <AdminList<Appeal>
         data={items}
@@ -153,13 +166,42 @@ export default function AppealInboxScreen() {
         }}
       />
 
-      <AppealReviewSheet appeal={selected} onClose={() => setSelected(null)} />
+      <AppealReviewSheet
+        appeal={selected}
+        onClose={() => setSelected(null)}
+        onOpenCase={(appeal) => {
+          setSelected(null);
+          const query = [
+            `basvuru=${encodeURIComponent(appeal.public_id)}`,
+            appeal.city_id ? `il=${appeal.city_id}` : null,
+            appeal.league_id ? `lig=${appeal.league_id}` : null,
+            appeal.season_id ? `sezon=${appeal.season_id}` : null,
+            appeal.match_id ? `mac=${appeal.match_id}` : null,
+          ].filter(Boolean).join("&");
+          router.push(`/yonetim/ceza-yeni?${query}` as Href);
+        }}
+        onOpenLinked={(publicId) => {
+          setSelected(null);
+          router.push(`/yonetim/cezalar/${encodeURIComponent(publicId)}` as Href);
+        }}
+      />
+      <AppealCreateSheet visible={creating} onClose={() => setCreating(false)} />
     </AdminScreen>
   );
 }
 
 /** İtirazın tam metni + karar formu. Sonuçlanmış başvuruda önce karar okunur. */
-function AppealReviewSheet({ appeal, onClose }: { appeal: Appeal | null; onClose: () => void }) {
+function AppealReviewSheet({
+  appeal,
+  onClose,
+  onOpenCase,
+  onOpenLinked,
+}: {
+  appeal: Appeal | null;
+  onClose: () => void;
+  onOpenCase: (appeal: Appeal) => void;
+  onOpenLinked: (publicId: string) => void;
+}) {
   const [decision, setDecision] = useState<Decision>("accepted");
   const [text, setText] = useState("");
   const [visibility, setVisibility] = useState<AppealVisibility>("team");
@@ -252,6 +294,14 @@ function AppealReviewSheet({ appeal, onClose }: { appeal: Appeal | null; onClose
             </Text>
           </View>
 
+          {/* Dosya aç: başvuru bir oyuncu hakkında işlem gerektiriyorsa ceza dosyası açılır. */}
+          <View style={styles.caseRow}>
+            {appeal.linked_penalty_public_id ? (
+              <Button label="Açılan dosya" icon="folder-open-outline" variant="secondary" size="sm" onPress={() => onOpenLinked(appeal.linked_penalty_public_id!)} style={styles.grow} />
+            ) : null}
+            <Button label={appeal.linked_penalty_public_id ? "Yeni dosya aç" : "Dosya aç"} icon="folder-outline" variant="secondary" size="sm" onPress={() => onOpenCase(appeal)} style={styles.grow} />
+          </View>
+
           {appeal.attachments?.length ? (
             <GroupCard title={`Ekler (${appeal.attachments.length})`} icon="attach">
               <AppealAttachments items={appeal.attachments} />
@@ -259,9 +309,10 @@ function AppealReviewSheet({ appeal, onClose }: { appeal: Appeal | null; onClose
           ) : null}
 
           <GroupCard title="Başvuru bilgileri" icon="information-circle">
+            <FactRow icon="pricetag-outline" label="İtiraz nedeni" value={appeal.category_label} />
+            <FactRow icon="create-outline" label="Kaynak" value={appeal.source === "admin" ? "Kurul kaydı" : "Takım başvurusu"} />
             <FactRow icon="shield-outline" label="İtiraz eden takım" value={appeal.team_name || "—"} />
             <FactRow icon="people-outline" label="Rakip takım" value={appeal.opponent_team_name || "—"} />
-            <FactRow icon="pricetag-outline" label="Konu" value={appeal.category_label} />
             <FactRow icon="football-outline" label="Maç" value={appeal.match_label || "Belirtilmedi"} />
             <FactRow icon="calendar-outline" label="Maç tarihi" value={appeal.match_date ? formatDate(appeal.match_date) : "—"} last />
           </GroupCard>
@@ -311,7 +362,115 @@ function AppealReviewSheet({ appeal, onClose }: { appeal: Appeal | null; onClose
   );
 }
 
+/** Kurulun takım adına elle başvuru kaydettiği form. */
+function AppealCreateSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const [team, setTeam] = useState<{ id: number; name: string } | null>(null);
+  const [matchId, setMatchId] = useState<number | null>(null);
+  const [category, setCategory] = useState<AppealCategory>("rule_error");
+  const [subject, setSubject] = useState("");
+  const [description, setDescription] = useState("");
+  const [failure, setFailure] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!visible) return;
+    setTeam(null);
+    setMatchId(null);
+    setCategory("rule_error");
+    setSubject("");
+    setDescription("");
+    setFailure(null);
+  }, [visible]);
+
+  const matches = useQuery({
+    queryKey: ["admin", "penalties", "appeal-team-matches", team?.id],
+    queryFn: () => listAppealTeamMatches(team!.id),
+    enabled: Boolean(team),
+  });
+
+  const create = useAdminMutation(
+    () => adminCreateAppeal({ team_id: team!.id, match_id: matchId, category, subject: subject.trim(), description: description.trim() }),
+    { success: "Başvuru kaydedildi ve takım yetkililerine bildirildi.", invalidate: [["admin", "penalties", "appeals"]], silentError: true, onSuccess: onClose }
+  );
+
+  const submit = async () => {
+    setFailure(null);
+    if (!team) return setFailure("Başvurunun hangi takım adına kaydedileceğini seç.");
+    if (!subject.trim() || !description.trim()) return setFailure("Başlık ve açıklama yazılmalıdır.");
+    try {
+      await create.mutateAsync(undefined);
+    } catch (error) {
+      setFailure(errorText(error));
+    }
+    return undefined;
+  };
+
+  return (
+    <BottomSheet
+      visible={visible}
+      onClose={create.isPending ? () => undefined : onClose}
+      title="Başvuru ekle"
+      snap="full"
+      footer={<Button label="Başvuruyu kaydet" icon="checkmark" size="lg" onPress={submit} loading={create.isPending} haptic="success" fullWidth />}
+    >
+      <View style={styles.body}>
+        <Text style={styles.meta} {...textScale.long}>
+          Panel dışından iletilen ya da kurulun kendiliğinden ele aldığı bir başvuruyu takım adına kaydet. Herkese açık sayfada yalnızca itiraz nedeni görünür.
+        </Text>
+        <GroupCard title="Taraf" step={1}>
+          <SelectField<number>
+            label="Takım"
+            required
+            value={team?.id ?? null}
+            valueLabel={team?.name ?? null}
+            onChange={(value, option) => {
+              setTeam(value != null ? { id: value, name: option?.label ?? "" } : null);
+              setMatchId(null);
+            }}
+            loadOptions={async (q) => (q.trim().length < 2 ? [] : (await searchAppealTeams(q.trim())).map((t) => ({ value: t.id, label: t.name })))}
+            queryKey={["admin", "penalties", "appeal-teams"]}
+            placeholder="Takım adı yaz (en az 2 harf)"
+            sheetTitle="Takım seç"
+            icon="shield-outline"
+          />
+          <SelectField<number>
+            label="İlgili maç (varsa)"
+            value={matchId}
+            onChange={(value) => setMatchId(value)}
+            options={(matches.data ?? []).map((m) => ({ value: m.id, label: m.label, hint: m.date ? formatDate(m.date) : null }))}
+            placeholder={team ? "Belirli bir maç yok" : "Önce takım seç"}
+            disabled={!team}
+            clearable
+            sheetTitle="Maç seç"
+            icon="football-outline"
+          />
+        </GroupCard>
+        <GroupCard title="İtiraz nedeni" step={2}>
+          <ChipGroup>
+            {APPEAL_CATEGORIES.map((option) => (
+              <Chip key={option.key} label={option.label} size="sm" selected={category === option.key} onPress={() => setCategory(option.key)} />
+            ))}
+          </ChipGroup>
+        </GroupCard>
+        <GroupCard title="Başvuru metni" step={3}>
+          <Input label="Başlık" value={subject} onChangeText={setSubject} maxLength={200} placeholder="Örn. Cezalı oyuncunun oynatılması" />
+          <Input
+            label="Açıklama (yalnız kurul ve ilgili takım görür)"
+            value={description}
+            onChangeText={setDescription}
+            multiline
+            numberOfLines={5}
+            maxLength={5000}
+            placeholder="Başvurunun içeriğini ve dayanaklarını yaz."
+          />
+        </GroupCard>
+        {failure ? <DangerNote tone="danger" icon="alert-circle" title="Kaydedilemedi" body={failure} /> : null}
+      </View>
+    </BottomSheet>
+  );
+}
+
 const styles = StyleSheet.create({
+  caseRow: { flexDirection: "row", gap: space.sm },
   header: { gap: space.md },
   grow: { flex: 1, minWidth: 0 },
   pills: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
