@@ -206,6 +206,8 @@ export interface PenaltyCreate {
   team_id: number | null;
   team_name: string | null;
   disiplin_karari: string | null;
+  /** Dosya bir disiplin başvurusu üzerine açılıyorsa sunucu ikisini bağlar. */
+  appeal_public_id?: string;
 }
 
 /* ===================== uçlar ===================== */
@@ -311,6 +313,16 @@ export const APPEAL_DECISIONS: { value: Exclude<AppealStatus, "pending">; label:
   { value: "rejected", label: "İtirazı reddet", hint: "İtiraz yerinde görülmedi; mevcut karar geçerlidir." },
   { value: "in_review", label: "Değerlendirmeye al", hint: "Henüz karar verilmedi; takıma başvurunun değerlendirildiği bildirilir." },
 ];
+
+/* Kurulun elle kaydettiği başvuru (takım adına) ve yardımcı uçları. */
+export const searchAppealTeams = (q: string) =>
+  get<{ teams: { id: number; name: string }[] }>("/api/penalties/admin/appeal-teams", q ? { q } : undefined).then((d) => d.teams ?? []);
+
+export const listAppealTeamMatches = (teamId: number) =>
+  get<{ matches: { id: number; label: string; date: string | null }[] }>(`/api/penalties/admin/appeal-teams/${enc(teamId)}/matches`).then((d) => d.matches ?? []);
+
+export const adminCreateAppeal = (body: { team_id: number; match_id: number | null; category: string; subject: string; description: string }) =>
+  post<{ appeal: Appeal; message?: string }>("/api/penalties/admin/appeals", body).then((d) => d.appeal);
 
 export const listAppeals = (params: { status?: AppealFilter } = {}) =>
   get<{ items: Appeal[] }>("/api/penalties/admin/appeals", params).then((d) => d.items ?? []);

@@ -12,13 +12,16 @@
  * seçildiyse ardından PATCH ile güncellenir (web ile aynı iki adım). Başarıda
  * dosyanın ayrıntısına geçilir.
  *
+ * DOSYA AÇ: bir disiplin başvurusundan gelindiğinde (?basvuru=&il=&lig=&sezon=&mac=)
+ * kapsam ve maç başvurudan doldurulur; kaydedilen dosya başvuruya bağlanır.
+ *
  * Sunucu modelinde "madde", "tür" ya da para cezası "tutarı" alanı yoktur;
  * ceza maç sayısı ya da süresiz ihraç olarak tutulur ve gerekçe karar
  * metnine yazılır.
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { useRouter, type Href } from "expo-router";
+import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -42,8 +45,11 @@ import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 export default function PenaltyCreateScreen() {
   const router = useRouter();
-  const [scope, setScope] = useState<ScopeValue>({ cityId: null, leagueId: null, seasonId: null });
-  const [matchId, setMatchId] = useState<number | null>(null);
+  const params = useLocalSearchParams<{ basvuru?: string; il?: string; lig?: string; sezon?: string; mac?: string }>();
+  const num = (value?: string) => (value && /^\d+$/.test(value) ? Number(value) : null);
+  const appealId = params.basvuru || null;
+  const [scope, setScope] = useState<ScopeValue>({ cityId: num(params.il), leagueId: num(params.lig), seasonId: num(params.sezon) });
+  const [matchId, setMatchId] = useState<number | null>(num(params.mac));
   const [player, setPlayer] = useState<PenaltyMatchPlayer | null>(null);
   const [playerQuery, setPlayerQuery] = useState("");
   const [decision, setDecision] = useState<DecisionValue>({ status: "sevk", duration_type: "", match_count: "" });
@@ -83,6 +89,7 @@ export default function PenaltyCreateScreen() {
         team_id: player.team_id ?? null,
         team_name: player.team_name ?? null,
         disiplin_karari: karar.trim() || null,
+        ...(appealId ? { appeal_public_id: appealId } : {}),
       });
       // Sevk dışında bir aşama ya da süre seçildiyse kayıt hemen güncellenir.
       if (decision.status !== "sevk" || decision.duration_type) {
