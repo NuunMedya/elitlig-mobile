@@ -46,14 +46,16 @@ export default function PenaltiesScreen() {
   const [teamId, setTeamId] = useState<number | null>(null);
   const [activeOnly, setActiveOnly] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // Arşive alınan dosyalar varsayılan listede görünmez; "Arşiv" çipiyle açılır.
+  const [archive, setArchive] = useState(false);
 
   const canView = hasAnyPermission(auth.user, ["penalties.view"]);
   const canCreate = hasAnyPermission(auth.user, ["penalties.create"]);
 
   // Aşama sayıları için liste aşamasız çekilir; aşama süzgeci istemcide.
   const query = useQuery({
-    queryKey: ["admin", "penalties", "list", scope],
-    queryFn: () => listPenalties({ city_id: scope.cityId, league_id: scope.leagueId, season_id: scope.seasonId }),
+    queryKey: ["admin", "penalties", "list", scope, archive],
+    queryFn: () => listPenalties({ city_id: scope.cityId, league_id: scope.leagueId, season_id: scope.seasonId, archived: archive ? "only" : "" }),
     enabled: canView,
   });
 
@@ -125,6 +127,7 @@ export default function PenaltiesScreen() {
               {filters.map((f) => (
                 <Chip key={f.key || "all"} label={f.label} count={f.count} size="sm" selected={status === f.key} onPress={() => setStatus(f.key as PenaltyStatus | "")} />
               ))}
+              <Chip label="Arşiv" icon="archive-outline" size="sm" selected={archive} onPress={() => setArchive((value) => !value)} />
               <Chip
                 label={activeFilterCount ? `Süzgeç · ${activeFilterCount}` : "Süzgeç"}
                 icon="options-outline"
