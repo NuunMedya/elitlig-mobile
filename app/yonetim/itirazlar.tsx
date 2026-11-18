@@ -17,6 +17,10 @@
  * DOSYA AÇ: başvuru bir oyuncu hakkında işlem gerektiriyorsa karar sayfasından
  * ceza dosyası açılır; kapsam ve maç başvurudan doldurulur, dosya başvuruya bağlanır.
  *
+ * ARŞİV / SİL: karar sayfasından başvuru arşive alınır (listelerden ve herkese
+ * açık sayfadan kalkar, "Arşiv" çipinden geri çıkarılır). Kalıcı silme yalnız
+ * admin rolüne gösterilir; sunucu da ayrıca denetler.
+ *
  * VERİ: GET /api/penalties/admin/appeals?status=
  *       POST /api/penalties/admin/appeals/:publicId/review
  */
@@ -26,7 +30,7 @@ import { useRouter, type Href } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { AdminList, AdminScreen, SelectField, useAdminMutation, type FilterOption } from "@/components/admin";
+import { AdminList, AdminScreen, confirmAction, SelectField, useAdminMutation, type FilterOption } from "@/components/admin";
 import { RadioGroup } from "@/components/admin/penalties/RadioRow";
 import { AppealAttachments } from "@/components/discipline/AppealAttachments";
 import { CountStrip, DangerNote, FactRow, GroupCard, RequestCard } from "@/components/admin/team/ManageKit";
@@ -35,6 +39,8 @@ import { errorText } from "@/lib/admin/errors";
 import { formatDate, formatDateTime, timeAgo } from "@/lib/admin/format";
 import {
   adminCreateAppeal,
+  archiveAppeal,
+  deleteAppeal,
   APPEAL_DECISIONS,
   APPEAL_STATUS_LABELS,
   APPEAL_VISIBILITY_LABELS,
@@ -49,6 +55,7 @@ import {
   type AppealVisibility,
 } from "@/lib/api/admin/penalties";
 import { APPEAL_CATEGORIES, type AppealCategory } from "@/lib/api/panel";
+import { useAuth } from "@/providers/AuthProvider";
 import { colors, radius, space, textScale, type } from "@/theme";
 
 const FILTERS: { key: AppealFilter; label: string }[] = [
@@ -57,6 +64,7 @@ const FILTERS: { key: AppealFilter; label: string }[] = [
   { key: "partially_accepted", label: "Kısmen kabul" },
   { key: "rejected", label: "Reddedilen" },
   { key: "", label: "Tümü" },
+  { key: "archived", label: "Arşiv" },
 ];
 
 const STATUS_TONE: Record<AppealStatus, Tone> = {
@@ -207,6 +215,27 @@ function AppealReviewSheet({
   const [visibility, setVisibility] = useState<AppealVisibility>("team");
   const [editing, setEditing] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const isAdmin = useAuth().user?.role === "admin";
+
+  const archive = useAdminMutation(() => archiveAppeal(appeal!.public_id, !appeal!.is_archived), {
+    success: () => (appeal?.is_archived ? "Başvuru arşivden çıkarıldı." : "Başvuru arşive alındı."),
+    invalidate: [["admin", "penalties", "appeals"]],
+    onSuccess: onClose,
+  });
+  const remove = useAdminMutation(() => deleteAppeal(appeal!.public_id), {
+    success: "Başvuru kalıcı olarak silindi.",
+    invalidate: [["admin", "penalties", "appeals"]],
+    onSuccess: onClose,
+  });
+  const confirmRemove = async () => {
+    const sure = await confirmAction({
+      title: "Başvuru silinsin mi?",
+      message: "İtiraz metni, ekleri ve kararı kalıcı olarak silinir; geri getirilemez. Yalnızca listeden kaldırmak için arşive alabilirsin.",
+      confirmLabel: "Kalıcı olarak sil",
+      destructive: true,
+    });
+    if (sure) remove.mutate(undefined);
+  };
 
   // Yeni başvuru açılınca form onun güncel değerleriyle dolar.
   useEffect(() => {
@@ -285,7 +314,7 @@ function AppealReviewSheet({
                 {[appeal.team_name, formatDateTime(appeal.createdAt)].filter(Boolean).join(" · ")}
               </Text>
             </View>
-            <Badge label={APPEAL_STATUS_LABELS[appeal.status]} tone={STATUS_TONE[appeal.status]} size="sm" />
+            <Badge label={appeal.is_archived ? "Arşivde" : APPEAL_STATUS_LABELS[appeal.status]} tone={appeal.is_archived ? "neutral" : STATUS_TONE[appeal.status]} size="sm" />
           </View>
 
           <View style={styles.quote}>
@@ -300,6 +329,20 @@ function AppealReviewSheet({
               <Button label="Açılan dosya" icon="folder-open-outline" variant="secondary" size="sm" onPress={() => onOpenLinked(appeal.linked_penalty_public_id!)} style={styles.grow} />
             ) : null}
             <Button label={appeal.linked_penalty_public_id ? "Yeni dosya aç" : "Dosya aç"} icon="folder-outline" variant="secondary" size="sm" onPress={() => onOpenCase(appeal)} style={styles.grow} />
+          </View>
+          <View style={styles.caseRow}>
+            <Button
+              label={appeal.is_archived ? "Arşivden çıkar" : "Arşive al"}
+              icon={appeal.is_archived ? "arrow-undo-outline" : "archive-outline"}
+              variant="secondary"
+              size="sm"
+              onPress={() => archive.mutate(undefined)}
+              loading={archive.isPending}
+              style={styles.grow}
+            />
+            {isAdmin ? (
+              <Button label="Sil" icon="trash-outline" variant="danger" size="sm" onPress={confirmRemove} loading={remove.isPending} style={styles.grow} />
+            ) : null}
           </View>
 
           {appeal.attachments?.length ? (

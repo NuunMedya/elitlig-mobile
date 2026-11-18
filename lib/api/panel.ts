@@ -324,6 +324,8 @@ export interface Appeal {
   source?: "team" | "admin";
   /** Başvuru üzerine açılan ceza dosyası (yalnız kurul görünümünde). */
   linked_penalty_public_id?: string | null;
+  /** Kurul başvuruyu arşive aldı (yalnız kurul görünümünde). */
+  is_archived?: boolean;
   team_id: number;
   team_name: string | null;
   match_id: number | null;
