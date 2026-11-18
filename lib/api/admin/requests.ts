@@ -146,6 +146,7 @@ export function adminPathToRoute(path: string | null | undefined): string | null
   const table: Record<string, string> = {
     "/yonetim/talepler": "/yonetim/talepler",
     "/yonetim/admin/savunmalar": "/yonetim/savunmalar",
+    "/yonetim/admin/itirazlar": "/yonetim/itirazlar",
     "/editor/cezalar": "/yonetim/cezalar",
     "/yonetim/admin/transfer-onaylari": "/yonetim/transfer-onaylari",
     "/editor/kadrolar": "/yonetim/kadrolar",

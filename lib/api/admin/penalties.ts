@@ -285,3 +285,28 @@ export function collapseEvents(events: PenaltyEvent[] = []): PenaltyEvent[] {
   }
   return out;
 }
+
+/* ===================== takım itirazları =====================
+   Ceza dosyasından bağımsız başvurular (maç sonucu, hakem kararı…).
+   GET  /api/penalties/admin/appeals?status=            (penalties.review)
+   POST /api/penalties/admin/appeals/:publicId/review   karar / incelemeye al */
+
+export type { Appeal, AppealStatus, AppealCategory } from "../panel";
+export { APPEAL_STATUS_LABELS } from "../panel";
+import type { Appeal, AppealStatus } from "../panel";
+
+/** "open": henüz sonuçlanmamış (bekleyen + incelenen) başvurular. */
+export type AppealFilter = AppealStatus | "open" | "";
+
+export const APPEAL_DECISIONS: { value: Exclude<AppealStatus, "pending">; label: string; hint: string }[] = [
+  { value: "accepted", label: "İtirazı kabul et", hint: "Takım haklı bulundu; itiraza konu karar düzeltilecek." },
+  { value: "partially_accepted", label: "Kısmen kabul et", hint: "İtirazın bir bölümü yerinde görüldü." },
+  { value: "rejected", label: "İtirazı reddet", hint: "İtiraz yerinde görülmedi; mevcut karar geçerlidir." },
+  { value: "in_review", label: "İncelemeye al", hint: "Henüz karar verilmedi; takıma başvurunun incelendiği bildirilir." },
+];
+
+export const listAppeals = (params: { status?: AppealFilter } = {}) =>
+  get<{ items: Appeal[] }>("/api/penalties/admin/appeals", params).then((d) => d.items ?? []);
+
+export const reviewAppeal = (publicId: string, body: { status: Exclude<AppealStatus, "pending">; decision_text: string | null }) =>
+  post<{ appeal: Appeal; message?: string }>(`/api/penalties/admin/appeals/${enc(publicId)}/review`, body);

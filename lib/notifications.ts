@@ -144,6 +144,11 @@ function targetFromEntity(
         ? { pathname: "/sozlesme/[id]", params: { id: entityId } }
         : { pathname: "/sozlesmelerim" };
 
+    // Takım itirazı (ceza dosyasından bağımsız başvuru): kurul değerlendirme
+    // kutusuna, takım yetkilisi kendi başvuru ekranına gider.
+    case "DISCIPLINE_APPEAL":
+      return ctx.isManagement ? { pathname: "/yonetim/itirazlar" } : { pathname: "/takimim/itiraz" };
+
     case "PENALTY":
       return entityId
         ? { pathname: "/ceza/[id]", params: { id: entityId } }
@@ -207,6 +212,8 @@ const TYPE_PREFIX_TARGETS: ReadonlyArray<
   ["TRANSFER_", (id) => (id ? { pathname: "/teklif/[id]", params: { id } } : { pathname: "/tekliflerim" })],
   ["OFFER_", (id) => (id ? { pathname: "/teklif/[id]", params: { id } } : { pathname: "/tekliflerim" })],
   ["CONTRACT_", (id) => (id ? { pathname: "/sozlesme/[id]", params: { id } } : { pathname: "/sozlesmelerim" })],
+  // Tam ad önekten önce: itirazın id'si bir ceza dosyası değildir.
+  ["PENALTY_APPEAL_", (_id, ctx) => (ctx.isManagement ? { pathname: "/yonetim/itirazlar" } : { pathname: "/takimim/itiraz" })],
   ["PENALTY_", (id) => (id ? { pathname: "/ceza/[id]", params: { id } } : { pathname: "/cezalarim" })],
   ["PANEL_MESSAGE", (id) => (id ? { pathname: "/mesaj/[id]", params: { id } } : MANAGEMENT_BOX)],
   ["TEAM_INVITE", () => ({ pathname: "/davetler" })],

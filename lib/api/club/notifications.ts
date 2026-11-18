@@ -47,6 +47,7 @@ export function notificationHref(item: PanelNotification): string | null {
   if (type.startsWith("TRANSFER_")) return "/takimim/transfer";
   if (type.startsWith("CONTRACT_")) return id ? `/sozlesme/${id}` : "/takimim/sozlesmeler";
   if (type.startsWith("TEAM_INVITE") || type.startsWith("TEAM_APPLICATION")) return "/takimim/ilanlar";
+  if (type.startsWith("PENALTY_APPEAL_")) return "/takimim/itiraz";
   if (type.startsWith("PENALTY_")) return id ? `/ceza/${id}` : "/takimim/disiplin";
   if (type.startsWith("MATCH_CREATED") || type.startsWith("MATCH_LINEUP")) return id && /^\d+$/.test(id) ? `/takimim/mac/${id}` : "/takimim/mac-merkezi";
   if (type.startsWith("MATCH_REQUEST")) return "/takimim/mac-al";
