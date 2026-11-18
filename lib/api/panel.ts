@@ -253,6 +253,68 @@ export const submitObjection = (publicId: string, text: string, side: string) =>
   post<{ message: string }>(`/api/penalties/${publicId}/objection`, { text, side });
 
 /**
+ * Takım itirazları — ceza dosyasından bağımsız başvurular (maç sonucu, hakem
+ * kararı, oyuncu uygunluğu…). Takım yetkilisi açar, disiplin kurulu
+ * sonuçlandırır. Konu başlığı ve gerekçe yalnız takım ve kurulca görülür;
+ * kurulun kararı herkese açık disiplin sayfasında duyurulur.
+ * Sözlükler sunucudaki constants/penalty.js ile birebir.
+ */
+export type AppealStatus = "pending" | "in_review" | "accepted" | "partially_accepted" | "rejected";
+export type AppealCategory = "match_result" | "referee" | "eligibility" | "forfeit" | "organization" | "other";
+
+export const APPEAL_STATUS_LABELS: Record<AppealStatus, string> = {
+  pending: "Değerlendirme bekliyor",
+  in_review: "İnceleniyor",
+  accepted: "Kabul edildi",
+  partially_accepted: "Kısmen kabul edildi",
+  rejected: "Reddedildi",
+};
+
+export const APPEAL_CATEGORIES: { key: AppealCategory; label: string }[] = [
+  { key: "match_result", label: "Maç sonucu" },
+  { key: "referee", label: "Hakem kararı" },
+  { key: "eligibility", label: "Oyuncu uygunluğu / lisans" },
+  { key: "forfeit", label: "Hükmen sonuç / maça çıkmama" },
+  { key: "organization", label: "Saha ve organizasyon" },
+  { key: "other", label: "Diğer" },
+];
+
+export interface Appeal {
+  public_id: string;
+  city_id: number | null;
+  team_id: number;
+  team_name: string | null;
+  match_id: number | null;
+  match_label: string | null;
+  match_date: string | null;
+  category: AppealCategory;
+  category_label: string;
+  status: AppealStatus;
+  status_label: string;
+  is_decided: boolean;
+  decision_text: string | null;
+  decided_at: string | null;
+  createdAt: string;
+  /** Yalnız başvuran takım ve kurul görünümünde döner. */
+  subject?: string;
+  description?: string;
+}
+
+export interface AppealMatch {
+  id: number;
+  label: string;
+  date: string | null;
+}
+
+export const getMyAppeals = () => get<{ items: Appeal[]; can_submit: boolean }>("/api/penalties/appeals/mine");
+
+export const getAppealMatches = () =>
+  get<{ matches: AppealMatch[] }>("/api/penalties/appeals/matches").then((d) => d.matches ?? []);
+
+export const createAppeal = (body: { category: AppealCategory; match_id: number | null; subject: string; description: string }) =>
+  post<{ appeal: Appeal; message: string }>("/api/penalties/appeals", body);
+
+/**
  * Mesajlar — panel başvuru sistemi (thread'li).
  *
  * categories/statuses/priorities sözlükleri yanıtla gelir; ekranda sabit
