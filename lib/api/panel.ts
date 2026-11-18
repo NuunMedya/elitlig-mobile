@@ -326,6 +326,11 @@ export interface Appeal {
   linked_penalty_public_id?: string | null;
   /** Kurul başvuruyu arşive aldı (yalnız kurul görünümünde). */
   is_archived?: boolean;
+  /** Başvuruda adı geçen oyuncu (varsa). */
+  player_id?: number | null;
+  player_name?: string | null;
+  /** Bu başvurudan başlatılan süreçler (yalnız kurul görünümünde). */
+  processes?: AppealProcess[];
   team_id: number;
   team_name: string | null;
   match_id: number | null;
@@ -350,6 +355,79 @@ export interface Appeal {
   description?: string;
   attachments?: AppealAttachment[];
 }
+
+/** Başvurudan başlatılan süreç: oyuncu sevki, maç ya da konu incelemesi. */
+export interface AppealProcess {
+  type: "player" | "match" | "topic";
+  public_id: string;
+  title: string;
+  status_label: string;
+  is_decided: boolean;
+  createdAt: string;
+}
+
+/** Başvuruda "ilgili oyuncu" seçimi: maçın iki takımının kadrosu. */
+export interface AppealPlayer {
+  player_id: number;
+  player_name: string;
+  team_name: string | null;
+}
+
+/**
+ * İnceleme: oyuncu sevki dışındaki disiplin süreçleri (maç / konu).
+ * Açılış açıklaması ve karar herkese açıktır.
+ */
+export interface Inquiry {
+  public_id: string;
+  kind: "match" | "topic";
+  kind_label: string;
+  city_id: number | null;
+  league_id: number | null;
+  season_id: number | null;
+  match_id: number | null;
+  match_label: string | null;
+  match_date: string | null;
+  subject: string | null;
+  subject_date: string | null;
+  title: string;
+  headline: string;
+  description: string | null;
+  status: "open" | "decided";
+  status_label: string;
+  is_decided: boolean;
+  decision_text: string | null;
+  decided_at: string | null;
+  createdAt: string;
+  source_appeal_public_id?: string | null;
+  is_archived?: boolean;
+}
+
+/** Herkese açık ceza dosyası (oyuncu sevki). */
+export interface PublicPenalty {
+  public_id: string;
+  status: string;
+  status_label: string;
+  city_id: number | null;
+  league_id: number | null;
+  season_id: number | null;
+  player_name: string | null;
+  team_name: string | null;
+  match_label: string | null;
+  match_date: string | null;
+  disiplin_karari: string | null;
+  match_count: number | null;
+  ban_state: { duration_type?: string | null; active?: boolean | null; matches_required?: number; matches_remaining?: number; summary?: string } | null;
+  createdAt: string;
+}
+
+export const getPublicPenalties = (cityId: number) =>
+  get<{ items: PublicPenalty[] }>("/api/penalties/public", { city_id: cityId }).then((d) => d.items ?? []);
+
+export const getPublicInquiries = (cityId: number) =>
+  get<{ items: Inquiry[] }>("/api/penalties/public/inquiries", { city_id: cityId }).then((d) => d.items ?? []);
+
+export const getAppealMatchPlayers = (matchId: number) =>
+  get<{ players: AppealPlayer[] }>(`/api/penalties/appeals/matches/${matchId}/players`).then((d) => d.players ?? []);
 
 export interface AppealMatch {
   id: number;
@@ -399,6 +477,7 @@ export function uploadAppealFile(file: { uri: string; name: string; type: string
 export const createAppeal = (body: {
   category: AppealCategory;
   match_id: number | null;
+  player_id?: number | null;
   subject: string;
   description: string;
   attachments?: AppealAttachment[];

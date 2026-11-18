@@ -201,15 +201,15 @@ export interface PenaltyUpdate {
 }
 
 export interface PenaltyCreate {
-  city_id: number;
-  league_id: number;
-  season_id: number;
+  city_id: number | null;
+  league_id: number | null;
+  season_id: number | null;
   match_id: number | null;
-  match_label: string | null;
+  match_label?: string | null;
   player_id: number;
-  team_id: number | null;
-  team_name: string | null;
-  disiplin_karari: string | null;
+  team_id?: number | null;
+  team_name?: string | null;
+  disiplin_karari?: string | null;
   /** Dosya bir disiplin başvurusu üzerine açılıyorsa sunucu ikisini bağlar. */
   appeal_public_id?: string;
 }
@@ -332,6 +332,34 @@ export const searchAppealTeams = (q: string) =>
 
 export const listAppealTeamMatches = (teamId: number) =>
   get<{ matches: { id: number; label: string; date: string | null }[] }>(`/api/penalties/admin/appeal-teams/${enc(teamId)}/matches`).then((d) => d.matches ?? []);
+
+/* İncelemeler (maç / konu) — services/penalty/inquiries.js */
+export type { Inquiry, AppealProcess } from "../panel";
+import type { Inquiry } from "../panel";
+
+export const listInquiries = (params: { archived?: "only" | "all" | "" } = {}) =>
+  get<{ items: Inquiry[] }>("/api/penalties/admin/inquiries", params).then((d) => d.items ?? []);
+
+/** { kind: "match", match_id } ya da { kind: "topic", subject, subject_date }; appeal_public_id verilirse başvuru üzerine başlar. */
+export const createInquiry = (body: {
+  kind: "match" | "topic";
+  match_id?: number | null;
+  subject?: string;
+  subject_date?: string | null;
+  city_id?: number | null;
+  league_id?: number | null;
+  season_id?: number | null;
+  description?: string | null;
+  appeal_public_id?: string;
+}) => post<{ inquiry: Inquiry }>("/api/penalties/admin/inquiries", body).then((d) => d.inquiry);
+
+export const updateInquiry = (publicId: string, body: { status?: "open" | "decided"; decision_text?: string | null; description?: string | null }) =>
+  patch<{ inquiry: Inquiry }>(`/api/penalties/admin/inquiries/${enc(publicId)}`, body).then((d) => d.inquiry);
+
+export const archiveInquiry = (publicId: string, archived = true) =>
+  post<{ inquiry: Inquiry }>(`/api/penalties/admin/inquiries/${enc(publicId)}/archive`, { archived }).then((d) => d.inquiry);
+
+export const deleteInquiry = (publicId: string) => del<{ message?: string }>(`/api/penalties/admin/inquiries/${enc(publicId)}`);
 
 export const adminCreateAppeal = (body: { team_id: number; match_id: number | null; category: string; subject: string; description: string }) =>
   post<{ appeal: Appeal; message?: string }>("/api/penalties/admin/appeals", body).then((d) => d.appeal);

@@ -12,6 +12,11 @@
  * takım, ilgili takımlar (rakip dahil) ya da herkese açık (disiplin sayfası +
  * haberler). Takımın gerekçe metni ve ekleri hiçbir durumda yayımlanmaz.
  *
+ * SÜREÇ BAŞLAT: karar sayfasından tek başvuru üzerine üç ayrı süreç açılır —
+ * başvuruda adı geçen oyuncu disiplin kuruluna sevk edilir, maç hakkında
+ * inceleme başlatılır, başlık + tarihle konu incelemesi açılır. Hepsi başvuruya
+ * bağlanır ve sayfada listelenir.
+ *
  * BAŞVURU EKLE: kurul, panel dışından iletilen ya da kendiliğinden ele aldığı
  * bir başvuruyu takım adına elle kaydeder (takım → maç → neden → metin).
  * DOSYA AÇ: başvuru bir oyuncu hakkında işlem gerektiriyorsa karar sayfasından
@@ -40,6 +45,8 @@ import { formatDate, formatDateTime, timeAgo } from "@/lib/admin/format";
 import {
   adminCreateAppeal,
   archiveAppeal,
+  createInquiry,
+  createPenalty,
   deleteAppeal,
   APPEAL_DECISIONS,
   APPEAL_STATUS_LABELS,
@@ -227,6 +234,40 @@ function AppealReviewSheet({
     invalidate: [["admin", "penalties", "appeals"]],
     onSuccess: onClose,
   });
+  // Süreç başlat: oyuncu sevki · maç incelemesi · konu incelemesi.
+  const [topic, setTopic] = useState("");
+  const [topicDate, setTopicDate] = useState("");
+  useEffect(() => {
+    setTopic("");
+    setTopicDate("");
+  }, [appeal?.public_id]);
+  const started = { invalidate: [["admin", "penalties"]] as [string, string][], onSuccess: onClose };
+  const refer = useAdminMutation(
+    () =>
+      createPenalty({
+        city_id: appeal!.city_id,
+        league_id: appeal!.league_id ?? null,
+        season_id: appeal!.season_id ?? null,
+        match_id: appeal!.match_id,
+        player_id: appeal!.player_id!,
+        appeal_public_id: appeal!.public_id,
+      }),
+    { ...started, success: () => `${appeal?.player_name ?? "Oyuncu"} disiplin kuruluna sevk edildi.` }
+  );
+  const startMatch = useAdminMutation(() => createInquiry({ kind: "match", appeal_public_id: appeal!.public_id }), { ...started, success: "Maç hakkında inceleme başlatıldı." });
+  const startTopic = useAdminMutation(
+    () => createInquiry({ kind: "topic", subject: topic.trim(), subject_date: toIsoDate(topicDate), appeal_public_id: appeal!.public_id }),
+    { ...started, success: "Konu incelemesi başlatıldı." }
+  );
+  const confirmRefer = async () => {
+    const sure = await confirmAction({
+      title: "Oyuncu sevk edilsin mi?",
+      message: `${appeal?.player_name ?? "Oyuncu"} disiplin kuruluna sevk edilecek; oyuncuya ve takımına bildirilecek.`,
+      confirmLabel: "Sevk et",
+    });
+    if (sure) refer.mutate(undefined);
+  };
+
   const confirmRemove = async () => {
     const sure = await confirmAction({
       title: "Başvuru silinsin mi?",
@@ -323,13 +364,44 @@ function AppealReviewSheet({
             </Text>
           </View>
 
-          {/* Dosya aç: başvuru bir oyuncu hakkında işlem gerektiriyorsa ceza dosyası açılır. */}
-          <View style={styles.caseRow}>
-            {appeal.linked_penalty_public_id ? (
-              <Button label="Açılan dosya" icon="folder-open-outline" variant="secondary" size="sm" onPress={() => onOpenLinked(appeal.linked_penalty_public_id!)} style={styles.grow} />
+          <GroupCard title="Süreç başlat" icon="hammer">
+            <View style={styles.startRow}>
+              <View style={styles.grow}>
+                <Text style={styles.startTitle} {...textScale.dense}>Oyuncuyu sevk et</Text>
+                <Text style={styles.meta} {...textScale.dense}>{appeal.player_name ? `Başvuruda adı geçen: ${appeal.player_name}` : "Başvuruda oyuncu belirtilmemiş."}</Text>
+              </View>
+              {appeal.player_id ? (
+                <Button label="Sevk et" size="sm" onPress={confirmRefer} loading={refer.isPending} />
+              ) : (
+                <Button label="Oyuncu seç" size="sm" variant="secondary" onPress={() => onOpenCase(appeal)} />
+              )}
+            </View>
+            <View style={styles.startRow}>
+              <View style={styles.grow}>
+                <Text style={styles.startTitle} {...textScale.dense}>Maç incelemesi</Text>
+                <Text style={styles.meta} {...textScale.dense}>{appeal.match_label ?? "Başvuruda maç belirtilmemiş."}</Text>
+              </View>
+              <Button label="Başlat" size="sm" onPress={() => startMatch.mutate(undefined)} loading={startMatch.isPending} disabled={!appeal.match_id} />
+            </View>
+            <View style={styles.startForm}>
+              <Text style={styles.startTitle} {...textScale.dense}>Konu incelemesi</Text>
+              <Input value={topic} onChangeText={setTopic} placeholder="Konu başlığı (örn. Instagram paylaşımları)" maxLength={255} />
+              <Input value={topicDate} onChangeText={setTopicDate} placeholder="Tarih (GG.AA.YYYY)" keyboardType="numbers-and-punctuation" maxLength={10} />
+              <Button label="Konu incelemesi başlat" size="sm" onPress={() => startTopic.mutate(undefined)} loading={startTopic.isPending} disabled={!topic.trim()} />
+            </View>
+            {(appeal.processes ?? []).length ? (
+              <View style={styles.processes}>
+                <Text style={styles.meta} {...textScale.dense}>Bu başvurudan başlatılan süreçler</Text>
+                {(appeal.processes ?? []).map((item) => (
+                  <View key={`${item.type}-${item.public_id}`} style={styles.startRow}>
+                    <Text style={[styles.startTitle, styles.grow]} numberOfLines={2} {...textScale.dense}>{item.title}</Text>
+                    <Badge label={item.status_label} tone={item.is_decided ? "win" : "warn"} size="xs" />
+                    {item.type === "player" ? <Button label="Aç" size="sm" variant="ghost" onPress={() => onOpenLinked(item.public_id)} /> : null}
+                  </View>
+                ))}
+              </View>
             ) : null}
-            <Button label={appeal.linked_penalty_public_id ? "Yeni dosya aç" : "Dosya aç"} icon="folder-outline" variant="secondary" size="sm" onPress={() => onOpenCase(appeal)} style={styles.grow} />
-          </View>
+          </GroupCard>
           <View style={styles.caseRow}>
             <Button
               label={appeal.is_archived ? "Arşivden çıkar" : "Arşive al"}
@@ -353,6 +425,7 @@ function AppealReviewSheet({
 
           <GroupCard title="Başvuru bilgileri" icon="information-circle">
             <FactRow icon="pricetag-outline" label="İtiraz nedeni" value={appeal.category_label} />
+            <FactRow icon="person-outline" label="İlgili oyuncu" value={appeal.player_name || "Belirtilmedi"} />
             <FactRow icon="create-outline" label="Kaynak" value={appeal.source === "admin" ? "Kurul kaydı" : "Takım başvurusu"} />
             <FactRow icon="shield-outline" label="İtiraz eden takım" value={appeal.team_name || "—"} />
             <FactRow icon="people-outline" label="Rakip takım" value={appeal.opponent_team_name || "—"} />
@@ -512,7 +585,19 @@ function AppealCreateSheet({ visible, onClose }: { visible: boolean; onClose: ()
   );
 }
 
+/** "GG.AA.YYYY" → "YYYY-AA-GG" (geçersizse null). */
+function toIsoDate(value: string): string | null {
+  const match = value.trim().match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+  if (!match) return null;
+  const [, day, month, year] = match;
+  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+}
+
 const styles = StyleSheet.create({
+  startRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  startForm: { gap: space.sm },
+  startTitle: { ...type.label, color: colors.textPrimary },
+  processes: { gap: space.sm },
   caseRow: { flexDirection: "row", gap: space.sm },
   header: { gap: space.md },
   grow: { flex: 1, minWidth: 0 },
