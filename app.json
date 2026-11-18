@@ -2,7 +2,7 @@
   "expo": {
     "name": "ElitLig",
     "slug": "elitlig-mobile",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -144,7 +144,16 @@
           "cameraPermission": false
         }
       ],
-      "expo-video"
+      "expo-video",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "iosAppId": "ca-app-pub-8129650500771620~3523187196",
+          "skAdNetworkItems": [
+            "cstr6suwn9.skadnetwork"
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

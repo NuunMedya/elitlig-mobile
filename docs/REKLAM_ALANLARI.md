@@ -13,30 +13,40 @@ Her alanın modu **Reklam alanları → Mobil uygulama** sekmesinden seçilir:
 sponsor / Google / sponsor öncelikli (boşsa Google) / kapalı. Sponsor reklamları
 yeni bir mağaza sürümü gerektirmez; OTA güncellemesiyle gelir.
 
-## Google AdMob'u açmak (yeni mağaza sürümü gerekir)
+## Google AdMob
 
-AdMob yerel bir modüldür; uygulamaya eklenene kadar `lib/ads/admob.ts` sessizce
-`null` döner ve Google alanları boş kalır (uygulama çökmez).
+Paket (`react-native-google-mobile-ads`) kuruludur; `app.json` → `plugins`
+altında uygulama kimlikleriyle tanımlanır. AdMob yerel bir modüldür: yalnızca
+bu paketi içeren mağaza sürümlerinde çalışır. Modül yoksa `lib/ads/admob.ts`
+sessizce `null` döner ve Google alanları boş kalır (uygulama çökmez).
 
-1. AdMob'da Android ve iOS uygulamalarını oluşturun; uygulama kimliklerini
-   (`ca-app-pub-…~…`) not edin.
-2. Paketi ekleyin (Expo SDK 54 / RN 0.81 ile uyumlu sürümü seçin):
-   `npx expo install react-native-google-mobile-ads`
-3. `app.json` → `plugins` dizisine ekleyin:
-   ```json
-   ["react-native-google-mobile-ads", {
-     "androidAppId": "ca-app-pub-XXXXXXXX~YYYYYYYY",
-     "iosAppId": "ca-app-pub-XXXXXXXX~ZZZZZZZZ"
-   }]
-   ```
-4. `app.json` → `version` değerini artırın (runtimeVersion `appVersion`
-   politikasında; yerel modül eklenince eski sürümlere OTA gitmemeli).
-5. EAS ile yeni sürüm derleyip yayınlayın.
-6. Yönetimde **Google reklamları** sekmesinde Google'ı açın, AdMob uygulama
-   kimliklerini kayıt için girin; **Reklam alanları → Mobil uygulama**
-   sekmesinde her alana Android/iOS reklam birimini (`ca-app-pub-…/…`) yazın.
-7. elitlig.com/app-ads.txt kendiliğinden yayıncı kimliğinden üretilir;
-   AdMob'da geliştirici web sitesi olarak elitlig.com girilmelidir.
+**Durum:** iOS açık (1.2.0 ve sonrası). **Android kapalı** — Android AdMob
+uygulama kimliği henüz girilmedi. Kimlik olmadan SDK Android'de açılışta
+çöktüğü için paket Android derlemesine alınmıyor
+(`package.json` → `expo.autolinking.android.exclude`).
+
+### Android'i açmak
+
+1. `app.json` → `react-native-google-mobile-ads` eklentisine
+   `"androidAppId": "ca-app-pub-…~…"` ekleyin.
+2. `package.json` içindeki `expo.autolinking.android.exclude` listesinden
+   `react-native-google-mobile-ads` satırını kaldırın.
+3. `app.json` → `version` değerini artırıp EAS ile yeni sürüm yayınlayın.
+
+### Reklam birimleri (yeni sürüm gerektirmez)
+
+Yönetimde **Google reklamları** sekmesinde Google'ı açın ve AdMob uygulama
+kimliklerini girin; **Reklam alanları → Mobil uygulama** sekmesinde her alana
+Android/iOS reklam birimini (`ca-app-pub-…/…`) yazın.
+
+| Alan | AdMob biçimi |
+| --- | --- |
+| `app_home`, `app_match`, `app_inline` | Banner |
+| `app_popup` | Geçiş (interstitial) |
+| `app_rewarded` | Ödüllü |
+
+`app-ads.txt`, mağaza kaydındaki geliştirici web sitesinin (nuuncreative.com)
+kök dizininde yayınlanır.
 
 Test sırasında Google'ın test birimlerini kullanın (ör. banner
 `ca-app-pub-3940256099942544/6300978111`); gerçek birime kendi cihazınızdan
