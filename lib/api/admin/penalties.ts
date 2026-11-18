@@ -291,9 +291,16 @@ export function collapseEvents(events: PenaltyEvent[] = []): PenaltyEvent[] {
    GET  /api/penalties/admin/appeals?status=            (penalties.review)
    POST /api/penalties/admin/appeals/:publicId/review   karar / incelemeye al */
 
-export type { Appeal, AppealStatus, AppealCategory } from "../panel";
-export { APPEAL_STATUS_LABELS } from "../panel";
-import type { Appeal, AppealStatus } from "../panel";
+export type { Appeal, AppealStatus, AppealCategory, AppealVisibility } from "../panel";
+export { APPEAL_STATUS_LABELS, APPEAL_VISIBILITY_LABELS } from "../panel";
+import type { Appeal, AppealStatus, AppealVisibility } from "../panel";
+
+/** Karar verilirken seçilen duyuru kapsamı (web AppealReviewPanel ile aynı). */
+export const APPEAL_VISIBILITY_OPTIONS: { value: AppealVisibility; label: string; hint: string }[] = [
+  { value: "team", label: "Yalnızca itiraz eden takıma bildir", hint: "Sonuç yalnızca başvuruyu yapan takıma bildirilir." },
+  { value: "teams", label: "Yalnızca ilgili takımlara bildir", hint: "İtiraz eden takıma ve maçtaki rakibe bildirilir; herkese açık yayımlanmaz." },
+  { value: "public", label: "Herkese açık yayımla", hint: "Disiplin sayfasında ve Haberler'de yayımlanır; ilgili takımlar da bilgilendirilir." },
+];
 
 /** "open": henüz sonuçlanmamış (bekleyen + incelenen) başvurular. */
 export type AppealFilter = AppealStatus | "open" | "";
@@ -302,11 +309,11 @@ export const APPEAL_DECISIONS: { value: Exclude<AppealStatus, "pending">; label:
   { value: "accepted", label: "İtirazı kabul et", hint: "Takım haklı bulundu; itiraza konu karar düzeltilecek." },
   { value: "partially_accepted", label: "Kısmen kabul et", hint: "İtirazın bir bölümü yerinde görüldü." },
   { value: "rejected", label: "İtirazı reddet", hint: "İtiraz yerinde görülmedi; mevcut karar geçerlidir." },
-  { value: "in_review", label: "İncelemeye al", hint: "Henüz karar verilmedi; takıma başvurunun incelendiği bildirilir." },
+  { value: "in_review", label: "Değerlendirmeye al", hint: "Henüz karar verilmedi; takıma başvurunun değerlendirildiği bildirilir." },
 ];
 
 export const listAppeals = (params: { status?: AppealFilter } = {}) =>
   get<{ items: Appeal[] }>("/api/penalties/admin/appeals", params).then((d) => d.items ?? []);
 
-export const reviewAppeal = (publicId: string, body: { status: Exclude<AppealStatus, "pending">; decision_text: string | null }) =>
+export const reviewAppeal = (publicId: string, body: { status: Exclude<AppealStatus, "pending">; decision_text: string | null; visibility?: AppealVisibility }) =>
   post<{ appeal: Appeal; message?: string }>(`/api/penalties/admin/appeals/${enc(publicId)}/review`, body);

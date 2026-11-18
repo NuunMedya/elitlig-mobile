@@ -264,7 +264,7 @@ export type AppealCategory = "match_result" | "referee" | "eligibility" | "forfe
 
 export const APPEAL_STATUS_LABELS: Record<AppealStatus, string> = {
   pending: "Değerlendirme bekliyor",
-  in_review: "İnceleniyor",
+  in_review: "Değerlendiriliyor",
   accepted: "Kabul edildi",
   partially_accepted: "Kısmen kabul edildi",
   rejected: "Reddedildi",
@@ -278,6 +278,22 @@ export const APPEAL_CATEGORIES: { key: AppealCategory; label: string }[] = [
   { key: "organization", label: "Saha ve organizasyon" },
   { key: "other", label: "Diğer" },
 ];
+
+/** Sonucun kime duyurulacağı (kurul karar verirken seçer). */
+export type AppealVisibility = "team" | "teams" | "public";
+export const APPEAL_VISIBILITY_LABELS: Record<AppealVisibility, string> = {
+  team: "Yalnızca itiraz eden takım",
+  teams: "Yalnızca ilgili takımlar",
+  public: "Herkese açık",
+};
+
+/** İtiraz eki: bağlantı ya da yüklenmiş dosya. */
+export interface AppealAttachment {
+  type: "link" | "image" | "video" | "document";
+  url: string;
+  name: string | null;
+}
+export const APPEAL_ATTACHMENT_LIMIT = 10;
 
 export interface Appeal {
   public_id: string;
@@ -295,9 +311,16 @@ export interface Appeal {
   decision_text: string | null;
   decided_at: string | null;
   createdAt: string;
+  opponent_team_name?: string | null;
+  visibility?: AppealVisibility;
+  /** Karar herkese açık yayımlandı mı (disiplin sayfası + haberler). */
+  is_published?: boolean;
+  /** false: takım bu itirazda RAKİP; yalnız karar görünür. */
+  is_own?: boolean;
   /** Yalnız başvuran takım ve kurul görünümünde döner. */
   subject?: string;
   description?: string;
+  attachments?: AppealAttachment[];
 }
 
 export interface AppealMatch {
@@ -311,7 +334,23 @@ export const getMyAppeals = () => get<{ items: Appeal[]; can_submit: boolean }>(
 export const getAppealMatches = () =>
   get<{ matches: AppealMatch[] }>("/api/penalties/appeals/matches").then((d) => d.matches ?? []);
 
-export const createAppeal = (body: { category: AppealCategory; match_id: number | null; subject: string; description: string }) =>
+/** İtiraza eklenecek fotoğraf / video / belge (≤25 MB); dönen adres başvuruyla gönderilir. */
+export function uploadAppealFile(file: { uri: string; name: string; type: string }) {
+  const form = new FormData();
+  // RN fetch dosya nesnesini { uri, name, type } üçlüsüyle tanır.
+  form.append("file", file as unknown as Blob);
+  return post<{ url: string; name: string | null; mime: string | null; type: AppealAttachment["type"] }>("/api/penalties/appeals/uploads", form, {
+    timeout: 180_000,
+  });
+}
+
+export const createAppeal = (body: {
+  category: AppealCategory;
+  match_id: number | null;
+  subject: string;
+  description: string;
+  attachments?: AppealAttachment[];
+}) =>
   post<{ appeal: Appeal; message: string }>("/api/penalties/appeals", body);
 
 /**

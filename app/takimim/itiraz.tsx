@@ -8,17 +8,25 @@
  * yetkilisi olup olmadığını söyler. Yeni başvuru alt sayfada yazılır
  * (POST /api/penalties/appeals): konu türü, isteğe bağlı maç, başlık, gerekçe.
  *
- * Başlık ve gerekçe yalnız takım ve kurulca görülür; kurulun kararı herkese
- * açık disiplin sayfasında duyurulur.
+ * Başvuruya ek konabilir: bağlantı (haber, video adresi…) ve galeriden
+ * fotoğraf / video. Dosya önce yüklenir (POST /api/penalties/appeals/uploads),
+ * dönen adres başvuruyla gönderilir. Belge (PDF, Word…) seçici uygulamada
+ * yok; belge web panelinden eklenir ya da bağlantısı yapıştırılır.
+ *
+ * Başlık, gerekçe ve ekler yalnız takım ve kurulca görülür. Kurul sonucu
+ * kime duyuracağını kendi seçer. Liste, takımın RAKİP olduğu ve ilgili
+ * takımlara duyurulan sonuçları da içerir (is_own=false; yalnız karar).
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import * as ImagePicker from "expo-image-picker";
 import { Redirect } from "expo-router";
 import React, { useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { AppealAttachments } from "@/components/discipline/AppealAttachments";
 import {
   Badge,
   BottomSheet,
@@ -38,9 +46,13 @@ import {
   type Tone,
 } from "@/components/ui";
 import {
+  APPEAL_ATTACHMENT_LIMIT,
   APPEAL_CATEGORIES,
   APPEAL_STATUS_LABELS,
+  APPEAL_VISIBILITY_LABELS,
   createAppeal,
+  uploadAppealFile,
+  type AppealAttachment,
   getAppealMatches,
   getMyAppeals,
   type Appeal,
@@ -73,6 +85,8 @@ export default function TeamAppealScreen() {
   const [matchId, setMatchId] = useState<number | null>(null);
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
+  const [attachments, setAttachments] = useState<AppealAttachment[]>([]);
+  const [link, setLink] = useState("");
 
   const query = useQuery({
     queryKey: ["panel", "appeals"],
@@ -91,13 +105,15 @@ export default function TeamAppealScreen() {
   const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching });
 
   const mutation = useMutation({
-    mutationFn: () => createAppeal({ category, match_id: matchId, subject: subject.trim(), description: description.trim() }),
+    mutationFn: () => createAppeal({ category, match_id: matchId, subject: subject.trim(), description: description.trim(), attachments }),
     onSuccess: () => {
       setComposing(false);
       setCategory("match_result");
       setMatchId(null);
       setSubject("");
       setDescription("");
+      setAttachments([]);
+      setLink("");
       void queryClient.invalidateQueries({ queryKey: ["panel", "appeals"] });
       toast.show({ message: "İtiraz başvurun disiplin kuruluna iletildi.", tone: "success", icon: "checkmark-circle", haptic: "success" });
     },
@@ -109,6 +125,48 @@ export default function TeamAppealScreen() {
         duration: 4000,
       });
     },
+  });
+
+  const failed = (error: unknown, fallback: string) =>
+    toast.show({
+      message: error instanceof ApiError ? error.userMessage : error instanceof Error ? error.message : fallback,
+      tone: "danger",
+      icon: "alert-circle",
+      duration: 4000,
+    });
+
+  const room = APPEAL_ATTACHMENT_LIMIT - attachments.length;
+
+  const addLink = () => {
+    const raw = link.trim();
+    if (!raw) return;
+    const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    if (!/^https?:\/\/[^\s/]+\.[^\s/]+/i.test(url)) return failed(new Error("Geçerli bir bağlantı adresi yaz (örn. https://…)."), "");
+    if (room <= 0) return failed(new Error(`En fazla ${APPEAL_ATTACHMENT_LIMIT} ek eklenebilir.`), "");
+    setAttachments((previous) => (previous.some((item) => item.url === url) ? previous : [...previous, { type: "link", url, name: null }]));
+    setLink("");
+  };
+
+  // Galeriden fotoğraf / video seçip yükler.
+  const upload = useMutation({
+    mutationFn: async () => {
+      if (room <= 0) throw new Error(`En fazla ${APPEAL_ATTACHMENT_LIMIT} ek eklenebilir.`);
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) throw new Error("Fotoğraflarına erişim izni gerekiyor.");
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images", "videos"], quality: 0.85 });
+      if (result.canceled || !result.assets?.[0]) return null;
+      const asset = result.assets[0];
+      const isVideo = asset.type === "video";
+      const mime = asset.mimeType ?? (isVideo ? "video/mp4" : "image/jpeg");
+      const ext = mime.split("/")[1]?.replace("jpeg", "jpg").replace("quicktime", "mov") || (isVideo ? "mp4" : "jpg");
+      const name = asset.fileName ?? `itiraz-${Date.now()}.${ext}`;
+      const uploaded = await uploadAppealFile({ uri: asset.uri, name, type: mime });
+      return { type: uploaded.type ?? (isVideo ? "video" : "image"), url: uploaded.url, name: uploaded.name ?? name } as AppealAttachment;
+    },
+    onSuccess: (attachment) => {
+      if (attachment) setAttachments((previous) => [...previous, attachment]);
+    },
+    onError: (error: unknown) => failed(error, "Dosya yüklenemedi."),
   });
 
   if (!auth.user) return <Redirect href="/giris" />;
@@ -131,12 +189,12 @@ export default function TeamAppealScreen() {
             <View style={styles.intro}>
               <Text style={styles.introText} {...textScale.long}>
                 Maç sonucu, hakem kararı, rakip oyuncunun uygunluğu ya da organizasyonla ilgili itirazını buradan kurula
-                iletebilirsin. Kurulun kararı burada ve disiplin sayfasındaki duyurularda yayımlanır.
+                iletebilirsin. Bağlantı, fotoğraf ve video ekleyebilirsin. Kurulun kararı sana burada bildirilir.
               </Text>
               <View style={styles.privacy}>
                 <Ionicons name="lock-closed" size={13} color={colors.textTertiary} />
                 <Text style={styles.privacyText} {...textScale.dense}>
-                  İtiraz gerekçen herkese açık sayfada gösterilmez.
+                  İtiraz gerekçen ve eklerin herkese açık sayfada gösterilmez.
                 </Text>
               </View>
             </View>
@@ -193,7 +251,7 @@ export default function TeamAppealScreen() {
               variant="primary"
               icon="send"
               onPress={() => mutation.mutate()}
-              disabled={!valid || mutation.isPending}
+              disabled={!valid || mutation.isPending || upload.isPending}
               loading={mutation.isPending}
               style={styles.sheetButton}
             />
@@ -246,6 +304,39 @@ export default function TeamAppealScreen() {
             maxLength={5000}
             hint={`En az ${MIN_TEXT} karakter. Gönderildikten sonra düzenlenemez.`}
           />
+
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel} {...textScale.dense}>
+              Ekler (isteğe bağlı) · {attachments.length}/{APPEAL_ATTACHMENT_LIMIT}
+            </Text>
+            <Input
+              value={link}
+              onChangeText={setLink}
+              placeholder="Bağlantı yapıştır (haber, video adresi…)"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              returnKeyType="done"
+              onSubmitEditing={addLink}
+            />
+            <View style={styles.sheetFooter}>
+              <Button label="Bağlantı ekle" icon="link" variant="secondary" size="sm" onPress={addLink} disabled={!link.trim()} style={styles.sheetButton} />
+              <Button
+                label="Fotoğraf / video"
+                icon="images"
+                variant="secondary"
+                size="sm"
+                onPress={() => upload.mutate()}
+                loading={upload.isPending}
+                disabled={upload.isPending || room <= 0}
+                style={styles.sheetButton}
+              />
+            </View>
+            <AppealAttachments items={attachments} onRemove={(index) => setAttachments((previous) => previous.filter((_, i) => i !== index))} />
+            <Text style={styles.privacyText} {...textScale.dense}>
+              Dosya başına en fazla 25 MB. Ekleri yalnızca disiplin kurulu görür. Belge (PDF, Word…) eklemek için web panelini kullanabilir ya da bağlantısını yapıştırabilirsin.
+            </Text>
+          </View>
         </View>
       </BottomSheet>
     </SafeAreaView>
@@ -259,11 +350,13 @@ function Gap() {
 const AppealCard = React.memo(function AppealCard({ appeal }: { appeal: Appeal }) {
   const tone = STATUS_TONE[appeal.status] ?? "neutral";
   const meta = [appeal.category_label, appeal.match_label, formatDateShort(appeal.createdAt)].filter(Boolean).join(" · ");
+  const own = appeal.is_own !== false;
+  const title = own ? appeal.subject ?? appeal.category_label : `${appeal.team_name ?? "Rakip takım"} takımının itirazı`;
   return (
     <View
       style={styles.card}
       accessible
-      accessibilityLabel={[appeal.subject, APPEAL_STATUS_LABELS[appeal.status] ?? appeal.status_label, meta].filter(Boolean).join(", ")}
+      accessibilityLabel={[title, APPEAL_STATUS_LABELS[appeal.status] ?? appeal.status_label, meta].filter(Boolean).join(", ")}
     >
       <View style={styles.top}>
         <IconTile
@@ -274,19 +367,23 @@ const AppealCard = React.memo(function AppealCard({ appeal }: { appeal: Appeal }
         />
         <View style={styles.texts}>
           <Text style={styles.title} numberOfLines={2} {...textScale.dense}>
-            {appeal.subject ?? appeal.category_label}
+            {title}
           </Text>
           <Text style={styles.meta} numberOfLines={2} {...textScale.dense}>
             {meta}
           </Text>
         </View>
       </View>
-      <Badge label={APPEAL_STATUS_LABELS[appeal.status] ?? appeal.status_label} tone={tone} size="sm" />
+      <View style={styles.badges}>
+        {own ? null : <Badge label="Rakip takımın itirazı" size="sm" />}
+        <Badge label={APPEAL_STATUS_LABELS[appeal.status] ?? appeal.status_label} tone={tone} size="sm" />
+      </View>
       {appeal.description ? (
         <Text style={styles.body} numberOfLines={4} {...textScale.long}>
           {appeal.description}
         </Text>
       ) : null}
+      {appeal.attachments?.length ? <AppealAttachments items={appeal.attachments} /> : null}
       {appeal.is_decided ? (
         <View style={styles.verdict}>
           <Text style={styles.verdictLabel} {...textScale.badge}>
@@ -295,6 +392,11 @@ const AppealCard = React.memo(function AppealCard({ appeal }: { appeal: Appeal }
           <Text style={styles.verdictText} {...textScale.long}>
             {appeal.decision_text || "Karar metni yazılmadı."}
           </Text>
+          {own ? (
+            <Text style={styles.meta} {...textScale.dense}>
+              Duyuru: {APPEAL_VISIBILITY_LABELS[appeal.visibility ?? "team"]}
+            </Text>
+          ) : null}
         </View>
       ) : null}
     </View>
@@ -321,6 +423,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     alignItems: "flex-start",
   },
+  badges: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
   top: { flexDirection: "row", alignItems: "center", gap: space.md, alignSelf: "stretch" },
   texts: { flex: 1, minWidth: 0, gap: space.xxs },
   title: { ...type.h4, color: colors.textPrimary },
