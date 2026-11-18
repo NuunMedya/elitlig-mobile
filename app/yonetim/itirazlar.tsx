@@ -8,8 +8,9 @@
  * (kabul / kısmen kabul / ret / incelemeye al + karar metni). Sonuçlanmış
  * başvuruda karar okunur ve düzeltilebilir.
  *
- * Karar metni takıma bildirilir ve herkese açık disiplin sayfasında
- * duyurulur; takımın gerekçe metni yayımlanmaz.
+ * Karar verilirken SONUCUN KİME DUYURULACAĞI seçilir: yalnız itiraz eden
+ * takım, ilgili takımlar (rakip dahil) ya da herkese açık (disiplin sayfası +
+ * haberler). Takımın gerekçe metni ve ekleri hiçbir durumda yayımlanmaz.
  *
  * VERİ: GET /api/penalties/admin/appeals?status=
  *       POST /api/penalties/admin/appeals/:publicId/review
@@ -22,6 +23,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { AdminList, AdminScreen, useAdminMutation, type FilterOption } from "@/components/admin";
 import { RadioGroup } from "@/components/admin/penalties/RadioRow";
+import { AppealAttachments } from "@/components/discipline/AppealAttachments";
 import { CountStrip, DangerNote, FactRow, GroupCard, RequestCard } from "@/components/admin/team/ManageKit";
 import { Badge, BottomSheet, Button, Chip, ChipGroup, IconTile, Input, type Tone } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
@@ -29,11 +31,14 @@ import { formatDate, formatDateTime, timeAgo } from "@/lib/admin/format";
 import {
   APPEAL_DECISIONS,
   APPEAL_STATUS_LABELS,
+  APPEAL_VISIBILITY_LABELS,
+  APPEAL_VISIBILITY_OPTIONS,
   listAppeals,
   reviewAppeal,
   type Appeal,
   type AppealFilter,
   type AppealStatus,
+  type AppealVisibility,
 } from "@/lib/api/admin/penalties";
 import { colors, radius, space, textScale, type } from "@/theme";
 
@@ -157,6 +162,7 @@ export default function AppealInboxScreen() {
 function AppealReviewSheet({ appeal, onClose }: { appeal: Appeal | null; onClose: () => void }) {
   const [decision, setDecision] = useState<Decision>("accepted");
   const [text, setText] = useState("");
+  const [visibility, setVisibility] = useState<AppealVisibility>("team");
   const [editing, setEditing] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
@@ -165,22 +171,33 @@ function AppealReviewSheet({ appeal, onClose }: { appeal: Appeal | null; onClose
     if (!appeal) return;
     setDecision(appeal.is_decided ? (appeal.status as Decision) : "accepted");
     setText(appeal.decision_text ?? "");
+    setVisibility(appeal.visibility ?? "team");
     setEditing(false);
     setFailure(null);
   }, [appeal?.public_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const needsText = decision !== "in_review";
-  const review = useAdminMutation(() => reviewAppeal(appeal!.public_id, { status: decision, decision_text: text.trim() || null }), {
-    success: () => (needsText ? "Karar kaydedildi, takıma bildirildi ve duyuruldu." : "İtiraz incelemeye alındı ve takıma bildirildi."),
+  const review = useAdminMutation(
+    () => reviewAppeal(appeal!.public_id, { status: decision, decision_text: text.trim() || null, visibility: needsText ? visibility : undefined }),
+    {
+    success: () =>
+      !needsText
+        ? "İtiraz değerlendirmeye alındı ve takıma bildirildi."
+        : visibility === "public"
+          ? "Karar kaydedildi; disiplin sayfasında ve haberlerde yayımlandı."
+          : visibility === "teams"
+            ? "Karar kaydedildi ve ilgili takımlara bildirildi."
+            : "Karar kaydedildi ve itiraz eden takıma bildirildi.",
     invalidate: [["admin", "penalties", "appeals"]],
     silentError: true,
     onSuccess: onClose,
-  });
+    }
+  );
 
   const submit = async () => {
     setFailure(null);
     if (needsText && !text.trim()) {
-      setFailure("Karar metni yazılmalıdır; bu metin disiplin sayfasında duyurulur.");
+      setFailure("Karar metni yazılmalıdır; bu metin seçtiğin kişilere duyurulur.");
       return;
     }
     try {
@@ -201,7 +218,7 @@ function AppealReviewSheet({ appeal, onClose }: { appeal: Appeal | null; onClose
       footer={
         showForm ? (
           <Button
-            label={needsText ? "Kararı kaydet ve duyur" : "İncelemeye al"}
+            label={!needsText ? "Değerlendirmeye al" : visibility === "public" ? "Kararı kaydet ve yayımla" : "Kararı kaydet ve bildir"}
             icon="checkmark"
             size="lg"
             onPress={submit}
@@ -210,7 +227,7 @@ function AppealReviewSheet({ appeal, onClose }: { appeal: Appeal | null; onClose
             fullWidth
           />
         ) : (
-          <Button label="Kararı düzelt" icon="create-outline" variant="secondary" fullWidth onPress={() => setEditing(true)} />
+          <Button label="Kararı veya duyuru kapsamını değiştir" icon="create-outline" variant="secondary" fullWidth onPress={() => setEditing(true)} />
         )
       }
     >
@@ -235,8 +252,15 @@ function AppealReviewSheet({ appeal, onClose }: { appeal: Appeal | null; onClose
             </Text>
           </View>
 
+          {appeal.attachments?.length ? (
+            <GroupCard title={`Ekler (${appeal.attachments.length})`} icon="attach">
+              <AppealAttachments items={appeal.attachments} />
+            </GroupCard>
+          ) : null}
+
           <GroupCard title="Başvuru bilgileri" icon="information-circle">
-            <FactRow icon="shield-outline" label="Takım" value={appeal.team_name || "—"} />
+            <FactRow icon="shield-outline" label="İtiraz eden takım" value={appeal.team_name || "—"} />
+            <FactRow icon="people-outline" label="Rakip takım" value={appeal.opponent_team_name || "—"} />
             <FactRow icon="pricetag-outline" label="Konu" value={appeal.category_label} />
             <FactRow icon="football-outline" label="Maç" value={appeal.match_label || "Belirtilmedi"} />
             <FactRow icon="calendar-outline" label="Maç tarihi" value={appeal.match_date ? formatDate(appeal.match_date) : "—"} last />
@@ -249,15 +273,28 @@ function AppealReviewSheet({ appeal, onClose }: { appeal: Appeal | null; onClose
               </GroupCard>
               <GroupCard title={needsText ? "Karar metni" : "Kurul notu"} step={2}>
                 <Input
-                  label={needsText ? "Karar metni (herkese açık duyurulur)" : "Kurul notu (isteğe bağlı)"}
+                  label={needsText ? "Karar metni" : "Kurul notu (isteğe bağlı)"}
                   value={text}
                   onChangeText={setText}
                   multiline
                   numberOfLines={5}
-                  placeholder={needsText ? "Kararı ve gerekçesini yaz. Bu metin disiplin sayfasında yayımlanır." : "Karar verilene dek yayımlanmaz."}
+                  placeholder={needsText ? "Kararı ve gerekçesini yaz. Bu metin aşağıda seçtiğin kişilere duyurulur." : "Karar verilene dek kimseye gösterilmez."}
                   maxLength={5000}
                 />
               </GroupCard>
+              {needsText ? (
+                <GroupCard title="Sonuç kime duyurulsun?" step={3}>
+                  <RadioGroup
+                    options={APPEAL_VISIBILITY_OPTIONS.map((o) => ({
+                      value: o.value,
+                      label: o.label,
+                      hint: o.value === "teams" && !appeal.opponent_team_name ? `${o.hint} Bu itiraz bir maça bağlı değil; yalnız itiraz eden takım bilgilendirilir.` : o.hint,
+                    }))}
+                    value={visibility}
+                    onChange={setVisibility}
+                  />
+                </GroupCard>
+              ) : null}
               {failure ? <DangerNote tone="danger" icon="alert-circle" title="Kaydedilemedi" body={failure} /> : null}
             </>
           ) : (
@@ -265,7 +302,7 @@ function AppealReviewSheet({ appeal, onClose }: { appeal: Appeal | null; onClose
               tone={appeal.status === "rejected" ? "danger" : "info"}
               icon={appeal.status === "rejected" ? "close-circle" : "checkmark-circle"}
               title={`Kurul kararı · ${APPEAL_STATUS_LABELS[appeal.status]}`}
-              body={`${appeal.decision_text || "Karar metni yazılmadı."}\n${formatDateTime(appeal.decided_at)}`}
+              body={`${appeal.decision_text || "Karar metni yazılmadı."}\n${formatDateTime(appeal.decided_at)} · Duyuru: ${APPEAL_VISIBILITY_LABELS[appeal.visibility ?? "team"]}`}
             />
           )}
         </View>
