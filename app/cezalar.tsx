@@ -60,7 +60,15 @@ const TYPE_META: Record<ProcessType, { label: string; icon: keyof typeof Ionicon
 
 const PENALTY_STEPS = ["Kurula sevk", "Kurul kararı", "CAS değerlendirmesi", "CAS kararı"];
 const PENALTY_ORDER = ["sevk", "kurul_karari", "cas_basvuru", "cas_karari"];
-const INQUIRY_STEPS = ["İnceleme başlatıldı", "Karar"];
+// İnceleme aşamaları: oyuncu dosyalarındaki kurul kararı → CAS sırasının karşılığı.
+const INQUIRY_STEPS = ["İnceleme", "Ara karar", "İtiraz", "Nihai karar"];
+const INQUIRY_ORDER = ["open", "interim", "objected", "decided"];
+const INQUIRY_OUTCOME: Record<string, { label: string; tone: Tone }> = {
+  open: { label: "İnceleme sürüyor", tone: "warn" },
+  interim: { label: "Ara karar açıklandı", tone: "warn" },
+  objected: { label: "Ara karara itiraz edildi", tone: "warn" },
+  decided: { label: "Nihai karar açıklandı", tone: "win" },
+};
 
 /** Oyuncu dosyası ve incelemeler listede ortak biçime gelir. */
 interface Process {
@@ -74,6 +82,8 @@ interface Process {
   step: number;
   outcome: { label: string; note?: string | null; tone: Tone };
   decision: string | null;
+  /** İncelemede ara karar (açıklandıysa). */
+  interim?: string | null;
   description: string | null;
 }
 
@@ -113,9 +123,10 @@ function inquiryProcess(inquiry: Inquiry): Process {
     headline: inquiry.headline,
     meta: inquiry.kind === "match" && inquiry.match_date ? `Maç tarihi ${formatDateShort(inquiry.match_date)}` : "",
     steps: INQUIRY_STEPS,
-    step: inquiry.is_decided ? 1 : 0,
-    outcome: inquiry.is_decided ? { label: "Karar açıklandı", tone: "win" } : { label: "İnceleme sürüyor", tone: "warn" },
+    step: Math.max(0, INQUIRY_ORDER.indexOf(inquiry.status)),
+    outcome: INQUIRY_OUTCOME[inquiry.status] ?? INQUIRY_OUTCOME[inquiry.is_decided ? "decided" : "open"],
     decision: inquiry.decision_text,
+    interim: inquiry.interim_text ?? null,
     description: inquiry.description,
   };
 }
@@ -253,12 +264,22 @@ export default function DisciplineScreen() {
                 </Text>
               </View>
             ) : null}
+            {detail.interim ? (
+              <View style={styles.block}>
+                <Text style={styles.blockLabel} {...textScale.badge}>
+                  ARA KARAR
+                </Text>
+                <Text style={styles.blockText} {...textScale.long}>
+                  {detail.interim}
+                </Text>
+              </View>
+            ) : null}
             <View style={styles.block}>
               <Text style={styles.blockLabel} {...textScale.badge}>
-                KARAR
+                {detail.type === "player" ? "KARAR" : "NİHAİ KARAR"}
               </Text>
               <Text style={styles.blockText} {...textScale.long}>
-                {detail.decision ?? (detail.open ? "Süreç devam ediyor. Karar açıklandığında burada yayımlanır." : "Karar metni yayımlanmadı.")}
+                {detail.decision ?? (detail.open ? (detail.interim ? "Nihai karar henüz açıklanmadı. İlgili taraflar ara karara itiraz edebilir." : "Süreç devam ediyor. Karar açıklandığında burada yayımlanır.") : "Karar metni yayımlanmadı.")}
               </Text>
             </View>
           </View>

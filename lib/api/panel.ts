@@ -379,6 +379,22 @@ export interface AppealPlayer {
  * İnceleme: oyuncu sevki dışındaki disiplin süreçleri (maç / konu).
  * Açılış açıklaması ve karar herkese açıktır.
  */
+export type InquiryStatus = "open" | "interim" | "objected" | "decided";
+export const INQUIRY_STAGES: { key: InquiryStatus; label: string }[] = [
+  { key: "open", label: "İnceleme" },
+  { key: "interim", label: "Ara karar" },
+  { key: "objected", label: "İtiraz" },
+  { key: "decided", label: "Nihai karar" },
+];
+
+/** Sürecin (oyuncu dosyası / inceleme) kime açık yürütüldüğü. */
+export type ProcessVisibility = "public" | "teams" | "team";
+export const PROCESS_VISIBILITY_OPTIONS: { value: ProcessVisibility; label: string; hint: string }[] = [
+  { value: "public", label: "Herkese açık", hint: "Disiplin sayfasında, duyurularda ve haberlerde yer alır." },
+  { value: "teams", label: "Yalnızca ilgili taraflar", hint: "Genel kitleye kapalıdır; yalnızca taraflar ve başvuran takım görür." },
+  { value: "team", label: "Yalnızca başvuran takım", hint: "Diğer taraflar süreci görmez; savunmalarını onlar adına kurul girebilir." },
+];
+
 export interface Inquiry {
   public_id: string;
   kind: "match" | "topic";
@@ -394,13 +410,25 @@ export interface Inquiry {
   title: string;
   headline: string;
   description: string | null;
-  status: "open" | "decided";
+  /** inceleme → ara karar → ara karara itiraz → nihai karar */
+  status: InquiryStatus;
   status_label: string;
+  stage?: number;
   is_decided: boolean;
+  /** Ara karar (açıklandıysa). */
+  interim_text?: string | null;
+  interim_at?: string | null;
+  has_objection?: boolean;
   decision_text: string | null;
   decided_at: string | null;
+  visibility?: ProcessVisibility;
+  visibility_label?: string;
   createdAt: string;
   source_appeal_public_id?: string | null;
+  /** Süreç bir başvurudan açıldı ("yalnızca başvuran takım" seçilebilir). */
+  has_source_team?: boolean;
+  /** Kurulun taraf adına kayıt girerken seçeceği liste. */
+  parties?: { side: "team" | "player"; team_id: number | null; name: string; is_source: boolean }[];
   is_archived?: boolean;
   /** Taraflar ve savunmalar (yalnız kurul görünümünde). */
   party_team_names?: string[];
@@ -412,6 +440,11 @@ export interface Inquiry {
 /** İncelemeye tarafın yazdığı savunma ve kurulun değerlendirmesi. */
 export interface InquiryDefense {
   id: number;
+  /** defense: savunma · objection: ara karara itiraz */
+  kind?: "defense" | "objection";
+  kind_label?: string;
+  /** Kurul, taraf adına elle girdi. */
+  entered_by_admin?: boolean;
   side: "team" | "player";
   team_name: string | null;
   player_name: string | null;
@@ -428,6 +461,8 @@ export interface MyInquiry extends Inquiry {
   viewer_side: "team" | "player";
   viewer_party_name: string | null;
   can_defend: boolean;
+  /** Ara karara itiraz edilebilir (ara karardan nihai karara dek). */
+  can_object?: boolean;
   my_defenses: InquiryDefense[];
 }
 
@@ -435,6 +470,10 @@ export const getMyInquiries = () => get<{ items: MyInquiry[] }>("/api/penalties/
 
 export const submitInquiryDefense = (publicId: string, text: string) =>
   post<{ message: string }>(`/api/penalties/inquiries/${publicId}/defense`, { text });
+
+/** Ara karara itiraz; itiraz üzerine verilen karar nihaidir. */
+export const submitInquiryObjection = (publicId: string, text: string) =>
+  post<{ message: string }>(`/api/penalties/inquiries/${publicId}/objection`, { text });
 
 /** Herkese açık ceza dosyası (oyuncu sevki). */
 export interface PublicPenalty {

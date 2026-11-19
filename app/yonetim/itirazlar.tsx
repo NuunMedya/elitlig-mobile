@@ -58,7 +58,8 @@ import {
   type AppealStatus,
   type AppealVisibility,
 } from "@/lib/api/admin/penalties";
-import { APPEAL_CATEGORIES, type AppealCategory } from "@/lib/api/panel";
+import { VisibilityCard } from "@/components/admin/penalties/ProcessTools";
+import { APPEAL_CATEGORIES, type AppealCategory, type ProcessVisibility } from "@/lib/api/panel";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, radius, space, textScale, type } from "@/theme";
 
@@ -228,9 +229,12 @@ function AppealReviewSheet({
   // Süreç başlat: oyuncu sevki · maç incelemesi · konu incelemesi.
   const [topic, setTopic] = useState("");
   const [topicDate, setTopicDate] = useState("");
+  // Bu başvurudan başlatılacak süreç kime açık yürütülsün.
+  const [processVisibility, setProcessVisibility] = useState<ProcessVisibility>("public");
   useEffect(() => {
     setTopic("");
     setTopicDate("");
+    setProcessVisibility("public");
   }, [appeal?.public_id]);
   const started = { invalidate: [["admin", "penalties"]] as [string, string][], onSuccess: onClose };
   const refer = useAdminMutation(
@@ -242,12 +246,13 @@ function AppealReviewSheet({
         match_id: appeal!.match_id,
         player_id: appeal!.player_id!,
         appeal_public_id: appeal!.public_id,
+        visibility: processVisibility,
       }),
     { ...started, success: () => `${appeal?.player_name ?? "Oyuncu"} disiplin kuruluna sevk edildi.` }
   );
-  const startMatch = useAdminMutation(() => createInquiry({ kind: "match", appeal_public_id: appeal!.public_id }), { ...started, success: "Maç hakkında inceleme başlatıldı." });
+  const startMatch = useAdminMutation(() => createInquiry({ kind: "match", appeal_public_id: appeal!.public_id, visibility: processVisibility }), { ...started, success: "Maç hakkında inceleme başlatıldı." });
   const startTopic = useAdminMutation(
-    () => createInquiry({ kind: "topic", subject: topic.trim(), subject_date: toIsoDate(topicDate), appeal_public_id: appeal!.public_id }),
+    () => createInquiry({ kind: "topic", subject: topic.trim(), subject_date: toIsoDate(topicDate), appeal_public_id: appeal!.public_id, visibility: processVisibility }),
     { ...started, success: "Konu incelemesi başlatıldı." }
   );
   const confirmRefer = async () => {
@@ -331,7 +336,8 @@ function AppealReviewSheet({
             </Text>
           </View>
 
-          <GroupCard title="Süreç başlat" icon="hammer">
+          <VisibilityCard value={processVisibility} allowed={["public", "teams", "team"]} onChange={setProcessVisibility} />
+          <GroupCard title="İnceleme başlat" icon="hammer">
             <View style={styles.startRow}>
               <View style={styles.grow}>
                 <Text style={styles.startTitle} {...textScale.dense}>Oyuncuyu sevk et</Text>
