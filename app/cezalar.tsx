@@ -24,7 +24,6 @@ import React, { useMemo, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { PublicAppeals } from "@/components/discipline/PublicAppeals";
 import { LeaguePicker } from "@/components/LeaguePicker";
 import {
   Badge,
@@ -48,26 +47,29 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
 
-type TabKey = "surecler" | "basvurular";
+// CEZALAR: disiplin kuruluna sevk edilen oyuncular · KARARLAR: hakkında
+// inceleme başlatılan maçlar ve olaylar. Takım başvuruları ve savunma /
+// itiraz metinleri bu ekranda yer almaz; yalnızca aşama ve yönetimin kararları.
+type TabKey = "cezalar" | "kararlar";
 type ProcessType = "player" | "match" | "topic";
 type TypeFilter = "all" | ProcessType;
 
 const TYPE_META: Record<ProcessType, { label: string; icon: keyof typeof Ionicons.glyphMap; tone: IconTileTone }> = {
   player: { label: "Oyuncu sevki", icon: "person", tone: "violet" },
   match: { label: "Maç incelemesi", icon: "football", tone: "cyan" },
-  topic: { label: "Konu incelemesi", icon: "document-text", tone: "gold" },
+  topic: { label: "Olay incelemesi", icon: "document-text", tone: "gold" },
 };
 
 const PENALTY_STEPS = ["Kurula sevk", "Kurul kararı", "CAS değerlendirmesi", "CAS kararı"];
 const PENALTY_ORDER = ["sevk", "kurul_karari", "cas_basvuru", "cas_karari"];
 // İnceleme aşamaları: oyuncu dosyalarındaki kurul kararı → CAS sırasının karşılığı.
-const INQUIRY_STEPS = ["İnceleme", "Ara karar", "İtiraz", "Nihai karar"];
+const INQUIRY_STEPS = ["İnceleme", "Disiplin Kurulu kararı", "CAS başvurusu", "CAS kararı"];
 const INQUIRY_ORDER = ["open", "interim", "objected", "decided"];
 const INQUIRY_OUTCOME: Record<string, { label: string; tone: Tone }> = {
   open: { label: "İnceleme sürüyor", tone: "warn" },
-  interim: { label: "Ara karar açıklandı", tone: "warn" },
-  objected: { label: "Ara karara itiraz edildi", tone: "warn" },
-  decided: { label: "Nihai karar açıklandı", tone: "win" },
+  interim: { label: "Kurul kararı açıklandı", tone: "win" },
+  objected: { label: "CAS'a başvuruldu", tone: "warn" },
+  decided: { label: "CAS kararı açıklandı", tone: "win" },
 };
 
 /** Oyuncu dosyası ve incelemeler listede ortak biçime gelir. */
@@ -82,7 +84,7 @@ interface Process {
   step: number;
   outcome: { label: string; note?: string | null; tone: Tone };
   decision: string | null;
-  /** İncelemede ara karar (açıklandıysa). */
+  /** İncelemede Disiplin Kurulu kararı (açıklandıysa). */
   interim?: string | null;
   description: string | null;
 }
@@ -118,7 +120,7 @@ function inquiryProcess(inquiry: Inquiry): Process {
   return {
     key: `i-${inquiry.public_id}`,
     type: inquiry.kind,
-    open: !inquiry.is_decided,
+    open: inquiry.status === "open" || inquiry.status === "objected",
     date: inquiry.decided_at ?? inquiry.createdAt,
     headline: inquiry.headline,
     meta: inquiry.kind === "match" && inquiry.match_date ? `Maç tarihi ${formatDateShort(inquiry.match_date)}` : "",
@@ -135,7 +137,7 @@ export default function DisciplineScreen() {
   const scope = useScope();
   const auth = useAuth();
   const router = useRouter();
-  const [tab, setTab] = useState<TabKey>("surecler");
+  const [tab, setTab] = useState<TabKey>("cezalar");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [onlyOpen, setOnlyOpen] = useState(false);
   const [detail, setDetail] = useState<Process | null>(null);
@@ -169,8 +171,9 @@ export default function DisciplineScreen() {
     );
   }, [penalties.data, inquiries.data, scope.leagueId, scope.seasonId]);
 
-  const count = (key: TypeFilter) => (key === "all" ? all.length : all.filter((item) => item.type === key).length);
-  const visible = all.filter((item) => (typeFilter === "all" || item.type === typeFilter) && (!onlyOpen || item.open));
+  const inTab = all.filter((item) => (tab === "cezalar" ? item.type === "player" : item.type !== "player"));
+  const count = (key: TypeFilter) => (key === "all" ? inTab.length : inTab.filter((item) => item.type === key).length);
+  const visible = inTab.filter((item) => (tab === "cezalar" || typeFilter === "all" || item.type === typeFilter) && (!onlyOpen || item.open));
   const loading = penalties.isLoading || inquiries.isLoading;
 
   return (
@@ -189,19 +192,20 @@ export default function DisciplineScreen() {
             <LeaguePicker />
             <SegmentedControl
               items={[
-                { key: "surecler", label: "Süreçler" },
-                { key: "basvurular", label: "Başvurular" },
+                { key: "cezalar", label: "Cezalar" },
+                { key: "kararlar", label: "Kararlar" },
               ]}
               value={tab}
-              onChange={(next) => setTab(next as TabKey)}
+              onChange={(next) => {
+                setTab(next as TabKey);
+                setTypeFilter("all");
+              }}
             />
           </View>
         }
       />
 
-      {tab === "basvurular" ? (
-        <PublicAppeals cityId={scope.cityId} leagueId={scope.leagueId} seasonId={scope.seasonId} />
-      ) : (
+      {(
         <FlatList
           data={loading ? [] : visible}
           keyExtractor={(item) => item.key}
@@ -210,10 +214,13 @@ export default function DisciplineScreen() {
           ListHeaderComponent={
             <View style={styles.filters}>
               <ChipGroup scrollable contentPadding={0}>
-                <Chip label="Tümü" count={count("all")} size="sm" selected={typeFilter === "all"} onPress={() => setTypeFilter("all")} />
-                <Chip label="Oyuncu" icon="person" count={count("player")} size="sm" selected={typeFilter === "player"} onPress={() => setTypeFilter("player")} />
-                <Chip label="Maç" icon="football" count={count("match")} size="sm" selected={typeFilter === "match"} onPress={() => setTypeFilter("match")} />
-                <Chip label="Konu" icon="document-text" count={count("topic")} size="sm" selected={typeFilter === "topic"} onPress={() => setTypeFilter("topic")} />
+                <Chip label="Tümü" count={count("all")} size="sm" selected={tab === "cezalar" || typeFilter === "all"} onPress={() => setTypeFilter("all")} />
+                {tab === "kararlar" ? (
+                  <>
+                    <Chip label="Maç" icon="football" count={count("match")} size="sm" selected={typeFilter === "match"} onPress={() => setTypeFilter("match")} />
+                    <Chip label="Olay" icon="document-text" count={count("topic")} size="sm" selected={typeFilter === "topic"} onPress={() => setTypeFilter("topic")} />
+                  </>
+                ) : null}
                 <Chip label="Yalnız süren" size="sm" tone="warn" selected={onlyOpen} onPress={() => setOnlyOpen((value) => !value)} />
               </ChipGroup>
             </View>
@@ -231,8 +238,8 @@ export default function DisciplineScreen() {
               <EmptyState
                 variant="inline"
                 icon="shield-checkmark-outline"
-                title={all.length ? "Bu süzgeçte kayıt yok" : "Disiplin süreci yok"}
-                body={all.length ? undefined : `${scope.cityLabel || "Bu kapsam"} için yayımlanmış bir disiplin süreci bulunmuyor.`}
+                title={inTab.length ? "Bu süzgeçte kayıt yok" : tab === "cezalar" ? "Sevk edilen oyuncu yok" : "İnceleme yok"}
+                body={inTab.length ? undefined : tab === "cezalar" ? "Disiplin kuruluna sevk edilmiş oyuncu bulunmuyor." : "Hakkında inceleme başlatılmış maç ya da olay bulunmuyor."}
               />
             )
           }
@@ -267,7 +274,7 @@ export default function DisciplineScreen() {
             {detail.interim ? (
               <View style={styles.block}>
                 <Text style={styles.blockLabel} {...textScale.badge}>
-                  ARA KARAR
+                  DİSİPLİN KURULU KARARI
                 </Text>
                 <Text style={styles.blockText} {...textScale.long}>
                   {detail.interim}
@@ -276,10 +283,10 @@ export default function DisciplineScreen() {
             ) : null}
             <View style={styles.block}>
               <Text style={styles.blockLabel} {...textScale.badge}>
-                {detail.type === "player" ? "KARAR" : "NİHAİ KARAR"}
+                {detail.type === "player" ? "KARAR" : "CAS KARARI"}
               </Text>
               <Text style={styles.blockText} {...textScale.long}>
-                {detail.decision ?? (detail.open ? (detail.interim ? "Nihai karar henüz açıklanmadı. İlgili taraflar ara karara itiraz edebilir." : "Süreç devam ediyor. Karar açıklandığında burada yayımlanır.") : "Karar metni yayımlanmadı.")}
+                {detail.decision ?? (detail.open ? (detail.interim ? "Karara itiraz edilirse dosya CAS'a taşınır; CAS kararı burada yayımlanır." : "Süreç devam ediyor. Karar açıklandığında burada yayımlanır.") : "Karar metni yayımlanmadı.")}
               </Text>
             </View>
           </View>

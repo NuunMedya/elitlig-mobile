@@ -382,9 +382,9 @@ export interface AppealPlayer {
 export type InquiryStatus = "open" | "interim" | "objected" | "decided";
 export const INQUIRY_STAGES: { key: InquiryStatus; label: string }[] = [
   { key: "open", label: "İnceleme" },
-  { key: "interim", label: "Ara karar" },
+  { key: "interim", label: "Disiplin Kurulu kararı" },
   { key: "objected", label: "İtiraz" },
-  { key: "decided", label: "Nihai karar" },
+  { key: "decided", label: "CAS kararı" },
 ];
 
 /** Sürecin (oyuncu dosyası / inceleme) kime açık yürütüldüğü. */
@@ -410,12 +410,12 @@ export interface Inquiry {
   title: string;
   headline: string;
   description: string | null;
-  /** inceleme → ara karar → ara karara itiraz → nihai karar */
+  /** inceleme → Disiplin Kurulu kararı → karara itiraz (CAS başvurusu) → CAS kararı */
   status: InquiryStatus;
   status_label: string;
   stage?: number;
   is_decided: boolean;
-  /** Ara karar (açıklandıysa). */
+  /** Disiplin Kurulu kararı (açıklandıysa). */
   interim_text?: string | null;
   interim_at?: string | null;
   has_objection?: boolean;
@@ -440,7 +440,7 @@ export interface Inquiry {
 /** İncelemeye tarafın yazdığı savunma ve kurulun değerlendirmesi. */
 export interface InquiryDefense {
   id: number;
-  /** defense: savunma · objection: ara karara itiraz */
+  /** defense: savunma · objection: karara itiraz (CAS başvurusu) */
   kind?: "defense" | "objection";
   kind_label?: string;
   /** Kurul, taraf adına elle girdi. */
@@ -461,7 +461,7 @@ export interface MyInquiry extends Inquiry {
   viewer_side: "team" | "player";
   viewer_party_name: string | null;
   can_defend: boolean;
-  /** Ara karara itiraz edilebilir (ara karardan nihai karara dek). */
+  /** CAS başvurusu (itiraz) edilebilir (Disiplin Kurulu kararından CAS kararına dek). */
   can_object?: boolean;
   my_defenses: InquiryDefense[];
 }
@@ -471,7 +471,7 @@ export const getMyInquiries = () => get<{ items: MyInquiry[] }>("/api/penalties/
 export const submitInquiryDefense = (publicId: string, text: string) =>
   post<{ message: string }>(`/api/penalties/inquiries/${publicId}/defense`, { text });
 
-/** Ara karara itiraz; itiraz üzerine verilen karar nihaidir. */
+/** CAS başvurusu (itiraz); itiraz üzerine verilen karar nihaidir. */
 export const submitInquiryObjection = (publicId: string, text: string) =>
   post<{ message: string }>(`/api/penalties/inquiries/${publicId}/objection`, { text });
 
