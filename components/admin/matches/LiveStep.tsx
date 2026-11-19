@@ -30,7 +30,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LinearGradient } from "expo-linear-gradient";
-import { StyleSheet, Text, View } from "react-native";
+import { AppState, StyleSheet, Text, View } from "react-native";
 
 import { ActionSheet, Panel, SegmentField, confirmAction, useAdminMutation } from "@/components/admin";
 import { BottomSheet, Button, Chip, ChipGroup, EmptyState, Odometer, SkeletonListRow, Stepper, Touchable, fireHaptic, useToast } from "@/components/ui";
@@ -67,7 +67,7 @@ import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
-import { outbox, useEventOutbox, type PendingEvent } from "./eventOutbox";
+import { hydrateOutbox, outbox, useEventOutbox, type PendingEvent } from "./eventOutbox";
 import { EventSheet, draftToBody, type EventDraft } from "./EventSheet";
 import { clientEventId, clockText, eventSide, pad2, toSquad, type Side } from "./model";
 import { Note } from "./parts";
@@ -94,6 +94,8 @@ const QUICK_EVENTS: { key: string; label: string; code: string; icon: keyof type
 ];
 
 const MAX_AUTO_RETRY = 5;
+/** Bekleyen olay varken yeniden deneme aralığı. */
+const PENDING_RETRY_MS = 20_000;
 
 /**
  * Canlı akış uçları hatayı { error: "Olay kaydedilemedi", detail: "<asıl neden>" }
@@ -454,6 +456,35 @@ export function LiveStep({ match, onScore }: { match: AdminMatch; onScore?: (sco
     });
     if (ok) outbox.remove(matchId, item.clientId);
   };
+
+  /* Gönderilemeyen olaylar maç "canlı" olmasa da kendiliğinden yeniden denenir:
+     ekran açıldığında (uygulama kapanıp açıldıysa diskten gelen olaylar dahil),
+     uygulama öne döndüğünde ve bekleyen olay oldukça 20 saniyede bir. Aşağıdaki
+     olay listesi yoklaması yalnız canlı maçta çalıştığı için, maç başlamadan ya
+     da bittikten sonra girilen olaylar önceden hiç yeniden denenmiyordu. */
+  const hasRetryable = pending.some((item) => item.state === "failed" && item.retryable);
+  const retryRetryable = useCallback(() => {
+    outbox
+      .get(matchId)
+      .filter((item) => item.state === "failed" && item.retryable)
+      .forEach((item) => void sendPending(item));
+  }, [matchId, sendPending]);
+  useEffect(() => {
+    if (!hasRetryable) return undefined;
+    const timer = setInterval(retryRetryable, PENDING_RETRY_MS);
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") retryRetryable();
+    });
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
+  }, [hasRetryable, retryRetryable]);
+  useEffect(() => {
+    void hydrateOutbox().then(retryRetryable);
+    // Yalnız ekran açılışında.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchId]);
 
   /* Bağlantı geri geldiğinde (olay listesi yeniden okunabildiğinde) bağlantı
      yüzünden gönderilemeyen olaylar kendiliğinden yeniden denenir. */
