@@ -351,6 +351,8 @@ export const createInquiry = (body: {
   season_id?: number | null;
   description?: string | null;
   appeal_public_id?: string;
+  /** Konu incelemesinin tarafı (savunma yazabilecek takım). */
+  team_id?: number | null;
 }) => post<{ inquiry: Inquiry }>("/api/penalties/admin/inquiries", body).then((d) => d.inquiry);
 
 export const updateInquiry = (publicId: string, body: { status?: "open" | "decided"; decision_text?: string | null; description?: string | null }) =>
@@ -358,6 +360,10 @@ export const updateInquiry = (publicId: string, body: { status?: "open" | "decid
 
 export const archiveInquiry = (publicId: string, archived = true) =>
   post<{ inquiry: Inquiry }>(`/api/penalties/admin/inquiries/${enc(publicId)}/archive`, { archived }).then((d) => d.inquiry);
+
+/** Kurul inceleme savunmasını değerlendirir (kabul / ret / dikkate alındı). */
+export const reviewInquiryDefense = (defenseId: number, body: { review_status: Exclude<ReviewStatus, "pending">; review_note?: string | null }) =>
+  post<{ message?: string }>(`/api/penalties/admin/inquiry-defenses/${enc(defenseId)}/review`, body);
 
 export const deleteInquiry = (publicId: string) => del<{ message?: string }>(`/api/penalties/admin/inquiries/${enc(publicId)}`);
 

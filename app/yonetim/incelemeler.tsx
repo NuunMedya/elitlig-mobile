@@ -6,6 +6,8 @@
  *   · "İnceleme başlat": maç (il → lig → sezon → maç) ya da konu (başlık + tarih)
  *   · satıra dokununca karar yazılır ve açıklanır; inceleme arşive alınır.
  *     Kalıcı silme yalnız admin rolünde.
+ *   · tarafların (maçın takımları, belirtilen takım / oyuncu) inceleme sürerken
+ *     yazdığı savunmalar aynı sayfada okunur ve değerlendirilir.
  * Başvuru üzerine başlatılan incelemeler Takım itirazları ekranından açılır.
  *
  * VERİ: GET/POST /api/penalties/admin/inquiries, PATCH …/:id, POST …/:id/archive
@@ -18,7 +20,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { AdminList, AdminScreen, confirmAction, SelectField, useAdminMutation } from "@/components/admin";
 import { ScopeSelects, type ScopeValue } from "@/components/admin/penalties/ScopeSelects";
 import { DangerNote, GroupCard, RequestCard } from "@/components/admin/team/ManageKit";
-import { BottomSheet, Button, Chip, ChipGroup, FAB, IconTile, Input } from "@/components/ui";
+import { Badge, BottomSheet, Button, Chip, ChipGroup, FAB, IconTile, Input } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { formatDate, timeAgo } from "@/lib/admin/format";
 import {
@@ -27,6 +29,7 @@ import {
   deleteInquiry,
   listInquiries,
   listPenaltyMatches,
+  reviewInquiryDefense,
   updateInquiry,
   type Inquiry,
 } from "@/lib/api/admin/penalties";
@@ -96,7 +99,7 @@ export default function InquiriesScreen() {
             when={[timeAgo(item.createdAt), item.source_appeal_public_id ? "Başvuru üzerine" : "Kurul"].join(" · ")}
             title={item.title}
             subtitle={item.description}
-            priority={item.is_decided ? null : { label: "İnceleme sürüyor", tone: "warn", icon: "hourglass" }}
+            priority={item.is_decided ? null : { label: item.pending_defense_count ? `${item.pending_defense_count} savunma bekliyor` : "İnceleme sürüyor", tone: "warn", icon: "hourglass" }}
             status={item.is_decided ? { label: "Karar açıklandı", tone: "win" } : null}
             done={item.is_decided}
             onPress={() => setSelected(item)}
@@ -131,6 +134,12 @@ function InquirySheet({ inquiry, onClose }: { inquiry: Inquiry | null; onClose: 
     success: () => (inquiry?.is_archived ? "İnceleme arşivden çıkarıldı." : "İnceleme arşive alındı."),
   });
   const remove = useAdminMutation(() => deleteInquiry(inquiry!.public_id), { ...options, success: "İnceleme kalıcı olarak silindi." });
+  // Savunma değerlendirme: savunma id → not.
+  const [notes, setNotes] = useState<Record<number, string>>({});
+  const review = useAdminMutation(
+    (vars: { id: number; status: "accepted" | "rejected" | "noted" }) => reviewInquiryDefense(vars.id, { review_status: vars.status, review_note: (notes[vars.id] ?? "").trim() || null }),
+    { ...options, success: "Savunma değerlendirildi ve ilgili tarafa bildirildi." }
+  );
 
   const submit = async () => {
     setFailure(null);
@@ -162,6 +171,34 @@ function InquirySheet({ inquiry, onClose }: { inquiry: Inquiry | null; onClose: 
             {[inquiry.status_label, `Başlatıldı ${formatDate(inquiry.createdAt)}`, inquiry.source_appeal_public_id ? "Başvuru üzerine" : "Kurul (resen)"].join(" · ")}
           </Text>
           {inquiry.description ? <Text style={styles.text} {...textScale.long}>{inquiry.description}</Text> : null}
+          <GroupCard title={`Savunmalar (${inquiry.defenses?.length ?? 0})`}>
+            <Text style={styles.meta} {...textScale.dense}>
+              Taraflar: {[...(inquiry.party_team_names ?? []), inquiry.party_player_name].filter(Boolean).join(", ") || "belirtilmedi"}
+            </Text>
+            {(inquiry.defenses ?? []).map((defense) => (
+              <View key={defense.id} style={styles.defense}>
+                <View style={styles.row}>
+                  <Text style={[styles.defenseWho, styles.grow]} numberOfLines={1} {...textScale.dense}>
+                    {defense.side === "player" ? defense.player_name ?? "Oyuncu" : defense.team_name ?? "Takım"}
+                  </Text>
+                  <Badge label={defense.review_status_label} tone={defense.review_status === "pending" ? "warn" : "neutral"} size="xs" />
+                </View>
+                <Text style={styles.text} selectable {...textScale.long}>{defense.text}</Text>
+                {defense.review_status === "pending" ? (
+                  <>
+                    <Input value={notes[defense.id] ?? ""} onChangeText={(value) => setNotes((previous) => ({ ...previous, [defense.id]: value }))} placeholder="Değerlendirme notu (yazana iletilir)" />
+                    <View style={styles.row}>
+                      <Button label="Kabul" size="sm" variant="secondary" onPress={() => review.mutate({ id: defense.id, status: "accepted" })} disabled={review.isPending} style={styles.grow} />
+                      <Button label="Ret" size="sm" variant="secondary" onPress={() => review.mutate({ id: defense.id, status: "rejected" })} disabled={review.isPending} style={styles.grow} />
+                      <Button label="Dikkate al" size="sm" variant="secondary" onPress={() => review.mutate({ id: defense.id, status: "noted" })} disabled={review.isPending} style={styles.grow} />
+                    </View>
+                  </>
+                ) : (
+                  <Text style={styles.meta} {...textScale.dense}>{defense.review_note || "Not yazılmadı."}</Text>
+                )}
+              </View>
+            ))}
+          </GroupCard>
           <GroupCard title="Karar">
             <Input
               label="Karar metni (herkese açık yayımlanır)"
@@ -298,4 +335,6 @@ const styles = StyleSheet.create({
   title: { ...type.h3, color: colors.textPrimary },
   meta: { ...type.caption, color: colors.textTertiary },
   text: { ...type.body, color: colors.textSecondary },
+  defense: { gap: space.sm },
+  defenseWho: { ...type.label, color: colors.textPrimary },
 });

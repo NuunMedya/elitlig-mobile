@@ -28,6 +28,7 @@ import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { penaltyNeedsAction } from "@/components/club/useClubSignals";
+import { MyInquiries } from "@/components/discipline/MyInquiries";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import {
   Badge,
@@ -104,6 +105,8 @@ export default function TeamDisciplineScreen() {
         contentContainerStyle={styles.content}
         ListHeaderComponent={
           <View style={styles.header}>
+            {/* Tarafı olunan maç / konu incelemeleri ve savunma. */}
+            <MyInquiries />
             {!query.isLoading ? (
               <MetricGrid columns={2}>
                 <MetricTile label="Süre işleyen" value={String(actionable.length)} icon="alarm" tone={actionable.length ? "danger" : "neutral"} />
