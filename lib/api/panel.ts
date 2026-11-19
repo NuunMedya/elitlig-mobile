@@ -275,10 +275,12 @@ export type AppealCategory =
 
 export const APPEAL_STATUS_LABELS: Record<AppealStatus, string> = {
   pending: "Değerlendirme bekliyor",
-  in_review: "Değerlendiriliyor",
-  accepted: "Kabul edildi",
-  partially_accepted: "Kısmen kabul edildi",
-  rejected: "Reddedildi",
+  // Başvurunun kararı yoktur; iki sonuç vardır. accepted / partially_accepted
+  // eski sunucu yanıtlarından kalmadır.
+  in_review: "İnceleme başlatıldı",
+  accepted: "İnceleme başlatıldı",
+  partially_accepted: "İnceleme başlatıldı",
+  rejected: "Değerlendirmeye alınmadı",
 };
 
 /**

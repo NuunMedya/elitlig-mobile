@@ -319,12 +319,6 @@ export const APPEAL_VISIBILITY_OPTIONS: { value: AppealVisibility; label: string
 /** "archived": arşive alınan başvurular (diğer süzgeçler arşivi içermez). */
 export type AppealFilter = AppealStatus | "open" | "archived" | "";
 
-export const APPEAL_DECISIONS: { value: Exclude<AppealStatus, "pending">; label: string; hint: string }[] = [
-  { value: "accepted", label: "İtirazı kabul et", hint: "Takım haklı bulundu; itiraza konu karar düzeltilecek." },
-  { value: "partially_accepted", label: "Kısmen kabul et", hint: "İtirazın bir bölümü yerinde görüldü." },
-  { value: "rejected", label: "İtirazı reddet", hint: "İtiraz yerinde görülmedi; mevcut karar geçerlidir." },
-  { value: "in_review", label: "Değerlendirmeye al", hint: "Henüz karar verilmedi; takıma başvurunun değerlendirildiği bildirilir." },
-];
 
 /* Kurulun elle kaydettiği başvuru (takım adına) ve yardımcı uçları. */
 export const searchAppealTeams = (q: string) =>
@@ -383,5 +377,7 @@ export const listAppeals = ({ status }: { status?: AppealFilter } = {}) => {
 };
 
 
-export const reviewAppeal = (publicId: string, body: { status: Exclude<AppealStatus, "pending">; decision_text: string | null; visibility?: AppealVisibility }) =>
+// Başvurunun karar metni yoktur: yalnızca "değerlendirmeye alınmadı" (rejected)
+// denir ya da bu geri alınır (pending). "İnceleme başlatıldı" süreç açılınca oluşur.
+export const reviewAppeal = (publicId: string, body: { status: "rejected" | "pending" }) =>
   post<{ appeal: Appeal; message?: string }>(`/api/penalties/admin/appeals/${enc(publicId)}/review`, body);
