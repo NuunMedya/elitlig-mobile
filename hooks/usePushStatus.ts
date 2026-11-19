@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Platform } from "react-native";
 import { del, post } from "@/lib/http";
-import { registerForPush, type PushRegistration } from "@/lib/notifications";
+import { registerForPush, type PushPrompt, type PushRegistration } from "@/lib/notifications";
 
 /** Cihaz kaydının sunucuya yazılma durumu. */
 export type ServerSyncState = "bekliyor" | "yazildi" | "hata" | "giris-yok";
@@ -93,10 +93,10 @@ function publish(patch: Partial<PushStatus>) {
  * yokken izin penceresi açmak kullanıcıyı boşuna rahatsız eder ve token sahipsiz
  * kalır.
  */
-export async function runPushRegistration(signedIn: boolean): Promise<PushStatus> {
+export async function runPushRegistration(signedIn: boolean, prompt: PushPrompt = "always"): Promise<PushStatus> {
   publish({ busy: true });
 
-  const result = await registerForPush();
+  const result = await registerForPush(prompt);
   publish({ ...result, busy: false });
 
   if (!result.token) {

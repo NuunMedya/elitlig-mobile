@@ -26,7 +26,9 @@
  * hakkını verir; tek kanalda bu ayrım mümkün değildi.
  */
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
+import { PUSH_ASKED_KEY } from "@/lib/storage";
 // Yalnız tip: dinamik import edilen expo-notifications modülünü açılışta yüklemez.
 import type { AndroidImportance } from "expo-notifications";
 
@@ -470,8 +472,27 @@ function isExpoGo(): boolean {
   }
 }
 
-/** Bildirim izni iste, kanalları kur, Expo push token'ı al. */
-export async function registerForPush(): Promise<PushRegistration> {
+/**
+ * İzin penceresi ne zaman açılsın?
+ *   "always"  kullanıcı bir düğmeye bastı (sihirbaz, Bildirim tercihleri)
+ *   "once"    kendiliğinden kayıt (giriş): daha önce hiç sorulmadıysa sor
+ *   "never"   kendiliğinden kayıt (ön plana geliş): asla sorma
+ *
+ * NEDEN: kayıt uygulama her ön plana geldiğinde çalışır. İzni reddetmiş bir
+ * kullanıcıya Android'de pencere ikinci kez, yani uygulamaya her dönüşünde
+ * yeniden çıkabiliyordu. Kendiliğinden kayıt artık en çok bir kez sorar.
+ */
+export type PushPrompt = "always" | "once" | "never";
+
+/** Bu çağrıda izin penceresi açılabilir mi? */
+export function mayPromptForPush(prompt: PushPrompt, alreadyAsked: boolean): boolean {
+  if (prompt === "always") return true;
+  if (prompt === "never") return false;
+  return !alreadyAsked;
+}
+
+/** Bildirim izni iste (kurala göre), kanalları kur, Expo push token'ı al. */
+export async function registerForPush(prompt: PushPrompt = "always"): Promise<PushRegistration> {
   try {
     const Notifications = await import("expo-notifications");
     const Device = await import("expo-device");
@@ -487,8 +508,12 @@ export async function registerForPush(): Promise<PushRegistration> {
     const { status: existing } = await Notifications.getPermissionsAsync();
     let finalStatus = existing;
     if (existing !== "granted") {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
+      const alreadyAsked = (await AsyncStorage.getItem(PUSH_ASKED_KEY).catch(() => null)) === "1";
+      if (mayPromptForPush(prompt, alreadyAsked)) {
+        await AsyncStorage.setItem(PUSH_ASKED_KEY, "1").catch(() => undefined);
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
     }
 
     if (finalStatus !== "granted") {

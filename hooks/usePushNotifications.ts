@@ -47,10 +47,12 @@ export function usePushNotifications() {
   useEffect(() => {
     if (!signedIn) return;
 
-    void runPushRegistration(true);
+    // Girişte izin daha önce hiç sorulmadıysa bir kez sorulur; uygulamaya her
+    // dönüşte ise yalnız mevcut izin ve token yenilenir, pencere açılmaz.
+    void runPushRegistration(true, "once");
 
     const onChange = (next: AppStateStatus) => {
-      if (next === "active") void runPushRegistration(true);
+      if (next === "active") void runPushRegistration(true, "never");
     };
     const subscription = AppState.addEventListener("change", onChange);
     return () => subscription.remove();
