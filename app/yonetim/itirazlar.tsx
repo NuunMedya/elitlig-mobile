@@ -48,10 +48,7 @@ import {
   createInquiry,
   createPenalty,
   deleteAppeal,
-  APPEAL_DECISIONS,
   APPEAL_STATUS_LABELS,
-  APPEAL_VISIBILITY_LABELS,
-  APPEAL_VISIBILITY_OPTIONS,
   listAppeals,
   listAppealTeamMatches,
   reviewAppeal,
@@ -67,19 +64,18 @@ import { colors, radius, space, textScale, type } from "@/theme";
 
 const FILTERS: { key: AppealFilter; label: string }[] = [
   { key: "open", label: "Bekleyen" },
-  { key: "accepted", label: "Kabul edilen" },
-  { key: "partially_accepted", label: "Kısmen kabul" },
-  { key: "rejected", label: "Reddedilen" },
+  { key: "in_review", label: "İnceleme başlatılan" },
+  { key: "rejected", label: "Değerlendirmeye alınmayan" },
   { key: "", label: "Tümü" },
   { key: "archived", label: "Arşiv" },
 ];
 
 const STATUS_TONE: Record<AppealStatus, Tone> = {
   pending: "warn",
-  in_review: "info",
+  in_review: "win",
   accepted: "win",
-  partially_accepted: "warn",
-  rejected: "danger",
+  partially_accepted: "win",
+  rejected: "neutral",
 };
 
 type Decision = Exclude<AppealStatus, "pending">;
@@ -143,7 +139,6 @@ export default function AppealInboxScreen() {
             <CountStrip
               items={[
                 { key: "open", label: "Bekleyen", value: openItems.length, tone: "warn", icon: "hourglass", selected: filter === "open", onPress: () => setFilter("open") },
-                { key: "review", label: "İncelenen", value: openItems.filter((a) => a.status === "in_review").length, tone: "info", icon: "search" },
                 { key: "listed", label: "Listelenen", value: items.length, icon: "list" },
               ]}
             />
@@ -217,10 +212,6 @@ function AppealReviewSheet({
   onOpenCase: (appeal: Appeal) => void;
   onOpenLinked: (publicId: string) => void;
 }) {
-  const [decision, setDecision] = useState<Decision>("accepted");
-  const [text, setText] = useState("");
-  const [visibility, setVisibility] = useState<AppealVisibility>("team");
-  const [editing, setEditing] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const isAdmin = useAuth().user?.role === "admin";
 
@@ -278,48 +269,32 @@ function AppealReviewSheet({
     if (sure) remove.mutate(undefined);
   };
 
-  // Yeni başvuru açılınca form onun güncel değerleriyle dolar.
   useEffect(() => {
-    if (!appeal) return;
-    setDecision(appeal.is_decided ? (appeal.status as Decision) : "accepted");
-    setText(appeal.decision_text ?? "");
-    setVisibility(appeal.visibility ?? "team");
-    setEditing(false);
     setFailure(null);
-  }, [appeal?.public_id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [appeal?.public_id]);
 
-  const needsText = decision !== "in_review";
+  // Başvurunun karar metni yoktur. İki sonuç vardır: süreç başlatılınca
+  // kendiliğinden "İnceleme başlatıldı" ya da buradan "Değerlendirmeye alınmadı".
+  const dismissed = appeal?.status === "rejected";
+  const opened = Boolean(appeal) && !dismissed && (appeal!.status !== "pending" || (appeal!.processes?.length ?? 0) > 0);
   const review = useAdminMutation(
-    () => reviewAppeal(appeal!.public_id, { status: decision, decision_text: text.trim() || null, visibility: needsText ? visibility : undefined }),
+    (status: "rejected" | "pending") => reviewAppeal(appeal!.public_id, { status }),
     {
-    success: () =>
-      !needsText
-        ? "İtiraz değerlendirmeye alındı ve takıma bildirildi."
-        : visibility === "public"
-          ? "Karar kaydedildi; disiplin sayfasında ve haberlerde yayımlandı."
-          : visibility === "teams"
-            ? "Karar kaydedildi ve ilgili takımlara bildirildi."
-            : "Karar kaydedildi ve itiraz eden takıma bildirildi.",
-    invalidate: [["admin", "penalties", "appeals"]],
-    silentError: true,
-    onSuccess: onClose,
+      success: (_data, status) => (status === "rejected" ? "Başvuru değerlendirmeye alınmadı; takıma bildirildi." : "Başvuru yeniden bekleyenlere alındı."),
+      invalidate: [["admin", "penalties", "appeals"]],
+      silentError: true,
+      onSuccess: onClose,
     }
   );
 
-  const submit = async () => {
+  const submit = async (status: "rejected" | "pending") => {
     setFailure(null);
-    if (needsText && !text.trim()) {
-      setFailure("Karar metni yazılmalıdır; bu metin seçtiğin kişilere duyurulur.");
-      return;
-    }
     try {
-      await review.mutateAsync(undefined);
+      await review.mutateAsync(status);
     } catch (error) {
       setFailure(errorText(error));
     }
   };
-
-  const showForm = Boolean(appeal) && (!appeal!.is_decided || editing);
 
   return (
     <BottomSheet
@@ -328,18 +303,10 @@ function AppealReviewSheet({
       title={appeal ? `Takım itirazı · ${appeal.category_label}` : "Takım itirazı"}
       snap="full"
       footer={
-        showForm ? (
-          <Button
-            label={!needsText ? "Değerlendirmeye al" : visibility === "public" ? "Kararı kaydet ve yayımla" : "Kararı kaydet ve bildir"}
-            icon="checkmark"
-            size="lg"
-            onPress={submit}
-            loading={review.isPending}
-            haptic="success"
-            fullWidth
-          />
+        opened ? undefined : dismissed ? (
+          <Button label="Geri al (bekleyenlere döndür)" icon="arrow-undo-outline" variant="secondary" fullWidth onPress={() => submit("pending")} loading={review.isPending} />
         ) : (
-          <Button label="Kararı veya duyuru kapsamını değiştir" icon="create-outline" variant="secondary" fullWidth onPress={() => setEditing(true)} />
+          <Button label="Değerlendirmeye alınmadı" icon="close-circle-outline" variant="secondary" size="lg" fullWidth onPress={() => submit("rejected")} loading={review.isPending} />
         )
       }
     >
@@ -433,45 +400,19 @@ function AppealReviewSheet({
             <FactRow icon="calendar-outline" label="Maç tarihi" value={appeal.match_date ? formatDate(appeal.match_date) : "—"} last />
           </GroupCard>
 
-          {showForm ? (
-            <>
-              <GroupCard title="Kararın" step={1}>
-                <RadioGroup options={APPEAL_DECISIONS.map((d) => ({ value: d.value, label: d.label, hint: d.hint }))} value={decision} onChange={setDecision} />
-              </GroupCard>
-              <GroupCard title={needsText ? "Karar metni" : "Kurul notu"} step={2}>
-                <Input
-                  label={needsText ? "Karar metni" : "Kurul notu (isteğe bağlı)"}
-                  value={text}
-                  onChangeText={setText}
-                  multiline
-                  numberOfLines={5}
-                  placeholder={needsText ? "Kararı ve gerekçesini yaz. Bu metin aşağıda seçtiğin kişilere duyurulur." : "Karar verilene dek kimseye gösterilmez."}
-                  maxLength={5000}
-                />
-              </GroupCard>
-              {needsText ? (
-                <GroupCard title="Sonuç kime duyurulsun?" step={3}>
-                  <RadioGroup
-                    options={APPEAL_VISIBILITY_OPTIONS.map((o) => ({
-                      value: o.value,
-                      label: o.label,
-                      hint: o.value === "teams" && !appeal.opponent_team_name ? `${o.hint} Bu itiraz bir maça bağlı değil; yalnız itiraz eden takım bilgilendirilir.` : o.hint,
-                    }))}
-                    value={visibility}
-                    onChange={setVisibility}
-                  />
-                </GroupCard>
-              ) : null}
-              {failure ? <DangerNote tone="danger" icon="alert-circle" title="Kaydedilemedi" body={failure} /> : null}
-            </>
-          ) : (
-            <DangerNote
-              tone={appeal.status === "rejected" ? "danger" : "info"}
-              icon={appeal.status === "rejected" ? "close-circle" : "checkmark-circle"}
-              title={`Kurul kararı · ${APPEAL_STATUS_LABELS[appeal.status]}`}
-              body={`${appeal.decision_text || "Karar metni yazılmadı."}\n${formatDateTime(appeal.decided_at)} · Duyuru: ${APPEAL_VISIBILITY_LABELS[appeal.visibility ?? "team"]}`}
-            />
-          )}
+          <DangerNote
+            tone={opened ? "info" : "warn"}
+            icon={opened ? "checkmark-circle" : dismissed ? "close-circle" : "information-circle"}
+            title={opened ? "Sonuç · İnceleme başlatıldı" : dismissed ? "Sonuç · Değerlendirmeye alınmadı" : "Başvurunun iki sonucu vardır"}
+            body={
+              opened
+                ? "Süreç ve karar, bu başvurudan başlatılan dosya üzerinden yürür. Başvurunun ayrıca bir kararı yoktur."
+                : dismissed
+                  ? `${formatDateTime(appeal.decided_at)} · Başvuran takıma bildirildi. Yukarıdan bir süreç başlatırsan sonuç “İnceleme başlatıldı” olur.`
+                  : "Olayla ilgili inceleme başlatmak için yukarıdan bir süreç başlat; karar o dosyada verilir. İnceleme başlatılmayacaksa aşağıdan “Değerlendirmeye alınmadı” de."
+            }
+          />
+          {failure ? <DangerNote tone="danger" icon="alert-circle" title="Kaydedilemedi" body={failure} /> : null}
         </View>
       ) : null}
     </BottomSheet>
