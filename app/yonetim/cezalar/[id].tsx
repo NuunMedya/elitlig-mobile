@@ -21,6 +21,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { AdminScreen, confirmAction, useAdminMutation } from "@/components/admin";
 import { durationBody, PenaltyDecisionFields, PenaltyTimeline, STATUS_ICON, type DecisionValue } from "@/components/admin/penalties/PenaltyBits";
 import { FactRow, GroupCard, IdentityStage, ListLine, StagePill } from "@/components/admin/team/ManageKit";
+import { PartyEntryCard, VisibilityCard } from "@/components/admin/penalties/ProcessTools";
 import { SubmissionReviewSheet } from "@/components/admin/penalties/SubmissionReviewSheet";
 import { Avatar, BottomSheet, Button, ErrorState, IconTile, Input, Reveal, SegmentedControl, SkeletonCard, SkeletonHero, type Tone } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
@@ -35,6 +36,7 @@ import {
   PENALTY_STATUS_SHORT,
   SIDE_LABELS,
   SUBMISSION_TYPE_LABELS,
+  adminPenaltySubmission,
   archivePenalty,
   deletePenalty,
   updatePenalty,
@@ -72,6 +74,16 @@ export default function PenaltyDetailScreen() {
     success: () => (penalty?.is_archived ? "Dosya arşivden çıkarıldı." : "Dosya arşive alındı."),
     invalidate: [["admin", "penalties"]],
   });
+  // Süreç herkese açık ya da yalnızca ilgili taraflara açık yürütülür.
+  const visibility = useAdminMutation((next: "public" | "teams") => updatePenalty(publicId, { visibility: next }), {
+    success: (_data, next) => (next === "public" ? "Dosya herkese açık yürütülüyor." : "Dosya genel kitleye kapatıldı; yalnızca ilgili taraflar görür."),
+    invalidate: [["admin", "penalties"]],
+  });
+  // Kurul, cezalı taraf adına savunma / itiraz girer.
+  const entry = useAdminMutation(
+    (vars: { kind: "defense" | "objection"; party: string; text: string }) => adminPenaltySubmission(publicId, { kind: vars.kind, side: vars.party === "team" ? "team" : "player", text: vars.text }),
+    { success: "Kayıt taraf adına eklendi.", invalidate: [["admin", "penalties"]] }
+  );
   const remove = useAdminMutation(() => deletePenalty(publicId), {
     success: "Ceza dosyası kalıcı olarak silindi.",
     invalidate: [["admin", "penalties"]],
@@ -237,6 +249,28 @@ export default function PenaltyDetailScreen() {
             />
             <PenaltyTimeline events={timeline} />
           </GroupCard>
+
+          {canUpdate ? (
+            <>
+              <VisibilityCard
+                value={penalty.visibility ?? "public"}
+                allowed={["public", "teams"]}
+                onChange={(next) => visibility.mutate(next === "public" ? "public" : "teams")}
+                pending={visibility.isPending}
+              />
+              <PartyEntryCard
+                parties={[
+                  { key: "player", label: `${penalty.player_name ?? "Oyuncu"} (oyuncu)` },
+                  { key: "team", label: `${penalty.team_name ?? "Takım"} (takım)` },
+                ]}
+                canObject={penalty.status === "kurul_karari" || penalty.status === "cas_basvuru"}
+                objectionLabel="İtiraz (CAS)"
+                objectionHint="İtiraz, kurul kararı açıklandıktan sonra girilebilir."
+                onSubmit={(vars) => entry.mutateAsync(vars)}
+                pending={entry.isPending}
+              />
+            </>
+          ) : null}
 
           <View style={styles.actions}>
             {penalty.player_id ? (

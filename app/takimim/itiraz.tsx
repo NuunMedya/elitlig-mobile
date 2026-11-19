@@ -67,10 +67,10 @@ import { colors, hairline, layout, radius, space, textScale, type } from "@/them
 
 const STATUS_TONE: Record<AppealStatus, Tone> = {
   pending: "warn",
-  in_review: "info",
+  in_review: "win",
   accepted: "win",
-  partially_accepted: "warn",
-  rejected: "danger",
+  partially_accepted: "win",
+  rejected: "neutral",
 };
 
 const MIN_TEXT = 10;
@@ -401,7 +401,7 @@ const AppealCard = React.memo(function AppealCard({ appeal }: { appeal: Appeal }
       <View style={styles.top}>
         <IconTile
           icon={appeal.is_decided ? "hammer" : "hourglass"}
-          tone={appeal.status === "accepted" ? "mint" : appeal.status === "rejected" ? "red" : "gold"}
+          tone={appeal.status === "pending" ? "gold" : appeal.status === "rejected" ? "red" : "mint"}
           size={40}
           glow={false}
         />
@@ -427,16 +427,18 @@ const AppealCard = React.memo(function AppealCard({ appeal }: { appeal: Appeal }
       {appeal.is_decided ? (
         <View style={styles.verdict}>
           <Text style={styles.verdictLabel} {...textScale.badge}>
-            KURUL KARARI{appeal.decided_at ? ` · ${formatDateShort(appeal.decided_at)}` : ""}
+            SONUÇ{appeal.decided_at ? ` · ${formatDateShort(appeal.decided_at)}` : ""}
           </Text>
           <Text style={styles.verdictText} {...textScale.long}>
-            {appeal.decision_text || "Karar metni yazılmadı."}
+            {appeal.status === "rejected"
+              ? "Başvurunuz değerlendirmeye alınmadı."
+              : "Olayla ilgili inceleme başlatıldı. Süreç ve karar, incelemeye konu dosya üzerinden yürür."}
           </Text>
-          {own ? (
-            <Text style={styles.meta} {...textScale.dense}>
-              Duyuru: {APPEAL_VISIBILITY_LABELS[appeal.visibility ?? "team"]}
+          {(appeal.processes ?? []).map((process) => (
+            <Text key={`${process.type}-${process.public_id}`} style={styles.meta} {...textScale.dense}>
+              {process.title} · {process.status_label}
             </Text>
-          ) : null}
+          ))}
         </View>
       ) : null}
     </View>

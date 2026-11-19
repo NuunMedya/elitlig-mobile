@@ -128,6 +128,9 @@ export interface PenaltyEvent {
 
 /** services/penalty serializePenalty. */
 export interface Penalty {
+  /** Kime açık yürütüldüğü (yalnız yönetim / taraf görünümünde). */
+  visibility?: "public" | "teams";
+  visibility_label?: string;
   /** Kurul dosyayı arşive aldı (yalnız yönetim görünümünde). */
   is_archived?: boolean;
   public_id: string;
@@ -193,6 +196,8 @@ export interface PenaltyListParams {
 }
 
 export interface PenaltyUpdate {
+  /** Dosya herkese açık mı, yalnızca ilgili taraflara mı açık yürütülüyor. */
+  visibility?: "public" | "teams";
   status?: PenaltyStatus;
   duration_type?: DurationType;
   match_count?: number;
@@ -212,6 +217,8 @@ export interface PenaltyCreate {
   disiplin_karari?: string | null;
   /** Dosya bir disiplin başvurusu üzerine açılıyorsa sunucu ikisini bağlar. */
   appeal_public_id?: string;
+  /** Süreç kime açık yürütülsün (varsayılan: herkese açık). */
+  visibility?: ProcessVisibility;
 }
 
 /* ===================== uçlar ===================== */
@@ -319,12 +326,6 @@ export const APPEAL_VISIBILITY_OPTIONS: { value: AppealVisibility; label: string
 /** "archived": arşive alınan başvurular (diğer süzgeçler arşivi içermez). */
 export type AppealFilter = AppealStatus | "open" | "archived" | "";
 
-export const APPEAL_DECISIONS: { value: Exclude<AppealStatus, "pending">; label: string; hint: string }[] = [
-  { value: "accepted", label: "İtirazı kabul et", hint: "Takım haklı bulundu; itiraza konu karar düzeltilecek." },
-  { value: "partially_accepted", label: "Kısmen kabul et", hint: "İtirazın bir bölümü yerinde görüldü." },
-  { value: "rejected", label: "İtirazı reddet", hint: "İtiraz yerinde görülmedi; mevcut karar geçerlidir." },
-  { value: "in_review", label: "Değerlendirmeye al", hint: "Henüz karar verilmedi; takıma başvurunun değerlendirildiği bildirilir." },
-];
 
 /* Kurulun elle kaydettiği başvuru (takım adına) ve yardımcı uçları. */
 export const searchAppealTeams = (q: string) =>
@@ -335,7 +336,7 @@ export const listAppealTeamMatches = (teamId: number) =>
 
 /* İncelemeler (maç / konu) — services/penalty/inquiries.js */
 export type { Inquiry, AppealProcess } from "../panel";
-import type { Inquiry } from "../panel";
+import type { Inquiry, ProcessVisibility } from "../panel";
 
 export const listInquiries = (params: { archived?: "only" | "all" | "" } = {}) =>
   get<{ items: Inquiry[] }>("/api/penalties/admin/inquiries", params).then((d) => d.items ?? []);
@@ -351,13 +352,32 @@ export const createInquiry = (body: {
   season_id?: number | null;
   description?: string | null;
   appeal_public_id?: string;
+  /** Konu incelemesinin tarafı (savunma yazabilecek takım). */
+  team_id?: number | null;
+  /** Süreç kime açık yürütülsün (varsayılan: herkese açık). */
+  visibility?: ProcessVisibility;
 }) => post<{ inquiry: Inquiry }>("/api/penalties/admin/inquiries", body).then((d) => d.inquiry);
 
-export const updateInquiry = (publicId: string, body: { status?: "open" | "decided"; decision_text?: string | null; description?: string | null }) =>
+export const updateInquiry = (
+  publicId: string,
+  body: { status?: "open" | "interim" | "decided"; decision_text?: string | null; interim_text?: string | null; description?: string | null; visibility?: ProcessVisibility }
+) =>
   patch<{ inquiry: Inquiry }>(`/api/penalties/admin/inquiries/${enc(publicId)}`, body).then((d) => d.inquiry);
 
 export const archiveInquiry = (publicId: string, archived = true) =>
   post<{ inquiry: Inquiry }>(`/api/penalties/admin/inquiries/${enc(publicId)}/archive`, { archived }).then((d) => d.inquiry);
+
+/** Kurul inceleme savunmasını değerlendirir (kabul / ret / dikkate alındı). */
+export const reviewInquiryDefense = (defenseId: number, body: { review_status: Exclude<ReviewStatus, "pending">; review_note?: string | null }) =>
+  post<{ message?: string }>(`/api/penalties/admin/inquiry-defenses/${enc(defenseId)}/review`, body);
+
+/** Kurul, incelemenin tarafı adına savunma ya da ara karara itiraz girer. */
+export const adminInquiryDefense = (publicId: string, body: { kind: "defense" | "objection"; side: "team" | "player"; team_id?: number | null; text: string }) =>
+  post<{ defense: unknown; message?: string }>(`/api/penalties/admin/inquiries/${enc(publicId)}/defenses`, body);
+
+/** Kurul, cezalı taraf (oyuncu / takım) adına savunma ya da itiraz girer. */
+export const adminPenaltySubmission = (publicId: string, body: { kind: "defense" | "objection"; side: "team" | "player"; text: string }) =>
+  post<{ penalty: Penalty; message?: string }>(`/api/penalties/${enc(publicId)}/submissions`, body).then((d) => d.penalty);
 
 export const deleteInquiry = (publicId: string) => del<{ message?: string }>(`/api/penalties/admin/inquiries/${enc(publicId)}`);
 
@@ -377,5 +397,7 @@ export const listAppeals = ({ status }: { status?: AppealFilter } = {}) => {
 };
 
 
-export const reviewAppeal = (publicId: string, body: { status: Exclude<AppealStatus, "pending">; decision_text: string | null; visibility?: AppealVisibility }) =>
+// Başvurunun karar metni yoktur: yalnızca "değerlendirmeye alınmadı" (rejected)
+// denir ya da bu geri alınır (pending). "İnceleme başlatıldı" süreç açılınca oluşur.
+export const reviewAppeal = (publicId: string, body: { status: "rejected" | "pending" }) =>
   post<{ appeal: Appeal; message?: string }>(`/api/penalties/admin/appeals/${enc(publicId)}/review`, body);

@@ -25,11 +25,11 @@ import { colors, hairline, layout, radius, space, textScale, type } from "@/them
 type Filter = "all" | "review" | "decided";
 
 const STAGE: Record<string, { label: string; tone: Tone }> = {
-  pending: { label: "Başvuru alındı", tone: "warn" },
-  in_review: { label: "İncelemede", tone: "warn" },
-  accepted: { label: "Kabul edildi", tone: "win" },
-  partially_accepted: { label: "Kısmen kabul edildi", tone: "win" },
-  rejected: { label: "Reddedildi", tone: "danger" },
+  pending: { label: "Değerlendirme bekliyor", tone: "warn" },
+  in_review: { label: "İnceleme başlatıldı", tone: "win" },
+  accepted: { label: "İnceleme başlatıldı", tone: "win" },
+  partially_accepted: { label: "İnceleme başlatıldı", tone: "win" },
+  rejected: { label: "Değerlendirmeye alınmadı", tone: "neutral" },
   decided: { label: "Sonuçlandı", tone: "neutral" },
 };
 const stageOf = (appeal: PublicAppeal) => STAGE[appeal.status] ?? STAGE.pending;
@@ -67,8 +67,8 @@ export function PublicAppeals({ cityId, leagueId, seasonId }: { cityId?: number 
           <View style={styles.header}>
             <ChipGroup scrollable contentPadding={0}>
               <Chip label="Tümü" count={all.length} size="sm" selected={filter === "all"} onPress={() => setFilter("all")} />
-              <Chip label="İncelemede" count={all.length - decidedCount} size="sm" selected={filter === "review"} onPress={() => setFilter("review")} />
-              <Chip label="Kararlar" count={decidedCount} size="sm" selected={filter === "decided"} onPress={() => setFilter("decided")} />
+              <Chip label="Bekleyen" count={all.length - decidedCount} size="sm" selected={filter === "review"} onPress={() => setFilter("review")} />
+              <Chip label="Sonuçlanan" count={decidedCount} size="sm" selected={filter === "decided"} onPress={() => setFilter("decided")} />
             </ChipGroup>
             <View style={styles.lock}>
               <Ionicons name="lock-closed" size={12} color={colors.textTertiary} />
@@ -127,18 +127,18 @@ export function PublicAppeals({ cityId, leagueId, seasonId }: { cityId?: number 
               {detail.opponent_team_name ? <KeyValueRow label="Rakip takım" value={detail.opponent_team_name} /> : null}
               {detail.match_label ? <KeyValueRow label="Maç" value={detail.match_label} /> : null}
               <KeyValueRow label="Başvuru tarihi" value={formatDateShort(detail.createdAt)} />
-              {detail.is_decided && detail.decided_at ? <KeyValueRow label="Karar tarihi" value={formatDateShort(detail.decided_at)} /> : null}
+              {detail.is_decided && detail.decided_at ? <KeyValueRow label="Sonuç tarihi" value={formatDateShort(detail.decided_at)} /> : null}
             </View>
             <View style={styles.verdict}>
               <Text style={styles.verdictLabel} {...textScale.badge}>
-                KARAR
+                SONUÇ
               </Text>
               <Text style={styles.verdictText} {...textScale.long}>
-                {detail.decision_text
-                  ? detail.decision_text
-                  : detail.is_decided
-                    ? "Başvuru karara bağlanmış ve karar ilgili taraflara tebliğ edilmiştir."
-                    : "Başvuru Merkez Disiplin Kurulunun incelemesindedir."}
+                {!detail.is_decided
+                  ? "Başvuru Merkez Disiplin Kurulunun değerlendirmesini bekliyor."
+                  : detail.status === "rejected"
+                    ? "Başvuru değerlendirmeye alınmadı."
+                    : "Olayla ilgili inceleme başlatıldı. Süreç ve karar, Süreçler sekmesindeki ilgili dosya üzerinden yürür."}
               </Text>
             </View>
           </View>

@@ -6,6 +6,12 @@
  *   · "İnceleme başlat": maç (il → lig → sezon → maç) ya da konu (başlık + tarih)
  *   · satıra dokununca karar yazılır ve açıklanır; inceleme arşive alınır.
  *     Kalıcı silme yalnız admin rolünde.
+ *   · tarafların (maçın takımları, belirtilen takım / oyuncu) inceleme sürerken
+ *     yazdığı savunmalar aynı sayfada okunur ve değerlendirilir.
+ *   · aşamalar oyuncu dosyalarındaki kurul kararı → CAS sırasının karşılığıdır:
+ *     inceleme → ara karar → ara karara itiraz → nihai karar.
+ *   · süreç herkese açık ya da kapalı (yalnız ilgili taraflar / yalnız başvuran
+ *     takım) yürütülebilir; kurul taraf adına savunma ve itiraz girebilir.
  * Başvuru üzerine başlatılan incelemeler Takım itirazları ekranından açılır.
  *
  * VERİ: GET/POST /api/penalties/admin/inquiries, PATCH …/:id, POST …/:id/archive
@@ -17,16 +23,19 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { AdminList, AdminScreen, confirmAction, SelectField, useAdminMutation } from "@/components/admin";
 import { ScopeSelects, type ScopeValue } from "@/components/admin/penalties/ScopeSelects";
+import { PartyEntryCard, VisibilityCard } from "@/components/admin/penalties/ProcessTools";
 import { DangerNote, GroupCard, RequestCard } from "@/components/admin/team/ManageKit";
-import { BottomSheet, Button, Chip, ChipGroup, FAB, IconTile, Input } from "@/components/ui";
+import { Badge, BottomSheet, Button, Chip, ChipGroup, FAB, IconTile, Input } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { formatDate, timeAgo } from "@/lib/admin/format";
 import {
+  adminInquiryDefense,
   archiveInquiry,
   createInquiry,
   deleteInquiry,
   listInquiries,
   listPenaltyMatches,
+  reviewInquiryDefense,
   updateInquiry,
   type Inquiry,
 } from "@/lib/api/admin/penalties";
@@ -81,7 +90,7 @@ export default function InquiriesScreen() {
         extraHeader={
           <ChipGroup scrollable contentPadding={0}>
             <Chip label="Süren" count={openCount} size="sm" selected={filter === "open"} onPress={() => setFilter("open")} />
-            <Chip label="Karar açıklanan" size="sm" selected={filter === "decided"} onPress={() => setFilter("decided")} />
+            <Chip label="Nihai karar" size="sm" selected={filter === "decided"} onPress={() => setFilter("decided")} />
             <Chip label="Arşiv" icon="archive-outline" size="sm" selected={filter === "archived"} onPress={() => setFilter("archived")} />
           </ChipGroup>
         }
@@ -96,8 +105,8 @@ export default function InquiriesScreen() {
             when={[timeAgo(item.createdAt), item.source_appeal_public_id ? "Başvuru üzerine" : "Kurul"].join(" · ")}
             title={item.title}
             subtitle={item.description}
-            priority={item.is_decided ? null : { label: "İnceleme sürüyor", tone: "warn", icon: "hourglass" }}
-            status={item.is_decided ? { label: "Karar açıklandı", tone: "win" } : null}
+            priority={item.is_decided ? null : { label: item.pending_defense_count ? `${item.pending_defense_count} kayıt bekliyor` : item.status_label, tone: "warn", icon: "hourglass" }}
+            status={item.is_decided ? { label: "Nihai karar", tone: "win" } : item.visibility && item.visibility !== "public" ? { label: "Kapalı süreç", tone: "neutral" } : null}
             done={item.is_decided}
             onPress={() => setSelected(item)}
           />
@@ -113,30 +122,66 @@ export default function InquiriesScreen() {
 function InquirySheet({ inquiry, onClose }: { inquiry: Inquiry | null; onClose: () => void }) {
   const isAdmin = useAuth().user?.role === "admin";
   const [decision, setDecision] = useState("");
+  const [interim, setInterim] = useState("");
   const [failure, setFailure] = useState<string | null>(null);
   useEffect(() => {
     setDecision(inquiry?.decision_text ?? "");
+    setInterim(inquiry?.interim_text ?? "");
     setFailure(null);
   }, [inquiry?.public_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const options = { invalidate: [["admin", "penalties"]] as [string, string][], onSuccess: onClose };
-  const announce = useAdminMutation(() => updateInquiry(inquiry!.public_id, { status: "decided", decision_text: decision.trim() }), {
+  const closed = Boolean(inquiry?.visibility && inquiry.visibility !== "public");
+  const interimAnnounced = Boolean(inquiry) && inquiry!.status !== "open";
+  const canObject = inquiry?.status === "interim" || inquiry?.status === "objected";
+  const announce = useAdminMutation((text: string) => updateInquiry(inquiry!.public_id, { status: "decided", decision_text: text }), {
     ...options,
-    success: "Karar açıklandı ve disiplin sayfasında yayımlandı.",
+    success: closed ? "Nihai karar açıklandı ve ilgili taraflara bildirildi." : "Nihai karar açıklandı ve disiplin sayfasında yayımlandı.",
     silentError: true,
   });
+  const announceInterim = useAdminMutation(
+    () => updateInquiry(inquiry!.public_id, { status: inquiry!.status === "objected" ? undefined : "interim", interim_text: interim.trim() }),
+    { ...options, success: () => (interimAnnounced ? "Ara karar güncellendi." : "Ara karar açıklandı; taraflar itiraz edebilir."), silentError: true }
+  );
+  const visibility = useAdminMutation((next: "public" | "teams" | "team") => updateInquiry(inquiry!.public_id, { visibility: next }), {
+    ...options,
+    success: "Görünürlük güncellendi.",
+  });
+  const entry = useAdminMutation(
+    (vars: { kind: "defense" | "objection"; party: string; text: string }) => {
+      const party = (inquiry!.parties ?? [])[Number(vars.party)];
+      return adminInquiryDefense(inquiry!.public_id, { kind: vars.kind, side: party.side, team_id: party.team_id, text: vars.text });
+    },
+    { invalidate: [["admin", "penalties"]], success: "Kayıt taraf adına eklendi." }
+  );
   const reopen = useAdminMutation(() => updateInquiry(inquiry!.public_id, { status: "open" }), { ...options, success: "İnceleme yeniden açıldı." });
   const archive = useAdminMutation(() => archiveInquiry(inquiry!.public_id, !inquiry!.is_archived), {
     ...options,
     success: () => (inquiry?.is_archived ? "İnceleme arşivden çıkarıldı." : "İnceleme arşive alındı."),
   });
   const remove = useAdminMutation(() => deleteInquiry(inquiry!.public_id), { ...options, success: "İnceleme kalıcı olarak silindi." });
+  // Savunma değerlendirme: savunma id → not.
+  const [notes, setNotes] = useState<Record<number, string>>({});
+  const review = useAdminMutation(
+    (vars: { id: number; status: "accepted" | "rejected" | "noted" }) => reviewInquiryDefense(vars.id, { review_status: vars.status, review_note: (notes[vars.id] ?? "").trim() || null }),
+    { ...options, success: "Kayıt değerlendirildi ve ilgili tarafa bildirildi." }
+  );
 
-  const submit = async () => {
+  const submit = async (text = decision) => {
     setFailure(null);
-    if (!decision.trim()) return setFailure("Karar metni yazılmalıdır; bu metin disiplin sayfasında yayımlanır.");
+    if (!text.trim()) return setFailure("Nihai karar metni yazılmalıdır.");
     try {
-      await announce.mutateAsync(undefined);
+      await announce.mutateAsync(text.trim());
+    } catch (error) {
+      setFailure(errorText(error));
+    }
+    return undefined;
+  };
+  const submitInterim = async () => {
+    setFailure(null);
+    if (!interim.trim()) return setFailure("Ara karar metni yazılmalıdır.");
+    try {
+      await announceInterim.mutateAsync(undefined);
     } catch (error) {
       setFailure(errorText(error));
     }
@@ -153,7 +198,7 @@ function InquirySheet({ inquiry, onClose }: { inquiry: Inquiry | null; onClose: 
       onClose={announce.isPending ? () => undefined : onClose}
       title={inquiry?.kind_label ?? "İnceleme"}
       snap="full"
-      footer={<Button label={inquiry?.is_decided ? "Kararı güncelle" : "Kararı açıkla"} icon="checkmark" size="lg" onPress={submit} loading={announce.isPending} haptic="success" fullWidth />}
+      footer={<Button label={inquiry?.is_decided ? "Nihai kararı güncelle" : "Nihai kararı açıkla"} icon="checkmark" size="lg" onPress={() => submit()} loading={announce.isPending} haptic="success" fullWidth />}
     >
       {inquiry ? (
         <View style={styles.body}>
@@ -162,20 +207,98 @@ function InquirySheet({ inquiry, onClose }: { inquiry: Inquiry | null; onClose: 
             {[inquiry.status_label, `Başlatıldı ${formatDate(inquiry.createdAt)}`, inquiry.source_appeal_public_id ? "Başvuru üzerine" : "Kurul (resen)"].join(" · ")}
           </Text>
           {inquiry.description ? <Text style={styles.text} {...textScale.long}>{inquiry.description}</Text> : null}
-          <GroupCard title="Karar">
+          <VisibilityCard
+            value={inquiry.visibility ?? "public"}
+            allowed={inquiry.has_source_team ? ["public", "teams", "team"] : ["public", "teams"]}
+            onChange={(next) => visibility.mutate(next)}
+            pending={visibility.isPending}
+          />
+          <GroupCard title={`Savunmalar ve itirazlar (${inquiry.defenses?.length ?? 0})`}>
+            <Text style={styles.meta} {...textScale.dense}>
+              Taraflar: {[...(inquiry.party_team_names ?? []), inquiry.party_player_name].filter(Boolean).join(", ") || "belirtilmedi"}
+            </Text>
+            {(inquiry.defenses ?? []).map((defense) => (
+              <View key={defense.id} style={styles.defense}>
+                <View style={styles.row}>
+                  <Text style={[styles.defenseWho, styles.grow]} numberOfLines={1} {...textScale.dense}>
+                    {defense.side === "player" ? defense.player_name ?? "Oyuncu" : defense.team_name ?? "Takım"}
+                  </Text>
+                  <Badge label={defense.kind === "objection" ? "İtiraz" : "Savunma"} tone={defense.kind === "objection" ? "danger" : "info"} size="xs" />
+                  {defense.entered_by_admin ? <Badge label="Kurul kaydı" tone="neutral" size="xs" /> : null}
+                  <Badge label={defense.review_status_label} tone={defense.review_status === "pending" ? "warn" : "neutral"} size="xs" />
+                </View>
+                <Text style={styles.text} selectable {...textScale.long}>{defense.text}</Text>
+                {defense.review_status === "pending" ? (
+                  <>
+                    <Input value={notes[defense.id] ?? ""} onChangeText={(value) => setNotes((previous) => ({ ...previous, [defense.id]: value }))} placeholder="Değerlendirme notu (yazana iletilir)" />
+                    <View style={styles.row}>
+                      <Button label="Kabul" size="sm" variant="secondary" onPress={() => review.mutate({ id: defense.id, status: "accepted" })} disabled={review.isPending} style={styles.grow} />
+                      <Button label="Ret" size="sm" variant="secondary" onPress={() => review.mutate({ id: defense.id, status: "rejected" })} disabled={review.isPending} style={styles.grow} />
+                      <Button label="Dikkate al" size="sm" variant="secondary" onPress={() => review.mutate({ id: defense.id, status: "noted" })} disabled={review.isPending} style={styles.grow} />
+                    </View>
+                  </>
+                ) : (
+                  <Text style={styles.meta} {...textScale.dense}>{defense.review_note || "Not yazılmadı."}</Text>
+                )}
+              </View>
+            ))}
+          </GroupCard>
+          {!inquiry.is_decided ? (
+            <PartyEntryCard
+              key={`${inquiry.public_id}-${inquiry.defenses?.length ?? 0}`}
+              parties={(inquiry.parties ?? []).map((party, index) => ({
+                key: String(index),
+                label: `${party.name}${party.side === "player" ? " (oyuncu)" : party.is_source ? " (başvuran takım)" : ""}`,
+              }))}
+              canObject={canObject}
+              objectionLabel="Ara karara itiraz"
+              objectionHint="İtiraz, ara karar açıklandıktan sonra girilebilir."
+              onSubmit={(vars) => entry.mutateAsync(vars)}
+              pending={entry.isPending}
+            />
+          ) : null}
+          <GroupCard title="Ara karar">
             <Input
-              label="Karar metni (herkese açık yayımlanır)"
+              label="Ara karar metni"
+              value={interim}
+              onChangeText={setInterim}
+              multiline
+              numberOfLines={4}
+              maxLength={5000}
+              placeholder="Ara kararı yaz. Açıklandığında taraflar bu karara itiraz edebilir."
+            />
+            <Text style={styles.meta} {...textScale.dense}>
+              {inquiry.status === "objected"
+                ? "Taraflardan itiraz geldi; itirazı değerlendirip nihai kararı ver."
+                : inquiry.status === "interim"
+                  ? "Ara karar açıklandı; henüz itiraz gelmedi."
+                  : inquiry.is_decided
+                    ? "Nihai karar açıklandı."
+                    : "Ara karar vermeden doğrudan nihai karar da açıklayabilirsin."}
+            </Text>
+            {!inquiry.is_decided ? (
+              <View style={styles.row}>
+                <Button label={interimAnnounced ? "Ara kararı güncelle" : "Ara kararı açıkla"} variant="secondary" size="sm" onPress={submitInterim} loading={announceInterim.isPending} style={styles.grow} />
+                {interimAnnounced && inquiry.interim_text ? (
+                  <Button label="Ara kararı kesinleştir" variant="secondary" size="sm" onPress={() => submit(inquiry.interim_text ?? "")} disabled={announce.isPending} style={styles.grow} />
+                ) : null}
+              </View>
+            ) : null}
+          </GroupCard>
+          <GroupCard title="Nihai karar">
+            <Input
+              label="Nihai karar metni"
               value={decision}
               onChangeText={setDecision}
               multiline
               numberOfLines={5}
               maxLength={5000}
-              placeholder="İncelemenin sonucunu yaz."
+              placeholder={inquiry.status === "objected" ? "İtirazı değerlendir ve nihai kararı yaz." : "Nihai kararı yaz."}
             />
           </GroupCard>
           {failure ? <DangerNote tone="danger" icon="alert-circle" title="Kaydedilemedi" body={failure} /> : null}
           <View style={styles.row}>
-            {inquiry.is_decided ? <Button label="Yeniden aç" variant="secondary" size="sm" onPress={() => reopen.mutate(undefined)} loading={reopen.isPending} style={styles.grow} /> : null}
+            {inquiry.status !== "open" ? <Button label="Yeniden aç" variant="secondary" size="sm" onPress={() => reopen.mutate(undefined)} loading={reopen.isPending} style={styles.grow} /> : null}
             <Button
               label={inquiry.is_archived ? "Arşivden çıkar" : "Arşive al"}
               icon={inquiry.is_archived ? "arrow-undo-outline" : "archive-outline"}
@@ -221,11 +344,12 @@ function StartSheet({ visible, onClose }: { visible: boolean; onClose: () => voi
     enabled: visible && kind === "match" && scopeReady,
   });
 
+  const [startVisibility, setStartVisibility] = useState<"public" | "teams">("public");
   const start = useAdminMutation(
     () =>
       kind === "match"
-        ? createInquiry({ kind, match_id: matchId, description: description.trim() || null })
-        : createInquiry({ kind, subject: subject.trim(), subject_date: toIsoDate(date), city_id: scope.cityId, league_id: scope.leagueId, season_id: scope.seasonId, description: description.trim() || null }),
+        ? createInquiry({ kind, match_id: matchId, description: description.trim() || null, visibility: startVisibility })
+        : createInquiry({ kind, subject: subject.trim(), subject_date: toIsoDate(date), city_id: scope.cityId, league_id: scope.leagueId, season_id: scope.seasonId, description: description.trim() || null, visibility: startVisibility }),
     { success: "İnceleme başlatıldı.", invalidate: [["admin", "penalties"]], silentError: true, onSuccess: onClose }
   );
   const submit = async () => {
@@ -283,8 +407,9 @@ function StartSheet({ visible, onClose }: { visible: boolean; onClose: () => voi
           ) : null}
         </GroupCard>
         <GroupCard title="Açıklama (isteğe bağlı)">
-          <Input value={description} onChangeText={setDescription} multiline numberOfLines={3} maxLength={5000} placeholder="İncelemenin kapsamı; herkese açık yayımlanır." />
+          <Input value={description} onChangeText={setDescription} multiline numberOfLines={3} maxLength={5000} placeholder="İncelemenin kapsamı." />
         </GroupCard>
+        <VisibilityCard value={startVisibility} allowed={["public", "teams"]} onChange={(next) => setStartVisibility(next === "public" ? "public" : "teams")} />
         {failure ? <DangerNote tone="danger" icon="alert-circle" title="Başlatılamadı" body={failure} /> : null}
       </View>
     </BottomSheet>
@@ -298,4 +423,6 @@ const styles = StyleSheet.create({
   title: { ...type.h3, color: colors.textPrimary },
   meta: { ...type.caption, color: colors.textTertiary },
   text: { ...type.body, color: colors.textSecondary },
+  defense: { gap: space.sm },
+  defenseWho: { ...type.label, color: colors.textPrimary },
 });
