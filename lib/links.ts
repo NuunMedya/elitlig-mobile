@@ -9,9 +9,38 @@ import { WEB_BASE_URL } from "./config";
  * kurmamış olabilir; adres sitede çalışır (elitlig-client App.js rotaları).
  * İli bilinmeyen maçta adres üretilmez: çalışmayan bağlantı paylaşılmaz.
  */
-export function webMatchUrl(match: { id: number | string; city_id?: number | null }): string | null {
+export function webMatchUrl(match: {
+  id: number | string;
+  city_id?: number | null;
+  first_team_name?: string | null;
+  second_team_name?: string | null;
+}): string | null {
   if (!match.city_id) return null;
-  return `${WEB_BASE_URL}/sehir/${match.city_id}/mac/${match.id}`;
+  // Okunaklı adres: iki takım adı + numara (sitedeki src/utils/entityPath.js ile aynı kural).
+  const slug = webSlug([match.first_team_name, match.second_team_name].filter(Boolean).join(" "));
+  return `${WEB_BASE_URL}/sehir/${match.city_id}/mac/${slug ? `${slug}-` : ""}${match.id}`;
+}
+
+const TR_MAP: Record<string, string> = { ç: "c", ğ: "g", ı: "i", ö: "o", ş: "s", ü: "u", â: "a", î: "i", û: "u" };
+
+/** "Kartallar FK" -> "kartallar-fk" (en çok 70 karakter, kelime ortasından kesilmez). */
+export function webSlug(value: string): string {
+  const words = value
+    .toLocaleLowerCase("tr-TR")
+    .replace(/[çğıöşüâîû]/g, (ch) => TR_MAP[ch] ?? ch)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean);
+  let slug = "";
+  for (const word of words) {
+    const next = slug ? `${slug}-${word}` : word;
+    if (next.length > 70) break;
+    slug = next;
+  }
+  return slug || words.join("-").slice(0, 70);
 }
 
 /**
