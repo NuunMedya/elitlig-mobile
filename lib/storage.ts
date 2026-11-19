@@ -135,3 +135,10 @@ export async function clearSessionCache(): Promise<void> {
 
 /** İlk açılıştaki şehir seçim ekranının görüldüğünü işaretleyen bayrak. */
 export const INTRO_SEEN_KEY = "elitlig.intro.v1";
+
+/**
+ * Bildirim izni penceresinin en az bir kez gösterildiğini işaretler.
+ * Uygulama bundan sonra izni kendiliğinden sormaz; yalnız kullanıcı bir düğmeye
+ * bastığında (başlangıç sihirbazı, Bildirim tercihleri) sorar.
+ */
+export const PUSH_ASKED_KEY = "elitlig.push.asked.v1";

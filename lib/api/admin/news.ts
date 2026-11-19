@@ -32,6 +32,8 @@ export const NEWS_STATUS_LABELS: Record<NewsStatus, string> = { published: "YayÄ
 export interface AdminNews {
   kind: "news";
   id: string;
+  /** Sitedeki okunaklÄ± adres. */
+  path?: string | null;
   title: string;
   summary: string;
   content: string;

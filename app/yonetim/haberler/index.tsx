@@ -190,7 +190,7 @@ export default function NewsListScreen() {
                   label: "Bağlantıyı paylaş",
                   icon: "share-social-outline",
                   hidden: menu.status !== "published",
-                  onPress: () => void Share.share({ message: `${menu.title}\n${webNewsUrl(menu.id)}` }),
+                  onPress: () => void Share.share({ message: `${menu.title}\n${webNewsUrl(menu)}` }),
                 },
                 { label: "Sil", icon: "trash-outline", danger: true, hidden: !canDelete || !scope.canEditItem(menu), onPress: () => void askDelete(menu) },
               ]

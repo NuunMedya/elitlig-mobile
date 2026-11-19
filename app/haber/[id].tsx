@@ -272,13 +272,13 @@ export default function NewsDetailScreen() {
   const links = useMemo(() => (item ? relatedLinks(item) : []), [item]);
 
   /**
-   * Paylaşım metni: başlık + özet + sitedeki tekil haber adresi
-   * (`/haberler?haber=<id>` haberi pencerede açar).
+   * Paylaşım metni: başlık + özet + sitedeki haber ayrıntı sayfasının
+   * okunaklı adresi.
    */
   const share = useCallback(() => {
     if (!item) return;
     const summary = item.summary?.trim() || stripHtml(item.content, 220);
-    const url = webNewsUrl(publicId);
+    const url = webNewsUrl({ id: item.id || publicId, path: item.path });
     void Share.share({
       title: item.title,
       message: [item.title, summary, url].filter(Boolean).join("\n\n"),

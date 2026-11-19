@@ -60,6 +60,10 @@
               "scheme": "https",
               "host": "elitlig.com",
               "pathPrefix": "/haberler"
+            },{
+              "scheme": "https",
+              "host": "elitlig.com",
+              "pathPrefix": "/haber/"
             },
             {
               "scheme": "https",
@@ -70,6 +74,10 @@
               "scheme": "https",
               "host": "www.elitlig.com",
               "pathPrefix": "/haberler"
+            },{
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "pathPrefix": "/haber/"
             }
           ],
           "category": [

@@ -27,6 +27,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AdminScreen, confirmAction, useAdminMutation } from "@/components/admin";
 import { InfoStep } from "@/components/admin/matches/InfoStep";
+import { useEventOutbox } from "@/components/admin/matches/eventOutbox";
 import { LineupStep } from "@/components/admin/matches/LineupStep";
 import { LiveStep } from "@/components/admin/matches/LiveStep";
 import { PostStep } from "@/components/admin/matches/PostStep";
@@ -100,14 +101,29 @@ export default function MatchWorkflowScreen() {
     setDirtyState(next);
   }, []);
 
-  usePreventRemove(dirty, ({ data }) => {
-    void confirmAction({
-      title: "Kaydedilmemiş değişiklikler var",
-      message: "Bu maçta girdiğin değişiklikler kaydedilmedi. Çıkarsan kaybolur.",
-      confirmLabel: "Kaydetmeden çık",
-      cancelLabel: "Ekranda kal",
-      destructive: true,
-    }).then((ok) => {
+  /* Sunucuya henüz yazılamamış canlı olaylar (bkz. eventOutbox). Cihazda
+     saklanırlar ve kaybolmazlar; ama yeniden gönderim yalnız bu ekran açıkken
+     yapılır. Yönetici farkında olmadan çıkıp olayları göndermeden bırakmasın. */
+  const pendingEvents = useEventOutbox(matchId).length;
+
+  usePreventRemove(dirty || pendingEvents > 0, ({ data }) => {
+    void confirmAction(
+      dirty
+        ? {
+            title: "Kaydedilmemiş değişiklikler var",
+            message: "Bu maçta girdiğin değişiklikler kaydedilmedi. Çıkarsan kaybolur.",
+            confirmLabel: "Kaydetmeden çık",
+            cancelLabel: "Ekranda kal",
+            destructive: true,
+          }
+        : {
+            title: "Gönderilmemiş olay var",
+            message: `${pendingEvents} olay henüz sunucuya yazılmadı. Olaylar bu telefonda saklanır ve kaybolmaz, ama ancak bu maçın Canlı adımına döndüğünde gönderilir.`,
+            confirmLabel: "Yine de çık",
+            cancelLabel: "Ekranda kal",
+            destructive: true,
+          }
+    ).then((ok) => {
       if (ok) navigation.dispatch(data.action);
     });
   });

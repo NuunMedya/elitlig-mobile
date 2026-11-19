@@ -349,6 +349,8 @@ export interface PlayerListResponse {
 export interface NewsItem {
   kind: "news" | "transfer" | "penalty";
   id: string;
+  /** Sitedeki okunaklı adres (yalnız editör haberlerinde; eski sunucuda yok). */
+  path?: string | null;
   title: string;
   summary?: string | null;
   content?: string | null;

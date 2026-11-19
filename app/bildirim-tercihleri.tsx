@@ -86,6 +86,8 @@ import {
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, elevate, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { PUSH_ASKED_KEY } from "@/lib/storage";
 
 /** Aynı anda giden tercih isteklerini tanımak için (bkz. onSettled). */
 const PREFERENCE_MUTATION_KEY = ["notifications", "preference-toggle"] as const;
@@ -231,6 +233,7 @@ export default function NotificationPreferencesScreen() {
        */
       try {
         const Notifications = await import("expo-notifications");
+        await AsyncStorage.setItem(PUSH_ASKED_KEY, "1").catch(() => undefined);
         await Notifications.requestPermissionsAsync();
       } catch {
         // Modül yoksa sessizce geç.

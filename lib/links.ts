@@ -14,9 +14,17 @@ export function webMatchUrl(match: { id: number | string; city_id?: number | nul
   return `${WEB_BASE_URL}/sehir/${match.city_id}/mac/${match.id}`;
 }
 
-/** Tekil haber: haber listesi açılır ve haber penceresi kendiliğinden gelir. */
-export function webNewsUrl(publicId: string): string {
-  return `${WEB_BASE_URL}/haberler?haber=${encodeURIComponent(publicId)}`;
+/**
+ * Tekil haber: sitedeki haber ayrıntı sayfası. Sunucu okunaklı adresi hazır
+ * verir (`path`: /haber/kartallar-sampiyon-oldu-111111112222); eski sunucuda ya
+ * da yalnız kimlik eldeyse adres kimlikle kurulur (site onu okunaklı adrese
+ * düzeltir).
+ */
+export function webNewsUrl(news: string | { id: string; path?: string | null }): string {
+  const path = typeof news === "string" ? "" : news.path ?? "";
+  if (/^\/haber\/[a-z0-9-]+$/.test(path)) return `${WEB_BASE_URL}${path}`;
+  const id = typeof news === "string" ? news : news.id;
+  return `${WEB_BASE_URL}/haber/${encodeURIComponent(id)}`;
 }
 
 /**

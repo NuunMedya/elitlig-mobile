@@ -1,0 +1,29 @@
+# Her itişte ve birleştirme isteğinde hızlı denetimler: tür denetimi, tasarım
+# belirteçleri ve oyun/bulmaca verisi. APK derlemesi ayrı iş akışındadır
+# (build-apk.yml); bu iş birkaç dakikada biter ve hatayı erken gösterir.
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check

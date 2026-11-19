@@ -186,8 +186,15 @@ export interface LineupPayloadRow {
 }
 
 /** POST /api/maclar/:id/kadro — iki takımın kadrosu birlikte yazılır (matches.lineup). */
-export const saveLineup = (id: number, body: { home: LineupPayloadRow[]; away: LineupPayloadRow[] }) =>
-  post<{ message: string; count: number }>(`/api/maclar/${id}/kadro`, body);
+/**
+ * Men cezası süren oyuncu kadrodaysa sunucu 409 `PLAYER_SUSPENDED` döndürür
+ * (mesajda oyuncu adları ve kalan maç sayısı yazar). Yönetici bilerek onaylarsa
+ * aynı istek `allowSuspended: true` ile yeniden gönderilir.
+ */
+export const saveLineup = (
+  id: number,
+  body: { home: LineupPayloadRow[]; away: LineupPayloadRow[]; allowSuspended?: boolean }
+) => post<{ message: string; count: number }>(`/api/maclar/${id}/kadro`, body);
 
 /** POST /maclar/:id/guest-players — oyuncu oluşturup takımın kadrosuna bağlar. */
 export const createRosterPlayer = (

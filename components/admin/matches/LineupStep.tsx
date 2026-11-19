@@ -24,6 +24,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import * as ImagePicker from "expo-image-picker";
 import { Alert, FlatList, StyleSheet, Text, View } from "react-native";
 
+import { ApiError } from "@/lib/http";
 import { ChipsField, ToggleField, confirmAction, useAdminMutation } from "@/components/admin";
 import {
   Avatar,
@@ -258,7 +259,24 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
   };
 
   const save = useAdminMutation(
-    () => saveLineup(matchId, { home: buildPayload("home"), away: buildPayload("away") }),
+    async () => {
+      const body = { home: buildPayload("home"), away: buildPayload("away") };
+      try {
+        return await saveLineup(matchId, body);
+      } catch (error) {
+        // Cezalı oyuncu: sunucu adları mesajda döndürür; yönetici onaylarsa kaydedilir.
+        if (!(error instanceof ApiError) || error.code !== "PLAYER_SUSPENDED") throw error;
+        const ok = await confirmAction({
+          title: "Cezalı oyuncu kadroda",
+          message: error.message,
+          confirmLabel: "Yine de kaydet",
+          cancelLabel: "Vazgeç",
+          destructive: true,
+        });
+        if (!ok) throw new Error("Kadro kaydedilmedi: cezalı oyuncuyu kadrodan çıkar ya da kaydı onayla.");
+        return saveLineup(matchId, { ...body, allowSuspended: true });
+      }
+    },
     {
       success: (res) => res?.message || "Kadro kaydedildi.",
       invalidate: [["admin", "matches"], ["studio"]],
