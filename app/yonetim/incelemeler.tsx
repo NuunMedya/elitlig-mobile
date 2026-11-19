@@ -9,7 +9,7 @@
  *   · tarafların (maçın takımları, belirtilen takım / oyuncu) inceleme sürerken
  *     yazdığı savunmalar aynı sayfada okunur ve değerlendirilir.
  *   · aşamalar oyuncu dosyalarındaki kurul kararı → CAS sırasının karşılığıdır:
- *     inceleme → ara karar → ara karara itiraz → nihai karar.
+ *     inceleme → Disiplin Kurulu kararı → karara itiraz (CAS başvurusu) → CAS kararı.
  *   · süreç herkese açık ya da kapalı (yalnız ilgili taraflar / yalnız başvuran
  *     takım) yürütülebilir; kurul taraf adına savunma ve itiraz girebilir.
  * Başvuru üzerine başlatılan incelemeler Takım itirazları ekranından açılır.
@@ -90,7 +90,7 @@ export default function InquiriesScreen() {
         extraHeader={
           <ChipGroup scrollable contentPadding={0}>
             <Chip label="Süren" count={openCount} size="sm" selected={filter === "open"} onPress={() => setFilter("open")} />
-            <Chip label="Nihai karar" size="sm" selected={filter === "decided"} onPress={() => setFilter("decided")} />
+            <Chip label="CAS kararı" size="sm" selected={filter === "decided"} onPress={() => setFilter("decided")} />
             <Chip label="Arşiv" icon="archive-outline" size="sm" selected={filter === "archived"} onPress={() => setFilter("archived")} />
           </ChipGroup>
         }
@@ -106,7 +106,7 @@ export default function InquiriesScreen() {
             title={item.title}
             subtitle={item.description}
             priority={item.is_decided ? null : { label: item.pending_defense_count ? `${item.pending_defense_count} kayıt bekliyor` : item.status_label, tone: "warn", icon: "hourglass" }}
-            status={item.is_decided ? { label: "Nihai karar", tone: "win" } : item.visibility && item.visibility !== "public" ? { label: "Kapalı süreç", tone: "neutral" } : null}
+            status={item.is_decided ? { label: "CAS kararı", tone: "win" } : item.visibility && item.visibility !== "public" ? { label: "Kapalı süreç", tone: "neutral" } : null}
             done={item.is_decided}
             onPress={() => setSelected(item)}
           />
@@ -136,12 +136,12 @@ function InquirySheet({ inquiry, onClose }: { inquiry: Inquiry | null; onClose: 
   const canObject = inquiry?.status === "interim" || inquiry?.status === "objected";
   const announce = useAdminMutation((text: string) => updateInquiry(inquiry!.public_id, { status: "decided", decision_text: text }), {
     ...options,
-    success: closed ? "Nihai karar açıklandı ve ilgili taraflara bildirildi." : "Nihai karar açıklandı ve disiplin sayfasında yayımlandı.",
+    success: closed ? "CAS kararı açıklandı ve ilgili taraflara bildirildi." : "CAS kararı açıklandı ve disiplin sayfasında yayımlandı.",
     silentError: true,
   });
   const announceInterim = useAdminMutation(
     () => updateInquiry(inquiry!.public_id, { status: inquiry!.status === "objected" ? undefined : "interim", interim_text: interim.trim() }),
-    { ...options, success: () => (interimAnnounced ? "Ara karar güncellendi." : "Ara karar açıklandı; taraflar itiraz edebilir."), silentError: true }
+    { ...options, success: () => (interimAnnounced ? "Disiplin Kurulu kararı güncellendi." : "Disiplin Kurulu kararı açıklandı; taraflar itiraz edebilir."), silentError: true }
   );
   const visibility = useAdminMutation((next: "public" | "teams" | "team") => updateInquiry(inquiry!.public_id, { visibility: next }), {
     ...options,
@@ -169,7 +169,7 @@ function InquirySheet({ inquiry, onClose }: { inquiry: Inquiry | null; onClose: 
 
   const submit = async (text = decision) => {
     setFailure(null);
-    if (!text.trim()) return setFailure("Nihai karar metni yazılmalıdır.");
+    if (!text.trim()) return setFailure("CAS kararı metni yazılmalıdır.");
     try {
       await announce.mutateAsync(text.trim());
     } catch (error) {
@@ -179,7 +179,7 @@ function InquirySheet({ inquiry, onClose }: { inquiry: Inquiry | null; onClose: 
   };
   const submitInterim = async () => {
     setFailure(null);
-    if (!interim.trim()) return setFailure("Ara karar metni yazılmalıdır.");
+    if (!interim.trim()) return setFailure("Disiplin Kurulu kararı metni yazılmalıdır.");
     try {
       await announceInterim.mutateAsync(undefined);
     } catch (error) {
@@ -198,7 +198,14 @@ function InquirySheet({ inquiry, onClose }: { inquiry: Inquiry | null; onClose: 
       onClose={announce.isPending ? () => undefined : onClose}
       title={inquiry?.kind_label ?? "İnceleme"}
       snap="full"
-      footer={<Button label={inquiry?.is_decided ? "Nihai kararı güncelle" : "Nihai kararı açıkla"} icon="checkmark" size="lg" onPress={() => submit()} loading={announce.isPending} haptic="success" fullWidth />}
+      footer={
+        // İlk karar her zaman Disiplin Kurulu kararıdır; CAS kararı ondan sonra verilir.
+        interimAnnounced ? (
+          <Button label={inquiry?.is_decided ? "CAS kararını güncelle" : "CAS kararını açıkla"} icon="checkmark" size="lg" onPress={() => submit()} loading={announce.isPending} haptic="success" fullWidth />
+        ) : (
+          <Button label="Disiplin Kurulu kararını açıkla" icon="checkmark" size="lg" onPress={submitInterim} loading={announceInterim.isPending} haptic="success" fullWidth />
+        )
+      }
     >
       {inquiry ? (
         <View style={styles.body}>
@@ -251,49 +258,46 @@ function InquirySheet({ inquiry, onClose }: { inquiry: Inquiry | null; onClose: 
                 label: `${party.name}${party.side === "player" ? " (oyuncu)" : party.is_source ? " (başvuran takım)" : ""}`,
               }))}
               canObject={canObject}
-              objectionLabel="Ara karara itiraz"
-              objectionHint="İtiraz, ara karar açıklandıktan sonra girilebilir."
+              objectionLabel="CAS başvurusu (itiraz)"
+              objectionHint="İtiraz, Disiplin Kurulu kararı açıklandıktan sonra girilebilir."
               onSubmit={(vars) => entry.mutateAsync(vars)}
               pending={entry.isPending}
             />
           ) : null}
-          <GroupCard title="Ara karar">
+          <GroupCard title="Disiplin Kurulu kararı">
             <Input
-              label="Ara karar metni"
+              label="Disiplin Kurulu kararı metni"
               value={interim}
               onChangeText={setInterim}
               multiline
               numberOfLines={4}
               maxLength={5000}
-              placeholder="Ara kararı yaz. Açıklandığında taraflar bu karara itiraz edebilir."
+              placeholder="Disiplin Kurulu kararını yaz. Açıklandığında taraflar bu karara itiraz edebilir."
             />
             <Text style={styles.meta} {...textScale.dense}>
               {inquiry.status === "objected"
-                ? "Taraflardan itiraz geldi; itirazı değerlendirip nihai kararı ver."
+                ? "Taraflardan itiraz geldi; itirazı değerlendirip CAS kararını ver."
                 : inquiry.status === "interim"
-                  ? "Ara karar açıklandı; henüz itiraz gelmedi."
+                  ? "Disiplin Kurulu kararı açıklandı; henüz itiraz gelmedi."
                   : inquiry.is_decided
-                    ? "Nihai karar açıklandı."
-                    : "Ara karar vermeden doğrudan nihai karar da açıklayabilirsin."}
+                    ? "CAS kararı açıklandı."
+                    : "Taraflar savunma yazmasa da karar verebilirsin. Karara itiraz edilirse dosya CAS'a taşınır."}
             </Text>
             {!inquiry.is_decided ? (
               <View style={styles.row}>
-                <Button label={interimAnnounced ? "Ara kararı güncelle" : "Ara kararı açıkla"} variant="secondary" size="sm" onPress={submitInterim} loading={announceInterim.isPending} style={styles.grow} />
-                {interimAnnounced && inquiry.interim_text ? (
-                  <Button label="Ara kararı kesinleştir" variant="secondary" size="sm" onPress={() => submit(inquiry.interim_text ?? "")} disabled={announce.isPending} style={styles.grow} />
-                ) : null}
+                <Button label={interimAnnounced ? "Disiplin Kurulu kararını güncelle" : "Disiplin Kurulu kararını açıkla"} variant="secondary" size="sm" onPress={submitInterim} loading={announceInterim.isPending} style={styles.grow} />
               </View>
             ) : null}
           </GroupCard>
-          <GroupCard title="Nihai karar">
+          <GroupCard title="CAS kararı">
             <Input
-              label="Nihai karar metni"
+              label="CAS kararı metni"
               value={decision}
               onChangeText={setDecision}
               multiline
               numberOfLines={5}
               maxLength={5000}
-              placeholder={inquiry.status === "objected" ? "İtirazı değerlendir ve nihai kararı yaz." : "Nihai kararı yaz."}
+              placeholder={inquiry.status === "objected" ? "İtirazı değerlendir ve CAS kararını yaz." : "CAS kararını yaz."}
             />
           </GroupCard>
           {failure ? <DangerNote tone="danger" icon="alert-circle" title="Kaydedilemedi" body={failure} /> : null}

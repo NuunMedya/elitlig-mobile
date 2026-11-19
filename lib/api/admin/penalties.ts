@@ -371,7 +371,7 @@ export const archiveInquiry = (publicId: string, archived = true) =>
 export const reviewInquiryDefense = (defenseId: number, body: { review_status: Exclude<ReviewStatus, "pending">; review_note?: string | null }) =>
   post<{ message?: string }>(`/api/penalties/admin/inquiry-defenses/${enc(defenseId)}/review`, body);
 
-/** Kurul, incelemenin tarafı adına savunma ya da ara karara itiraz girer. */
+/** Kurul, incelemenin tarafı adına savunma ya da karara itiraz (CAS başvurusu) girer. */
 export const adminInquiryDefense = (publicId: string, body: { kind: "defense" | "objection"; side: "team" | "player"; team_id?: number | null; text: string }) =>
   post<{ defense: unknown; message?: string }>(`/api/penalties/admin/inquiries/${enc(publicId)}/defenses`, body);
 
