@@ -22,8 +22,9 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useMemo } from "react";
-import { FlatList, StyleSheet, Text, View } from "react-native";
+import { FlatList, StyleSheet, Text, View, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { MyInquiries } from "@/components/discipline/MyInquiries";
 import {
   Badge,
   Chip,
@@ -211,6 +212,8 @@ export default function PenaltiesScreen() {
   const listHeader = useMemo(
     () => (
       <View style={styles.headerBlock}>
+        {/* Tarafı olunan maç / konu incelemeleri ve savunma. */}
+        <MyInquiries />
         {/* ÖZET: açık dosya · aksiyon gereken · süren men cezası (maç). */}
         <Reveal>
           <MetricGrid columns={3}>
@@ -279,11 +282,16 @@ export default function PenaltiesScreen() {
       ) : query.isError && items.length === 0 ? (
         <ErrorState error={query.error} onRetry={query.refetch} />
       ) : items.length === 0 ? (
-        <EmptyState
-          icon="shield-checkmark-outline"
-          title="Dosya yok"
-          body="Taraf olduğun bir disiplin dosyası yok."
-        />
+        // Ceza dosyası olmasa da taraf olunan incelemeler burada görünür.
+        <ScrollView contentContainerStyle={styles.headerBlock}>
+          <MyInquiries />
+          <EmptyState
+            icon="shield-checkmark-outline"
+            title="Ceza dosyası yok"
+            body="Taraf olduğun bir ceza dosyası yok."
+            variant="inline"
+          />
+        </ScrollView>
       ) : (
         <FlatList
           {...scrollProps}

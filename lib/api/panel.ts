@@ -400,7 +400,39 @@ export interface Inquiry {
   createdAt: string;
   source_appeal_public_id?: string | null;
   is_archived?: boolean;
+  /** Taraflar ve savunmalar (yalnız kurul görünümünde). */
+  party_team_names?: string[];
+  party_player_name?: string | null;
+  defenses?: InquiryDefense[];
+  pending_defense_count?: number;
 }
+
+/** İncelemeye tarafın yazdığı savunma ve kurulun değerlendirmesi. */
+export interface InquiryDefense {
+  id: number;
+  side: "team" | "player";
+  team_name: string | null;
+  player_name: string | null;
+  text: string;
+  review_status: "pending" | "accepted" | "rejected" | "noted";
+  review_status_label: string;
+  review_note: string | null;
+  reviewed_at: string | null;
+  createdAt: string;
+}
+
+/** Üyenin taraf olduğu inceleme: kendi savunmalarıyla. */
+export interface MyInquiry extends Inquiry {
+  viewer_side: "team" | "player";
+  viewer_party_name: string | null;
+  can_defend: boolean;
+  my_defenses: InquiryDefense[];
+}
+
+export const getMyInquiries = () => get<{ items: MyInquiry[] }>("/api/penalties/inquiries/mine").then((d) => d.items ?? []);
+
+export const submitInquiryDefense = (publicId: string, text: string) =>
+  post<{ message: string }>(`/api/penalties/inquiries/${publicId}/defense`, { text });
 
 /** Herkese açık ceza dosyası (oyuncu sevki). */
 export interface PublicPenalty {
