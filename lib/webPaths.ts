@@ -49,7 +49,11 @@ export function webPathToAppPath(input: string): string {
     const slugged = pathname.match(/^\/([a-z0-9-]+)\/(mac|takim|oyuncu)\/(\d+)$/i);
     if (slugged && !APP_DIRS.has(slugged[1].toLowerCase())) return `${ENTITY[slugged[2]]}/${slugged[3]}`;
 
-    // /haberler?haber=<publicId> — tekil haber (mobilin paylaştığı adres)
+    // /haber/<publicId> — sitedeki haber ayrıntı sayfası; uygulamada aynı rota.
+    const news = pathname.match(/^\/haber\/([0-9a-f-]{8,64})$/i);
+    if (news) return `/haber/${news[1]}`;
+
+    // /haberler?haber=<publicId> — tekil haber (önceki sürümlerin paylaştığı adres)
     if (pathname === "/haberler") {
       const id = new URLSearchParams(search).get("haber");
       return id ? `/haber/${encodeURIComponent(id)}` : "/(tabs)/ligler";

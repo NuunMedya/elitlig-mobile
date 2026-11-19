@@ -272,8 +272,8 @@ export default function NewsDetailScreen() {
   const links = useMemo(() => (item ? relatedLinks(item) : []), [item]);
 
   /**
-   * Paylaşım metni: başlık + özet + sitedeki tekil haber adresi
-   * (`/haberler?haber=<id>` haberi pencerede açar).
+   * Paylaşım metni: başlık + özet + sitedeki haber ayrıntı sayfası
+   * (`/haber/<id>`).
    */
   const share = useCallback(() => {
     if (!item) return;

@@ -14,9 +14,12 @@ export function webMatchUrl(match: { id: number | string; city_id?: number | nul
   return `${WEB_BASE_URL}/sehir/${match.city_id}/mac/${match.id}`;
 }
 
-/** Tekil haber: haber listesi açılır ve haber penceresi kendiliğinden gelir. */
+/**
+ * Tekil haber: sitedeki haber ayrıntı sayfası (başlığı ve paylaşım önizlemesi
+ * olan tam sayfa). Eski `/haberler?haber=<id>` adresi sitede buraya yönlenir.
+ */
 export function webNewsUrl(publicId: string): string {
-  return `${WEB_BASE_URL}/haberler?haber=${encodeURIComponent(publicId)}`;
+  return `${WEB_BASE_URL}/haber/${encodeURIComponent(publicId)}`;
 }
 
 /**
