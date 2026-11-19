@@ -39,10 +39,20 @@ export class ApiError extends Error {
     return this.status === 503 || this.status === 429;
   }
 
+  /** Sunucu hem kod hem okunur bir açıklama gönderdi mi? */
+  get hasServerReason(): boolean {
+    const text = (this.message || "").trim();
+    return Boolean(this.code) && text.length > 0 && text.length <= 200 && !/^İstek başarısız \(\d+\)$/.test(text);
+  }
+
   /** Ekranda gösterilecek Türkçe mesaj. */
   get userMessage(): string {
     if (this.status === 0) return "İnternet bağlantısı kurulamadı.";
     if (this.status === 401) return "Oturumunuzun süresi dolmuş. Tekrar giriş yapın.";
+    // Sunucu bir hata kodu gönderdiyse nedenini de yazmıştır ("Bu maç başka bir
+    // şehre ait", "Kadro kilitli" gibi): genel cümle yerine o gösterilir. Kodsuz
+    // 403/404 (ör. tanımsız adres) genel cümleyle kalır.
+    if ((this.status === 403 || this.status === 404) && this.hasServerReason) return this.message;
     if (this.status === 403) return "Bu içeriği görme yetkiniz yok.";
     if (this.status === 404) return "Kayıt bulunamadı.";
     if (this.status >= 500) return "Sunucuya şu anda ulaşılamıyor. Az sonra tekrar deneyin.";
