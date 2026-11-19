@@ -298,6 +298,8 @@ export interface EventBody {
   aciklama: string | null;
   olusturan_kullanici_id?: number | null;
   client_event_id?: string;
+  /** Skoru sunucu olaylardan yeniden hesaplasın (elle tescilli maçta dokunmaz). */
+  sync_score?: boolean;
 }
 
 export const getEvents = (id: number) => get<MatchEvent[]>(`/api/maclar/${id}/olaylar`);
@@ -309,8 +311,13 @@ export const createEvent = (id: number, body: EventBody) =>
 export const updateEvent = (id: number, eventId: number, body: Partial<EventBody>) =>
   put<MatchEvent & { success: boolean }>(`/api/maclar/${id}/olaylar/${eventId}`, body);
 
-export const deleteEvent = (id: number, eventId: number) =>
-  del<{ message: string }>(`/api/maclar/${id}/olaylar/${eventId}`);
+/**
+ * DELETE. `syncScore`: skor kalan olaylardan sunucuda yeniden hesaplanır
+ * (yönetim rejisi). Varsayılan kapalı: canlı reji ekranı isimsiz golleri de
+ * saydığı için skoru kendisi eşitler (components/live/useLiveMatch.ts).
+ */
+export const deleteEvent = (id: number, eventId: number, options: { syncScore?: boolean } = {}) =>
+  del<{ message: string }>(`/api/maclar/${id}/olaylar/${eventId}${options.syncScore ? "?sync_score=1" : ""}`);
 
 /** Reji panelindeki olay düğmeleri (MatchLiveStep EVENT_GROUPS) — kodlar birebir. */
 export const EVENT_GROUPS: { key: string; title: string; items: { code: string; label: string }[] }[] = [

@@ -42,12 +42,14 @@ export function webPathToAppPath(input: string): string {
     pathname = pathname.replace(/\/+$/, "") || "/";
 
     // /sehir/:c[/lig/:l/sezon/:s]/(mac|takim|oyuncu)/:id
-    const scoped = pathname.match(/^\/sehir\/\d+(?:\/lig\/\d+\/sezon\/\d+)?\/(mac|takim|oyuncu)\/(\d+)$/);
-    if (scoped) return `${ENTITY[scoped[1]]}/${scoped[2]}`;
+    // Son parça yalnız numara ("7") ya da okunaklı ad + numara ("kartallar-fk-7")
+    // olabilir; kaydı sondaki numara bulur.
+    const scoped = pathname.match(/^\/sehir\/\d+(?:\/lig\/\d+\/sezon\/\d+)?\/(mac|takim|oyuncu)\/(?:[a-z0-9-]*-)?(\d+)$/i);
+    if (scoped) return `${ENTITY[scoped[1].toLowerCase()]}/${scoped[2]}`;
 
     // /:citySlug/(mac|takim|oyuncu)/:id — eski şehir adresleri
-    const slugged = pathname.match(/^\/([a-z0-9-]+)\/(mac|takim|oyuncu)\/(\d+)$/i);
-    if (slugged && !APP_DIRS.has(slugged[1].toLowerCase())) return `${ENTITY[slugged[2]]}/${slugged[3]}`;
+    const slugged = pathname.match(/^\/([a-z0-9-]+)\/(mac|takim|oyuncu)\/(?:[a-z0-9-]*-)?(\d+)$/i);
+    if (slugged && !APP_DIRS.has(slugged[1].toLowerCase())) return `${ENTITY[slugged[2].toLowerCase()]}/${slugged[3]}`;
 
     // /haber/<okunaklı-ad>-<kod> ya da /haber/<publicId> — sitedeki haber ayrıntı
     // sayfası; uygulamada aynı rota. Haber ucu iki anahtarı da çözer.

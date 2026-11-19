@@ -241,16 +241,19 @@ export function LiveStep({ match, onScore }: { match: AdminMatch; onScore?: (sco
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [score.home, score.away]);
 
-  /** Olay değişince skoru maç kaydına eşitle (elle tescilde dokunmaz). */
+  /**
+   * Olay değişince olay listesini ve maç kaydını tazeler.
+   *
+   * SKORU SUNUCU YAZAR: olay eklerken `sync_score`, silerken `?sync_score=1`
+   * gönderilir; sunucu skoru o maçın bütün olaylarından yeniden hesaplar (elle
+   * tescilli maçta dokunmaz), düzenlemede de farkı kendisi uygular. Önceden bu
+   * ekran skoru kendi hesaplayıp maça yazıyordu: iki cihaz aynı maçı yönetirken
+   * ya da bir olay kuyrukta beklerken eski skor yenisinin üzerine yazılabiliyordu.
+   */
   const syncScore = async () => {
-    const fresh = await queryClient.fetchQuery({ queryKey: eventsKey, queryFn: () => getEvents(matchId), staleTime: 0 });
-    if (manual) return;
-    const next = scoreFromEvents(fresh, homeTeamId, awayTeamId);
-    if (next.home !== Number(match.first_team_score) || next.away !== Number(match.second_team_score)) {
-      await updateMatch(matchId, { first_team_score: next.home, second_team_score: next.away });
-      void queryClient.invalidateQueries({ queryKey: ["admin", "matches", "detail", matchId] });
-      void queryClient.invalidateQueries({ queryKey: ["admin", "matches", "list"] });
-    }
+    await queryClient.fetchQuery({ queryKey: eventsKey, queryFn: () => getEvents(matchId), staleTime: 0 });
+    void queryClient.invalidateQueries({ queryKey: ["admin", "matches", "detail", matchId] });
+    void queryClient.invalidateQueries({ queryKey: ["admin", "matches", "list"] });
   };
 
   /* ───────── maç durumu ───────── */
@@ -405,7 +408,7 @@ export function LiveStep({ match, onScore }: { match: AdminMatch; onScore?: (sco
     async (item: PendingEvent) => {
       outbox.patch(matchId, item.clientId, { state: "sending", error: undefined, attempts: item.attempts + 1 });
       try {
-        const saved = await createEvent(matchId, { ...item.body, client_event_id: item.clientId });
+        const saved = await createEvent(matchId, { ...item.body, client_event_id: item.clientId, sync_score: true });
         queryClient.setQueryData<MatchEvent[]>(["admin", "matches", "events", matchId], (old) => {
           const list = old ?? [];
           return saved?.id && !list.some((ev) => ev.id === saved.id) ? [...list, saved] : list;
@@ -504,7 +507,7 @@ export function LiveStep({ match, onScore }: { match: AdminMatch; onScore?: (sco
       const previous = queryClient.getQueryData<MatchEvent[]>(eventsKey);
       queryClient.setQueryData<MatchEvent[]>(eventsKey, (old) => (old ?? []).filter((item) => item.id !== ev.id));
       try {
-        await deleteEvent(matchId, ev.id);
+        await deleteEvent(matchId, ev.id, { syncScore: true });
       } catch (error) {
         // 404: olay başka bir cihazdan zaten silinmiş — hedeflenen sonuç bu.
         if (!(error instanceof ApiError && error.status === 404)) {
