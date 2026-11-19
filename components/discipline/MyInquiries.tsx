@@ -5,8 +5,8 @@
  * (maçın takımları, kurulun belirttiği takım ya da oyuncu) inceleme SÜRERKEN
  * savunma yazabilir — oyuncu ceza dosyalarındaki savunmanın aynısı. Savunma
  * metni yalnız yazan tarafa ve kurula açıktır; kurulun değerlendirmesi aynı
- * kartta görünür. Ara karar açıklanınca savunma kapanır, itiraz açılır:
- * taraflar ara karara itiraz edebilir; itiraz üzerine verilen karar nihaidir.
+ * kartta görünür. Disiplin Kurulu kararı açıklanınca savunma kapanır, itiraz açılır:
+ * taraflar karara itiraz (CAS başvurusu) edebilir; itiraz üzerine verilen karar nihaidir.
  *
  * Takımım ▸ Disiplin ve Cezalarım ekranlarının başında gösterilir; taraf olunan
  * inceleme yoksa hiçbir şey çizmez.
@@ -62,7 +62,7 @@ export function MyInquiries() {
     },
   });
 
-  // Ara karar açıklandıysa yazılan metin savunma değil, ara karara itirazdır.
+  // Disiplin Kurulu kararı açıklandıysa yazılan metin savunma değil, karara itirazdır (CAS başvurusu).
   const objecting = Boolean(writing?.can_object);
   const items = query.data ?? [];
   if (!items.length) return null;
@@ -110,7 +110,7 @@ export function MyInquiries() {
           {inquiry.interim_text ? (
             <View style={styles.block}>
               <Text style={styles.blockLabel} {...textScale.badge}>
-                ARA KARAR{inquiry.interim_at ? ` · ${formatDateShort(inquiry.interim_at)}` : ""}
+                DİSİPLİN KURULU KARARI{inquiry.interim_at ? ` · ${formatDateShort(inquiry.interim_at)}` : ""}
               </Text>
               <Text style={styles.blockText} {...textScale.long}>
                 {inquiry.interim_text}
@@ -120,7 +120,7 @@ export function MyInquiries() {
           {inquiry.is_decided ? (
             <View style={styles.block}>
               <Text style={styles.blockLabel} {...textScale.badge}>
-                NİHAİ KARAR
+                CAS KARARI
               </Text>
               <Text style={styles.blockText} {...textScale.long}>
                 {inquiry.decision_text || "Karar metni yayımlanmadı."}
@@ -128,7 +128,7 @@ export function MyInquiries() {
             </View>
           ) : inquiry.can_defend || inquiry.can_object ? (
             <Button
-              label={inquiry.can_object ? "Ara karara itiraz et" : inquiry.my_defenses.length ? "Ek savunma yaz" : "Savunma yaz"}
+              label={inquiry.can_object ? "Karara itiraz et (CAS)" : inquiry.my_defenses.length ? "Ek savunma yaz" : "Savunma yaz"}
               icon="create-outline"
               variant="primary"
               size="sm"
@@ -144,7 +144,7 @@ export function MyInquiries() {
       <BottomSheet
         visible={writing !== null}
         onClose={mutation.isPending ? () => undefined : () => setWriting(null)}
-        title={objecting ? "Ara karara itiraz" : "Savunma yaz"}
+        title={objecting ? "CAS başvurusu (itiraz)" : "Savunma yaz"}
         snap="half"
         footer={
           <View style={styles.footer}>
@@ -165,7 +165,7 @@ export function MyInquiries() {
           <Text style={styles.meta} {...textScale.long}>
             {writing?.headline}. {objecting ? "İtirazın üzerine kurulun vereceği karar nihaidir." : "Savunman doğrudan Merkez Disiplin Kurulu'na iletilir."} Yazdıkların herkese açık sayfada yayımlanmaz.
           </Text>
-          <Input value={text} onChangeText={setText} placeholder={objecting ? "Ara karara neden itiraz ettiğini gerekçesiyle yaz…" : "Olayı kendi tarafından anlat…"} multiline hint={`En az ${MIN_TEXT} karakter. Gönderildikten sonra düzenlenemez.`} />
+          <Input value={text} onChangeText={setText} placeholder={objecting ? "Karara neden itiraz ettiğini gerekçesiyle yaz…" : "Olayı kendi tarafından anlat…"} multiline hint={`En az ${MIN_TEXT} karakter. Gönderildikten sonra düzenlenemez.`} />
         </View>
       </BottomSheet>
     </View>
