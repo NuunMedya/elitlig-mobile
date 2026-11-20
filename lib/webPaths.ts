@@ -44,7 +44,8 @@ export function webPathToAppPath(input: string): string {
     // /sehir/:c[/lig/:l/sezon/:s]/(mac|takim|oyuncu)/:id
     // Son parça yalnız numara ("7") ya da okunaklı ad + numara ("kartallar-fk-7")
     // olabilir; kaydı sondaki numara bulur.
-    const scoped = pathname.match(/^\/sehir\/\d+(?:\/lig\/\d+\/sezon\/\d+)?\/(mac|takim|oyuncu)\/(?:[a-z0-9-]*-)?(\d+)$/i);
+    // Şehir, lig ve sezon parçaları da okunaklı olabilir ("ankara-6", "1-lig-2").
+    const scoped = pathname.match(/^\/sehir\/(?:[a-z0-9-]*-)?\d+(?:\/lig\/(?:[a-z0-9-]*-)?\d+\/sezon\/(?:[a-z0-9-]*-)?\d+)?\/(mac|takim|oyuncu)\/(?:[a-z0-9-]*-)?(\d+)$/i);
     if (scoped) return `${ENTITY[scoped[1].toLowerCase()]}/${scoped[2]}`;
 
     // /:citySlug/(mac|takim|oyuncu)/:id — eski şehir adresleri
@@ -63,7 +64,7 @@ export function webPathToAppPath(input: string): string {
     }
 
     if (SIMPLE[pathname]) return SIMPLE[pathname];
-    if (/^\/sehir\/\d+(\/.*)?$/.test(pathname) || pathname === "/") return "/";
+    if (/^\/sehir\/(?:[a-z0-9-]*-)?\d+(\/.*)?$/i.test(pathname) || pathname === "/") return "/";
 
     // Uygulama şeması ve uygulama içi yollar olduğu gibi geçer.
     return isWeb ? "/" : raw;
