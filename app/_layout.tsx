@@ -76,7 +76,10 @@ const queryClient = new QueryClient({
         error.status >= 500 &&
         !error.isOverloaded &&
         failureCount < 1,
-      refetchOnWindowFocus: false,
+      // Uygulama ön plana dönünce (focusManager → AppState) ekrandaki bayat
+      // sorgular tazelenir; eskiden arka planda kalan skor/liste dönüşte eski
+      // kalıyordu. staleTime (15 sn) sık dönüşlerde gereksiz isteği önler.
+      refetchOnWindowFocus: true,
       // Uygulama arka plandayken yoklama yok (bkz. focusManager yukarıda).
       refetchIntervalInBackground: false,
     },

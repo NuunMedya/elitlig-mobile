@@ -36,6 +36,7 @@
  * `app/(tabs)/oyunlar.tsx` içinde de var (arena.ts başka bir ajanın dosyası).
  */
 
+import { istanbulToday } from "@/lib/leaderboard";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery } from "@tanstack/react-query";
@@ -376,11 +377,12 @@ export default function DailyQuizScreen() {
   const [landTick, setLandTick] = useState(0);
 
   /**
-   * GÜN ANAHTARI: `toISOString()` (UTC) ile üretilir ve `(tabs)/oyunlar.tsx`
-   * ile BİREBİR aynı olmalıdır — yerel takvime geçmek gece yarısı ile 03:00
-   * arasında "bugün oynanmadı" gösterirdi.
+   * GÜN ANAHTARI: İstanbul takvim günü (lib/leaderboard › istanbulToday) ve
+   * `(tabs)/oyunlar.tsx` ile BİREBİR aynı. Eskiden UTC günüydü: Türkiye'de yeni
+   * test gece 03:00'te açılıyordu; sunucunun günlük bildirimi ve seri hesabı
+   * Türkiye gününe göre.
    */
-  const day = new Date().toISOString().slice(0, 10);
+  const day = istanbulToday();
   const dayLabel = new Date().toLocaleDateString("tr-TR", { day: "numeric", month: "long" });
 
   // Çevrimdışı (sözleşme §7): bugünün havuzu çevrimiçiyken cihaza yazılır;

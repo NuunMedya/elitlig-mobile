@@ -50,6 +50,7 @@ import {
 import { MEMBERSHIP_STATUS_LABELS, addPlayerToTeam, removePlayerFromTeam } from "@/lib/api/admin/teams";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, radius, space, textScale, type } from "@/theme";
+import { parseAmount } from "@/lib/api/admin/accounting";
 
 const PERMS = ["players.update"];
 type Tab = "profile" | "teams" | "value" | "account";
@@ -97,7 +98,8 @@ export default function PlayerProfileScreen() {
         season: (v.season as string) || null,
         attendence_date: (v.attendence_date as string) || null,
       };
-      if (v.value !== "" && v.value != null) body.value = Number(String(v.value).replace(",", ".")) || 0;
+      // "15.000" on beş bin okunur (önceden 15).
+      if (v.value !== "" && v.value != null) body.value = parseAmount(v.value) || 0;
       if (nationwide && v.city) body.city = String(v.city);
       return updatePlayer(playerId, body);
     },

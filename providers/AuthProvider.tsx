@@ -13,7 +13,7 @@ import { AppState, type AppStateStatus } from "react-native";
 import * as authApi from "@/lib/api/auth";
 import type { RegisterInput } from "@/lib/api/auth";
 import { ApiError, configureAuth } from "@/lib/http";
-import { resetPushSync, unregisterPushDevice } from "@/hooks/usePushStatus";
+import { getSyncedPushToken, resetPushSync, unregisterPushDevice } from "@/hooks/usePushStatus";
 import { clearLedger } from "@/lib/notificationLedger";
 import {
   clearSessionCache,
@@ -119,7 +119,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
        yeniden yazılsın — aksi hâlde token eski üyenin hesabında kalırdı. */
     resetPushSync();
     await clearLedger();
-  }, []);
+    // Önceki kullanıcının özel verisi (panel, bildirim, takip) önbellekte
+    // kalmasın: aynı cihazda başka hesapla girişte görünüyordu. Oturum
+    // sunucu tarafından kapatıldığında da (iptal, engel) aynısı geçerli.
+    queryClient.clear();
+  }, [queryClient]);
 
   /** Yeni jetonu bellekte ve güvenli depoda tutar; yenileme saatini işler. */
   const adoptToken = useCallback(async (token: string) => {
@@ -268,7 +272,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
-    const response = await authApi.changePassword(currentPassword, newPassword);
+    const response = await authApi.changePassword(currentPassword, newPassword, getSyncedPushToken());
     // Eski jeton sunucuda geçersiz kılındı; yenisi yazılmazsa bir sonraki
     // istek 401 alır ve kullanıcı dışarı atılır.
     await adoptToken(response.token);
@@ -284,8 +288,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Sunucuya ulaşılamasa da yerel oturum kapatılır.
     }
     await forgetSession();
-    await queryClient.invalidateQueries();
-  }, [forgetSession, queryClient]);
+  }, [forgetSession]);
 
   const refreshUser = useCallback(() => revalidate(true), [revalidate]);
 

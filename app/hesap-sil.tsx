@@ -95,6 +95,12 @@ const FALLBACK_SUMMARY: DeletionSummary = {
         "Mesajların, bildirimlerin, takip ettiklerin, taleplerin ve oyun skorların geri alınamaz biçimde silinir. " +
         "Lig kayıtları (maçlar, goller, puan durumu) ligin ortak verisidir; onlar yerinde kalır, hesabınla bağı kopar.",
     },
+    {
+      key: "kept",
+      title: "Mali kayıtlar saklanır",
+      description:
+        "Ödeme siparişlerin (tutar, plan, havale kodu) ve araçlardaki muhasebe, bütçe, görev ve not kayıtların mali ve yasal saklama gereği silinmez.",
+    },
   ],
 };
 

@@ -111,9 +111,20 @@ export function AccountEditSheet({
     return out;
   }, [form, initial]);
   const dirty = Object.keys(payload).length > 0;
+  /* E-posta ve telefon şifre sıfırlama kanalı: sunucu değişikliği mevcut
+     şifreyle onaylatır (PASSWORD_REQUIRED). */
+  const needsPassword = "email" in payload || "phone" in payload;
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!visible) return;
+    setCurrentPassword("");
+    setPasswordError(null);
+  }, [visible]);
 
   const save = useMutation({
-    mutationFn: () => patch<{ user?: AuthUser }>("/api/users/me", payload),
+    mutationFn: () =>
+      patch<{ user?: AuthUser }>("/api/users/me", needsPassword ? { ...payload, currentPassword } : payload),
     onSuccess: async () => {
       await onSaved();
       toast.show({ message: "Üyelik bilgilerin güncellendi.", tone: "success" });
@@ -128,6 +139,11 @@ export function AccountEditSheet({
       const next: Partial<Record<Field, string>> = {};
       for (const [key, message] of Object.entries(detail.fieldErrors ?? {})) {
         if (key in form) next[key as Field] = String(message);
+      }
+      if (error.code === "PASSWORD_REQUIRED" || error.code === "CURRENT_PASSWORD_INVALID") {
+        setPasswordError(error.message);
+        setBanner(null);
+        return;
       }
       const mapped = error.code ? SERVER_FIELD[error.code] : undefined;
       if (mapped && !next[mapped]) next[mapped] = error.message;
@@ -146,6 +162,10 @@ export function AccountEditSheet({
   const submit = () => {
     setTouched(true);
     if (Object.keys(errors).length || !dirty || save.isPending) return;
+    if (needsPassword && !currentPassword) {
+      setPasswordError("E-posta ya da telefonu değiştirmek için mevcut şifreni gir.");
+      return;
+    }
     save.mutate();
   };
 
@@ -270,6 +290,22 @@ export function AccountEditSheet({
           textContentType="telephoneNumber"
           maxLength={50}
         />
+        {needsPassword ? (
+          <Input
+            label="Mevcut şifre"
+            value={currentPassword}
+            onChangeText={(value) => {
+              setCurrentPassword(value);
+              setPasswordError(null);
+            }}
+            error={passwordError ?? undefined}
+            hint="E-posta ya da telefon şifre sıfırlamada kullanıldığından değişiklik şifrenle onaylanır."
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="password"
+          />
+        ) : null}
 
         <View style={styles.field}>
           <Text style={styles.fieldLabel} {...textScale.dense}>

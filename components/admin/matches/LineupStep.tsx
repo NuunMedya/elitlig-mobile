@@ -44,6 +44,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { errorText } from "@/lib/admin/errors";
 import {
+  getGameRules,
   createRosterPlayer,
   LAST_LINEUP_SCAN,
   findLastLineup,
@@ -118,6 +119,17 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
   const awayTeamId = Number(match.away_team_id) || null;
   const canEdit = hasAnyPermission(auth.user, ["matches.lineup"]);
 
+  // Sahadaki oyuncu sayısı sezonun kural kitapçığından; yoksa 11.
+  const rulesQuery = useQuery({
+    queryKey: ["admin", "rule-books", "game", match.season_id ?? null],
+    queryFn: () => getGameRules(Number(match.season_id)),
+    enabled: Boolean(match.season_id),
+    staleTime: 10 * 60 * 1000,
+  });
+  const fieldSize = (() => {
+    const value = Number(rulesQuery.data?.field_size);
+    return Number.isInteger(value) && value > 0 && value <= 11 ? value : 11;
+  })();
   const lineupQuery = useQuery({
     queryKey: ["admin", "matches", "lineup", matchId],
     queryFn: () => getLineup(matchId),
@@ -292,7 +304,7 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
     const home = buildPayload("home").length;
     const away = buildPayload("away").length;
     if (!home && !away) {
-      Alert.alert("Kadro boş", "En az bir oyuncuyu İlk 11 ya da Yedek olarak seç.");
+      Alert.alert("Kadro boş", "En az bir oyuncuyu As ya da Yedek olarak seç.");
       return;
     }
     if (!home || !away) {
@@ -352,7 +364,7 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
     if (!counts[side].starters && !counts[side].bench) return;
     const ok = await confirmAction({
       title: "Seçimi temizle",
-      message: `${teamName} için İlk 11 ve yedek seçimleri kaldırılsın mı? Kaydedene kadar sunucudaki kadro değişmez.`,
+      message: `${teamName} için as ve yedek seçimleri kaldırılsın mı? Kaydedene kadar sunucudaki kadro değişmez.`,
       confirmLabel: "Temizle",
       destructive: true,
     });
@@ -490,7 +502,7 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
               style={[styles.sideCard, on ? styles.sideCardOn : null]}
               accessibilityRole="radio"
               accessibilityState={{ selected: on }}
-              accessibilityLabel={`${name}: İlk 11 ${c.starters}, yedek ${c.bench}`}
+              accessibilityLabel={`${name}: as ${c.starters}/${fieldSize}, yedek ${c.bench}`}
             >
               <View style={styles.sideHead}>
                 <Text style={styles.sideTag} {...textScale.badge}>
@@ -504,13 +516,13 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
               <View style={styles.sideNums}>
                 <Text style={styles.sideBig} {...textScale.badge}>
                   {c.starters}
-                  <Text style={styles.sideOf}>/11</Text>
+                  <Text style={styles.sideOf}>/{fieldSize}</Text>
                 </Text>
                 <Text style={styles.sideBench} {...textScale.badge}>
                   +{c.bench} yedek
                 </Text>
               </View>
-              <GradientBar value={Math.min(1, c.starters / 11)} height={4} gradient={c.starters >= 11 ? [colors.win, colors.win] : undefined} />
+              <GradientBar value={Math.min(1, c.starters / fieldSize)} height={4} gradient={c.starters >= fieldSize ? [colors.win, colors.win] : undefined} />
             </Touchable>
           );
         })}
@@ -551,7 +563,7 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
       </ChipGroup>
 
       {preview ? (
-        <View style={styles.pitch} accessibilityLabel={`${teamName} ilk 11 saha önizlemesi, diziliş ${lines.formation}`}>
+        <View style={styles.pitch} accessibilityLabel={`${teamName} as kadro saha önizlemesi, diziliş ${lines.formation}`}>
           <LinearGradient colors={colors.gradientPitch} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={StyleSheet.absoluteFill} />
           {/* Tebeşir çizgileri: orta saha çizgisi ve yuvarlak, ceza sahası. */}
           <View style={styles.chalkMid} pointerEvents="none" />
@@ -567,7 +579,7 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
               </Text>
             </View>
             <Text style={styles.pitchCount} {...textScale.dense}>
-              {starters.length}/11
+              {starters.length}/{fieldSize}
             </Text>
           </View>
           {(["Forvet", "Orta Saha", "Defans", "Kaleci"] as const).map((line) => (
@@ -743,10 +755,10 @@ const PlayerLine = React.memo(function PlayerLine({
                 style={[styles.roleBtn, on ? (role === "starter" ? styles.roleStarter : styles.roleBench) : null]}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: on, disabled }}
-                accessibilityLabel={role === "starter" ? "İlk 11" : "Yedek"}
+                accessibilityLabel={role === "starter" ? "As" : "Yedek"}
               >
                 <Text style={[styles.roleText, on ? styles.roleTextOn : null]} {...textScale.badge}>
-                  {role === "starter" ? "İlk 11" : "Yedek"}
+                  {role === "starter" ? "As" : "Yedek"}
                 </Text>
               </Touchable>
             );
@@ -832,7 +844,7 @@ function PlayerEditSheet({
             label="Rol"
             value={player.role || null}
             options={[
-              { key: "starter", label: "İlk 11" },
+              { key: "starter", label: "As" },
               { key: "bench", label: "Yedek" },
             ]}
             onChange={(v) => onChange({ role: (typeof v === "string" ? v : "") as Role })}

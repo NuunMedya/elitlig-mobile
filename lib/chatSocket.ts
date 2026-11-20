@@ -43,6 +43,17 @@ let socket: Socket | null = null;
 let refs = 0;
 let lastToken: string | null = null;
 const statusListeners = new Set<(connected: boolean) => void>();
+/**
+ * Abone olunan olaylar soketten bağımsız tutulur. Jeton yenilenince (ya da
+ * kullanıcı değişince) soket yeniden kurulur; eskiden `removeAllListeners`
+ * ekranların dinleyicilerini de söktüğü için yenilemeden sonra yeni mesajlar
+ * ekrana düşmüyordu. Yeni sokete kayıtlı dinleyiciler yeniden bağlanır.
+ */
+const registry = new Map<string, Set<Handler>>();
+
+function attachRegistered(target: Socket) {
+  registry.forEach((handlers, event) => handlers.forEach((handler) => target.on(event, handler)));
+}
 
 function notify(connected: boolean) {
   statusListeners.forEach((fn) => fn(connected));
@@ -71,6 +82,7 @@ function connect(): Socket | null {
   });
   socket.on("connect", () => notify(true));
   socket.on("disconnect", () => notify(false));
+  attachRegistered(socket);
   return socket;
 }
 
@@ -105,9 +117,19 @@ export function onChatStatus(fn: (connected: boolean) => void): () => void {
 export function onChatEvent<T>(event: string, handler: (payload: T) => void): () => void {
   const current = connect();
   if (!current) return () => {};
-  current.on(event, handler as Handler);
+  const fn = handler as Handler;
+  let handlers = registry.get(event);
+  if (!handlers) {
+    handlers = new Set();
+    registry.set(event, handlers);
+  }
+  handlers.add(fn);
+  current.on(event, fn);
   return () => {
-    socket?.off(event, handler as Handler);
+    const set = registry.get(event);
+    set?.delete(fn);
+    if (set && set.size === 0) registry.delete(event);
+    socket?.off(event, fn);
   };
 }
 

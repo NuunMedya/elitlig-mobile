@@ -37,6 +37,9 @@ export function toNumber(value: unknown): number | null {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
   let text = String(value).trim().replace(/[₺\s]/g, "");
   if (text.includes(",")) text = text.replace(/\./g, "").replace(",", ".");
+  // Virgülsüz binlik yazım ("1.500", "12.000.000"): önceden ondalık okunuyor,
+  // personel ücretine "1.500" yazılınca 1,5 kaydediliyordu.
+  else if (/^-?[1-9]\d{0,2}(\.\d{3})+$/.test(text)) text = text.replace(/\./g, "");
   const n = Number(text);
   return Number.isFinite(n) ? n : null;
 }

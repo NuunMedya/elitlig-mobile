@@ -49,10 +49,12 @@ export const logout = () => post<{ message: string }>("/api/users/logout");
 
 /** Oturum açıkken şifre değiştirme — PATCH /api/users/me/password. Sunucu
  *  token_version'ı artırıp taze jeton döndürür; eski jeton geçersizdir. */
-export const changePassword = (currentPassword: string, newPassword: string) =>
+export const changePassword = (currentPassword: string, newPassword: string, pushToken?: string | null) =>
   patch<{ message: string; token: string; expiresIn: number }>("/api/users/me/password", {
     currentPassword,
     newPassword,
+    // Sunucu diğer cihazların bildirim kaydını siler; bu cihazınki korunur.
+    ...(pushToken ? { pushToken } : {}),
   });
 
 /** Şifremi unuttum, 1. adım: hesap kayıtlıysa 6 haneli kod kayıtlı telefona SMS

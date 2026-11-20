@@ -112,7 +112,19 @@ const FavoriteContext = createContext<FavoriteContextValue | null>(null);
 function syncServer(action: "follow" | "unfollow", kind: FavoriteKind, id: number, enabled: boolean) {
   if (!enabled) return;
   const call = action === "follow" ? followFavorite : unfollowFavorite;
-  call(kind, id).catch(() => {});
+  call(kind, id).catch((error) => {
+    // Sessizce yutulmasın: geliştirmede görünür, üretimde bir sonraki
+    // girişteki senkron (aşağıdaki birleştirme) farkı yeniden dener.
+    if (__DEV__) console.warn(`Takip senkronu başarısız (${action} ${kind}/${id})`, error);
+  });
+}
+
+/** Sunucudaki ayrıntılı kayıtları yerel listeye ekler (yinelenmeden). */
+function mergeById<T extends { id: number; name: string }>(prev: T[], incoming: T[]): T[] {
+  if (!incoming.length) return prev;
+  const have = new Set(prev.map((item) => item.id));
+  const extra = incoming.filter((item) => item.id > 0 && Boolean(item.name) && !have.has(item.id));
+  return extra.length ? [...prev, ...extra] : prev;
 }
 
 /** Bozuk/yinelenen kayıtları eleyen sayısal id listesi okuyucusu. */
@@ -232,8 +244,17 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         const server = await getMyFavorites();
+        // Sunucudaki takipler cihaza geri yüklenir (yeni telefon, yeniden
+        // kurulum, başka hesaptan geçiş): ad/amblemle gelen kayıtlar eklenir.
+        const restore = () => {
+          setFavorites((prev) => mergeById(prev, server.teams.map((t) => ({ id: t.id, name: t.name, logo: t.logo ?? null }))));
+          setLeagues((prev) => mergeById(prev, server.leagues));
+          setSeasons((prev) => mergeById(prev, server.seasons));
+          setCities((prev) => mergeById(prev, server.cities));
+        };
         if (foreign) {
           if (server.matchIds.length) setMatches(Array.from(new Set(server.matchIds)));
+          restore();
           return;
         }
         const serverTeams = new Set(server.teamIds);
@@ -262,6 +283,7 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
         if (server.matchIds.length) {
           setMatches((prev) => Array.from(new Set([...prev, ...server.matchIds])));
         }
+        restore();
       } catch {
         // Sunucuya ulaşılamadıysa sonraki girişte tekrar denenir.
         syncedUserRef.current = null;

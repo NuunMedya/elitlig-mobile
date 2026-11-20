@@ -633,13 +633,16 @@ export const deleteSeasonGroup = (groupId: number) => del<{ message?: string }>(
 export const setGroupSlotCount = (groupId: number, count: number, force = false) =>
   put<unknown>(`${G}/${groupId}/slots/count`, { count, force });
 
+/** Maçı olan grupta takım değişikliği sunucuda onay ister: 409 + GROUP_HAS_MATCHES; force ile geçilir. */
 export const updateGroupSlot = (
   groupId: number,
   slotId: number,
-  body: { source_type: string; team_id?: number | null; source_group_id?: number | null; source_rank?: number | null; source_matchup?: number | null }
-) => patch<unknown>(`${G}/${groupId}/slots/${slotId}`, body);
+  body: { source_type: string; team_id?: number | null; source_group_id?: number | null; source_rank?: number | null; source_matchup?: number | null },
+  force = false
+) => patch<unknown>(`${G}/${groupId}/slots/${slotId}`, force ? { ...body, force: true } : body);
 
-export const clearGroupSlot = (groupId: number, slotId: number) => post<unknown>(`${G}/${groupId}/slots/${slotId}/clear`);
+export const clearGroupSlot = (groupId: number, slotId: number, force = false) =>
+  post<unknown>(`${G}/${groupId}/slots/${slotId}/clear`, force ? { force: true } : undefined);
 
 export const moveGroupSlot = (groupId: number, slotId: number, direction: "up" | "down") =>
   post<unknown>(`${G}/${groupId}/slots/${slotId}/move`, { direction });

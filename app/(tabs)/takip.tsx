@@ -277,7 +277,9 @@ export default function TakipScreen() {
 
   const matchQueries = useQueries({
     queries: favoriteMatches.map((id) => ({
-      queryKey: queryKeys.match(id),
+      // Maç sayfası aynı kimliği zaman tüneliyle ister (queryKeys.match);
+      // özet ayrı anahtarda tutulur ki iki farklı içerik birbirini ezmesin.
+      queryKey: [...queryKeys.match(id), "summary"],
       queryFn: () => getMatch(id),
       staleTime: 60_000,
     })),

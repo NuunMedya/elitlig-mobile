@@ -74,6 +74,12 @@ export async function unregisterPushDevice(timeoutMs = 4000): Promise<void> {
   }
 }
 
+/** Bu cihazın sunucuya yazılmış push token'ı (yoksa null). Şifre değişiminde
+ *  sunucu bu token'ı korur, diğer cihazların kaydını siler. */
+export function getSyncedPushToken(): string | null {
+  return syncedToken;
+}
+
 /** Çıkışta çağrılır: bir sonraki girişte token yeniden yazılsın. */
 export function resetPushSync(): void {
   syncedToken = null;

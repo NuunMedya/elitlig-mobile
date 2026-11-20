@@ -461,10 +461,11 @@ export default function MacKadrosuScreen() {
   });
   const reportMutation = useMutation({
     mutationFn: async () => {
-      // Kadro henüz kaydedilmediyse önce kaydet, sonra rejiye bildir.
-      if (!planQuery.data?.plan?.lineup?.length) {
-        await saveTeamMatchPlan(matchId, { formation, kitColor: kit, tactics: tactics.trim() || undefined, lineup: entries.map(({ displayName: _n, photo: _p, ...row }) => row) });
-      }
+      // Ekrandaki kadro her zaman önce kaydedilir, sonra rejiye bildirilir.
+      // Önceden yalnız hiç kayıt yoksa kaydediliyordu: kaydedilmemiş değişiklik
+      // varken "Bildirildi" denip rejiye eski kadro gidiyordu. Kayıt idempotent.
+      if (!entries.length) throw new Error("Önce kadroya oyuncu ekle.");
+      await saveTeamMatchPlan(matchId, { formation, kitColor: kit, tactics: tactics.trim() || undefined, lineup: entries.map(({ displayName: _n, photo: _p, ...row }) => row) });
       return reportMatchLineup(matchId);
     },
     onSuccess: (data) => {
@@ -472,7 +473,7 @@ export default function MacKadrosuScreen() {
       void queryClient.invalidateQueries({ queryKey: ["takim", "attendance", matchId] });
       void queryClient.invalidateQueries({ queryKey: ["takim", "match-plan", matchId] });
     },
-    onError: (error) => toast.show({ message: error instanceof ApiError ? error.userMessage : "Kadro bildirilemedi.", tone: "danger" }),
+    onError: (error) => toast.show({ message: error instanceof ApiError ? error.userMessage : error instanceof Error && error.message ? error.message : "Kadro bildirilemedi.", tone: "danger" }),
   });
   const selectedRegisteredIds = useMemo(() => entries.map((entry) => entry.playerId).filter((id): id is number => id != null), [entries]);
   const syncMutation = useMutation({

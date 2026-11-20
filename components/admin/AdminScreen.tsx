@@ -40,7 +40,7 @@
 
 import { Redirect, useRouter } from "expo-router";
 import React from "react";
-import { ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -157,18 +157,24 @@ export function AdminScreen({
           scrollY={scroll ? scrollY : undefined}
         />
       )}
-      {scroll ? (
-        <ScrollView
-          {...scrollProps}
-          contentContainerStyle={[styles.content, contentStyle]}
-          keyboardShouldPersistTaps="handled"
-          refreshControl={onRefresh ? refresh.control : undefined}
-        >
-          {children}
-        </ScrollView>
-      ) : (
-        <View style={styles.fill}>{children}</View>
-      )}
+      {/* iOS'ta klavye form alanlarının (karar notu, tutar, açıklama) üstünü
+          örtüyordu; içerik klavye kadar yukarı itilir. Android pencereyi
+          zaten yeniden boyutlandırır. */}
+      <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        {scroll ? (
+          <ScrollView
+            {...scrollProps}
+            contentContainerStyle={[styles.content, contentStyle]}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+            refreshControl={onRefresh ? refresh.control : undefined}
+          >
+            {children}
+          </ScrollView>
+        ) : (
+          <View style={styles.fill}>{children}</View>
+        )}
+      </KeyboardAvoidingView>
       {overlay}
     </SafeAreaView>
   );

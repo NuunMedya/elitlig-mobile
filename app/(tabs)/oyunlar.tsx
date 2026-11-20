@@ -35,6 +35,7 @@
  * (UTC günü, toISOString) okunur.
  */
 
+import { istanbulToday } from "@/lib/leaderboard";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -162,7 +163,8 @@ export default function OyunlarScreen() {
   const me = puzzle.data;
   const summary = useQuery({ queryKey: ["arena", "me", "summary"], queryFn: getMyArenaSummary, enabled: signedIn, staleTime: 60_000, retry: false });
 
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  // Günün Testi ile aynı gün anahtarı (İstanbul takvimi; bkz. app/gunun.tsx).
+  const today = useMemo(() => istanbulToday(), []);
   // Kişisel rekorlar hesaba bağlı oyun kaydından (lib/puzzle/saves); Günün
   // Testi'nin bugünkü sonucu cihazdan.
   const bests = useGameSave("bests");

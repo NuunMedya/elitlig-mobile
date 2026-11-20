@@ -83,6 +83,7 @@ import {
   textScale,
   type,
 } from "@/theme";
+import { parseAmount } from "@/lib/api/admin/accounting";
 
 /* ============================ SUNUCU BİÇİMLERİ ============================= */
 
@@ -173,6 +174,7 @@ const EVENT_LABELS: Record<string, string> = {
   OFFER_REJECTED: "Teklif reddedildi",
   OFFER_WITHDRAWN: "Teklif geri çekildi",
   OFFER_EXPIRED: "Teklifin süresi doldu",
+  OFFER_CANCELLED: "Başka takıma geçtiğin için teklif iptal edildi",
   OFFER_REVISED: "Takım teklifi güncelledi",
   REVISION_REQUESTED: "Düzenleme istedin",
   ADMIN_APPROVED: "Yönetim onayladı",
@@ -562,8 +564,9 @@ export default function OfferDetailScreen() {
       let proposed: string | number | boolean = raw;
       if (field?.kind === "bool") proposed = raw === "true";
       else if (field?.kind === "money") {
-        const numeric = Number(raw.replace(",", "."));
-        proposed = Number.isFinite(numeric) ? numeric : raw;
+        // Ortak kural: "15.000" on beş bin, "1.500,50" bin beş yüz elli kuruş.
+        const numeric = parseAmount(raw);
+        proposed = numeric != null && Number.isFinite(numeric) ? numeric : raw;
       }
       const explanation = (revisionNotes[code] ?? "").trim();
       return { fieldCode: code, proposedValue: proposed, explanation: explanation || undefined };

@@ -104,6 +104,21 @@ import { useScope } from "@/providers/ScopeProvider";
 import { colors, hairline, layout, space } from "@/theme";
 import type { ApiMatchEvent, KadroPlayer, MatchState } from "@/lib/types";
 
+
+/** Maç kaydı, durum geçişini yakalamak için yoklanmalı mı? */
+function needsStatusPolling(match: { date?: string | null; time?: string | null } | undefined): boolean {
+  if (!match) return false;
+  const state = matchState(match as Parameters<typeof matchState>[0]);
+  if (state === "finished") return false;
+  if (state === "live") return true;
+  const day = String(match.date ?? "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;
+  const [hh = "00", mm = "00"] = String(match.time ?? "00:00").split(":");
+  const kickoff = new Date(`${day}T${hh.padStart(2, "0")}:${mm.padStart(2, "0")}:00+03:00`).getTime();
+  if (Number.isNaN(kickoff)) return false;
+  const diff = Date.now() - kickoff;
+  return diff > -2 * 60 * 60_000 && diff < 6 * 60 * 60_000;
+}
 export default function MatchDetailScreen() {
   const params = useLocalSearchParams<{ id: string; tab?: string }>();
   const router = useRouter();
@@ -130,6 +145,11 @@ export default function MatchDetailScreen() {
     queryKey: queryKeys.match(matchId),
     queryFn: () => getMatch(matchId, ["timeline"]),
     enabled: validId,
+    // Başlama saatine yakın ya da saati geçmiş (henüz bitmemiş) maçta kayıt
+    // dakikada bir yoklanır: "zamanlanmış → canlı → bitti" geçişi ekran açıkken
+    // görülür. Canlı soket yalnız "canlı" durumda açıldığı için bu geçişi
+    // başka hiçbir şey yakalamıyordu. Uzak/bitmiş maçta yoklama yok.
+    refetchInterval: (query) => (needsStatusPolling(query.state.data) ? 60_000 : false),
   });
 
   const kadroQuery = useQuery({

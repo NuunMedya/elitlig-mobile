@@ -79,7 +79,9 @@ export function currentAuthToken(): string | null {
  * hatada kullanıcıyı dışarı atıyordu. Yalnız jetonun geçersiz olduğunu
  * söyleyen kodlar oturumu kapatır.
  */
-const SESSION_ENDING_CODES = new Set(["INVALID_TOKEN", "TOKEN_STALE", "INVALID_USER", "AUTH_REQUIRED"]);
+const SESSION_ENDING_CODES = new Set(["INVALID_TOKEN", "TOKEN_STALE", "INVALID_USER", "AUTH_REQUIRED", "SESSION_REVOKED"]);
+/** Hesap kapatıldığında (403) da oturum yerelde kapanır; aksi hâlde her istek 403 alır. */
+const SESSION_ENDING_403_CODES = new Set(["ACCOUNT_BLOCKED"]);
 
 /** Oturum kapatma geri çağrısı — hangi jetonla reddedildiği bildirilir. */
 type UnauthorizedHandler = (rejectedToken: string) => void;
@@ -204,6 +206,8 @@ async function once<T>(path: string, options: RequestOptions): Promise<T> {
       );
       // Jetonsuz istek (ör. yanlış şifreyle giriş) oturumu etkilemez.
       if (response.status === 401 && token && (!code || SESSION_ENDING_CODES.has(code))) {
+        onUnauthorized?.(token);
+      } else if (response.status === 403 && token && code && SESSION_ENDING_403_CODES.has(code)) {
         onUnauthorized?.(token);
       }
       throw error;

@@ -120,9 +120,15 @@
       ],
       "expo-font",
       [
+        "expo-calendar",
+        {
+          "calendarPermission": "Takip ettiğin maçları takvimine eklemek için takvime erişilir."
+        }
+      ],
+      [
         "@config-plugins/react-native-webrtc",
         {
-          "cameraPermission": "Kamera, yönetici hesabıyla maçı telefondan canlı yayınlamak için kullanılır.",
+          "cameraPermission": "Kamera; sohbette fotoğraf çekip göndermek ve yönetici hesabıyla maçı telefondan canlı yayınlamak için kullanılır.",
           "microphonePermission": "Mikrofon; sesli arama, sesli mesaj ve maçın canlı yayınında sesi iletmek için kullanılır."
         }
       ],
@@ -141,15 +147,15 @@
       [
         "./modules/elitlig-live/app.plugin.js",
         {
-          "cameraPermission": "Kamera, yönetici hesabıyla maçı telefondan canlı yayınlamak için kullanılır.",
+          "cameraPermission": "Kamera; sohbette fotoğraf çekip göndermek ve yönetici hesabıyla maçı telefondan canlı yayınlamak için kullanılır.",
           "microphonePermission": "Mikrofon; sesli arama, sesli mesaj ve maçın canlı yayınında sesi iletmek için kullanılır."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Profil fotoğrafını ve kulüp logosunu seçmek için fotoğraflarına erişilir.",
-          "cameraPermission": false
+          "photosPermission": "Profil fotoğrafını, kulüp logosunu ve sohbette gönderilecek fotoğrafı seçmek için fotoğraflarına erişilir.",
+          "cameraPermission": "Kamera; sohbette fotoğraf çekip göndermek ve yönetici hesabıyla maçı telefondan canlı yayınlamak için kullanılır."
         }
       ],
       "expo-video",

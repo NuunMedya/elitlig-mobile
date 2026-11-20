@@ -40,6 +40,7 @@ import {
   type Inquiry,
 } from "@/lib/api/admin/penalties";
 import { useAuth } from "@/providers/AuthProvider";
+import { hasAnyPermission } from "@/lib/admin/access";
 import { colors, space, textScale, type } from "@/theme";
 
 type Filter = "open" | "decided" | "archived";
@@ -120,7 +121,11 @@ export default function InquiriesScreen() {
 
 /** Karar yazma / açıklama, arşiv ve (yalnız admin) silme. */
 function InquirySheet({ inquiry, onClose }: { inquiry: Inquiry | null; onClose: () => void }) {
-  const isAdmin = useAuth().user?.role === "admin";
+  const authUser = useAuth().user;
+  const isAdmin = authUser?.role === "admin";
+  // Karar yazma sunucuda penalties.update ister; yalnız görüntüleme yetkilisi
+  // metni yazıp sonunda 403 alıyordu.
+  const canDecide = hasAnyPermission(authUser, ["penalties.update"]);
   const [decision, setDecision] = useState("");
   const [interim, setInterim] = useState("");
   const [failure, setFailure] = useState<string | null>(null);
@@ -170,6 +175,9 @@ function InquirySheet({ inquiry, onClose }: { inquiry: Inquiry | null; onClose: 
   const submit = async (text = decision) => {
     setFailure(null);
     if (!text.trim()) return setFailure("CAS kararı metni yazılmalıdır.");
+    // Karar taraflara bildirilir ve (açıksa) kamuya yayımlanır: onay sorulur.
+    const sure = await confirmAction({ title: "CAS kararı açıklansın mı?", message: "Karar taraflara bildirilir ve görünürlüğe göre disiplin sayfasında yayımlanır.", confirmLabel: "Açıkla" });
+    if (!sure) return undefined;
     try {
       await announce.mutateAsync(text.trim());
     } catch (error) {
@@ -180,6 +188,8 @@ function InquirySheet({ inquiry, onClose }: { inquiry: Inquiry | null; onClose: 
   const submitInterim = async () => {
     setFailure(null);
     if (!interim.trim()) return setFailure("Disiplin Kurulu kararı metni yazılmalıdır.");
+    const sure = await confirmAction({ title: "Disiplin Kurulu kararı açıklansın mı?", message: "Karar taraflara bildirilir; taraflar itiraz edebilir.", confirmLabel: "Açıkla" });
+    if (!sure) return undefined;
     try {
       await announceInterim.mutateAsync(undefined);
     } catch (error) {
@@ -200,7 +210,9 @@ function InquirySheet({ inquiry, onClose }: { inquiry: Inquiry | null; onClose: 
       snap="full"
       footer={
         // İlk karar her zaman Disiplin Kurulu kararıdır; CAS kararı ondan sonra verilir.
-        interimAnnounced ? (
+        !canDecide ? (
+          <Text style={styles.meta} {...textScale.dense}>Karar yazmak için ceza güncelleme yetkisi gerekir.</Text>
+        ) : interimAnnounced ? (
           <Button label={inquiry?.is_decided ? "CAS kararını güncelle" : "CAS kararını açıkla"} icon="checkmark" size="lg" onPress={() => submit()} loading={announce.isPending} haptic="success" fullWidth />
         ) : (
           <Button label="Disiplin Kurulu kararını açıkla" icon="checkmark" size="lg" onPress={submitInterim} loading={announceInterim.isPending} haptic="success" fullWidth />

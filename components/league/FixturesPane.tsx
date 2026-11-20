@@ -47,6 +47,7 @@ import {
   useRefresh,
 } from "@/components/ui";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
+import { useTodayIso } from "@/hooks/useTodayIso";
 import { getMatches } from "@/lib/api/matches";
 import { formatDayHeading, formatNumber } from "@/lib/format";
 import { matchState } from "@/lib/match";
@@ -251,10 +252,7 @@ export function FixturesPane({ scrollProps }: PaneProps) {
   const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching });
 
   const [fixtureWindow, setFixtureWindow] = useState<FixtureWindow | null>(null);
-  const todayKey = useMemo(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  }, []);
+  const todayKey = useTodayIso();
 
   const buckets = useMemo(() => {
     const list = query.data ?? [];
@@ -269,15 +267,29 @@ export function FixturesPane({ scrollProps }: PaneProps) {
     return [...map.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   }, [query.data]);
 
-  const counts = useMemo(() => {
-    let upcoming = 0;
-    let past = 0;
+  /*
+   * Yaklaşan / Sonuçlar ayrımı maçın DURUMUNA göre: bitmemiş maç (saati geçmiş
+   * ama sonucu girilmemiş olsa da) "Yaklaşan"da, biten maç (bugün oynanmış
+   * olsa da) "Sonuçlar"da. Eskiden yalnız tarihe bakılıyordu: bugün biten maç
+   * yaklaşanlarda, dün oynanması gereken ama sonucu bekleyen maç sonuçlarda
+   * skor olmadan görünüyordu.
+   */
+  const splitBuckets = useMemo(() => {
+    const upcoming: [string, ApiMatch[]][] = [];
+    const past: [string, ApiMatch[]][] = [];
     for (const [key, data] of buckets) {
-      if (key >= todayKey) upcoming += data.length;
-      else past += data.length;
+      const open = data.filter((match) => matchState(match) !== "finished");
+      const done = data.filter((match) => matchState(match) === "finished");
+      if (open.length) upcoming.push([key, open]);
+      if (done.length) past.push([key, done]);
     }
     return { upcoming, past };
-  }, [buckets, todayKey]);
+  }, [buckets]);
+
+  const counts = useMemo(() => {
+    const sum = (list: [string, ApiMatch[]][]) => list.reduce((n, [, data]) => n + data.length, 0);
+    return { upcoming: sum(splitBuckets.upcoming), past: sum(splitBuckets.past) };
+  }, [splitBuckets]);
 
   const activeWindow: FixtureWindow =
     fixtureWindow ?? (counts.upcoming > 0 ? "yaklasan" : "sonuclar");
@@ -285,8 +297,8 @@ export function FixturesPane({ scrollProps }: PaneProps) {
   const sections = useMemo<DaySection[]>(() => {
     const picked =
       activeWindow === "yaklasan"
-        ? buckets.filter(([key]) => key >= todayKey)
-        : buckets.filter(([key]) => key < todayKey).reverse();
+        ? splitBuckets.upcoming
+        : [...splitBuckets.past].reverse();
     let lastWeek = "";
     return picked.map(([key, data]) => {
       const week = isoWeek(key);
@@ -300,7 +312,7 @@ export function FixturesPane({ scrollProps }: PaneProps) {
         data: [...data].sort((a, b) => String(a.time).localeCompare(String(b.time))),
       };
     });
-  }, [buckets, activeWindow, todayKey]);
+  }, [splitBuckets, activeWindow]);
 
   /* Sezon şeridi: oynanmış maç sayısı durumdan, sıradaki gün takvimden. */
   const progress = useMemo(() => {

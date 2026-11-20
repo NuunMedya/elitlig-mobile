@@ -114,7 +114,7 @@ import { GoalClipPlayer } from "@/components/live/GoalClipPlayer";
 import { GoalClipStrip, type ClipStripItem } from "@/components/live/MatchGoalClips";
 import { listGoalClips, type GoalClip } from "@/lib/live/clips";
 import { getMatchKadro } from "@/lib/api/matches";
-import { getPlayer, getPlayerRankings } from "@/lib/api/players";
+import { getPlayer, getPlayerNationalRank, getPlayerRankings } from "@/lib/api/players";
 import { positionLabel } from "@/lib/api/team";
 import { getTeam } from "@/lib/api/teams";
 import { formatAge, formatDateShort, mediaUrl } from "@/lib/format";
@@ -646,8 +646,8 @@ export default function PlayerDetailScreen() {
 
   /* Türkiye geneli sıralama (kapsamsız) — künyedeki "TR n." rozetinin kaynağı. */
   const trRankQuery = useQuery({
-    queryKey: queryKeys.playerRankings({}, "topScorers"),
-    queryFn: () => getPlayerRankings({}, "topScorers"),
+    queryKey: [...queryKeys.playerRankings({}, "topScorers"), "rank", playerId],
+    queryFn: () => getPlayerNationalRank(playerId, "topScorers"),
     enabled: validId,
     staleTime: 10 * 60_000,
   });
@@ -682,11 +682,7 @@ export default function PlayerDetailScreen() {
     return row ? num(row.assists) : null;
   }, [rankingsQuery.data, playerId]);
 
-  const trRank = useMemo(() => {
-    const list = trRankQuery.data?.players ?? [];
-    const index = list.findIndex((item) => Number(item.id) === playerId);
-    return index >= 0 ? index + 1 : null;
-  }, [trRankQuery.data, playerId]);
+  const trRank = trRankQuery.data ?? null;
 
   /* Son kadrodaki satırım: forma no ve mevki buradan. Numara girilmemişse
      boş dize gelir (bkz. KadroPlayer.number) → null, rozet çizilmez. */
@@ -744,7 +740,8 @@ export default function PlayerDetailScreen() {
 
   const hero = useMemo(() => {
     if (!player) return null;
-    const age = formatAge(player.birth_date ?? null);
+    // Ziyaretçiye tam tarih gelmez; sunucu yaşı hesaplayıp gönderir.
+    const age = player.birth_date ? formatAge(player.birth_date) : player.age != null ? String(player.age) : "—";
     const facts: HeroFact[] = [
       { key: "matches", value: String(totalMatches), label: "MAÇ" },
       { key: "goals", value: String(num(player.total_goals)), label: "GOL" },

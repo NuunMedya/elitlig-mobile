@@ -156,24 +156,49 @@ export default function LeagueStructureScreen() {
     invalidate: [KEY],
   });
 
+  /**
+   * Maçı olan grupta kutu değişikliği sunucuda onay ister (GROUP_HAS_MATCHES):
+   * fikstür yeniden kurulur ve eski maçların eşleşme bağı kopabilir.
+   */
+  async function withMatchesConfirm<T>(send: (force: boolean) => Promise<T>): Promise<T | undefined> {
+    try {
+      return await send(false);
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.code !== "GROUP_HAS_MATCHES") throw error;
+      const ok = await confirmAction({
+        title: "Grupta maç var",
+        message: error.message,
+        confirmLabel: "Yine de değiştir",
+        destructive: true,
+      });
+      if (!ok) return undefined;
+      return send(true);
+    }
+  }
+
   const saveSlot = useAdminMutation(
     (v: FormValues) => {
       const { group, slot } = slotEdit!;
       if (!v.mode) throw new Error("Kutunun kaynağını seç.");
       const mode = String(v.mode);
-      if (mode === "TEAM") return updateGroupSlot(group.id, slot.id, { source_type: "TEAM", team_id: Number(v.team_id) });
-      return updateGroupSlot(group.id, slot.id, {
-        source_type: mode,
-        source_group_id: NEEDS_GROUP.has(mode) ? Number(v.source_group_id) : null,
-        source_rank: NEEDS_RANK.has(mode) ? Number(v.source_rank) : null,
-        source_matchup: NEEDS_MATCHUP.has(mode) ? Number(v.source_matchup) : null,
-      });
+      if (mode === "TEAM") {
+        return withMatchesConfirm((force) => updateGroupSlot(group.id, slot.id, { source_type: "TEAM", team_id: Number(v.team_id) }, force));
+      }
+      return withMatchesConfirm((force) =>
+        updateGroupSlot(group.id, slot.id, {
+          source_type: mode,
+          source_group_id: NEEDS_GROUP.has(mode) ? Number(v.source_group_id) : null,
+          source_rank: NEEDS_RANK.has(mode) ? Number(v.source_rank) : null,
+          source_matchup: NEEDS_MATCHUP.has(mode) ? Number(v.source_matchup) : null,
+        }, force)
+      );
     },
-    { success: "Kutu güncellendi.", invalidate: [KEY] }
+    // Onay penceresinde vazgeçilirse sonuç boş döner; başarı mesajı gösterilmez.
+    { success: (result) => (result === undefined ? null : "Kutu güncellendi."), invalidate: [KEY] }
   );
 
-  const clearSlot = useAdminMutation(({ group, slot }: { group: SeasonGroup; slot: GroupSlot }) => clearGroupSlot(group.id, slot.id), {
-    success: "Kutu boşaltıldı.",
+  const clearSlot = useAdminMutation(({ group, slot }: { group: SeasonGroup; slot: GroupSlot }) => withMatchesConfirm((force) => clearGroupSlot(group.id, slot.id, force)), {
+    success: (result) => (result === undefined ? null : "Kutu boşaltıldı."),
     invalidate: [KEY],
   });
 
