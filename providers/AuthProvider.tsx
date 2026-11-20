@@ -13,7 +13,7 @@ import { AppState, type AppStateStatus } from "react-native";
 import * as authApi from "@/lib/api/auth";
 import type { RegisterInput } from "@/lib/api/auth";
 import { ApiError, configureAuth } from "@/lib/http";
-import { resetPushSync, unregisterPushDevice } from "@/hooks/usePushStatus";
+import { getSyncedPushToken, resetPushSync, unregisterPushDevice } from "@/hooks/usePushStatus";
 import { clearLedger } from "@/lib/notificationLedger";
 import {
   clearSessionCache,
@@ -268,7 +268,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
-    const response = await authApi.changePassword(currentPassword, newPassword);
+    const response = await authApi.changePassword(currentPassword, newPassword, getSyncedPushToken());
     // Eski jeton sunucuda geçersiz kılındı; yenisi yazılmazsa bir sonraki
     // istek 401 alır ve kullanıcı dışarı atılır.
     await adoptToken(response.token);
