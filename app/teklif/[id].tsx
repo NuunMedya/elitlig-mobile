@@ -173,6 +173,7 @@ const EVENT_LABELS: Record<string, string> = {
   OFFER_REJECTED: "Teklif reddedildi",
   OFFER_WITHDRAWN: "Teklif geri çekildi",
   OFFER_EXPIRED: "Teklifin süresi doldu",
+  OFFER_CANCELLED: "Başka takıma geçtiğin için teklif iptal edildi",
   OFFER_REVISED: "Takım teklifi güncelledi",
   REVISION_REQUESTED: "Düzenleme istedin",
   ADMIN_APPROVED: "Yönetim onayladı",
