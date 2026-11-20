@@ -334,7 +334,7 @@ export default function ThreadDetailScreen() {
       subtitle={
         thread
           ? [thread.category_label, `${thread.messages.length} mesaj`].filter(Boolean).join(" · ")
-          : "ElitLig yönetimi"
+          : "Elitlig yönetimi"
       }
       back
     />
@@ -481,7 +481,7 @@ const Bubble = memo(function Bubble({ message }: { message: PanelThreadMessage }
         <View style={styles.senderRow}>
           <Ionicons name="shield-checkmark" size={11} color={colors.brandAccent} />
           <Text style={styles.sender} numberOfLines={1} {...textScale.dense}>
-            {message.sender || "ElitLig"} · Yönetim
+            {message.sender || "Elitlig"} · Yönetim
           </Text>
         </View>
       )}

@@ -37,7 +37,7 @@ export async function addMatchToCalendar(match: ApiMatch): Promise<void> {
       startDate: start,
       endDate: end,
       location: match.match_field ?? undefined,
-      notes: `${match.league_name} · ElitLig`,
+      notes: `${match.league_name} · Elitlig`,
       alarms: [{ relativeOffset: -60 }], // 1 saat önce hatırlat
     });
 

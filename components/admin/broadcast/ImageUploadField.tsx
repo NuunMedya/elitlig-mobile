@@ -23,7 +23,7 @@ import { colors, hairline, radius, space, textScale, type } from "@/theme";
 export async function pickImageFile(prefix = "gorsel"): Promise<UploadFile | null> {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!permission.granted) {
-    throw new Error(permission.canAskAgain ? "Fotoğraflarına erişim izni gerekiyor." : "Fotoğraf izni kapalı. Ayarlar'dan ElitLig için fotoğraf iznini aç.");
+    throw new Error(permission.canAskAgain ? "Fotoğraflarına erişim izni gerekiyor." : "Fotoğraf izni kapalı. Ayarlar'dan Elitlig için fotoğraf iznini aç.");
   }
   const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.9 });
   if (result.canceled || !result.assets?.[0]) return null;

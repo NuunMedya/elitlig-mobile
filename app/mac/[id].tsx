@@ -346,7 +346,7 @@ export default function MatchDetailScreen() {
       `${match.first_team_name} ${score} ${match.second_team_name}`,
       [match.league_name, match.match_season].filter(Boolean).join(" · "),
       match.match_field ? `Saha: ${match.match_field}` : null,
-      webMatchUrl(match) ?? "ElitLig",
+      webMatchUrl(match) ?? "Elitlig",
     ].filter(Boolean) as string[];
     void Share.share({ message: lines.join("\n") });
   }, [awayScore, homeScore, match, state]);

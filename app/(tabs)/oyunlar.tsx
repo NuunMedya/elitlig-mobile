@@ -111,7 +111,7 @@ const GAMES: GameRow[] = [
   { key: "slalom", category: "endless", title: "Slalom", blurb: "Sokakta top sür: zıpla, kay, şerit değiştir", icon: "flag", arena: "slalom", route: "/oyun/slalom", lives: true },
   { key: "sektir", category: "endless", title: "Top Sektir", blurb: "Dokun, topu sektir, barajın arasından geçir", icon: "football-outline", arena: "sektir", route: "/oyun/sektir", lives: true },
   // LİG YARIŞMALARI — gerçek maçlarla, haftalık tavanlı yıldız
-  { key: "fantezi", category: "league", title: "Fantezi ElitLig", blurb: "Liginin oyuncularıyla haftalık 5 kişilik kadro", icon: "people-circle", route: "/fantezi" },
+  { key: "fantezi", category: "league", title: "Fantezi Elitlig", blurb: "Liginin oyuncularıyla haftalık 5 kişilik kadro", icon: "people-circle", route: "/fantezi" },
   { key: "tahminLigi", category: "league", title: "Tahmin Ligi", blurb: "Liginin gelecek maçlarına skor tahmini", icon: "podium", route: "/tahmin-ligi" },
   { key: "kulupArenasi", category: "league", title: "Kulüp Arenası", blurb: "Takımların haftalık arena yarışı ve derbi", icon: "shield-half", route: "/kulup-arenasi" },
 ];

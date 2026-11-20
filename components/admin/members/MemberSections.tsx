@@ -126,7 +126,7 @@ export function ResetCodeCard({
   phone?: string | null;
 }) {
   const toast = useToast();
-  const message = `ElitLig şifre sıfırlama kodun: ${code}\nGiriş ekranında "Şifremi unuttum" adımında${username ? ` @${username} kullanıcı adınla` : ""} kullan. Kod ${formatDateTime(expiresAt)} tarihine kadar geçerlidir.`;
+  const message = `Elitlig şifre sıfırlama kodun: ${code}\nGiriş ekranında "Şifremi unuttum" adımında${username ? ` @${username} kullanıcı adınla` : ""} kullan. Kod ${formatDateTime(expiresAt)} tarihine kadar geçerlidir.`;
   const wa = whatsappUrl(phone, message);
   return (
     <View style={styles.code}>

@@ -80,7 +80,7 @@ export function StarredMessages({ conversationId }: { conversationId: number | n
  */
 const StarredRow = memo(function StarredRow({ item, showChat, onPress, onUnstar }: { item: StarredMessage; showChat: boolean; onPress: (item: StarredMessage) => void; onUnstar: (item: StarredMessage) => void }) {
   const summary = messageSummary(item);
-  const who = item.sender.is_me ? "Sen" : item.sender.is_management ? "ElitLig Yönetimi" : item.sender.name ?? "Üye";
+  const who = item.sender.is_me ? "Sen" : item.sender.is_management ? "Elitlig Yönetimi" : item.sender.name ?? "Üye";
   return (
     <Touchable feedback="card" haptic="selection" onPress={() => onPress(item)} accessibilityRole="button" accessibilityLabel={`${who}: ${summary.text}. Mesaja gitmek için dokun`} style={styles.card}>
       <View style={styles.head}>

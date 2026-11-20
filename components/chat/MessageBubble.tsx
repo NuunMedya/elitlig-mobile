@@ -729,7 +729,7 @@ export const MessageBubble = memo(function MessageBubble({ message, album, first
           <View style={[styles.nameRow, mediaOnly ? styles.padded : null]}>
             {message.sender.is_management ? <Ionicons name="shield-checkmark" size={12} color={nameTint} /> : null}
             <Text style={[styles.name, { color: nameTint }]} numberOfLines={1} {...textScale.dense}>
-              {message.sender.is_management ? "ElitLig Yönetimi" : message.sender.name ?? "Üye"}
+              {message.sender.is_management ? "Elitlig Yönetimi" : message.sender.name ?? "Üye"}
             </Text>
           </View>
         ) : null}

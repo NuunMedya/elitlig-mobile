@@ -291,7 +291,7 @@ export function AdminHome({ asTab = false }: { asTab?: boolean }) {
         <EmptyState
           icon="lock-closed-outline"
           title="Bu bölüm yönetime açık"
-          body="Yönetim paneli yalnızca ElitLig yönetim rollerine açıktır. Yetkiniz olduğunu düşünüyorsanız yönetimle iletişime geçin."
+          body="Yönetim paneli yalnızca Elitlig yönetim rollerine açıktır. Yetkiniz olduğunu düşünüyorsanız yönetimle iletişime geçin."
           action={{ label: "İletişim", onPress: () => router.push("/iletisim") }}
         />
       </SafeAreaView>
@@ -353,7 +353,7 @@ export function AdminHome({ asTab = false }: { asTab?: boolean }) {
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
         title="Yönetim"
-        overline={scope.cityLabel ? `ElitLig · ${scope.cityLabel}` : "ElitLig"}
+        overline={scope.cityLabel ? `Elitlig · ${scope.cityLabel}` : "Elitlig"}
         back={!asTab}
         scrollY={scrollY}
         actions={actions}

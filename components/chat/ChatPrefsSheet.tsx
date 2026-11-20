@@ -77,7 +77,7 @@ export function ChatPrefsSheet({ visible, onClose }: ChatPrefsSheetProps) {
           />
         ))}
         <ListRow
-          title="ElitLig Yönetimi"
+          title="Elitlig Yönetimi"
           subtitle="Her zaman açık."
           position="last"
           leading={{ icon: "lock-closed", tone: "neutral" }}

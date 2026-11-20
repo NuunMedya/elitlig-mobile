@@ -135,7 +135,7 @@ export function AdminScreen({
           <Text style={styles.lockedBody} {...textScale.long}>
             {auth.isManagement
               ? "Bu sayfa için gereken yetki hesabında tanımlı değil. Yetki için yöneticinle görüş."
-              : "Bu bölüm yalnız ElitLig yönetim hesaplarına açıktır."}
+              : "Bu bölüm yalnız Elitlig yönetim hesaplarına açıktır."}
           </Text>
           <Button label="Yönetim paneline dön" variant="secondary" icon="arrow-back" onPress={() => router.replace("/yonetim")} />
         </View>

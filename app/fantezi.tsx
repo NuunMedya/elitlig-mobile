@@ -109,7 +109,7 @@ export default function FantasyScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
-        title="Fantezi ElitLig"
+        title="Fantezi Elitlig"
         subtitle="5 oyuncu · 45 kredi · kaptan ×2"
         back
         scrollY={scrollY}

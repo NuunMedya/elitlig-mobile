@@ -14,7 +14,7 @@ export interface ClubKit {
 }
 
 export const CLUB_KITS: readonly ClubKit[] = [
-  { key: "elitlig", name: "ElitLig moru", primary: "#5B3DF5", secondary: "#FFFFFF" },
+  { key: "elitlig", name: "Elitlig moru", primary: "#5B3DF5", secondary: "#FFFFFF" },
   { key: "kirmizi", name: "Kırmızı-beyaz", primary: "#DC2626", secondary: "#FFFFFF" },
   { key: "sarilacivert", name: "Sarı-lacivert", primary: "#1E3A8A", secondary: "#FACC15" },
   { key: "siyahbeyaz", name: "Siyah-beyaz", primary: "#111827", secondary: "#F8FAFC" },

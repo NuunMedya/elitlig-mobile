@@ -24,7 +24,7 @@ export async function pickImageFile(prefix: string): Promise<UploadFile | null> 
       "Fotoğraf izni gerekli",
       permission.canAskAgain
         ? "Görsel seçmek için fotoğraflarına erişim izni ver."
-        : "Fotoğraf izni kapalı. Ayarlar'dan ElitLig için fotoğraf iznini aç.",
+        : "Fotoğraf izni kapalı. Ayarlar'dan Elitlig için fotoğraf iznini aç.",
       permission.canAskAgain
         ? [{ text: "Tamam" }]
         : [

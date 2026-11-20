@@ -118,7 +118,7 @@ export default function SeasonSummaryScreen() {
                 <Aurora variant="stage" />
                 <View style={styles.heroTop}>
                   <Text style={styles.heroOver} numberOfLines={1} {...textScale.badge}>
-                    {upperTR(`${data.season.league ?? "ElitLig"} · ${data.season.name ?? "Sezon"}`)}
+                    {upperTR(`${data.season.league ?? "Elitlig"} · ${data.season.name ?? "Sezon"}`)}
                   </Text>
                   <Text style={styles.heroBrand} {...textScale.badge}>
                     ELİTLİG

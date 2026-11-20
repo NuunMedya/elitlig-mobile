@@ -160,7 +160,7 @@ export async function pickAndUpload(): Promise<string | null> {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!permission.granted) {
     throw new Error(
-      permission.canAskAgain ? "Fotoğraflarına erişim izni gerekiyor." : "Fotoğraf izni kapalı. Ayarlar'dan ElitLig için fotoğraf iznini aç."
+      permission.canAskAgain ? "Fotoğraflarına erişim izni gerekiyor." : "Fotoğraf izni kapalı. Ayarlar'dan Elitlig için fotoğraf iznini aç."
     );
   }
   const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 });

@@ -297,7 +297,7 @@ export default function NotificationPreferencesScreen() {
 
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: "ElitLig test bildirimi",
+          title: "Elitlig test bildirimi",
           body: "Bunu gördüysen telefonun bildirimlere hazır.",
           // Veri yükü boş bırakılmaz: dokunulduğunda routeFromNotif çözemezse
           // uygulama normal açılışını yapar, bu doğru davranıştır.

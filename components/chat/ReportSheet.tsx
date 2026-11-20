@@ -109,7 +109,7 @@ export function ReportSheet({ target, onClose, onBlocked }: ReportSheetProps) {
       footer={<Button label="Şikayeti gönder" onPress={submit} loading={send.isPending} variant="danger" fullWidth />}
     >
       <Text style={styles.hint} {...textScale.long}>
-        Şikayetin ElitLig Yönetimi'ne iletilir ve gizli tutulur; karşı taraf kimin bildirdiğini görmez.
+        Şikayetin Elitlig Yönetimi'ne iletilir ve gizli tutulur; karşı taraf kimin bildirdiğini görmez.
       </Text>
       {target?.excerpt ? (
         <View style={styles.excerpt}>

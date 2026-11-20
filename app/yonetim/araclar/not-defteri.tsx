@@ -170,7 +170,7 @@ export default function NotebookScreen() {
   const exportAll = async () => {
     if (!notes.length) return;
     try {
-      await Share.share({ title: "ElitLig notlar", message: notesToMarkdown(notes) });
+      await Share.share({ title: "Elitlig notlar", message: notesToMarkdown(notes) });
     } catch {
       toast.show({ message: "Paylaşım açılamadı.", tone: "danger" });
     }

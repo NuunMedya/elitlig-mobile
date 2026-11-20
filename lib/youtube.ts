@@ -14,10 +14,10 @@
 const CITY_CHANNELS: Record<string, string> = {
   ankara: "elitligankara",
   istanbul: "İstanbulElitlig",
-  "istanbul avrupa": "ElitLigİstanbulAvrupa",
+  "istanbul avrupa": "ElitligİstanbulAvrupa",
   "tekirdağ": "ElitligTekirdag",
   izmir: "izmirelitlig",
-  "kırklareli": "ElitLigKırklareli",
+  "kırklareli": "ElitligKırklareli",
 };
 
 const keyOf = (label?: string | null) =>

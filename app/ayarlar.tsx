@@ -106,8 +106,8 @@ function willBeDark(choice: ThemeChoice): boolean {
 function versionLabel(): string {
   const version = Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? "";
   const build = Constants.nativeBuildVersion;
-  if (!version) return "ElitLig Mobil";
-  return build ? `ElitLig Mobil v${version} (${build})` : `ElitLig Mobil v${version}`;
+  if (!version) return "Elitlig Mobil";
+  return build ? `Elitlig Mobil v${version} (${build})` : `Elitlig Mobil v${version}`;
 }
 
 /* ================================= EKRAN ================================ */

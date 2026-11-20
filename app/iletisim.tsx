@@ -269,7 +269,7 @@ export default function ContactScreen() {
       list.push({
         key: "facebook",
         tile: "cyan",
-        value: handleOf(facebook, "ElitLig Facebook sayfası"),
+        value: handleOf(facebook, "Elitlig Facebook sayfası"),
         label: "Facebook",
         leading: { icon: "logo-facebook", tone: "info" },
         url: facebook,

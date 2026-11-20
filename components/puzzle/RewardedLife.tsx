@@ -34,7 +34,7 @@ const MIN_WATCH_MS = 12_500;
 const HOUSE = [
   { icon: "business" as const, title: "Kulüp Şehrini kur", body: "Oyunlardan ve görevlerden kazandığın yıldızlarla okul bahçesinden Avrupa devine yüksel." },
   { icon: "trophy" as const, title: "Haftalık görevler", body: "Görevleri tamamla, XP kazan, Kulüp Şehri'nde yıldıza çevir." },
-  { icon: "football" as const, title: "Gerçek maçların burada", body: "Liginin fikstürü, canlı skorlar ve oyuncu istatistikleri ElitLig'de." },
+  { icon: "football" as const, title: "Gerçek maçların burada", body: "Liginin fikstürü, canlı skorlar ve oyuncu istatistikleri Elitlig'de." },
 ];
 
 /**

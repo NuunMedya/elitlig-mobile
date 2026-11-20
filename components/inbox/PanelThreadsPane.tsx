@@ -473,7 +473,7 @@ export function PanelThreadsPane({
       >
         <View style={styles.sheet}>
           <Text style={styles.sheetIntro} {...textScale.long}>
-            Başvurun ElitLig yönetimine iletilir. Konuyu doğru kategoriye koyarsan daha hızlı
+            Başvurun Elitlig yönetimine iletilir. Konuyu doğru kategoriye koyarsan daha hızlı
             yanıtlanır.
           </Text>
 

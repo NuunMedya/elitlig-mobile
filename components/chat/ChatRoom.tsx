@@ -398,7 +398,7 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
         body: null,
         meta: null,
         client_id: clientId,
-        sender: { user_id: asManagement ? null : viewerId, name: asManagement ? "ElitLig Yönetimi" : meName, avatar: null, is_me: true, is_management: asManagement },
+        sender: { user_id: asManagement ? null : viewerId, name: asManagement ? "Elitlig Yönetimi" : meName, avatar: null, is_me: true, is_management: asManagement },
         reply_to: null,
         deleted: false,
         edited_at: null,
@@ -1138,7 +1138,7 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
   const status = !conversation
     ? ""
     : admin
-      ? conversation.subtitle || "ElitLig Yönetimi sohbeti"
+      ? conversation.subtitle || "Elitlig Yönetimi sohbeti"
       : grouped
         ? participants.map((p) => (p.is_me ? "Sen" : p.name.split(" ")[0])).slice(0, 8).join(", ") || conversation.subtitle
         : lastSeenLabel(otherPresence) || conversation.subtitle;
@@ -1231,7 +1231,7 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
   const pinnedMessage = pinnedId ? messages.find((item) => item.id === pinnedId) : null;
   const pinnedSummary = pinnedMessage ? messageSummary(pinnedMessage) : null;
   const emptyText = conversation.type === "management"
-    ? admin ? "Üyenin ElitLig Yönetimi sohbeti. Yanıtların yönetim adına gider." : "Yönetimle yazışmaların burada birikir."
+    ? admin ? "Üyenin Elitlig Yönetimi sohbeti. Yanıtların yönetim adına gider." : "Yönetimle yazışmaların burada birikir."
     : conversation.type === "admin" ? "Onay bekleyen işlemler burada kart olarak görünür."
       : grouped ? "Grupta henüz mesaj yok. İlk mesajı sen yaz." : `${conversation.title} ile sohbeti başlat.`;
   const assignSlot = assign ? assign.message.meta?.signup?.slots.find((slot) => slot.id === assign.slotId) : null;
@@ -1334,7 +1334,7 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
                 loadingOlder ? (
                   <SystemChip text="Eski mesajlar yükleniyor…" icon="time-outline" />
                 ) : !query.data?.has_more ? (
-                  <SystemChip text={admin ? "Üyenin ElitLig Yönetimi sohbeti · yanıtların yönetim adına gider." : "Mesajlar ElitLig sunucusunda saklanır; yalnız sohbetteki kişiler görür."} icon="lock-closed" />
+                  <SystemChip text={admin ? "Üyenin Elitlig Yönetimi sohbeti · yanıtların yönetim adına gider." : "Mesajlar Elitlig sunucusunda saklanır; yalnız sohbetteki kişiler görür."} icon="lock-closed" />
                 ) : null
               }
             />
@@ -1374,7 +1374,7 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
         ) : (
           <Composer
             conversationId={conversationId}
-            placeholder={conversation.type === "management" ? (admin ? "ElitLig Yönetimi adına yaz…" : "Yönetime mesaj yaz…") : "Mesaj yaz"}
+            placeholder={conversation.type === "management" ? (admin ? "Elitlig Yönetimi adına yaz…" : "Yönetime mesaj yaz…") : "Mesaj yaz"}
             participants={mentionPeople}
             reply={reply}
             edit={edit}
