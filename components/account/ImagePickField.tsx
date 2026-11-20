@@ -43,7 +43,7 @@ export const ImagePickField = React.memo(function ImagePickField({
       setError(
         permission.canAskAgain
           ? "Fotoğraflarına erişim izni gerekiyor."
-          : "Fotoğraf izni kapalı. Ayarlar'dan ElitLig için fotoğraf iznini aç.",
+          : "Fotoğraf izni kapalı. Ayarlar'dan Elitlig için fotoğraf iznini aç.",
       );
       return;
     }

@@ -57,7 +57,7 @@ export const LEAGUE_TIERS = [
   "1. Lig",
   "Süper Lig",
   "Şampiyonlar Gecesi",
-  "Elit Lig",
+  "Elitlig",
 ];
 
 export const tierOf = (level: number) => LEAGUE_TIERS[Math.min(LEAGUE_TIERS.length - 1, Math.floor((level - 1) / 20))];

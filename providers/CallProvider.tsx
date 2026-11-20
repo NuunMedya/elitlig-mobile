@@ -81,7 +81,7 @@ const END_LABELS: Record<string, string> = {
   "connection-failed": "Bağlantı koptu",
 };
 
-const MANAGEMENT_REMOTE: ChatUser = { user_id: 0, name: "ElitLig Yönetimi", avatar: null, subtitle: "Yönetim" };
+const MANAGEMENT_REMOTE: ChatUser = { user_id: 0, name: "Elitlig Yönetimi", avatar: null, subtitle: "Yönetim" };
 
 const CallContext = createContext<CallApi | null>(null);
 

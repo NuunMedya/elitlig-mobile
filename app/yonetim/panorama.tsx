@@ -118,7 +118,7 @@ export default function PanoramaScreen() {
               </Text>
               <View style={styles.ticker}>
                 <Text style={styles.tickerText} numberOfLines={1} {...textScale.badge}>
-                  {item.tickerVisible && item.tickerText ? item.tickerText : item.brandTitle || "ElitLig Panorama"}
+                  {item.tickerVisible && item.tickerText ? item.tickerText : item.brandTitle || "Elitlig Panorama"}
                 </Text>
               </View>
             </View>

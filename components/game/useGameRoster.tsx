@@ -85,7 +85,7 @@ export function useGameRoster(game: WebGameKey, cityId: number | null, playerId:
             onSelect={choose}
             title="Atıcını seç"
             loadingText="Ligin golcüleri yükleniyor…"
-            emptyText="Gerçek kadro şu an yüklenemedi; ElitLig atıcısıyla oynayabilirsin."
+            emptyText="Gerçek kadro şu an yüklenemedi; Elitlig atıcısıyla oynayabilirsin."
             attrs={[
               { key: "power", label: "Şut" },
               { key: "accuracy", label: "İsabet" },
@@ -126,7 +126,7 @@ export function useGameRoster(game: WebGameKey, cityId: number | null, playerId:
             onSelect={choose}
             title="Topu kim sektirecek?"
             loadingText="Ligin oyuncuları yükleniyor…"
-            emptyText="Gerçek kadro şu an yüklenemedi; ElitLig oyuncusuyla oynayabilirsin."
+            emptyText="Gerçek kadro şu an yüklenemedi; Elitlig oyuncusuyla oynayabilirsin."
             attrs={[
               { key: "control", label: "Kontrol" },
               { key: "agility", label: "Denge" },
@@ -161,7 +161,7 @@ export function useGameRoster(game: WebGameKey, cityId: number | null, playerId:
             onSelect={choose}
             title={waves ? "Kaptanını seç · takımın onun formasını giyer" : "Kaptanını seç · kadron onun formasını giyer"}
             loadingText="Ligin oyuncuları yükleniyor…"
-            emptyText="Gerçek kadro şu an yüklenemedi; ElitLig formasıyla oynayabilirsin."
+            emptyText="Gerçek kadro şu an yüklenemedi; Elitlig formasıyla oynayabilirsin."
             attrs={[]}
             chipMeta={(p) => `${p.stats.goals}G ${p.stats.assists}A`}
             detailMeta={(p) => [p.team.name, `${p.stats.goals} gol`, `${p.stats.assists} asist`].filter(Boolean).join(" · ")}
@@ -190,7 +190,7 @@ export function useGameRoster(game: WebGameKey, cityId: number | null, playerId:
           onSelect={choose}
           title="Topu kim sürecek?"
           loadingText="Ligin oyuncuları yükleniyor…"
-          emptyText="Gerçek kadro şu an yüklenemedi; ElitLig oyuncusuyla oynayabilirsin."
+          emptyText="Gerçek kadro şu an yüklenemedi; Elitlig oyuncusuyla oynayabilirsin."
           attrs={[
             { key: "agility", label: "Çeviklik" },
             { key: "control", label: "Kontrol" },

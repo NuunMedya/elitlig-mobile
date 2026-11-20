@@ -521,7 +521,7 @@ export function ChatInbox({ admin = false, embedded = false, headerActions, onSc
             : filter === "pinned" ? "Sabitlenen sohbet yok" : "Henüz sohbet yok";
   const emptyBody = searching
     ? "Başka bir ad ya da kelime dene."
-    : filter === "inbox" ? "Takım, oyuncu ve üyelerin ElitLig Yönetimi'ne yazdığı mesajlar burada toplanır. Onay bekleyen talepler Talepler'dedir."
+    : filter === "inbox" ? "Takım, oyuncu ve üyelerin Elitlig Yönetimi'ne yazdığı mesajlar burada toplanır. Onay bekleyen talepler Talepler'dedir."
       : filter === "all" ? (auth.isManagement ? "Yönetimdeki arkadaşların, takım başkanları, oyuncular ve üyelerle yazışmaya başla." : "Yönetimle, takımınla ve takım arkadaşlarınla yazışmaya başla.")
         : "Bütün sohbetlerine dönmek için Tümü'ne dokun.";
 

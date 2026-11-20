@@ -290,7 +290,7 @@ export function ChatCompose({ admin = false, initialTab }: ChatComposeProps) {
     <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
       <WaHeader
         title={groupMode ? "Yeni grup" : "Yeni sohbet"}
-        subtitle={admin ? "ElitLig Yönetimi adına: kime yazacaksın?" : "Kime yazmak istiyorsun?"}
+        subtitle={admin ? "Elitlig Yönetimi adına: kime yazacaksın?" : "Kime yazmak istiyorsun?"}
         back
         bottom={
           <View style={styles.headerBottom}>

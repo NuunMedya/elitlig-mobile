@@ -74,7 +74,7 @@ function Frame({ message, showSender, icon, label, children }: { message: ChatMe
           {label.toLocaleUpperCase("tr-TR")}
         </Text>
         <Text style={styles.stamp} {...textScale.badge}>
-          {showSender || !mine ? `${message.sender.is_management ? "ElitLig Yönetimi" : message.sender.name ?? "Üye"} · ` : ""}
+          {showSender || !mine ? `${message.sender.is_management ? "Elitlig Yönetimi" : message.sender.name ?? "Üye"} · ` : ""}
           {clock(message.created_at)}
         </Text>
       </View>

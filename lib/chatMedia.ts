@@ -118,7 +118,7 @@ export async function getCurrentLocation(): Promise<{ lat: number; lng: number }
     throw new Error(
       permission.canAskAgain
         ? "Konum izni verilmedi. Konum paylaşmak için izin verin."
-        : "Konum izni kapalı. Ayarlar > ElitLig > Konum bölümünden izin verip tekrar deneyin.",
+        : "Konum izni kapalı. Ayarlar > Elitlig > Konum bölümünden izin verip tekrar deneyin.",
     );
   }
   const servicesOn = await Location.hasServicesEnabledAsync().catch(() => true);

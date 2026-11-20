@@ -98,7 +98,7 @@ export function recordingFileName(home: string, away: string, at: Date = new Dat
   const stamp = `${at.getFullYear()}-${two(at.getMonth() + 1)}-${two(at.getDate())}_${two(at.getHours())}-${two(at.getMinutes())}`;
   const h = asciiSlug(home) || "Ev";
   const a = asciiSlug(away) || "Deplasman";
-  return `ElitLig_${h}-${a}_${stamp}`;
+  return `Elitlig_${h}-${a}_${stamp}`;
 }
 
 /** Kullanıcıya gösterilecek kayıt yeri. */

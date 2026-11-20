@@ -521,7 +521,7 @@ export async function registerForPush(prompt: PushPrompt = "always"): Promise<Pu
         state: "izin-yok",
         token: null,
         message:
-          "Bildirim izni verilmedi. Telefon ayarlarından ElitLig için bildirimlere izin verin.",
+          "Bildirim izni verilmedi. Telefon ayarlarından Elitlig için bildirimlere izin verin.",
       };
     }
 

@@ -112,7 +112,7 @@ export default function LoginScreen() {
   return (
     <AuthShell
       title={managementMode ? "Yönetim girişi" : "Giriş yap"}
-      overline={managementMode ? "ElitLig yönetim" : "ElitLig"}
+      overline={managementMode ? "Elitlig yönetim" : "Elitlig"}
       heading={managementMode ? "Yönetim girişi" : "Tekrar hoş geldin"}
       lede={
         managementMode
