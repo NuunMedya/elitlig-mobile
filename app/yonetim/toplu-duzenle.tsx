@@ -210,13 +210,16 @@ export default function BulkEditScreen() {
     if (values.match_field) body.match_field = values.match_field;
     if (values.mac_durumu) body.mac_durumu = values.mac_durumu;
     if (!Object.keys(body).length) throw new Error("Değiştirilecek en az bir alan seç.");
-    if (body.mac_durumu === "yayinlanmis" || body.mac_durumu === "taslak") {
+    // Toplu "Canlı" da onay ister: her maç için takipçilere "maç başladı" bildirimi gider.
+    if (body.mac_durumu === "yayinlanmis" || body.mac_durumu === "taslak" || body.mac_durumu === "canli") {
       const ok = await confirmAction({
-        title: `${selected.size} maç ${body.mac_durumu === "yayinlanmis" ? "yayınlanacak" : "taslağa alınacak"}`,
+        title: `${selected.size} maç ${body.mac_durumu === "yayinlanmis" ? "yayınlanacak" : body.mac_durumu === "canli" ? "canlıya alınacak" : "taslağa alınacak"}`,
         message:
           body.mac_durumu === "yayinlanmis"
             ? "Skorlar kesinleşir, puan durumu yeniden hesaplanır ve üyelere sonuç bildirimi gider."
-            : "Maçlar üye tarafında görünmez olur ve puan durumundan düşer.",
+            : body.mac_durumu === "canli"
+              ? "Her maç için oyunculara ve takipçilere \"maç başladı\" bildirimi gider."
+              : "Maçlar üye tarafında görünmez olur ve puan durumundan düşer.",
         confirmLabel: "Devam",
       });
       if (!ok) throw new Error("İşlem iptal edildi.");

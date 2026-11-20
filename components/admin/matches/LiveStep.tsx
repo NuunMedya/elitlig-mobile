@@ -49,7 +49,10 @@ import {
   isGoalCode,
   isManualResult,
   normalizeMatchStatus,
+  getGameRules,
+  pauseTimer,
   putTimer,
+  startTimer,
   scoreFromEvents,
   setLedStatus,
   setOverlayStatus,
@@ -73,7 +76,8 @@ import { clientEventId, clockText, eventSide, pad2, toSquad, type Side } from ".
 import { Note } from "./parts";
 import { ResultSheet } from "./ResultSheet";
 
-const HALF_MS = 25 * 60 * 1000;
+// Kural kitapçığında devre süresi yoksa kullanılır.
+const DEFAULT_HALF_MINUTES = 25;
 
 const STAT_ROWS = [
   { key: "chance", label: "Tehlike", test: (c: string) => c === "CHANCE_CREATED" },
@@ -190,6 +194,20 @@ export function LiveStep({ match, onScore }: { match: AdminMatch; onScore?: (sco
     return (id: unknown) => (id ? map.get(String(id)) ?? `Oyuncu #${id}` : "—");
   }, [squads]);
 
+  /* ───────── kurallar ───────── */
+  // Devre süresi sezonun kural kitapçığından; yoksa 25 dk.
+  const rulesQuery = useQuery({
+    queryKey: ["admin", "rule-books", "game", match.season_id ?? null],
+    queryFn: () => getGameRules(Number(match.season_id)),
+    enabled: Boolean(match.season_id),
+    staleTime: 10 * 60 * 1000,
+  });
+  const halfMinutes = (() => {
+    const value = Number(rulesQuery.data?.half_minutes);
+    return Number.isInteger(value) && value > 0 && value <= 90 ? value : DEFAULT_HALF_MINUTES;
+  })();
+  const HALF_MS = halfMinutes * 60 * 1000;
+
   /* ───────── saat ───────── */
   const timer = timerQuery.data ?? null;
   const [now, setNow] = useState(Date.now());
@@ -266,29 +284,32 @@ export function LiveStep({ match, onScore }: { match: AdminMatch; onScore?: (sco
       switch (action) {
         case "start":
           await updateMatch(matchId, { mac_durumu: "canli" });
-          writeTimer(await putTimer(matchId, true, nowMs));
+          writeTimer(await startTimer(matchId));
           writeTimer(await setTimerPeriod(matchId, 1));
           return "Maç canlı yayına alındı.";
         case "kickoff":
         case "resume":
-          await optimisticTimer(true, nowMs);
+          // Başlat/durdur süresi sunucuda hesaplanır (cihaz saati kaymaz).
+          writeTimer(await startTimer(matchId));
+          setNow(Date.now());
           return "Saat çalışıyor.";
         case "pause":
-          await optimisticTimer(false, nowMs);
+          writeTimer(await pauseTimer(matchId));
+          setNow(Date.now());
           return "Saat durduruldu.";
         case "halftime":
           await optimisticTimer(false, HALF_MS);
-          return "Devre arası: süre 25:00'da durduruldu.";
+          return `Devre arası: süre ${halfMinutes}:00'da durduruldu.`;
         case "second":
           writeTimer(await putTimer(matchId, true, HALF_MS));
           writeTimer(await setTimerPeriod(matchId, 2));
-          return "2. yarı 25:00'dan başlatıldı.";
+          return `2. yarı ${halfMinutes}:00'dan başlatıldı.`;
         case "finish":
           await updateMatch(matchId, {
             mac_durumu: "yayinlanmis",
             ...(manual ? {} : { first_team_score: eventScore.home, second_team_score: eventScore.away }),
           });
-          writeTimer(await putTimer(matchId, false, nowMs));
+          writeTimer(await pauseTimer(matchId));
           return "Maç bitti, skor tescil edildi.";
         case "reopen":
           await updateMatch(matchId, { mac_durumu: "canli" });
@@ -301,11 +322,11 @@ export function LiveStep({ match, onScore }: { match: AdminMatch; onScore?: (sco
   const primary = (() => {
     switch (phase) {
       case "notStarted":
-        return { label: "Maçı başlat", icon: "play" as const, run: () => control.mutate("start") };
+        return { label: "Maçı başlat", icon: "play" as const, run: () => void confirmThen("start") };
       case "kickoff":
         return { label: "1. yarıyı başlat", icon: "play" as const, run: () => control.mutate("kickoff") };
       case "first":
-        return { label: "Devre arası", icon: "cafe-outline" as const, run: () => control.mutate("halftime") };
+        return { label: "Devre arası", icon: "cafe-outline" as const, run: () => void confirmThen("halftime") };
       case "halftime":
         return { label: "2. yarıyı başlat", icon: "play-forward" as const, run: () => control.mutate("second") };
       case "paused":
@@ -314,9 +335,23 @@ export function LiveStep({ match, onScore }: { match: AdminMatch; onScore?: (sco
       case "extra":
         return { label: "Maçı bitir", icon: "flag-outline" as const, danger: true, run: () => void askFinish() };
       case "finished":
-        return { label: "Tekrar canlıya al", icon: "refresh-outline" as const, run: () => control.mutate("reopen") };
+        return { label: "Tekrar canlıya al", icon: "refresh-outline" as const, run: () => void confirmThen("reopen") };
     }
   })();
+
+  /**
+   * Geri alınması zor ya da bildirim gönderen eylemler onay ister: yanlış
+   * dokunuş takipçilere "maç başladı" bildirimi gönderiyor, saati durduruyordu.
+   */
+  const CONFIRMS: Record<"start" | "halftime" | "reopen", { title: string; message: string; confirmLabel: string }> = {
+    start: { title: "Maçı başlat", message: "Maç canlı yayına alınır ve takipçilere \"maç başladı\" bildirimi gider.", confirmLabel: "Başlat" },
+    halftime: { title: "Devre arası", message: `Saat ${halfMinutes}:00'da durdurulur.`, confirmLabel: "Devre arası" },
+    reopen: { title: "Tekrar canlıya al", message: "Bitmiş maç yeniden canlı akışa alınır; skor ve olaylar yeniden düzenlenebilir.", confirmLabel: "Canlıya al" },
+  };
+  const confirmThen = async (action: "start" | "halftime" | "reopen") => {
+    const ok = await confirmAction(CONFIRMS[action]);
+    if (ok) control.mutate(action);
+  };
 
   const askFinish = async () => {
     if (pending.length) {

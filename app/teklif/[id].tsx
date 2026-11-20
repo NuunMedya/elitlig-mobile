@@ -83,6 +83,7 @@ import {
   textScale,
   type,
 } from "@/theme";
+import { parseAmount } from "@/lib/api/admin/accounting";
 
 /* ============================ SUNUCU BİÇİMLERİ ============================= */
 
@@ -563,8 +564,9 @@ export default function OfferDetailScreen() {
       let proposed: string | number | boolean = raw;
       if (field?.kind === "bool") proposed = raw === "true";
       else if (field?.kind === "money") {
-        const numeric = Number(raw.replace(",", "."));
-        proposed = Number.isFinite(numeric) ? numeric : raw;
+        // Ortak kural: "15.000" on beş bin, "1.500,50" bin beş yüz elli kuruş.
+        const numeric = parseAmount(raw);
+        proposed = numeric != null && Number.isFinite(numeric) ? numeric : raw;
       }
       const explanation = (revisionNotes[code] ?? "").trim();
       return { fieldCode: code, proposedValue: proposed, explanation: explanation || undefined };

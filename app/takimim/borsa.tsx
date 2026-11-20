@@ -71,6 +71,7 @@ import { mediaUrl } from "@/lib/format";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { parseAmount } from "@/lib/api/admin/accounting";
 
 type Segment = "borsa" | "oyuncular" | "ilanlarim";
 type TypeFilter = "all" | TransferType;
@@ -749,7 +750,8 @@ function CreateListingSheet({
   const players = (rosterQuery.data?.roster ?? []).filter(
     (player) => !player.is_loan && !takenPlayerIds.includes(player.id),
   );
-  const feeNumber = fee.trim() ? Number(fee.replace(",", ".")) : null;
+  // Muhasebedeki ortak kural: "15.000" on beş bin (önceden 15 okunuyordu).
+  const feeNumber = fee.trim() ? parseAmount(fee) : null;
   const feeInvalid = feeNumber != null && (!Number.isFinite(feeNumber) || feeNumber < 0);
 
   const create = useMutation({

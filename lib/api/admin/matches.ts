@@ -408,6 +408,25 @@ export const getTimer = (id: number) => get<MatchTimer>(`/api/maclar/${id}/timer
 export const putTimer = (id: number, running: boolean, baseMs: number) =>
   put<MatchTimer>(`/api/maclar/${id}/timer`, { running, base_ms: Math.max(0, Math.floor(baseMs)) });
 
+/**
+ * Başlat / durdur sunucuda hesaplanır: biriken süreyi cihaz değil sunucu
+ * toplar. putTimer'a cihazın hesapladığı süreyi yazmak, telefon saati ileri ya
+ * da geri olduğunda bu kaymayı yayına kalıcı olarak ekliyordu.
+ */
+export const startTimer = (id: number) => post<MatchTimer>(`/api/maclar/${id}/timer/start`, {});
+export const pauseTimer = (id: number) => post<MatchTimer>(`/api/maclar/${id}/timer/pause`, {});
+
+/** Sezonun kural kitapçığındaki maç günü ayarları (GET /api/rule-books/context). */
+export interface GameRules {
+  halves: number | null;
+  half_minutes: number | null;
+  field_size: number | null;
+  field_sizes: number[];
+  max_bench: number | null;
+}
+export const getGameRules = (seasonId: number) =>
+  get<{ game?: GameRules | null }>("/api/rule-books/context", { seasonId }, { retry: false }).then((r) => r?.game ?? null);
+
 export const setTimerPeriod = (id: number, period: number) =>
   post<MatchTimer>(`/api/maclar/${id}/timer/period`, { period });
 
