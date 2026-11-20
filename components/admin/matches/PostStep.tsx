@@ -209,7 +209,8 @@ export function PostStep({
         matchId,
         allPlayers
           .map((p) => ({ playerId: Number(p.id), oyuncu_id: Number(p.id), puan: normalizeRating(ratings[p.id]) }))
-          .filter((r) => r.puan != null)
+          // Boşaltılan puan null gider ve sunucuda silinir; hiç girilmemiş olanlar gönderilmez.
+          .filter((r) => r.puan != null || savedRatings[r.oyuncu_id] != null)
       ),
     { success: "Oyuncu puanları kaydedildi.", invalidate: [lineupKey] }
   );
