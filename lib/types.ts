@@ -272,7 +272,11 @@ export interface ApiPlayer {
   player_img?: string | null;
   team_id?: number | null;
   player_position?: string | null;
+  /** Ziyaretçiye null döner; tam tarih yalnız yönetim, oyuncunun kendisi ve takım başkanına. */
   birth_date?: string | null;
+  /** Sunucunun hesapladığı yaş ve doğum yılı (tam tarih gizlendiğinde dolu). */
+  age?: number | null;
+  birth_year?: number | null;
   nationality?: string | null;
   value?: number | string | null;
   season?: string | null;

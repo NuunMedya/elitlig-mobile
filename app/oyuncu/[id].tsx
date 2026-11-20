@@ -744,7 +744,8 @@ export default function PlayerDetailScreen() {
 
   const hero = useMemo(() => {
     if (!player) return null;
-    const age = formatAge(player.birth_date ?? null);
+    // Ziyaretçiye tam tarih gelmez; sunucu yaşı hesaplayıp gönderir.
+    const age = player.birth_date ? formatAge(player.birth_date) : player.age != null ? String(player.age) : "—";
     const facts: HeroFact[] = [
       { key: "matches", value: String(totalMatches), label: "MAÇ" },
       { key: "goals", value: String(num(player.total_goals)), label: "GOL" },
