@@ -30,7 +30,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { LinearGradient } from "expo-linear-gradient";
-import { BackHandler, ScrollView, StyleSheet, Text, View } from "react-native";
+import { AppState, BackHandler, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ArenaResultCard, ArenaShareSheet, formatCount, SCORE_UNIT, useArenaScore } from "@/components/game/ArenaResult";
@@ -142,12 +142,27 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
   }, [sound, reduceMotion, phase, perks, roster]);
 
   /* Odak: başka ekrana geçince oyun durur, dönünce sürer. */
+  const focusedRef = useRef(false);
   useFocusEffect(
     useCallback(() => {
+      focusedRef.current = true;
       game.current?.send({ type: "resume" });
-      return () => game.current?.send({ type: "pause" });
+      return () => {
+        focusedRef.current = false;
+        game.current?.send({ type: "pause" });
+      };
     }, []),
   );
+
+  /* Uygulama arka plana gidince de oyun durur (WebView kendi saatini
+     işletmeye devam ediyordu); ön plana dönünce sürer. */
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") game.current?.send({ type: "pause" });
+      else if (focusedRef.current) game.current?.send({ type: "resume" });
+    });
+    return () => sub.remove();
+  }, []);
 
   const { finish, reset } = run;
   const levelGame = Boolean(config.levelGame);

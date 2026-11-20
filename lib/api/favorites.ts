@@ -21,6 +21,11 @@ export interface ServerFavorites {
   matchIds: number[];
   /** Takip edilen iller (Cities.id). */
   cityIds: number[];
+  /** Ad/amblem ayrıntısı (yeni sunucu); geri yükleme için. Eski sunucuda boş. */
+  teams: { id: number; name: string; logo?: string | null }[];
+  leagues: { id: number; name: string }[];
+  seasons: { id: number; name: string }[];
+  cities: { id: number; name: string }[];
 }
 
 export type FavoriteKind = "teams" | "leagues" | "seasons" | "cities" | "matches";
@@ -34,6 +39,10 @@ export const getMyFavorites = () =>
     seasonIds: data.seasonIds ?? [],
     matchIds: data.matchIds ?? [],
     cityIds: data.cityIds ?? [],
+    teams: Array.isArray(data.teams) ? data.teams : [],
+    leagues: Array.isArray(data.leagues) ? data.leagues : [],
+    seasons: Array.isArray(data.seasons) ? data.seasons : [],
+    cities: Array.isArray(data.cities) ? data.cities : [],
   }));
 
 export const followFavorite = (kind: FavoriteKind, id: number) =>

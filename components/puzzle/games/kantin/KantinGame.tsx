@@ -498,7 +498,9 @@ export function KantinGame({ level: levelNo, maxWidth, maxHeight, preBoosters, b
     let last = Date.now();
     const id = setInterval(() => {
       const now = Date.now();
-      elapsedRef.current += now - last;
+      // Uygulama arka plandayken zamanlayıcı durur; dönüşte aradaki süre tek
+      // tikte düşülüp oyun bitiyordu. Bir tikte en çok 500 ms sayılır.
+      elapsedRef.current += Math.min(now - last, 500);
       last = now;
       const m = meta.current;
       const t = elapsedRef.current;

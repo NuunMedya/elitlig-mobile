@@ -135,7 +135,12 @@ interface RelatedLink {
 /* ============================== SAF YARDIMCILAR =========================== */
 
 /** Gövde bloğu: düz paragraf ya da görsel. */
-type BodyBlock = { kind: "text"; text: string } | { kind: "image"; uri: string };
+type BodyBlock =
+  | { kind: "text"; text: string }
+  | { kind: "heading"; text: string }
+  | { kind: "image"; uri: string };
+
+const HEADING_MARK = "\u0000H:";
 
 const IMAGE_MARK = "\u0000IMG:";
 
@@ -147,6 +152,10 @@ function toBlocks(html: string | null | undefined, skip: { cover: string | null;
   if (!html) return [];
   const blocks = String(html)
     .replace(/<img[^>]*?src=["']([^"']+)["'][^>]*>/gi, (_m, src: string) => `\n\n${IMAGE_MARK}${src}\n\n`)
+    // Ara başlıklar ayrı blok olarak işaretlenir; liste maddeleri madde imiyle
+    // kalır (eskiden hepsi aynı düz paragrafa dönüşüyordu).
+    .replace(/<h[1-6][^>]*>/gi, `\n\n${HEADING_MARK}`)
+    .replace(/<li[^>]*>/gi, "\n\n• ")
     .replace(/<\/(p|div|h[1-6]|li|blockquote)>/gi, "\n\n")
     .replace(/<br\s*\/?>/gi, "\n")
     .split("\n\n")
@@ -155,6 +164,10 @@ function toBlocks(html: string | null | undefined, skip: { cover: string | null;
       if (trimmed.startsWith(IMAGE_MARK)) {
         const uri = mediaUrl(trimmed.slice(IMAGE_MARK.length));
         return uri ? { kind: "image", uri } : null;
+      }
+      if (trimmed.startsWith(HEADING_MARK)) {
+        const text = stripHtml(trimmed.slice(HEADING_MARK.length), 500);
+        return text ? { kind: "heading", text } : null;
       }
       const text = stripHtml(block, 5000);
       return text ? { kind: "text", text } : null;
@@ -407,6 +420,10 @@ export default function NewsDetailScreen() {
             blocks.map((block, index) =>
               block.kind === "image" ? (
                 <BodyImage key={`img-${index}`} uri={block.uri} />
+              ) : block.kind === "heading" ? (
+                <Text key={`h-${index}`} style={[styles.paragraph, styles.subheading]} accessibilityRole="header" {...textScale.long}>
+                  {block.text}
+                </Text>
               ) : (
                 <Text key={`p-${index}`} style={styles.paragraph} {...textScale.long}>
                   {block.text}
@@ -589,6 +606,10 @@ const styles = StyleSheet.create({
     ...type.article,
     color: colors.textPrimary,
     fontFamily: fonts.semibold,
+  },
+  subheading: {
+    fontFamily: fonts.heading,
+    marginTop: space.sm,
   },
   paragraph: {
     ...type.article,

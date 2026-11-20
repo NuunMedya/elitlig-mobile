@@ -201,15 +201,6 @@ export default function TeamDetailScreen() {
     [router, scrollY],
   );
 
-  const scopeKey = useMemo(
-    () => ({
-      cityId: scope.cityId ?? undefined,
-      leagueId: scope.leagueId ?? undefined,
-      seasonId: scope.seasonId ?? undefined,
-    }),
-    [scope.cityId, scope.leagueId, scope.seasonId],
-  );
-
   /* ---------------------------- Sorgular ---------------------------- */
 
   const teamQuery = useQuery({
@@ -225,17 +216,53 @@ export default function TeamDetailScreen() {
     staleTime: 60_000,
   });
 
+  /*
+   * Takımın KENDİ kapsamı: en son maçının il/lig/sezonu. Puan durumu ve gol
+   * krallığı bu kapsamdan okunur; eskiden kullanıcının seçili ligi
+   * kullanılıyordu ve başka ligdeki takımın sayfasında yabancı bir tablo
+   * görünüyordu. Takımın maçı yoksa seçili kapsama düşülür.
+   */
+  const teamScope = useMemo(() => {
+    const list = matchesQuery.data ?? [];
+    const latest = [...list]
+      .filter((m) => m.league_id && m.season_id)
+      .sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")))[0];
+    if (!latest) return null;
+    return {
+      cityId: latest.city_id ?? scope.cityId ?? undefined,
+      leagueId: Number(latest.league_id),
+      seasonId: Number(latest.season_id),
+      leagueLabel: latest.league_name || null,
+      seasonLabel: (latest as { match_season?: string | null }).match_season || null,
+    };
+  }, [matchesQuery.data, scope.cityId]);
+  const ownScopeReady = Boolean(teamScope?.cityId && teamScope.leagueId && teamScope.seasonId);
+
+  const scopeKey = useMemo(
+    () => (ownScopeReady && teamScope
+      ? { cityId: teamScope.cityId ?? undefined, leagueId: teamScope.leagueId, seasonId: teamScope.seasonId }
+      : {
+        cityId: scope.cityId ?? undefined,
+        leagueId: scope.leagueId ?? undefined,
+        seasonId: scope.seasonId ?? undefined,
+      }),
+    [ownScopeReady, teamScope, scope.cityId, scope.leagueId, scope.seasonId],
+  );
+  const scopeReady = ownScopeReady || (scope.ready && !matchesQuery.isLoading);
+  const leagueLabel = (ownScopeReady && teamScope?.leagueLabel) || scope.leagueLabel;
+  const seasonLabel = (ownScopeReady && teamScope?.seasonLabel) || scope.seasonLabel;
+
   const standingsQuery = useQuery({
     queryKey: queryKeys.standings(scopeKey),
     queryFn: () =>
-      getStandings({ cityId: scope.cityId!, leagueId: scope.leagueId!, seasonId: scope.seasonId! }),
-    enabled: scope.ready,
+      getStandings({ cityId: scopeKey.cityId!, leagueId: scopeKey.leagueId!, seasonId: scopeKey.seasonId! }),
+    enabled: scopeReady && Boolean(scopeKey.cityId && scopeKey.leagueId && scopeKey.seasonId),
   });
 
   const rankingsQuery = useQuery({
     queryKey: queryKeys.playerRankings(scopeKey, "topScorers"),
     queryFn: () => getPlayerRankings(scopeKey, "topScorers"),
-    enabled: scope.ready,
+    enabled: scopeReady,
     staleTime: 5 * 60_000,
   });
 
@@ -262,7 +289,7 @@ export default function TeamDetailScreen() {
   const newsQuery = useQuery({
     queryKey: queryKeys.newsFeed(scopeKey),
     queryFn: () => getNewsFeed(scopeKey),
-    enabled: tab === "transfer" && scope.ready,
+    enabled: tab === "transfer" && scopeReady,
     staleTime: 5 * 60_000,
   });
 
@@ -736,11 +763,11 @@ export default function TeamDetailScreen() {
           neighbours={neighbourRows}
           tableSize={standingsQuery.data?.length ?? 0}
           leaderPoints={standingsQuery.data?.[0] ? num(standingsQuery.data[0].display_points) : null}
-          scopeReady={scope.ready}
+          scopeReady={scopeReady}
           /* Kapsam henüz çözülürken "Kapsam seçilmedi" demek yanlış olur: iskelet. */
           standingsLoading={scope.loading || standingsQuery.isLoading}
           standing={standing}
-          leagueLabel={scope.leagueLabel}
+          leagueLabel={leagueLabel}
           topScorers={topScorers}
           leaders={leaders}
           analysis={analysis}
@@ -788,7 +815,7 @@ export default function TeamDetailScreen() {
           refreshControl={refresh.control}
           squad={squad}
           loading={(rosterQuery.isLoading || rankingsQuery.isLoading) && squad.length === 0}
-          seasonLabel={scope.seasonLabel}
+          seasonLabel={seasonLabel}
           onOpenPlayer={openPlayer}
         />
       ) : tab === "istatistik" ? (
@@ -798,7 +825,7 @@ export default function TeamDetailScreen() {
           records={records}
           career={career}
           discipline={discipline}
-          seasonLabel={scope.seasonLabel}
+          seasonLabel={seasonLabel}
           loading={matchesQuery.isLoading}
           onOpenMatch={openMatch}
         />
