@@ -68,15 +68,25 @@ export function OfflineSyncSetup() {
 
   useEffect(() => {
     // http katmanı: başarılı yanıt → bağlantı var, kuyruğu dene; yanıtsız hata → çevrimdışı.
+    // Bağlantı geri geldiğinde ekrandaki bayat veriler bir kez tazelenir
+    // (NetInfo olmadan: yanıtsız hatadan sonra gelen ilk başarılı yanıt).
+    let wasOffline = false;
     setNetworkObserver({
       success: () => {
         noteOnline();
         void flushRef.current();
+        if (wasOffline) {
+          wasOffline = false;
+          void queryClient.refetchQueries({ type: "active", stale: true });
+        }
       },
-      offline: () => noteRequestError(new ApiError("offline", 0, "NETWORK")),
+      offline: () => {
+        wasOffline = true;
+        noteRequestError(new ApiError("offline", 0, "NETWORK"));
+      },
     });
     return () => setNetworkObserver({});
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     void flush(true);

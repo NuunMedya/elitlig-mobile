@@ -62,6 +62,7 @@
  * kendi içinde bağlayan küçük sarmalayıcılarda yaşar.
  */
 
+import { useTodayIso } from "@/hooks/useTodayIso";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -210,8 +211,8 @@ export default function ScoresScreen() {
   const { scrollY, scrollProps } = useHeaderScroll();
   const bell = useNotificationBell();
 
-  /** Bugün ekran ömrü boyunca bir kez hesaplanır (gece yarısı geçişi nadir). */
-  const todayIso = useMemo(() => toIsoDate(new Date()), []);
+  /** Bugün: gece yarısı ve ön plana dönüşte yenilenir (bkz. useTodayIso). */
+  const todayIso = useTodayIso();
 
   const paramTab = readParam(params.tab);
   const paramDate = readParam(params.date);

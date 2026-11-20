@@ -119,7 +119,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
        yeniden yazılsın — aksi hâlde token eski üyenin hesabında kalırdı. */
     resetPushSync();
     await clearLedger();
-  }, []);
+    // Önceki kullanıcının özel verisi (panel, bildirim, takip) önbellekte
+    // kalmasın: aynı cihazda başka hesapla girişte görünüyordu. Oturum
+    // sunucu tarafından kapatıldığında da (iptal, engel) aynısı geçerli.
+    queryClient.clear();
+  }, [queryClient]);
 
   /** Yeni jetonu bellekte ve güvenli depoda tutar; yenileme saatini işler. */
   const adoptToken = useCallback(async (token: string) => {
@@ -284,8 +288,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Sunucuya ulaşılamasa da yerel oturum kapatılır.
     }
     await forgetSession();
-    await queryClient.invalidateQueries();
-  }, [forgetSession, queryClient]);
+  }, [forgetSession]);
 
   const refreshUser = useCallback(() => revalidate(true), [revalidate]);
 

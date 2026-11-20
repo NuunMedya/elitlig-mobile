@@ -14,7 +14,8 @@
  *        eas env:create --name GOOGLE_SERVICES_JSON --type file \
  *          --value ./google-services.json --environment production --visibility secret
  *   2. Proje köküne konmuş ./google-services.json.
- * İkisi de yoksa alan eklenmez ve derleme eskisi gibi sürer (push Android'de çalışmaz).
+ * İkisi de yoksa alan eklenmez; geliştirme/önizleme derlemesi sürer (push Android'de
+ * çalışmaz), üretim Android derlemesi ise hata verip durur.
  */
 const fs = require("node:fs");
 const path = require("node:path");
@@ -24,7 +25,19 @@ module.exports = ({ config }) => {
   const googleServicesFile =
     process.env.GOOGLE_SERVICES_JSON || (fs.existsSync(local) ? "./google-services.json" : undefined);
 
-  if (!googleServicesFile) return config;
+  if (!googleServicesFile) {
+    // Üretim Android derlemesi push olmadan sessizce çıkmasın: dosya yoksa
+    // derleme durur. Geliştirme / önizleme profilleri eskisi gibi sürer.
+    const isProductionAndroid =
+      process.env.EAS_BUILD_PROFILE === "production" && process.env.EAS_BUILD_PLATFORM === "android";
+    if (isProductionAndroid) {
+      throw new Error(
+        "google-services.json bulunamadı: üretim Android derlemesinde push bildirimleri çalışmaz. " +
+          "GOOGLE_SERVICES_JSON EAS ortam değişkenini tanımlayın (bkz. bu dosyanın başı)."
+      );
+    }
+    return config;
+  }
 
   return {
     ...config,

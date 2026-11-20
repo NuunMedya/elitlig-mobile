@@ -25,7 +25,10 @@ export async function addMatchToCalendar(match: ApiMatch): Promise<void> {
       return;
     }
 
-    const start = new Date(`${String(match.date).slice(0, 10)}T${match.time || "20:00:00"}`);
+    // Maç saati İstanbul saatidir; cihaz başka saat dilimindeyse de doğru
+    // ana denk gelsin diye açık +03:00 ile kurulur.
+    const [hh = "20", mm = "00"] = String(match.time || "20:00").split(":");
+    const start = new Date(`${String(match.date).slice(0, 10)}T${hh.padStart(2, "0")}:${mm.padStart(2, "0")}:00+03:00`);
     if (Number.isNaN(start.getTime())) {
       Alert.alert("Tarih okunamadı", "Bu maçın tarihi eklenemedi.");
       return;

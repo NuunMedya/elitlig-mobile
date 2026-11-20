@@ -16,6 +16,16 @@ import { isOfflineError, noteOnline, noteRequestError, uuid } from "./net";
 const KEY = (userId: number) => `elitlig.offline.queue.v1.${userId}`;
 /** Sunucu tek istekte en çok bu kadar olay alır. */
 const BATCH = 100;
+/** Kuyruk üst sınırı. */
+const MAX_QUEUE = 500;
+/**
+ * Sunucu bir olayı yanıtlamadıysa (sonuç listesinde yok) ya da parti ağ dışı
+ * bir hatayla reddedildiyse olayın deneme sayısı artar; bu kadar denemeden
+ * sonra olay kuyruktan çıkarılır. Eskiden tek bir bozuk olay kuyruğu kalıcı
+ * olarak tıkıyordu (her gönderim aynı partiyle aynı hatayı alıyordu).
+ */
+const MAX_ATTEMPTS = 5;
+type Queued = OfflineEvent & { attempts?: number };
 
 type Draft<T extends OfflineEvent> = Omit<T, "id"> & { id?: string };
 
@@ -53,8 +63,9 @@ export function enqueueOffline(userId: number, event: Draft<OfflineLevelEvent> |
     const full = { ...event, id: event.id ?? uuid() } as OfflineEvent;
     const list = await read(userId);
     list.push(full);
-    // Çok uzun çevrimdışı dönem: en eski olaylar korunur, sınır 500.
-    await write(userId, list.slice(0, 500));
+    // Çok uzun çevrimdışı dönem: sınır aşılırsa EN ESKİ olay düşer; eskiden
+    // yeni biten bölüm sessizce atılıyordu.
+    await write(userId, list.slice(-MAX_QUEUE));
     return full;
   });
 }
@@ -86,6 +97,12 @@ export function usePendingCount(userId: number | null | undefined): number {
   return n;
 }
 
+function bumpAttempts(list: Queued[], ids: Set<string>): OfflineEvent[] {
+  return list
+    .map((e) => (ids.has(e.id) ? { ...e, attempts: (e.attempts ?? 0) + 1 } : e))
+    .filter((e) => (e.attempts ?? 0) < MAX_ATTEMPTS);
+}
+
 let inflight: Promise<SyncResponse | null> | null = null;
 
 /**
@@ -104,18 +121,31 @@ export function flushOffline(userId: number): Promise<SyncResponse | null> {
       const batch = [...list].sort((a, b) => a.finishedAt - b.finishedAt).slice(0, BATCH);
       let res: SyncResponse;
       try {
-        res = await syncOffline(batch);
+        // Deneme sayacı yerel alandır; sunucuya gönderilmez.
+        res = await syncOffline(batch.map((e) => {
+          const { attempts: _attempts, ...rest } = e as Queued;
+          return rest as OfflineEvent;
+        }));
         noteOnline();
       } catch (error) {
         noteRequestError(error);
-        // Ağ hatası: kuyruk kalır. Diğer hatalar (eski sunucu 404 vb.) de silmez.
-        if (!isOfflineError(error)) break;
+        // Ağ hatası: kuyruk olduğu gibi kalır. Ağ dışı hata (sunucu partiyi
+        // reddetti): partideki olayların deneme sayısı artar, sınırı aşan düşer.
+        if (!isOfflineError(error)) {
+          const ids = new Set(batch.map((e) => e.id));
+          await serial(async () => {
+            const cur = (await read(userId)) as Queued[];
+            await write(userId, bumpAttempts(cur, ids));
+          });
+        }
         break;
       }
       const done = new Set((res.results ?? []).map((r) => r.id));
+      // Partide olup yanıtta olmayan olaylar: bir deneme sayılır.
+      const unanswered = new Set(batch.map((e) => e.id).filter((id) => !done.has(id)));
       await serial(async () => {
-        const cur = await read(userId);
-        await write(userId, cur.filter((e) => !done.has(e.id)));
+        const cur = (await read(userId)) as Queued[];
+        await write(userId, bumpAttempts(cur.filter((e) => !done.has(e.id)), unanswered));
       });
       total = total
         ? { ...res, results: [...total.results, ...res.results], gained: { stars: total.gained.stars + (res.gained?.stars ?? 0), coins: total.gained.coins + (res.gained?.coins ?? 0) } }
