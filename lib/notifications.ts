@@ -199,6 +199,18 @@ function targetFromEntity(
     case "SEASON":
       return { pathname: "/takimim/kadro", params: { gorunum: "sezon" } };
 
+    /* Transfer ilanı (services/transfer/listingService.js → TRANSFER_LISTING_CREATED):
+       kimlik bir OYUNCU kimliğidir, teklif değil. Eskiden TRANSFER_ öneki bunu
+       /teklif/<oyuncu> diye açıyor, ekran hiç yüklenmiyordu. */
+    case "PLAYER":
+      return entityId ? { pathname: "/oyuncu/[id]", params: { id: entityId } } : null;
+
+    /* Gecikmiş ekipman iadesi (services/equipment/notify.js → TODO_EQUIPMENT_OVERDUE):
+       kimlik ekipman kalemidir, görev kartı değil. Uygulamada ekipman ekranı
+       olmadığından görev panosu kimliksiz açılır (yanlış kartı açmaz). */
+    case "EQUIPMENT":
+      return { pathname: "/yonetim/gorevler" };
+
     default:
       return null;
   }
@@ -349,6 +361,7 @@ const AUTH_REQUIRED_PREFIXES = [
   "/teklif",
   "/sozlesmelerim",
   "/sozlesme",
+  "/transfer-izni",
   "/cezalarim",
   "/ceza",
   "/mesajlarim",
@@ -367,6 +380,23 @@ export function requiresAuth(target: NotifTarget): boolean {
   return AUTH_REQUIRED_PREFIXES.some(
     (prefix) => target.pathname === prefix || target.pathname.startsWith(`${prefix}/`)
   );
+}
+
+/**
+ * Bildirime DOKUNULUNCA gidilecek hedef — oturum durumu dahil.
+ *
+ * Misafir (oturumu kapalı) kullanıcı korumalı bir hedefe giden bildirime
+ * dokunursa doğrudan o ekrana değil giriş ekranına gider; korumalı ekran
+ * oturumsuz açıldığında boş / hata durumunda kalıyordu.
+ */
+export function tapTargetFromNotif(
+  data: Record<string, unknown> | null | undefined,
+  ctx: NotifContext & { signedIn: boolean }
+): NotifTarget | null {
+  const target = routeFromNotif(data, ctx);
+  if (!target) return null;
+  if (!ctx.signedIn && requiresAuth(target)) return { pathname: "/giris" };
+  return target;
 }
 
 /** Okundu işaretlemek için: panel bildirimlerinde notification_id bulunur. */

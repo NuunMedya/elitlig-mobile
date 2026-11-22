@@ -80,7 +80,7 @@ export function CallScreen() {
         muted={call.muted}
         speaker={call.speaker}
         onToggleMute={call.toggleMute}
-        onToggleSpeaker={call.toggleSpeaker}
+        onToggleSpeaker={call.speakerAvailable ? call.toggleSpeaker : undefined}
         onAccept={call.acceptCall}
         onReject={call.rejectCall}
         onEnd={call.endCall}
@@ -99,7 +99,8 @@ export interface CallViewProps {
   muted: boolean;
   speaker: boolean;
   onToggleMute: () => void;
-  onToggleSpeaker: () => void;
+  /** Yoksa (yerel ses yönlendirme modülü derlemede değil) hoparlör düğmesi gizlenir. */
+  onToggleSpeaker?: () => void;
   onAccept: () => void;
   onReject: () => void;
   onEnd: () => void;
@@ -159,7 +160,9 @@ export function CallView({ status, name, subtitle, avatar, statusText, error, mu
           {showControls ? (
             <View style={styles.dock}>
               <RoundButton icon={muted ? "mic-off" : "mic"} label={muted ? "Sesi aç" : "Sessiz"} active={muted} onPress={onToggleMute} />
-              <RoundButton icon={speaker ? "volume-high" : "volume-medium"} label="Hoparlör" active={speaker} onPress={onToggleSpeaker} />
+              {onToggleSpeaker ? (
+                <RoundButton icon={speaker ? "volume-high" : "volume-medium"} label="Hoparlör" active={speaker} onPress={onToggleSpeaker} />
+              ) : null}
             </View>
           ) : null}
           <View style={styles.row}>

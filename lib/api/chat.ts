@@ -776,6 +776,9 @@ export const endCall = (callId: number, reason?: string) =>
   post<{ call: ChatCall }>(`/api/chat/calls/${callId}/end`, reason ? { reason } : undefined);
 export const sendIceCandidate = (callId: number, candidate: unknown) =>
   post<{ relayed: boolean }>(`/api/chat/calls/${callId}/ice`, { candidate });
+/** Kendi SDP'ni karşı tarafa iletir (yeniden müzakere / kaçırılmış teklifin yeniden gönderimi). */
+export const sendCallSdp = (callId: number, sdp: SdpPayload) =>
+  post<{ relayed: boolean }>(`/api/chat/calls/${callId}/sdp`, { sdp });
 
 /** Yeni mesaj için istemci kimliği (çift gönderim önleme). */
 /** Konum mesajı için harita bağlantısı. */

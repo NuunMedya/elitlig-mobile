@@ -41,7 +41,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { Linking, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Linking, Platform, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -78,6 +78,7 @@ import type {
   NotificationPreferences,
 } from "@/lib/api/notifications";
 import { preferenceSections } from "@/lib/api/notifications";
+import { CHANNELS } from "@/lib/notifications";
 import {
   pushStatusTone,
   serverSyncMessage,
@@ -303,11 +304,14 @@ export default function NotificationPreferencesScreen() {
           // uygulama normal açılışını yapar, bu doğru davranıştır.
           data: { kind: "test" },
         },
-        trigger: null,
+        // Android'de kanal açıkça verilir: verilmezse Expo'nun yedek kanalına
+        // düşer ve kullanıcının "Panel Bildirimleri" kanal ayarı sınanmamış olur.
+        trigger: Platform.OS === "android" ? { channelId: CHANNELS.PANEL.id } : null,
       });
 
       toast.show({
-        message: "Test bildirimi gönderildi. Bildirim gölgesini kontrol et.",
+        message:
+          "Telefon testi gönderildi. Görünüyorsa izin ve kanal ayarı sağlam; uygulama kapalıyken gelen bildirimler ayrıca sunucu kaydına bağlıdır (üstteki durum satırı).",
         tone: "success",
       });
     } catch {
@@ -503,7 +507,7 @@ export default function NotificationPreferencesScreen() {
                 kayıt telefonda gösterilir. Uygulama tamamen kapalıyken yalnız push bildirimi çalışır.
               </Text>
               <Button
-                label="Test bildirimi gönder"
+                label="Telefonda test bildirimi göster"
                 onPress={sendTestNotification}
                 loading={testing}
                 size="sm"
