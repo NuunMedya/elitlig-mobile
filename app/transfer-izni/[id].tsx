@@ -43,7 +43,7 @@ import {
 } from "@/components/ui";
 import { isReleaseRequest } from "@/lib/api/club/notifications";
 import { getPanelNotificationsByPrefix, markNotifRead } from "@/lib/api/panel";
-import { decideRelease } from "@/lib/api/transfers";
+import { decideRelease, getReleaseStatus } from "@/lib/api/transfers";
 import { queryKeys } from "@/lib/queryKeys";
 import { ApiError } from "@/lib/http";
 import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
@@ -59,9 +59,9 @@ export default function ReleaseDecisionScreen() {
   const [done, setDoneState] = useState<"approve" | "reject" | "closed" | null>(null);
   const [choice, setChoice] = useState<"approve" | "reject" | null>(null);
 
-  /* Karar bu cihazda saklanır: ekran yeniden açıldığında "Kararını bekliyor"
-     yerine verilen karar görünür. (Sunucu izin durumunu bu takıma okutan bir
-     uç sunmuyor; başka yerden verilen karar ilk denemedeki 409 ile öğrenilir.) */
+  /* Karar bu cihazda da saklanır: sunucunun izin durumu ucu
+     (GET /api/transfer-offers/:id/release) henüz yayında olmayan sunucuda
+     ekran yeniden açılınca verilen karar yine görünsün. */
   const storeKey = `elitlig.release.decided.v1.${offerId}`;
   useEffect(() => {
     let alive = true;
@@ -82,6 +82,26 @@ export default function ReleaseDecisionScreen() {
     [storeKey],
   );
 
+  /* Sunucudaki gerçek durum: başka yerden (lig yönetimi, diğer yönetici)
+     verilmiş karar ekran açılır açılmaz görünür. Eski sunucu 404 döner;
+     o zaman yerel kayıt ve 409 yolu geçerli kalır. */
+  const status = useQuery({
+    queryKey: ["club", "release-status", offerId],
+    queryFn: () => getReleaseStatus(offerId),
+    enabled: Boolean(offerId),
+    staleTime: 15_000,
+    retry: false,
+  });
+  useEffect(() => {
+    const release = status.data;
+    if (!release) return;
+    const stillOpen = release.release_status === "PENDING" && ["SENT", "REVISION_REQUESTED", "DRAFT"].includes(release.offer_status);
+    if (stillOpen) return;
+    if (release.decided_by_me && release.release_status === "APPROVED") setDoneState("approve");
+    else if (release.decided_by_me && release.release_status === "REJECTED") setDoneState("reject");
+    else setDoneState((current) => current ?? "closed");
+  }, [status.data]);
+
   /* Yalnız izin bildirimleri istenir: eski bir talep ilk 50 bildirimin
      dışında kalsa da özeti bulunur. */
   const notifications = useQuery({
@@ -94,7 +114,11 @@ export default function ReleaseDecisionScreen() {
     () => (notifications.data?.items ?? []).filter((item) => isReleaseRequest(item) && item.entity_public_id === offerId),
     [notifications.data, offerId],
   );
-  const summary = related[0]?.description ?? null;
+  const serverSummary =
+    status.data?.offering_team?.name && status.data?.player?.name
+      ? `${status.data.offering_team.name}, ${status.data.player.name} için transfer teklifi verdi. Oyuncu teklifi ancak senin ya da lig yönetiminin izniyle kabul edebilir.`
+      : null;
+  const summary = related[0]?.description ?? serverSummary;
 
   /** Bu teklifin izin bildirimlerini kapat, işi gösteren her listeyi tazele. */
   const settle = useCallback(async () => {
@@ -108,6 +132,7 @@ export default function ReleaseDecisionScreen() {
     mutationFn: (decision: "approve" | "reject") => decideRelease(offerId, decision, note.trim()),
     onSuccess: (data, decision) => {
       setDone(decision);
+      void queryClient.invalidateQueries({ queryKey: ["club", "release-status", offerId] });
       toast.show({
         message: data?.message || (decision === "approve" ? "İzin verildi." : "İzin verilmedi."),
         tone: decision === "approve" ? "success" : "neutral",

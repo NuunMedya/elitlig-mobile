@@ -1,4 +1,4 @@
-import { get, patch } from "../http";
+import { get, patch, post } from "../http";
 
 /**
  * Bildirim tercihleri — routes/users.js (`/api/users/me/notification-preferences`).
@@ -165,3 +165,21 @@ export function preferenceSections(
 
   return sections;
 }
+
+/**
+ * Bu cihaza sunucudan GERÇEK test bildirimi (sunucu → Expo → FCM/APNs) —
+ * routes/User.js `POST /api/users/push-token/test`. `token` verilirse yalnız o
+ * cihaz denenir. `sent`, Expo'nun bildirimi kabul ettiği cihaz sayısıdır.
+ *
+ * Hatalar: 404 PUSH_TOKEN_NOT_REGISTERED (cihaz sunucuda kayıtlı değil),
+ * 429 PUSH_TEST_TOO_SOON. Kodsuz 404 = sunucu bu ucu henüz bilmiyor.
+ */
+export interface PushTestResult {
+  devices: number;
+  sent: number;
+  failed: number;
+  errors?: Record<string, number> | null;
+}
+
+export const sendServerTestPush = (token?: string | null) =>
+  post<PushTestResult>("/api/users/push-token/test", token ? { token } : {});

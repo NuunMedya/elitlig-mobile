@@ -54,6 +54,22 @@ export interface OutboxOffer extends TransferOffer {
 export const decideRelease = (publicId: string, decision: "approve" | "reject", note = "") =>
   post<{ message?: string }>(`/api/transfer-offers/${encodeURIComponent(publicId)}/release/${decision}`, { note });
 
+/** Transfer izninin durumu — routes/transferOffers.js `GET /:offerId/release`. */
+export interface ReleaseStatus {
+  offer_public_id: string;
+  offer_status: string;
+  release_status: "PENDING" | "APPROVED" | "REJECTED" | null;
+  release_decided_at: string | null;
+  release_note: string | null;
+  decided_by_me: boolean;
+  can_decide: boolean;
+  player: { id: number; name: string | null } | null;
+  offering_team: { id: number; name: string | null } | null;
+}
+
+export const getReleaseStatus = (publicId: string) =>
+  get<{ release: ReleaseStatus }>(`/api/transfer-offers/${encodeURIComponent(publicId)}/release`).then((r) => r.release);
+
 /* ───────────────────────── Transfer borsası ───────────────────────── */
 
 export interface Listing {
