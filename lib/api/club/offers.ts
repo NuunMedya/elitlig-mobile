@@ -1,13 +1,12 @@
 import { get } from "../../http";
-import type { Paged } from "../panel";
+import { collectPages, type Paged } from "../panel";
 import type { OutboxOffer } from "../transfers";
 
 /**
  * KULÜBÜN TEKLİF KUTUSU — GET /api/transfer-offers/outbox (offerService.list).
  *
- * `lib/api/transfers.ts` içindeki `getOfferOutbox` yalnız ilk 50 kaydı
- * durumsuz çeker. Transfer Yönetimi ekranı web'deki gibi DURUMA göre süzer
- * (sunucu `status` parametresini doğrular) ve sayfalar.
+ * Transfer Yönetimi ekranı web'deki gibi DURUMA göre süzer (sunucu `status`
+ * parametresini doğrular); sayfa verilmezse tüm sayfalar toplanır.
  */
 
 /** constants/transfer.js OFFER_STATUSES (takım tarafında anlamlı olanlar). */
@@ -28,13 +27,19 @@ export const OFFER_STATUS_LABELS: Record<string, string> = {
   CANCELLED: "İptal edildi",
 };
 
-export const getOutboxPage = (params: { status?: OutboxStatus | null; page?: number; search?: string } = {}) =>
-  get<Paged<OutboxOffer & { player_id?: number; created_at?: string; createdAt?: string }>>("/api/transfer-offers/outbox", {
-    status: params.status ?? undefined,
-    page: params.page ?? 1,
-    search: params.search?.trim() || undefined,
-    limit: 50,
-  });
+type OutboxRow = OutboxOffer & { player_id?: number; created_at?: string; createdAt?: string };
+
+/** Giden teklifler; `page` verilmezse tüm sayfalar toplanır (sayaçlar ve liste eksiksiz). */
+export const getOutboxPage = (params: { status?: OutboxStatus | null; page?: number; search?: string } = {}) => {
+  const fetchPage = (page: number, limit: number) =>
+    get<Paged<OutboxRow>>("/api/transfer-offers/outbox", {
+      status: params.status ?? undefined,
+      page,
+      search: params.search?.trim() || undefined,
+      limit,
+    });
+  return params.page ? fetchPage(params.page, 50) : collectPages(fetchPage);
+};
 
 /**
  * Bir oyuncuya kulübün AÇIK teklifi var mı? Oyuncu profili ve arama

@@ -144,7 +144,7 @@ export function DashboardSummary({ onNavigate, showQuickActions = true, showMetr
           ) : (
             <View>
               {matches.slice(0, maxMatches).map((match, index) => (
-                <MatchLine key={match.id} match={match} first={index === 0} onPress={() => go(`/yonetim/maclar?mac=${match.id}`)} />
+                <MatchLine key={match.id} match={match} first={index === 0} onPress={() => go(`/yonetim/mac/${match.id}`)} />
               ))}
               {matches.length > maxMatches ? (
                 <Text style={styles.more} {...textScale.dense}>

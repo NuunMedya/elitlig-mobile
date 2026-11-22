@@ -64,7 +64,7 @@ import {
 } from "@/components/ui";
 import { GroupSeparator, groupRowStyle } from "@/components/league/shared";
 import { SearchScopePanel, type SearchScopeMode } from "@/components/search/SearchScopePanel";
-import { getPlayerRankings } from "@/lib/api/players";
+import { getPlayerRankings, playerSearchRow, searchPlayers } from "@/lib/api/players";
 import { getTeams } from "@/lib/api/teams";
 import { queryKeys } from "@/lib/queryKeys";
 import type { ApiTeam, PlayerRankRow } from "@/lib/types";
@@ -290,7 +290,9 @@ export default function SearchScreen() {
     seasonId: scope.seasonId ?? undefined,
   };
 
-  // Oyuncu listesi kapsamlıdır; sunucu kapsamsız tam liste vermiyor.
+  // Kapsam listesi (seçili lig/sezon kadroları) sonuçların başına gelir; kapsam
+  // dışındaki ve henüz maçı yayınlanmamış oyuncular uygulama geneli ad
+  // aramasından (GET /api/players?search=) eklenir.
   const playersQuery = useQuery({
     /* Lig sekmesiyle AYNI anahtar: uç her `sort` için aynı (≈1 MB) listeyi
        döndürür; ayrı anahtar aynı veriyi ikinci kez indiriyordu. */
@@ -316,16 +318,38 @@ export default function SearchScreen() {
       .slice(0, 50);
   }, [enough, needle, teamCity, teamsQuery.data]);
 
+  /* Uygulama geneli ad araması: her tuşta değil, yazma durunca gider. */
+  const [globalTerm, setGlobalTerm] = useState(query);
+  useEffect(() => {
+    const timer = setTimeout(() => setGlobalTerm(query), 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+  const globalEnough = globalTerm.length >= MIN_QUERY;
+  const globalQuery = useQuery({
+    queryKey: ["players", "search", fold(globalTerm)],
+    queryFn: () => searchPlayers(globalTerm, 50),
+    enabled: kind === "oyuncu" && globalEnough,
+    staleTime: 5 * 60_000,
+    placeholderData: (previous) => previous,
+  });
+
   const players = useMemo(() => {
     if (!enough) return [];
-    return (playersQuery.data?.players ?? [])
-      .filter(
-        (player) =>
-          fold(player.name ?? "").includes(needle) ||
-          fold(player.teamName ?? "").includes(needle),
-      )
-      .slice(0, 50);
-  }, [enough, needle, playersQuery.data]);
+    const scoped = (playersQuery.data?.players ?? []).filter(
+      (player) =>
+        fold(player.name ?? "").includes(needle) ||
+        fold(player.teamName ?? "").includes(needle),
+    );
+    const seen = new Set(scoped.map((player) => Number(player.id)));
+    const global: PlayerRankRow[] = [];
+    for (const player of globalEnough ? globalQuery.data ?? [] : []) {
+      const id = Number(player.id);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      global.push(playerSearchRow(player));
+    }
+    return [...scoped, ...global].slice(0, 50);
+  }, [enough, globalEnough, globalQuery.data, needle, playersQuery.data]);
 
   const openTeam = useCallback(
     (teamId: number) => {
@@ -447,9 +471,17 @@ export default function SearchScreen() {
     [needle, openPlayer, players.length],
   );
 
-  const activeQuery = kind === "takim" ? teamsQuery : playersQuery;
-  const loading = enough && activeQuery.isLoading;
-  const failed = enough && activeQuery.isError;
+  // Oyuncuda iki kaynak var: biri sonuç verdiyse liste gösterilir; ikisi de
+  // yükleniyorsa yükleniyor, ikisi de düştüyse hata.
+  const playerSources = [scope.ready ? playersQuery : null, globalQuery].filter(Boolean) as (typeof globalQuery | typeof playersQuery)[];
+  const activeQuery = kind === "takim" ? teamsQuery : playersQuery.isError || !scope.ready ? globalQuery : playersQuery;
+  const loading =
+    enough &&
+    (kind === "takim"
+      ? teamsQuery.isLoading
+      : players.length === 0 && (playerSources.some((source) => source.isLoading) || query !== globalTerm));
+  const failed =
+    enough && (kind === "takim" ? teamsQuery.isError : players.length === 0 && playerSources.every((source) => source.isError));
   const scopeLine = [scope.cityLabel, scope.leagueLabel, scope.seasonLabel].filter(Boolean).join(" · ");
 
   const placeholder = (
@@ -465,7 +497,7 @@ export default function SearchScreen() {
           ? teamCity
             ? `"${query}" aramasına uyan takım ${teamCity.label} ilinde yok. Tüm illerde aramayı dene.`
             : `"${query}" aramasına uyan takım yok. Yazımı kontrol et ya da daha kısa yaz.`
-          : `"${query}" bu kapsamın kadrolarında yok. Başka bir lig ya da sezonda olabilir.`
+          : `"${query}" adında oyuncu bulunamadı. Yazımı kontrol et ya da daha kısa yaz.`
       }
       emptyAction={
         kind === "oyuncu"
@@ -661,7 +693,7 @@ export default function SearchScreen() {
                   <IconTile icon="funnel" tone="cyan" size={36} glow={false} />
                   <View style={styles.rowBody}>
                     <Text style={styles.scopeLabel} {...textScale.badge}>
-                      KADROLARDA ARANIYOR
+                      ÖNCE BU KADROLAR · SONRA TÜM OYUNCULAR
                     </Text>
                     <Text style={styles.scopeValue} numberOfLines={1} {...textScale.dense}>
                       {scopeLine}
@@ -685,11 +717,11 @@ export default function SearchScreen() {
             ) : null
           }
           ListEmptyComponent={
-            !scope.ready ? (
+            !scope.ready && !enough ? (
               <EmptyState
                 icon="options-outline"
                 title="Lig seçilmedi"
-                body="Oyuncu araması seçili lig ve sezon kadrolarında yapılır."
+                body="Adını yazarak tüm oyuncularda arayabilirsin; lig seçersen o ligin kadroları önce gelir."
                 action={{ label: "Kapsam seç", onPress: () => openPicker("players", "city") }}
               />
             ) : enough ? (

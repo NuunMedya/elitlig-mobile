@@ -1,5 +1,5 @@
 import { get } from "../http";
-import type { ApiPlayer, PlayerListResponse, PlayerSort, Scope } from "../types";
+import type { ApiPlayer, PlayerListResponse, PlayerRankRow, PlayerSort, Scope } from "../types";
 
 /**
  * Oyuncu uçları — routes/OyuncuListesi.js ve routes/Players.js
@@ -42,3 +42,41 @@ export const getPlayer = async (id: number) => {
 /** Bir takımın kadrosu — Players listesi team_id ile süzülür. */
 export const getPlayersByCity = (city: string) =>
   get<ApiPlayer[]>(`/api/players/by-city/${encodeURIComponent(city)}`);
+
+/**
+ * Uygulama geneli oyuncu adı araması (routes/Players.js `GET /api/players?search=`).
+ * Sunucu adı Türkçe karakter/büyük harf farkı gözetmeden kelime başlarıyla
+ * eşler; sonuç `limit` (en çok 100) ile sınırlıdır.
+ */
+export const searchPlayers = (term: string, limit = 30) =>
+  get<ApiPlayer[]>("/api/players", { search: term.trim(), limit });
+
+/**
+ * Arama satırını sıralama satırı biçimine çevirir (kariyer toplamlarıyla);
+ * aynı liste bileşeni iki kaynağı birlikte çizebilsin diye.
+ */
+export const playerSearchRow = (player: ApiPlayer & { team_name?: string | null }): PlayerRankRow => {
+  const yellow = Number(player.total_yellow_cards ?? 0);
+  const red = Number(player.total_red_cards ?? 0);
+  const matches = Number(player.total_matches ?? 0);
+  const goals = Number(player.total_goals ?? 0);
+  const points = Number(player.total_points ?? 0);
+  return {
+    id: Number(player.id),
+    name: player.player_name ?? "",
+    image: player.player_img ?? null,
+    teamId: player.team_id ?? null,
+    teamName: player.team_name ?? null,
+    city: player.city ?? null,
+    cityId: player.city_id ?? null,
+    matches,
+    goals,
+    assists: 0,
+    yellow,
+    red,
+    cards: yellow + red,
+    points,
+    goalsPerMatch: matches ? goals / matches : 0,
+    pointsPerMatch: matches ? points / matches : 0,
+  };
+};

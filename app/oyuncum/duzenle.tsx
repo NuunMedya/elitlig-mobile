@@ -17,7 +17,7 @@ import { AuthCard, AuthNotice, AuthShell } from "@/components/account/AuthShell"
 import { CityPickerSheet } from "@/components/account/CityPickerSheet";
 import { ImagePickField } from "@/components/account/ImagePickField";
 import { PendingChangeNotice } from "@/components/account/PendingChangeNotice";
-import { Button, Chip, EmptyState, Input, SkeletonCard, useToast } from "@/components/ui";
+import { Button, Chip, EmptyState, ErrorState, Input, SkeletonCard, useToast } from "@/components/ui";
 import { getPanelMe } from "@/lib/api/panel";
 import {
   POSITION_LABELS,
@@ -177,6 +177,8 @@ export default function EditPlayerProfileScreen() {
   );
 
   if (meQuery.isLoading || (player && !form)) return shell(<SkeletonCard lines={6} />);
+  // Yükleme hatası "profil bağlı değil" sayılmaz: bağlı oyuncuya yeniden bağlama önerilmesin.
+  if (meQuery.isError && !meQuery.data) return shell(<ErrorState error={meQuery.error} onRetry={meQuery.refetch} />);
   if (!player || !form) {
     return shell(
       <EmptyState

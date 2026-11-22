@@ -72,11 +72,19 @@ export const CHANGE_LABELS: Record<string, string> = {
   sponsor_update: "Sponsor alanı güncellemesi",
 };
 
-/** Kulübün gönderdiği teklifler — yalnız SAYAÇ için, en dar tiple. */
-const getOfferOutbox = () =>
-  get<{ items: { id: number; status: string }[]; totalItems: number }>("/api/transfer-offers/outbox", {
-    limit: 100,
-  });
+/**
+ * Kulübün gönderdiği, sonuçlanmamış tekliflerin SAYISI. Her açık durum için
+ * sunucunun `totalItems` değeri okunur (tek satırlık sayfa); ilk 100 kayda
+ * bakmak, çok teklif gönderen kulüpte sayacı eksik gösteriyordu.
+ */
+const getOfferOutbox = async () => {
+  const pages = await Promise.all(
+    [...ACTIVE_OFFER_STATUSES].map((status) =>
+      get<{ totalItems?: number; items?: unknown[] }>("/api/transfer-offers/outbox", { status, limit: 1 }),
+    ),
+  );
+  return { open: pages.reduce((sum, page) => sum + Number(page.totalItems ?? page.items?.length ?? 0), 0) };
+};
 
 /** Süre penceresi açık mı: son tarih var VE henüz geçmemiş. */
 const windowOpen = (deadline: string | null): boolean =>
@@ -147,7 +155,7 @@ export function useClubSignals() {
   const managed = team != null;
 
   const offersOut = useQuery({
-    queryKey: ["takim", "offers-outbox"],
+    queryKey: ["takim", "offers-outbox", "open-count"],
     queryFn: getOfferOutbox,
     enabled: managed,
     staleTime: 60_000,
@@ -264,7 +272,7 @@ export function useClubSignals() {
       /** Oyuncuya gelen kadro davetleri. */
       invitesReceived: isPlayer ? pending(inbox, "invite") : 0,
       /** Kulübün açık transfer teklifleri. */
-      offersOpen: (offersOut.data?.items ?? []).filter((item) => ACTIVE_OFFER_STATUSES.has(item.status)).length,
+      offersOpen: offersOut.data?.open ?? 0,
       /** Oyuncunun yanıtlaması gereken teklifler. */
       offersAwaiting: (offersIn.data?.items ?? []).filter((item) => item.status === "SENT").length,
       /** Savunma/itiraz süresi açık disiplin dosyaları. */

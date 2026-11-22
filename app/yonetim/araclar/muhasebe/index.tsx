@@ -55,7 +55,6 @@ import {
   todayKey,
   visibleSections,
 } from "@/lib/api/admin/accounting";
-import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, hairline, layout, radius, space, textScale, touchSlop, type, upperTR } from "@/theme";
 
@@ -126,12 +125,7 @@ export default function AccountingHubScreen() {
   };
   const openLedger = (yeni?: "income" | "expense") => router.push((yeni ? { pathname: LEDGER_ROUTE, params: { yeni } } : LEDGER_ROUTE) as never);
 
-  const financeError =
-    finance.error instanceof ApiError && finance.error.status === 404
-      ? "Hesaplar ve Virman için sunucu güncellemesi henüz yayında değil."
-      : finance.error
-        ? errorText(finance.error)
-        : null;
+  const financeError = finance.error ? errorText(finance.error) : null;
 
   return (
     <AdminScreen

@@ -1,5 +1,5 @@
 import { del, get, post } from "../http";
-import type { Paged, TransferOffer } from "./panel";
+import type { TransferOffer } from "./panel";
 
 /**
  * Takım tarafı transfer uçları — routes/transferOffers.js, routes/transferMarket.js.
@@ -49,9 +49,6 @@ export interface OutboxOffer extends TransferOffer {
   player?: { id: number; player_name: string; player_img: string | null } | null;
   release_status?: "PENDING" | "APPROVED" | "REJECTED" | null;
 }
-
-export const getOfferOutbox = (page = 1) =>
-  get<Paged<OutboxOffer>>("/api/transfer-offers/outbox", { page, limit: 50 });
 
 /** Serbest kalma izni — yalnız oyuncunun mevcut takımının yöneticisi. */
 export const decideRelease = (publicId: string, decision: "approve" | "reject", note = "") =>

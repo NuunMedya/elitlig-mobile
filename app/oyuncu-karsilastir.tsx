@@ -46,7 +46,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -69,7 +69,7 @@ import {
 } from "@/components/ui";
 import { DUEL_A, DUEL_B, DuelBar, DuelScore, HaloFrame, duelWinner } from "@/components/teampage/ProfileKit";
 import { CompareShare } from "@/components/share/CompareShare";
-import { getPlayer, getPlayerRankings } from "@/lib/api/players";
+import { getPlayer, getPlayerRankings, playerSearchRow, searchPlayers } from "@/lib/api/players";
 import { positionLabel } from "@/lib/api/team";
 import { getTeam } from "@/lib/api/teams";
 import { get } from "@/lib/http";
@@ -703,13 +703,37 @@ function PlayerPicker({
   const needle = fold(term.trim());
   const searching = needle.length >= MIN_QUERY;
 
+  /* Kapsam dışındaki oyuncular da seçilebilsin: yazma durunca uygulama geneli
+     ad araması (GET /api/players?search=) kapsam sonuçlarının arkasına eklenir. */
+  const [globalTerm, setGlobalTerm] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setGlobalTerm(term.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [term]);
+  const globalSearching = globalTerm.length >= MIN_QUERY;
+  const globalQuery = useQuery({
+    queryKey: ["players", "search", fold(globalTerm)],
+    queryFn: () => searchPlayers(globalTerm, 50),
+    enabled: visible && globalSearching,
+    staleTime: 5 * 60_000,
+    placeholderData: (previous) => previous,
+  });
+
   const list = useMemo(() => {
     const pool = (players ?? []).filter((row) => Number(row.id) !== excludeId);
     if (!searching) return pool.slice(0, TOP_COUNT);
-    return pool
-      .filter((row) => fold(row.name ?? "").includes(needle) || fold(row.teamName ?? "").includes(needle))
-      .slice(0, 50);
-  }, [excludeId, needle, players, searching]);
+    const scoped = pool.filter((row) => fold(row.name ?? "").includes(needle) || fold(row.teamName ?? "").includes(needle));
+    const seen = new Set<number>([...scoped.map((row) => Number(row.id)), ...(excludeId ? [excludeId] : [])]);
+    const global: PlayerRankRow[] = [];
+    for (const player of globalSearching ? globalQuery.data ?? [] : []) {
+      const id = Number(player.id);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      global.push(playerSearchRow(player));
+    }
+    return [...scoped, ...global].slice(0, 50);
+  }, [excludeId, globalQuery.data, globalSearching, needle, players, searching]);
+  const globalPending = searching && list.length === 0 && (globalQuery.isLoading || fold(globalTerm) !== needle);
 
   const close = useCallback(() => {
     setTerm("");
@@ -745,12 +769,14 @@ function PlayerPicker({
             {upperTR("Kapsamın en değerlileri")}
           </Text>
         ) : null}
-        {!scopeReady ? (
-          <EmptyState variant="inline" compact icon="location-outline" title="Kapsam seçilmedi" body="Oyuncu listesi seçili şehir ve ligden gelir." />
-        ) : loading ? (
+        {!scopeReady && !searching ? (
+          <EmptyState variant="inline" compact icon="location-outline" title="Kapsam seçilmedi" body="Adını yazarak tüm oyuncularda arayabilirsin; öneriler seçili şehir ve ligden gelir." />
+        ) : (searching ? globalPending : loading) ? (
           <SkeletonCard lines={5} />
-        ) : error ? (
+        ) : error && !searching ? (
           <ErrorState variant="inline" error={error} onRetry={onRetry} />
+        ) : searching && list.length === 0 && globalQuery.isError ? (
+          <ErrorState variant="inline" error={globalQuery.error} onRetry={globalQuery.refetch} />
         ) : (
           <FlatList
             data={list}
@@ -766,7 +792,7 @@ function PlayerPicker({
                 compact
                 icon="search-outline"
                 title="Oyuncu bulunamadı"
-                body="Bu kapsamda eşleşen oyuncu yok."
+                body="Bu ada uyan oyuncu yok. Yazımı kontrol et ya da daha kısa yaz."
               />
             }
           />
