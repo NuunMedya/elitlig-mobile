@@ -98,7 +98,7 @@ function insertEntry(rack: Entry[], e: Entry): Entry[] {
 
 /* ───────────────────────────── oyun ───────────────────────────── */
 
-export function UcleGame({ level, maxWidth, maxHeight, preBoosters, boosterStock, useBooster, onFinish, paused }: PuzzleGameProps) {
+export function UcleGame({ level, maxWidth, maxHeight, preBoosters, boosterStock, useBooster, onFinish, paused, onPause }: PuzzleGameProps) {
   const lvl = useMemo(() => generateUcleLevel(level), [level]);
   const rackSize = UCLE_RACK + (preBoosters.includes("raf") ? 1 : 0);
 
@@ -553,6 +553,7 @@ export function UcleGame({ level, maxWidth, maxHeight, preBoosters, boosterStock
         extraRack={rackSize > UCLE_RACK}
         compact={compact}
         still={still}
+        onPause={onPause}
       />
       <View style={[styles.stage, { height: stageH, marginTop: gapV }]}>
         {/* Tahta çerçevesi: çim keçe + ahşap kenar; tahta içine ortalanır. */}

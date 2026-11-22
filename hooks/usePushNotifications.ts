@@ -21,7 +21,7 @@ import { markDelivered, markRemotePushSeen } from "@/lib/notificationLedger";
 import {
   isRemoteNotification,
   notificationIdFromNotif,
-  routeFromNotif,
+  tapTargetFromNotif,
   setupNotificationHandlers,
 } from "@/lib/notifications";
 import { useAuth } from "@/providers/AuthProvider";
@@ -73,7 +73,7 @@ export function usePushNotifications() {
     const openFrom = (data: Record<string, unknown> | undefined, key: string) => {
       if (!data || lastHandled.current === key) return;
       lastHandled.current = key;
-      const target = routeFromNotif(data, { isManagement });
+      const target = tapTargetFromNotif(data, { isManagement, signedIn });
       if (target) router.push(target as never);
     };
 
@@ -130,5 +130,5 @@ export function usePushNotifications() {
       listenerRef.current?.remove?.();
       receivedRef.current?.remove?.();
     };
-  }, [initializing, isManagement]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [initializing, isManagement, signedIn]); // eslint-disable-line react-hooks/exhaustive-deps
 }

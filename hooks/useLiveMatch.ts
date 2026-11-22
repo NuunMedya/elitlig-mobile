@@ -75,6 +75,10 @@ export function useLiveMatch(matchId: number | null, enabled: boolean) {
     socket.on("disconnect", () => setSocketConnected(false));
     socket.on("connect_error", () => setSocketConnected(false));
     RESNAPSHOT_EVENTS.forEach((eventName) => socket.on(eventName, invalidate));
+    // İstatistikler maç ayrıntısından da okunur: yalnız anlık görüntü değil o da tazelenir.
+    socket.on(SOCKET_EVENTS.STATS_UPDATED, () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.match(matchId) });
+    });
 
     return () => {
       if (socket.connected) socket.emit(SOCKET_EVENTS.LEAVE_MATCH, { matchId });

@@ -44,5 +44,14 @@ export function isWebRtcAvailable(): boolean {
   return loadWebRtc() !== null;
 }
 
+/**
+ * Hoparlör / kulaklık geçişi yerel bir ses yönlendirme modülü ister
+ * (react-native-incall-manager). Derlemede yoksa düğme hiç gösterilmez;
+ * işlevsiz bir düğme yerine ses sistemin varsayılan çıkışından gelir.
+ */
+export function isSpeakerControlAvailable(): boolean {
+  return Boolean(loadWebRtc()?.InCallManager);
+}
+
 export const WEBRTC_UNAVAILABLE_MESSAGE =
   "Sesli arama için uygulamanın güncel sürümü gerekiyor. Mağazadan güncelledikten sonra tekrar deneyin.";

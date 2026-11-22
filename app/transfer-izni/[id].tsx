@@ -23,7 +23,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Alert, StyleSheet, Text, View } from "react-native";
 
@@ -41,8 +42,8 @@ import {
   type Tone,
 } from "@/components/ui";
 import { isReleaseRequest } from "@/lib/api/club/notifications";
-import { getPanelNotifications, markNotifRead } from "@/lib/api/panel";
-import { decideRelease } from "@/lib/api/transfers";
+import { getPanelNotificationsByPrefix, markNotifRead } from "@/lib/api/panel";
+import { decideRelease, getReleaseStatus } from "@/lib/api/transfers";
 import { queryKeys } from "@/lib/queryKeys";
 import { ApiError } from "@/lib/http";
 import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
@@ -54,13 +55,58 @@ export default function ReleaseDecisionScreen() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [note, setNote] = useState("");
-  const [done, setDone] = useState<"approve" | "reject" | null>(null);
+  /* "closed": karar başka yerden verilmiş (409) — kim, ne karar verdi bilinmez. */
+  const [done, setDoneState] = useState<"approve" | "reject" | "closed" | null>(null);
   const [choice, setChoice] = useState<"approve" | "reject" | null>(null);
 
-  /* Kulübüm ve Transfer masasıyla ORTAK anahtar — ikinci istek atılmaz. */
+  /* Karar bu cihazda da saklanır: sunucunun izin durumu ucu
+     (GET /api/transfer-offers/:id/release) henüz yayında olmayan sunucuda
+     ekran yeniden açılınca verilen karar yine görünsün. */
+  const storeKey = `elitlig.release.decided.v1.${offerId}`;
+  useEffect(() => {
+    let alive = true;
+    AsyncStorage.getItem(storeKey)
+      .then((value) => {
+        if (alive && (value === "approve" || value === "reject" || value === "closed")) setDoneState(value);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [storeKey]);
+  const setDone = useCallback(
+    (value: "approve" | "reject" | "closed") => {
+      setDoneState(value);
+      AsyncStorage.setItem(storeKey, value).catch(() => undefined);
+    },
+    [storeKey],
+  );
+
+  /* Sunucudaki gerçek durum: başka yerden (lig yönetimi, diğer yönetici)
+     verilmiş karar ekran açılır açılmaz görünür. Eski sunucu 404 döner;
+     o zaman yerel kayıt ve 409 yolu geçerli kalır. */
+  const status = useQuery({
+    queryKey: ["club", "release-status", offerId],
+    queryFn: () => getReleaseStatus(offerId),
+    enabled: Boolean(offerId),
+    staleTime: 15_000,
+    retry: false,
+  });
+  useEffect(() => {
+    const release = status.data;
+    if (!release) return;
+    const stillOpen = release.release_status === "PENDING" && ["SENT", "REVISION_REQUESTED", "DRAFT"].includes(release.offer_status);
+    if (stillOpen) return;
+    if (release.decided_by_me && release.release_status === "APPROVED") setDoneState("approve");
+    else if (release.decided_by_me && release.release_status === "REJECTED") setDoneState("reject");
+    else setDoneState((current) => current ?? "closed");
+  }, [status.data]);
+
+  /* Yalnız izin bildirimleri istenir: eski bir talep ilk 50 bildirimin
+     dışında kalsa da özeti bulunur. */
   const notifications = useQuery({
-    queryKey: ["club", "notifications"],
-    queryFn: () => getPanelNotifications(1),
+    queryKey: ["club", "notifications", "release"],
+    queryFn: () => getPanelNotificationsByPrefix("TRANSFER_RELEASE_"),
     staleTime: 30_000,
     retry: false,
   });
@@ -68,7 +114,11 @@ export default function ReleaseDecisionScreen() {
     () => (notifications.data?.items ?? []).filter((item) => isReleaseRequest(item) && item.entity_public_id === offerId),
     [notifications.data, offerId],
   );
-  const summary = related[0]?.description ?? null;
+  const serverSummary =
+    status.data?.offering_team?.name && status.data?.player?.name
+      ? `${status.data.offering_team.name}, ${status.data.player.name} için transfer teklifi verdi. Oyuncu teklifi ancak senin ya da lig yönetiminin izniyle kabul edebilir.`
+      : null;
+  const summary = related[0]?.description ?? serverSummary;
 
   /** Bu teklifin izin bildirimlerini kapat, işi gösteren her listeyi tazele. */
   const settle = useCallback(async () => {
@@ -82,6 +132,7 @@ export default function ReleaseDecisionScreen() {
     mutationFn: (decision: "approve" | "reject") => decideRelease(offerId, decision, note.trim()),
     onSuccess: (data, decision) => {
       setDone(decision);
+      void queryClient.invalidateQueries({ queryKey: ["club", "release-status", offerId] });
       toast.show({
         message: data?.message || (decision === "approve" ? "İzin verildi." : "İzin verilmedi."),
         tone: decision === "approve" ? "success" : "neutral",
@@ -90,7 +141,10 @@ export default function ReleaseDecisionScreen() {
     },
     onError: (error) => {
       // Karar başka yerden (lig yönetimi, diğer yönetici) verilmiş: iş kapanmıştır.
-      if (error instanceof ApiError && error.status === 409) void settle();
+      if (error instanceof ApiError && error.status === 409) {
+        setDone("closed");
+        void settle();
+      }
     },
   });
 
@@ -132,8 +186,8 @@ export default function ReleaseDecisionScreen() {
         <StageCard style={styles.hero}>
           <View style={styles.heroTop}>
             <IconTile
-              icon={done === "approve" ? "lock-open" : done === "reject" ? "lock-closed" : "swap-horizontal"}
-              tone={done === "approve" ? "mint" : done === "reject" ? "red" : "gold"}
+              icon={done === "approve" ? "lock-open" : done === "reject" ? "lock-closed" : done === "closed" ? "checkmark-done" : "swap-horizontal"}
+              tone={done === "approve" ? "mint" : done === "reject" ? "red" : done === "closed" ? "cyan" : "gold"}
               size={44}
             />
             <View style={styles.heroText}>
@@ -141,7 +195,7 @@ export default function ReleaseDecisionScreen() {
                 {upperTR("Serbest kalma izni")}
               </Text>
               <Text style={styles.heroTitle} {...textScale.dense}>
-                {done === "approve" ? "İzin verdin" : done === "reject" ? "İzin vermedin" : "Kararını bekliyor"}
+                {done === "approve" ? "İzin verdin" : done === "reject" ? "İzin vermedin" : done === "closed" ? "Karar verilmiş" : "Kararını bekliyor"}
               </Text>
             </View>
           </View>
@@ -191,11 +245,13 @@ export default function ReleaseDecisionScreen() {
       {done ? (
         <Reveal index={1} style={styles.stack}>
           <AuthNotice
-            tone={done === "approve" ? "success" : "danger"}
+            tone={done === "reject" ? "danger" : "success"}
             message={
               done === "approve"
                 ? "İzin verdin. Oyuncu artık teklifi kabul edip etmemeye kendisi karar verebilir."
-                : "İzin vermedin. Teklif sahibi takım ve oyuncu bilgilendirildi."
+                : done === "closed"
+                  ? "Bu teklif için karar zaten verilmiş ya da teklif artık geçerli değil. Yeni bir işlem gerekmiyor."
+                  : "İzin vermedin. Teklif sahibi takım ve oyuncu bilgilendirildi."
             }
           />
           <Button label="Kulübüme dön" variant="secondary" icon="arrow-back" onPress={() => router.replace("/(tabs)/kulubum")} size="lg" fullWidth />

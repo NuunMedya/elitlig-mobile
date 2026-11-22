@@ -64,7 +64,6 @@ import {
   type FinanceAccountsResponse,
   type FinanceTransfer,
 } from "@/lib/api/admin/accounting";
-import { ApiError } from "@/lib/http";
 import { colors, hairline, radius, space, textScale, touchSlop, type } from "@/theme";
 
 const KEY = ["admin", "finance"] as const;
@@ -157,8 +156,7 @@ export default function AccountsScreen() {
     ];
   };
 
-  const loadError =
-    query.error instanceof ApiError && query.error.status === 404 ? "Hesaplar ve Virman için sunucu güncellemesi henüz yayında değil." : query.error ? errorText(query.error) : null;
+  const loadError = query.error ? errorText(query.error) : null;
 
   return (
     <AdminScreen

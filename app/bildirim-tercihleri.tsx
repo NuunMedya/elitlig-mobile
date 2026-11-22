@@ -41,7 +41,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { Linking, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Linking, Platform, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -77,7 +77,9 @@ import type {
   NotificationPreferenceItem,
   NotificationPreferences,
 } from "@/lib/api/notifications";
-import { preferenceSections } from "@/lib/api/notifications";
+import { preferenceSections, sendServerTestPush } from "@/lib/api/notifications";
+import { ApiError } from "@/lib/http";
+import { CHANNELS } from "@/lib/notifications";
 import {
   pushStatusTone,
   serverSyncMessage,
@@ -295,6 +297,50 @@ export default function NotificationPreferencesScreen() {
         return;
       }
 
+      /* 1) Girişliyken önce GERÇEK push zinciri denenir: sunucu → Expo →
+         FCM/APNs → bu telefon. Uygulama kapalıyken bildirimin gelip
+         gelmeyeceğini yalnız bu test gösterir. */
+      if (signedIn) {
+        let token: string | null = null;
+        try {
+          const Constants = (await import("expo-constants")).default;
+          const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+          if (projectId) token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+        } catch {
+          token = null; // Expo Go / Firebase eksik: yerel teste düşülür
+        }
+        if (token) {
+          try {
+            const result = await sendServerTestPush(token);
+            if (result.sent > 0) {
+              toast.show({
+                message:
+                  "Sunucudan test bildirimi gönderildi; birkaç saniye içinde gelmeli. Gelirse uygulama kapalıyken de bildirimler gelir.",
+                tone: "success",
+              });
+            } else {
+              toast.show({
+                message:
+                  "Sunucu bildirimi gönderemedi (push hizmeti reddetti). Uygulama kapalıyken bildirim gelmeyebilir; uygulamayı güncelleyip yeniden dene.",
+                tone: "danger",
+              });
+            }
+            return;
+          } catch (error) {
+            if (error instanceof ApiError && error.status === 429) {
+              toast.show({ message: error.hasServerReason ? error.message : "Az sonra yeniden dene.", tone: "warn" });
+              return;
+            }
+            if (error instanceof ApiError && error.code === "PUSH_TOKEN_NOT_REGISTERED") {
+              toast.show({ message: error.message, tone: "warn" });
+              return;
+            }
+            // Sunucu bu ucu henüz bilmiyor ya da ağ yok: telefon testine düşülür.
+          }
+        }
+      }
+
+      /* 2) Yalnız telefon testi: izin ve kanal ayarını sınar. */
       await Notifications.scheduleNotificationAsync({
         content: {
           title: "Elitlig test bildirimi",
@@ -303,11 +349,14 @@ export default function NotificationPreferencesScreen() {
           // uygulama normal açılışını yapar, bu doğru davranıştır.
           data: { kind: "test" },
         },
-        trigger: null,
+        // Android'de kanal açıkça verilir: verilmezse Expo'nun yedek kanalına
+        // düşer ve kullanıcının "Panel Bildirimleri" kanal ayarı sınanmamış olur.
+        trigger: Platform.OS === "android" ? { channelId: CHANNELS.PANEL.id } : null,
       });
 
       toast.show({
-        message: "Test bildirimi gönderildi. Bildirim gölgesini kontrol et.",
+        message:
+          "Telefon testi gösterildi. Görünüyorsa izin ve kanal ayarı sağlam; uygulama kapalıyken gelen bildirimler ayrıca sunucu kaydına bağlıdır (üstteki durum satırı).",
         tone: "success",
       });
     } catch {
@@ -319,7 +368,7 @@ export default function NotificationPreferencesScreen() {
     } finally {
       setTesting(false);
     }
-  }, [toast]);
+  }, [signedIn, toast]);
 
   const goToSignIn = useCallback(() => router.push("/giris"), [router]);
   const openFollowSettings = useCallback(() => router.push("/takip-bildirimleri"), [router]);
@@ -503,7 +552,7 @@ export default function NotificationPreferencesScreen() {
                 kayıt telefonda gösterilir. Uygulama tamamen kapalıyken yalnız push bildirimi çalışır.
               </Text>
               <Button
-                label="Test bildirimi gönder"
+                label={signedIn ? "Test bildirimi gönder" : "Telefonda test bildirimi göster"}
                 onPress={sendTestNotification}
                 loading={testing}
                 size="sm"

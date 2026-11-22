@@ -28,6 +28,7 @@ export * from "./fonts";
 export * from "./space";
 export * from "./elevation";
 export * from "./motion";
+export * from "./intro";
 
 /** Kullanıcı tercihi (güneş/ay düğmesi) varsa o, yoksa sistem teması. */
 const override = getStoredTheme();

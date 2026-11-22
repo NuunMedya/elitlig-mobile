@@ -32,6 +32,10 @@
  * gibi "az olan iyi" metrikler ters sayılır. Her kartın başlığında kartın
  * kendi skoru durur.
  *
+ * PAYLAŞ: iki oyuncu yüklenince başlığın sağ üstünde "share-outline" ikonu
+ * paylaşım stüdyosunu (`components/share/CompareShare`) açar — Düello ·
+ * Radar · Kim önde?. Kapsam kartı varsa onun satırları, yoksa kariyer.
+ *
  * SEÇİCİ NEDEN SIRALAMA LİSTESİ: `app/ara.tsx` oyuncu aramasını aynı uçla
  * yapıyor (sunucu kapsamsız tam oyuncu listesi vermiyor). Aynı önbellek
  * anahtarı kullanıldığı için arama ekranından gelen kullanıcıda istek atılmaz.
@@ -42,7 +46,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -64,7 +68,8 @@ import {
   type IconTileTone,
 } from "@/components/ui";
 import { DUEL_A, DUEL_B, DuelBar, DuelScore, HaloFrame, duelWinner } from "@/components/teampage/ProfileKit";
-import { getPlayer, getPlayerRankings } from "@/lib/api/players";
+import { CompareShare } from "@/components/share/CompareShare";
+import { getPlayer, getPlayerRankings, playerSearchRow, searchPlayers } from "@/lib/api/players";
 import { positionLabel } from "@/lib/api/team";
 import { getTeam } from "@/lib/api/teams";
 import { get } from "@/lib/http";
@@ -271,6 +276,7 @@ export default function PlayerCompareScreen() {
     b: parseId(params.b),
   }));
   const [picking, setPicking] = useState<Side | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const sideA = usePlayerSide(ids.a);
   const sideB = usePlayerSide(ids.b);
@@ -355,6 +361,26 @@ export default function PlayerCompareScreen() {
   const totalTally = useMemo(() => tally([...career, ...(scopeList ?? [])]), [career, scopeList]);
   const showScore = ready && !loading && Boolean(playerA && playerB);
 
+  /* Paylaşım görseli: kapsam satırları varsa onlar (asist dahil, "bu sezon"),
+     yoksa kariyer satırları — ekranda görünen kartın aynısı. */
+  const shareData = useMemo(() => {
+    if (!showScore) return null;
+    const side = (player: ApiPlayer | null, row: PlayerRankRow | null, name: string, team: { team_name?: string | null; logo?: string | null } | undefined) => ({
+      name,
+      image: player?.player_img ?? row?.image ?? null,
+      crest: team?.logo ?? null,
+      sub: team?.team_name ?? row?.teamName ?? null,
+      role: positionLabel(player?.player_position) || null,
+    });
+    return {
+      kind: "player" as const,
+      a: side(playerA, rowA, nameA, sideA.teamQuery.data),
+      b: side(playerB, rowB, nameB, sideB.teamQuery.data),
+      metrics: scopeList ?? career,
+      caption: scopeList ? [scope.leagueLabel, scope.seasonLabel].filter(Boolean).join(" · ") || "Bu kapsamda" : "Kariyer",
+    };
+  }, [career, nameA, nameB, playerA, playerB, rowA, rowB, scope.leagueLabel, scope.seasonLabel, scopeList, showScore, sideA.teamQuery.data, sideB.teamQuery.data]);
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
@@ -362,6 +388,11 @@ export default function PlayerCompareScreen() {
         overline="KARŞILAŞTIRMA"
         scrollY={scrollY}
         back
+        actions={
+          shareData
+            ? [{ icon: "share-outline", onPress: () => setShareOpen(true), accessibilityLabel: "Karşılaştırmayı görsel olarak paylaş" }]
+            : undefined
+        }
       />
 
       <ScrollView
@@ -461,6 +492,8 @@ export default function PlayerCompareScreen() {
           </>
         )}
       </ScrollView>
+
+      {shareData ? <CompareShare visible={shareOpen} onClose={() => setShareOpen(false)} data={shareData} /> : null}
 
       <PlayerPicker
         visible={picking != null}
@@ -670,13 +703,37 @@ function PlayerPicker({
   const needle = fold(term.trim());
   const searching = needle.length >= MIN_QUERY;
 
+  /* Kapsam dışındaki oyuncular da seçilebilsin: yazma durunca uygulama geneli
+     ad araması (GET /api/players?search=) kapsam sonuçlarının arkasına eklenir. */
+  const [globalTerm, setGlobalTerm] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setGlobalTerm(term.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [term]);
+  const globalSearching = globalTerm.length >= MIN_QUERY;
+  const globalQuery = useQuery({
+    queryKey: ["players", "search", fold(globalTerm)],
+    queryFn: () => searchPlayers(globalTerm, 50),
+    enabled: visible && globalSearching,
+    staleTime: 5 * 60_000,
+    placeholderData: (previous) => previous,
+  });
+
   const list = useMemo(() => {
     const pool = (players ?? []).filter((row) => Number(row.id) !== excludeId);
     if (!searching) return pool.slice(0, TOP_COUNT);
-    return pool
-      .filter((row) => fold(row.name ?? "").includes(needle) || fold(row.teamName ?? "").includes(needle))
-      .slice(0, 50);
-  }, [excludeId, needle, players, searching]);
+    const scoped = pool.filter((row) => fold(row.name ?? "").includes(needle) || fold(row.teamName ?? "").includes(needle));
+    const seen = new Set<number>([...scoped.map((row) => Number(row.id)), ...(excludeId ? [excludeId] : [])]);
+    const global: PlayerRankRow[] = [];
+    for (const player of globalSearching ? globalQuery.data ?? [] : []) {
+      const id = Number(player.id);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      global.push(playerSearchRow(player));
+    }
+    return [...scoped, ...global].slice(0, 50);
+  }, [excludeId, globalQuery.data, globalSearching, needle, players, searching]);
+  const globalPending = searching && list.length === 0 && (globalQuery.isLoading || fold(globalTerm) !== needle);
 
   const close = useCallback(() => {
     setTerm("");
@@ -712,12 +769,14 @@ function PlayerPicker({
             {upperTR("Kapsamın en değerlileri")}
           </Text>
         ) : null}
-        {!scopeReady ? (
-          <EmptyState variant="inline" compact icon="location-outline" title="Kapsam seçilmedi" body="Oyuncu listesi seçili şehir ve ligden gelir." />
-        ) : loading ? (
+        {!scopeReady && !searching ? (
+          <EmptyState variant="inline" compact icon="location-outline" title="Kapsam seçilmedi" body="Adını yazarak tüm oyuncularda arayabilirsin; öneriler seçili şehir ve ligden gelir." />
+        ) : (searching ? globalPending : loading) ? (
           <SkeletonCard lines={5} />
-        ) : error ? (
+        ) : error && !searching ? (
           <ErrorState variant="inline" error={error} onRetry={onRetry} />
+        ) : searching && list.length === 0 && globalQuery.isError ? (
+          <ErrorState variant="inline" error={globalQuery.error} onRetry={globalQuery.refetch} />
         ) : (
           <FlatList
             data={list}
@@ -733,7 +792,7 @@ function PlayerPicker({
                 compact
                 icon="search-outline"
                 title="Oyuncu bulunamadı"
-                body="Bu kapsamda eşleşen oyuncu yok."
+                body="Bu ada uyan oyuncu yok. Yazımı kontrol et ya da daha kısa yaz."
               />
             }
           />

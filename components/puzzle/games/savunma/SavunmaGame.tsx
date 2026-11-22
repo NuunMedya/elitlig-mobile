@@ -21,6 +21,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { useGameRoster } from "@/components/game/useGameRoster";
+import { OVERLAY_PAUSE } from "@/components/game/HudPauseButton";
+import { useLevelArenaScore } from "@/components/game/useLevelArenaScore";
 import { WebGame, type GameCommand, type GameOverPayload, type WebGameHandle } from "@/components/game/WebGame";
 import { Touchable, useReduceMotion } from "@/components/ui";
 import { STAGE_COMMON } from "@/lib/puzzle/stagePalette";
@@ -31,8 +33,11 @@ import { fonts, radius, textScale, touchSlop, type } from "@/theme";
 
 /** Arena oyunlarının ortak ses tercihi (ArenaGameScreen ile aynı anahtar). */
 const SOUND_KEY = "elitlig.arena.sound.v1";
-/** Oyun HUD'unun sağ üstte boş bıraktığı köşe: canlı güçlendirici düğmesi orada. */
-const HUD_INSET = { top: 52, right: 60 };
+/**
+ * Oyun HUD'unun sağ üstte boş bıraktığı köşe: en sağda çerçevenin durdur
+ * düğmesi, solunda canlı güçlendirici düğmesi (ikisi bir sırada).
+ */
+const HUD_INSET = { top: 52, right: OVERLAY_PAUSE.right + OVERLAY_PAUSE.size * 2 + 16 };
 const LIVE_BOOSTER = "duvar";
 
 /** Bölüm modu komutları (WebGame'in GameCommand birleşimine henüz girmedi). */
@@ -46,6 +51,7 @@ type LevelCommand =
       reduceMotion?: boolean;
       roster?: Record<string, unknown> | null;
       hudInset?: { top: number; right: number };
+      safeArea?: { top: number; bottom: number };
     }
   | { type: "booster"; key: string }
   | { type: "continue"; extra?: Record<string, unknown> }
@@ -54,16 +60,24 @@ type LevelCommand =
 /** Reklamla devamın ödülü (oyun: +1 hak, golün geldiği koridor temizlenir). */
 const CONTINUE_EXTRA = "+1 hak";
 
-export function SavunmaGame({ level, maxWidth, maxHeight, preBoosters, boosterStock, useBooster, onFinish, paused, requestContinue }: PuzzleGameProps) {
+export function SavunmaGame({ level, maxWidth, maxHeight, preBoosters, boosterStock, useBooster, onFinish, paused, requestContinue, safeArea, sound: soundProp }: PuzzleGameProps) {
   const web = useRef<WebGameHandle>(null);
+  /* Bölüm skoru arena tablosuna da gider (haftalık görevler + sıralama). */
+  const arenaScore = useLevelArenaScore("savunma");
   const reduceMotion = useReduceMotion();
   const auth = useAuth();
   const scope = useScope();
   const { roster } = useGameRoster("savunma", scope.cityId ?? null, auth.user?.player_id ?? null);
-  const [sound, setSound] = useState(true);
+  /* Ses: çerçevenin mola kartındaki tercih (yoksa kayıtlı tercih). */
+  const [savedSound, setSound] = useState(true);
+  const sound = soundProp ?? savedSound;
   const [ready, setReady] = useState(false);
   const started = useRef(false);
   const finished = useRef(false);
+
+  /* Tam ekran: sahne kenardan kenara, HUD güvenli alanın içinde (games/core.js safeArea). */
+  const safeTop = Math.round(safeArea?.top ?? 0);
+  const safeBottom = Math.round(safeArea?.bottom ?? 0);
 
   const send = useCallback((cmd: LevelCommand | GameCommand) => {
     web.current?.send(cmd as GameCommand);
@@ -78,12 +92,13 @@ export function SavunmaGame({ level, maxWidth, maxHeight, preBoosters, boosterSt
   /* İlk config + start (bir kez); sonra ses / hareket / kadro değişince yalnız config. */
   useEffect(() => {
     if (!ready) return;
-    send({ type: "config", levelMode: true, level, boosters: preBoosters, sound, reduceMotion, roster, hudInset: HUD_INSET });
+    send({ type: "config", levelMode: true, level, boosters: preBoosters, sound, reduceMotion, roster, hudInset: HUD_INSET, safeArea: { top: safeTop, bottom: safeBottom } });
     if (!started.current) {
       started.current = true;
       send({ type: "start" });
+      arenaScore.begin();
     }
-  }, [ready, level, preBoosters, sound, reduceMotion, roster, send]);
+  }, [ready, level, preBoosters, sound, reduceMotion, roster, safeTop, safeBottom, send]);
 
   /* Çerçevenin mola / mağaza / sonuç pencereleri oyunu durdurur. */
   useEffect(() => {
@@ -94,6 +109,7 @@ export function SavunmaGame({ level, maxWidth, maxHeight, preBoosters, boosterSt
     (payload: GameOverPayload) => {
       if (finished.current) return;
       finished.current = true;
+      arenaScore.submit(payload);
       const won = payload.stats.won === 1;
       const stars = (won ? Math.max(1, Math.min(3, Math.round(payload.stats.stars || 1))) : 0) as PuzzleResult["stars"];
       const conceded = payload.stats.conceded ?? 0;
@@ -103,7 +119,7 @@ export function SavunmaGame({ level, maxWidth, maxHeight, preBoosters, boosterSt
         : `Savunma ${payload.stats.wave ?? 1}. dalgada çöktü · ${defeated} rakip durduruldu`;
       onFinish({ won, stars, score: payload.score, summary });
     },
-    [onFinish],
+    [onFinish, arenaScore],
   );
 
   const onEvent = useCallback(
@@ -132,7 +148,7 @@ export function SavunmaGame({ level, maxWidth, maxHeight, preBoosters, boosterSt
       <WebGame ref={web} game="savunma" onReady={() => setReady(true)} onOver={onOver} onEvent={onEvent} accessibilityLabel="Savunma Hattı oyun alanı" />
       <Touchable
         onPress={onWall}
-        style={[styles.booster, !ready && styles.dim]}
+        style={[styles.booster, { top: safeTop + OVERLAY_PAUSE.top }, !ready && styles.dim]}
         hitSlop={touchSlop(44)}
         accessibilityRole="button"
         accessibilityLabel={`Duvar güçlendiricisi: en tehlikeli üç koridora bedava stoper. Stok ${stock}`}
@@ -149,13 +165,12 @@ export function SavunmaGame({ level, maxWidth, maxHeight, preBoosters, boosterSt
 }
 
 const styles = StyleSheet.create({
-  wrap: { alignSelf: "center", overflow: "hidden", borderRadius: radius.lg },
+  wrap: { alignSelf: "center", overflow: "hidden" },
   booster: {
     position: "absolute",
-    top: 8,
-    right: 10,
-    width: 44,
-    height: 44,
+    right: OVERLAY_PAUSE.right + OVERLAY_PAUSE.size + 8,
+    width: OVERLAY_PAUSE.size,
+    height: OVERLAY_PAUSE.size,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",

@@ -5,6 +5,7 @@
  * bileşen yalnız köprüdür (docs/oyun-yenileme-2026-11.md §2):
  *   RN → oyun : config {levelMode:true, level, boosters, boosterStock, roster,
  *               perks, sound, reduceMotion, hudInset} · start · booster ·
+ *               boosterDeclined ·
  *               continue · giveUp · pause / resume
  *   oyun → RN : ready · levelInfo · useBooster {key} (canlı güçlendirici
  *               isteği: stok çerçevede, düşerse "booster" döner) · fail ·
@@ -21,6 +22,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { useGameRoster } from "@/components/game/useGameRoster";
+import { PAUSE_HUD_INSET } from "@/components/game/HudPauseButton";
+import { useLevelArenaScore } from "@/components/game/useLevelArenaScore";
 import { WebGame, type GameCommand, type GameOverPayload, type WebGameHandle } from "@/components/game/WebGame";
 import { useReduceMotion } from "@/components/ui";
 import { getPlayerCareer } from "@/lib/api/career";
@@ -30,14 +33,15 @@ import { useScope } from "@/providers/ScopeProvider";
 
 /** Arena oyunlarıyla ortak ses tercihi (ArenaGameScreen ile aynı anahtar). */
 const SOUND_KEY = "elitlig.arena.sound.v1";
-/** Duraklat düğmesi oyun alanının DIŞINDA (üst şerit): HUD köşe boşluğu gerekmez. */
-const HUD_INSET = { top: 0, right: 0 };
+/** Sağ üstteki durdur düğmesinin (çerçeve bindirir) köşesi: oyun HUD'u orayı boş bırakır. */
+const HUD_INSET = PAUSE_HUD_INSET;
 /** Oyunun tanıdığı güçlendirici anahtarları (games/penalti.js applyBooster). */
 const KEYS = ["nisan", "ek_sut"] as const;
 
 /** Bölüm modu komutları: WebGame'in GameCommand türünde (henüz) yok. */
 type LevelCommand =
   | { type: "booster"; key: string }
+  | { type: "boosterDeclined"; key: string }
   | { type: "continue"; extra?: { shots?: number } }
   | { type: "giveUp" }
   | {
@@ -51,10 +55,13 @@ type LevelCommand =
       perks?: { penalti?: { aimBonus: number } } | null;
       roster?: Record<string, unknown> | null;
       hudInset?: { top: number; right: number };
+      safeArea?: { top: number; bottom: number };
     };
 
-export function PenaltiGame({ level, maxWidth, maxHeight, preBoosters, boosterStock, useBooster, onFinish, paused, requestContinue }: PuzzleGameProps) {
+export function PenaltiGame({ level, maxWidth, maxHeight, preBoosters, boosterStock, useBooster, onFinish, paused, requestContinue, safeArea, sound: soundProp }: PuzzleGameProps) {
   const web = useRef<WebGameHandle>(null);
+  /* Bölüm skoru arena tablosuna da gider (haftalık görevler + sıralama). */
+  const arenaScore = useLevelArenaScore("penalti");
   const send = useCallback((cmd: GameCommand | LevelCommand) => web.current?.send(cmd as GameCommand), []);
   const reduceMotion = useReduceMotion();
   const auth = useAuth();
@@ -73,7 +80,9 @@ export function PenaltiGame({ level, maxWidth, maxHeight, preBoosters, boosterSt
   /* Gerçek lig kadrosu (atıcı + kaleci merdiveni); gelmezse varsayılan kadro. */
   const { roster } = useGameRoster("penalti", scope.cityId ?? null, playerId);
 
-  const [sound, setSound] = useState(true);
+  /* Ses: çerçevenin mola kartındaki tercih (yoksa kayıtlı tercih). */
+  const [savedSound, setSound] = useState(true);
+  const sound = soundProp ?? savedSound;
   useEffect(() => {
     AsyncStorage.getItem(SOUND_KEY)
       .then((value) => {
@@ -85,9 +94,12 @@ export function PenaltiGame({ level, maxWidth, maxHeight, preBoosters, boosterSt
   const boosters = useMemo(() => preBoosters.filter((k) => (KEYS as readonly string[]).includes(k)), [preBoosters]);
   const stock = useMemo(() => Object.fromEntries(KEYS.map((k) => [k, boosterStock[k] ?? 0])), [boosterStock]);
 
+  /* Tam ekran: sahne kenardan kenara, HUD güvenli alanın içinde (games/core.js safeArea). */
+  const safeTop = Math.round(safeArea?.top ?? 0);
+  const safeBottom = Math.round(safeArea?.bottom ?? 0);
   const config = useMemo<LevelCommand>(
-    () => ({ type: "config", levelMode: true, level, boosters, boosterStock: stock, sound, reduceMotion, perks, roster, hudInset: HUD_INSET }),
-    [level, boosters, stock, sound, reduceMotion, perks, roster],
+    () => ({ type: "config", levelMode: true, level, boosters, boosterStock: stock, sound, reduceMotion, perks, roster, hudInset: HUD_INSET, safeArea: { top: safeTop, bottom: safeBottom } }),
+    [level, boosters, stock, sound, reduceMotion, perks, roster, safeTop, safeBottom],
   );
   const configRef = useRef(config);
   configRef.current = config;
@@ -109,6 +121,7 @@ export function PenaltiGame({ level, maxWidth, maxHeight, preBoosters, boosterSt
     if (!started.current) {
       started.current = true;
       send({ type: "start" });
+      arenaScore.begin();
     }
   }, [send]);
 
@@ -122,20 +135,23 @@ export function PenaltiGame({ level, maxWidth, maxHeight, preBoosters, boosterSt
     (payload: GameOverPayload) => {
       if (finished.current) return;
       finished.current = true;
+      arenaScore.submit(payload);
       const won = payload.stats.won === 1;
       const stars = won ? (Math.max(1, Math.min(3, Math.round(payload.stats.stars || 1))) as 1 | 2 | 3) : 0;
       const goals = payload.stats.goals ?? 0;
       const shots = payload.stats.shots ?? 0;
       onFinish({ won, stars, score: payload.score, summary: `${goals}/${shots} gol` });
     },
-    [onFinish],
+    [onFinish, arenaScore],
   );
 
   const onEvent = useCallback(
     (message: Record<string, unknown>) => {
       if (message.type === "useBooster") {
         const key = String(message.key ?? "");
+        // Düşemezse oyuna söylenir; yoksa düğme bir sonraki şuta kadar soluk kalırdı.
         if ((KEYS as readonly string[]).includes(key) && useBooster(key)) send({ type: "booster", key });
+        else send({ type: "boosterDeclined", key });
         return;
       }
       if (message.type === "fail") {
@@ -159,5 +175,5 @@ export function PenaltiGame({ level, maxWidth, maxHeight, preBoosters, boosterSt
 }
 
 const styles = StyleSheet.create({
-  frame: { alignSelf: "center", overflow: "hidden", borderRadius: 18 },
+  frame: { alignSelf: "center", overflow: "hidden" },
 });

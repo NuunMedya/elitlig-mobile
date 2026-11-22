@@ -189,7 +189,6 @@ export default function RootLayout() {
                   <Stack.Screen name="takimim/mac-al" />
                   <Stack.Screen name="takimim/bilgiler" />
                   <Stack.Screen name="takimim/teklif-ver" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
-                  <Stack.Screen name="takimim/teklifler" />
                   <Stack.Screen name="takimim/borsa" />
                   <Stack.Screen name="takimim/musaitlik" />
                   <Stack.Screen name="transfer-izni/[id]" />

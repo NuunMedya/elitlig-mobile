@@ -8,8 +8,11 @@ import type { PuzzleGameKey } from "./types";
  */
 export type LifeGameKey = PuzzleGameKey | "slalom" | "sektir" | "seri" | "kimbu" | "tahmin";
 
-/** Genel ödüllü reklam türleri (sözleşme §5; sunucu rules.ADS). */
-export type AdKind = "life" | "double_coins" | "booster" | "spin";
+/**
+ * Genel ödüllü reklam türleri (sözleşme §5; sunucu rules.ADS). spin: çarkın
+ * ek çevirmesi (sonuç `wheel.index`), chest: Sandık Seç'in ek hakkı.
+ */
+export type AdKind = "life" | "double_coins" | "booster" | "spin" | "chest";
 
 /**
  * Bölüm kazancıyla gelen hediye (sözleşme §5): seri hediyesi, yıldız sandığı
@@ -181,7 +184,88 @@ export interface PuzzleProfile {
   gifts?: PuzzleGiftsState;
   /** Şehir 2.1: jeton harcama yerleri (eski sunucuda yok). */
   coin_shop?: CoinShop;
+  /** Günlük ödüller: çark · sandık seç · günün penaltısı (yeni sunucu). */
+  rewards?: RewardsState;
 }
+
+/* ───────────────────────── GÜNLÜK ÖDÜLLER (çark · sandık · penaltı) ─────────────────────────
+ * Sonucu SUNUCU belirler (services/puzzle rules.WHEEL / CHEST_POOLS / PENALTY);
+ * istemci yalnız gösterir. Çark sunucunun döndürdüğü dilimde durur. Haklar
+ * İstanbul gününe bağlı: çark 1 ücretsiz + reklamla `wheel.ad.left`; sandık
+ * 1 + reklamla 1; penaltı günde 1.
+ */
+
+/** Ödülün çıplak hali (çark dilimi, sandık içeriği). */
+export interface RewardPrize {
+  coins?: number;
+  booster?: number;
+  lives?: number;
+  stars?: number;
+  /** Sandık: büyük sandık. */
+  big?: boolean;
+}
+
+export interface WheelSegment extends RewardPrize {
+  key: string;
+  label: string;
+}
+
+/** Verilen ödül: { coins, boosters: {anahtar: n}, lives, life_game, stars, swapped }. */
+export interface GrantedReward {
+  coins?: number;
+  boosters?: Record<string, number>;
+  lives?: number;
+  life_game?: LifeGameKey;
+  stars?: number;
+  /** Can dolu olduğu için can yerine jeton verildi. */
+  swapped?: "lives";
+}
+
+export interface RewardsState {
+  day: string;
+  /** Hemen (reklamsız) alınabilecek ödül sayısı: rozet. */
+  ready: number;
+  wheel: { free: boolean; ad: { left: number; per_day: number }; segments: WheelSegment[] };
+  chest: { free: boolean; bonus: number; available: boolean; ad: { left: number; per_day: number } };
+  penalty: {
+    available: boolean;
+    zones: number;
+    goal: { coins: number };
+    corner_bonus: { booster: number };
+    miss: { coins: number };
+    last: { zone: number; outcome: PenaltyOutcome; keeper: { col: number; high: boolean } } | null;
+  };
+}
+
+export type PenaltyOutcome = "goal" | "saved" | "over";
+
+export const rewardKeys = { me: () => ["puzzle", "rewards"] as const };
+
+export const getRewards = () => get<{ rewards: RewardsState; profile: PuzzleProfile }>("/api/puzzle/rewards", undefined, { retry: false });
+
+/** Günün ücretsiz çevirmesi → `index`: çarkın duracağı dilim. */
+export const spinWheel = (game?: LifeGameKey | null) =>
+  post<{ index: number; segment: { key: string; label: string }; reward: GrantedReward; rewards: RewardsState; profile: PuzzleProfile }>(
+    "/api/puzzle/rewards/wheel",
+    game ? { game } : {},
+    { retry: false },
+  );
+
+/** Üç sandıktan birini aç (0–2); `options` üç sandığın içi (seçilmeyenler de gösterilir). */
+export const pickChest = (pick: number, game?: LifeGameKey | null) =>
+  post<{ pick: number; options: RewardPrize[]; reward: GrantedReward; rewards: RewardsState; profile: PuzzleProfile }>(
+    "/api/puzzle/rewards/chest",
+    game ? { pick, game } : { pick },
+    { retry: false },
+  );
+
+/** Günün penaltısı: zone 0–5 (0–2 üst sol/orta/sağ, 3–5 alt), power 0–1. */
+export const shootPenalty = (zone: number, power: number, game?: LifeGameKey | null) =>
+  post<{ outcome: PenaltyOutcome; zone: number; keeper: { col: number; high: boolean }; corner: boolean; reward: GrantedReward; rewards: RewardsState; profile: PuzzleProfile }>(
+    "/api/puzzle/rewards/penalty",
+    game ? { zone, power, game } : { zone, power },
+    { retry: false },
+  );
 
 export interface CoinShop {
   trade: { week: string; used: number; left: number; per_week: number; coins: number; stars: number };
@@ -324,7 +408,12 @@ export const startAd = (kind: AdKind, game?: LifeGameKey | null) =>
 export interface AdClaimResponse {
   kind: AdKind;
   game: LifeGameKey | null;
-  reward: { lives?: number; coins?: number; boosters?: Record<string, number>; stars?: number; title?: string };
+  reward: { lives?: number; coins?: number; boosters?: Record<string, number>; stars?: number; title?: string; swapped?: "lives" };
+  /** spin: çarkın duracağı dilim. */
+  wheel?: { index: number; key: string; label: string };
+  /** chest: ek sandık seçim hakkı verildi. */
+  chest_credit?: number;
+  rewards?: RewardsState;
   profile: PuzzleProfile;
 }
 export const claimAd = (token: string) => post<AdClaimResponse>("/api/puzzle/ad/claim", { token }, { retry: false });

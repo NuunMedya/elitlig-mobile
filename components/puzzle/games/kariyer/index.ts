@@ -40,4 +40,5 @@ export const kariyerModule: PuzzleGameModule = {
   ],
   goalSummary,
   Game: KariyerGame,
+  fullBleed: true,
 };

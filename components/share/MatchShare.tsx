@@ -1,7 +1,8 @@
 /**
- * Maç detayının paylaşım girişi — oynanmamış maçta MAÇ GÜNÜ (2 tasarım),
- * biten maçta MAÇ SONUCU (4-5 tasarım: Sade · Golcüler · Künye · Kazanan ·
- * Maçın yıldızı). Veri sayfanın zaten türettiği değerlerden gelir; ek istek
+ * Maç detayının paylaşım girişi — oynanmamış maçta MAÇ GÜNÜ (Afiş · Karşı
+ * karşıya · Geri sayım), biten maçta MAÇ SONUCU (Skor · Kazanan · Golcüler ·
+ * Künye · İstatistik · Maçın yıldızı · Golcü; veri yoksa ilgili tasarım
+ * listeden düşer). Veri sayfanın zaten türettiği değerlerden gelir; ek istek
  * atılmaz.
  */
 
@@ -55,7 +56,9 @@ export function MatchShare({
     const home = { name: match.first_team_name, logo: homeLogo };
     const away = { name: match.second_team_name, logo: awayLogo };
     const top = bestPlayers[0] ?? null;
-    const mvpTeam = top?.teamId != null ? (Number(top.teamId) === homeTeamId ? home : Number(top.teamId) === awayTeamId ? away : null) : null;
+    const teamOf = (teamId: number | null) =>
+      teamId != null ? (Number(teamId) === homeTeamId ? home : Number(teamId) === awayTeamId ? away : null) : null;
+    const mvpTeam = teamOf(top?.teamId ?? null);
     return {
       id: match.id,
       home,
@@ -74,6 +77,7 @@ export function MatchShare({
       mvp: top
         ? { name: top.name, image: top.image, goals: top.goals, assists: top.assists, rating: top.rating, team: mvpTeam }
         : null,
+      players: bestPlayers.map((p) => ({ name: p.name, image: p.image, goals: p.goals, assists: p.assists, rating: p.rating, team: teamOf(p.teamId) })),
       stats,
     };
   }, [awayLogo, awayScore, awayTeamId, bestPlayers, finished, homeLogo, homeScore, homeTeamId, match, scorers, stats]);

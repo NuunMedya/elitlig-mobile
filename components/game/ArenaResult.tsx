@@ -54,7 +54,12 @@ import { useAuth } from "@/providers/AuthProvider";
 import { fonts, radius, space, textScale, type, upperTR } from "@/theme";
 
 /** queued: çevrimdışı — skor cihazdaki kuyrukta, internet gelince gönderilir (sözleşme §7). */
-export type SubmitState = "idle" | "guest" | "sending" | "sent" | "failed" | "queued";
+/**
+ * "unverified": skor kaydedildi ama sunucu doğrulamadı (oturumsuz — ör. misafir
+ * turu girişten sonra gönderildi — ya da süre/istatistik tutmadı). Tablolar
+ * yalnız doğrulanmış skoru sayar; ekran "tabloya yazıldı" demez.
+ */
+export type SubmitState = "idle" | "guest" | "sending" | "sent" | "unverified" | "failed" | "queued";
 
 /** Her turu 1 can olan skor oyunları (sözleşme §4; misafirde cihaz canı). */
 const LIFE_SCORE_GAMES = new Set<string>(["slalom", "sektir", "seri", "kimbu", "tahmin"]);
@@ -129,7 +134,8 @@ export function useArenaScore(game: ArenaGame) {
         .then((response) => {
           // Bu arada yeni tur başladıysa onun oturumuna dokunulmaz.
           if (sessionRef.current === pending) sessionRef.current = null;
-          setSubmit("sent");
+          // Eski sunucu `verified` göndermez: o durumda yazıldı sayılır.
+          setSubmit(response?.entry?.verified === false ? "unverified" : "sent");
           // Rekor sunucuda da tutulur: başka cihazda yapılmış daha yüksek skor
           // varsa cihazdaki rekor ona çekilir ve bu tur "rekor" sayılmaz.
           const entry = response?.entry;
@@ -604,11 +610,11 @@ function SubmitLine({ state, onRetry, onSignIn }: { state: SubmitState; onRetry:
         onPress={onSignIn}
         style={[styles.submitPill, styles.submitGuest]}
         accessibilityRole="button"
-        accessibilityLabel="Giriş yap, skorun rekor tablosuna yazılsın"
+        accessibilityLabel="Giriş yap, sonraki turların rekor tablosuna yazılsın"
       >
         <Ionicons name="log-in" size={16} color={ARENA_RESULT.guestInk} />
         <Text style={[styles.submitPillText, { color: ARENA_RESULT.guestInk }]} {...textScale.dense}>
-          Giriş yap — bu skor tabloya yazılsın
+          Giriş yap — turların tabloya yazılsın
         </Text>
         <Ionicons name="chevron-forward" size={14} color={ARENA_RESULT.guestInk} />
       </Touchable>
@@ -639,6 +645,19 @@ function SubmitLine({ state, onRetry, onSignIn }: { state: SubmitState; onRetry:
         <Ionicons name="cloud-offline" size={16} color={ARENA_RESULT.muted} />
         <Text style={styles.submitInfo} {...textScale.dense}>
           Çevrimdışı · skorun internet gelince kaydedilecek
+        </Text>
+      </View>
+    );
+  }
+
+  if (state === "unverified") {
+    // Misafirken oynanan tur girişten sonra oturumsuz gider: sunucu kaydeder
+    // ama doğrulamaz (tablo, yıldız ve görev yalnız doğrulanmış turdan gelir).
+    return (
+      <View style={styles.submitLine} accessibilityLiveRegion="polite">
+        <Ionicons name="information-circle" size={16} color={ARENA_RESULT.muted} />
+        <Text style={styles.submitInfo} {...textScale.dense}>
+          Skor kaydedildi · tabloya girişli başlatılan turlar yazılır
         </Text>
       </View>
     );

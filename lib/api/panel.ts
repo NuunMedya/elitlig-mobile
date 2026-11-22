@@ -141,6 +141,37 @@ export interface Paged<T> {
   hasNextPage: boolean;
 }
 
+/** Tek istekte en çok bu kadar kayıt (sunucu `limit` üst sınırı 100). */
+const PAGE_LIMIT = 100;
+/** Liste ekranı en çok bu kadar sayfa toplar (≈1000 kayıt). */
+const MAX_PAGES = 10;
+
+/**
+ * Sayfalı listenin tamamını toplar. Liste ekranları ilk 50 kayıtla
+ * kalıyordu; çok teklifi/sözleşmesi olan hesapta sayaçlar ve liste eksikti.
+ * Sonuç tek sayfa gibi döner (`totalItems` sunucunun gerçek toplamıdır).
+ */
+export async function collectPages<T>(fetchPage: (page: number, limit: number) => Promise<Paged<T>>): Promise<Paged<T>> {
+  const first = await fetchPage(1, PAGE_LIMIT);
+  const items = [...(first?.items ?? [])];
+  let page = 1;
+  let last = first;
+  while (last?.hasNextPage && page < MAX_PAGES) {
+    page += 1;
+    // eslint-disable-next-line no-await-in-loop
+    last = await fetchPage(page, PAGE_LIMIT);
+    items.push(...(last?.items ?? []));
+  }
+  return {
+    ...first,
+    items,
+    page: 1,
+    totalItems: first?.totalItems ?? items.length,
+    totalPages: 1,
+    hasNextPage: Boolean(last?.hasNextPage),
+  };
+}
+
 export interface OfferTeam {
   id: number;
   team_name: string;
@@ -171,8 +202,11 @@ export interface TransferOffer {
   contract?: { public_id: string; status: string } | null;
 }
 
-export const getOfferInbox = (page = 1) =>
-  get<Paged<TransferOffer>>("/api/transfer-offers/inbox", { page, limit: 50 });
+/** Gelen teklifler; sayfa verilmezse tüm sayfalar toplanır. */
+export const getOfferInbox = (page?: number) =>
+  page
+    ? get<Paged<TransferOffer>>("/api/transfer-offers/inbox", { page, limit: 50 })
+    : collectPages((p, limit) => get<Paged<TransferOffer>>("/api/transfer-offers/inbox", { page: p, limit }));
 
 export const getOffer = (offerId: string) =>
   get<{ offer: TransferOffer }>(`/api/transfer-offers/${offerId}`);
@@ -200,8 +234,11 @@ export interface Contract {
   team?: OfferTeam;
 }
 
-export const getMyContracts = (page = 1) =>
-  get<Paged<Contract>>("/api/contracts", { scope: "player", page, limit: 50 });
+/** Oyuncunun sözleşmeleri; sayfa verilmezse tüm sayfalar toplanır. */
+export const getMyContracts = (page?: number) =>
+  page
+    ? get<Paged<Contract>>("/api/contracts", { scope: "player", page, limit: 50 })
+    : collectPages((p, limit) => get<Paged<Contract>>("/api/contracts", { scope: "player", page: p, limit }));
 
 /**
  * Cezalar ve savunmalar — routes/penalties.js.
@@ -627,6 +664,13 @@ export interface PanelNotificationsResponse {
 
 export const getPanelNotifications = (page = 1) =>
   get<PanelNotificationsResponse>("/api/panel-notifications", { page, limit: 50 });
+
+/**
+ * Yalnız verilen tür önekleriyle başlayan bildirimler (routes/panelNotifications.js
+ * `prefixes`): ilk sayfanın 50 kaydına sığmayan eski bir talep de bulunur.
+ */
+export const getPanelNotificationsByPrefix = (prefixes: string, limit = 100) =>
+  get<PanelNotificationsResponse>("/api/panel-notifications", { prefixes, limit, page: 1 });
 
 export const getUnreadNotifCount = () =>
   get<{ count: number }>("/api/panel-notifications/unread-count");

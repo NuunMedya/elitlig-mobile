@@ -84,7 +84,8 @@
  * yol ve iniş noktası görünür, gece/sis perdesi kalkar, kaygan top yarıya
  * iner), `ek_sut` (+1 şut; seri penaltıda kaçan ilk atışı tekrar atarsın).
  * Canlı güçlendirici düğmesine dokununca oyun {type:"useBooster", key} sorar;
- * RN stoktan düşerse {type:"booster", key} döner.
+ * RN stoktan düşerse {type:"booster", key} döner; düşemezse (stok yok,
+ * mağaza kapalı) {type:"boosterDeclined", key} döner ve düğme yeniden açılır.
  */
 (function () {
   "use strict";
@@ -1179,6 +1180,9 @@
     if (cmd.type === "config") levelConfig(cmd);
     else if (cmd.type === "booster") {
       if (LV && state !== "over") applyBooster(String(cmd.key), false);
+      if (lvl) lvl.asked = false;
+    } else if (cmd.type === "boosterDeclined") {
+      // İstek reddedildi: düğme bir sonraki şutu beklemeden yeniden basılabilir.
       if (lvl) lvl.asked = false;
     } else if (cmd.type === "continue") continueLevel(cmd.extra);
     else if (cmd.type === "giveUp") {

@@ -7,6 +7,7 @@
 
 import React from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
+import { SAFE } from "@/lib/share/canvas";
 import { Backdrop, BrandHeader, Footer, type BackdropMood } from "./Primitives";
 import type { ShareFrame } from "./types";
 
@@ -16,6 +17,8 @@ export interface PosterProps {
   /** Üst bant sağı: lig adı ve künye. */
   title?: string | null;
   meta?: string | null;
+  /** Künyenin sağındaki kısa etiket ("MAÇ SONU"). */
+  tag?: string | null;
   /** Alt bant sağı. */
   footer?: string | null;
   /** Zemin üstüne, içerikten önce çizilecek süsler (diyagonal bölme vb.). */
@@ -32,6 +35,7 @@ export function Poster({
   mood = "top",
   title,
   meta,
+  tag,
   footer,
   decor,
   watermark = true,
@@ -46,14 +50,14 @@ export function Poster({
       <Backdrop f={f} mood={mood} watermark={watermark} grid={grid} streaks={streaks} />
       {decor ? <View style={StyleSheet.absoluteFill} pointerEvents="none">{decor}</View> : null}
       <View style={StyleSheet.absoluteFill}>
-        <BrandHeader f={f} title={title} meta={meta} />
+        <BrandHeader f={f} title={title} meta={meta} tag={tag} />
         <View
           style={[
             {
               flex: 1,
-              paddingHorizontal: u(22),
-              paddingTop: u(f.story ? 14 : 8),
-              paddingBottom: u(f.story ? 50 : 34),
+              paddingHorizontal: u(SAFE[f.fmt].side),
+              paddingTop: u(f.story ? 18 : 10),
+              paddingBottom: u(SAFE[f.fmt].bottom + (f.story ? 14 : 22)),
             },
             bodyStyle,
           ]}

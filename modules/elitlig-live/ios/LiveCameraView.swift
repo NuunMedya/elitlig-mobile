@@ -10,10 +10,10 @@ import VideoToolbox
 /// bileşiminden geçer; skorbord bir `ImageScreenObject` olarak bu bileşime
 /// eklenir, böylece yayına gömülür (önizlemede de görünür).
 final class LiveCameraView: ExpoView {
-  let onStateChange = EventDispatcher()
-  let onStats = EventDispatcher()
-  let onReplayStateChange = EventDispatcher()
-  let onRecordingStateChange = EventDispatcher()
+  let onStateChange = ExpoModulesCore.EventDispatcher()
+  let onStats = ExpoModulesCore.EventDispatcher()
+  let onReplayStateChange = ExpoModulesCore.EventDispatcher()
+  let onRecordingStateChange = ExpoModulesCore.EventDispatcher()
 
   static let maxRetries = 5
 

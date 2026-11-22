@@ -2,7 +2,7 @@
  * OYUNCU SIRALAMASI ŞABLONLARI — gol krallığı, asist krallığı ve diğer
  * ölçütler (Oyuncular sekmesindeki seçili ölçüt).
  *
- *   Lider · Liste
+ *   Lider · Podyum (pencere 1. sıradan başlıyorsa) · Liste
  *
  * "Lider": pencerenin ilk sırası büyük fotoğraflı lider bloğu, kalanı ince
  * satırlar. "Liste": on eşit satır, değer çubuklarıyla.
@@ -14,7 +14,7 @@ import { View } from "react-native";
 import { splitName } from "@/lib/share/format";
 import { fonts } from "@/theme";
 import { Poster, Spacer } from "../canvas/Layout";
-import { CText, Crest, FillBox, FitName, Glass, Overline, Portrait, RankChip, SigBar } from "../canvas/Primitives";
+import { CText, Crest, FillBox, FitName, Glass, Kicker, Overline, Portrait, RankChip } from "../canvas/Primitives";
 import type { ShareFrame, ShareTemplateDef } from "../canvas/types";
 
 export interface RankedPlayer {
@@ -52,9 +52,8 @@ function Title({ f, d }: { f: ShareFrame; d: PlayersShareData }) {
   return (
     <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" }}>
       <View style={{ flex: 1 }}>
-        <Overline f={f}>{d.season || "Sezon"}</Overline>
-        <FitName f={f} k="title" text={d.metricLabel} room={14} lines={1} align="left" scale={story ? 1.1 : 0.8} style={{ marginTop: u(2) }} />
-        {story ? <SigBar f={f} width={36} height={3} style={{ marginTop: u(8) }} /> : null}
+        <Kicker f={f}>{d.season || "Sezon"}</Kicker>
+        <FitName f={f} k="title" text={d.metricLabel} room={14} lines={1} align="left" scale={story ? 1.1 : 0.8} style={{ marginTop: u(6) }} />
       </View>
       <Glass f={f} radius={14} strong style={{ paddingHorizontal: u(10), paddingVertical: u(5), marginBottom: u(2) }}>
         <CText f={f} k="numStrong" scale={0.9}>
@@ -130,7 +129,7 @@ function PlayersLeader({ f, d }: { f: ShareFrame; d: PlayersShareData }) {
         style={{ borderWidth: Math.max(1, u(0.7)), borderColor: t.glassLine, padding: u(story ? 14 : 10), flexDirection: "row", alignItems: "center", gap: u(story ? 14 : 10) }}
       >
         <View>
-          <Portrait f={f} image={lead.image} name={lead.name} size={story ? 96 : 64} ring={gold ? "gold" : "sig"} halo />
+          <Portrait f={f} image={lead.image} name={lead.name} size={story ? 86 : 64} ring={gold ? "gold" : "sig"} halo />
           <View style={{ position: "absolute", right: -u(2), bottom: -u(2) }}>
             <RankChip f={f} rank={lead.rank} size={story ? 28 : 20} />
           </View>
@@ -161,7 +160,7 @@ function PlayersLeader({ f, d }: { f: ShareFrame; d: PlayersShareData }) {
       <Spacer f={f} grow={0.3} min={story ? 10 : 6} />
       <Glass f={f} radius={20} style={{ paddingVertical: u(story ? 6 : 3), paddingHorizontal: u(2) }}>
         {rest.map((row) => (
-          <PlayerLine key={row.id} f={f} row={row} focus={row.id === d.focusId} h={story ? 30 : 23} />
+          <PlayerLine key={row.id} f={f} row={row} focus={row.id === d.focusId} h={story ? 27 : 23} />
         ))}
       </Glass>
       <Spacer f={f} />
@@ -178,9 +177,64 @@ function PlayersList({ f, d }: { f: ShareFrame; d: PlayersShareData }) {
       <Spacer f={f} grow={0.5} min={story ? 14 : 8} />
       <Glass f={f} radius={20} style={{ paddingVertical: u(story ? 8 : 4), paddingHorizontal: u(2), gap: u(story ? 2 : 0) }}>
         {d.rows.map((row) => (
-          <PlayerLine key={row.id} f={f} row={row} focus={row.id === d.focusId} h={story ? 40 : 28} bar max={max} />
+          <PlayerLine key={row.id} f={f} row={row} focus={row.id === d.focusId} h={story ? 35 : 28} bar max={max} />
         ))}
       </Glass>
+      <Spacer f={f} />
+    </Poster>
+  );
+}
+
+/** Podyum basamağı: portre + ad + değer; altında madalya degradeli basamak. */
+function PodiumStep({ f, row, unit, height, size, gold }: { f: ShareFrame; row: RankedPlayer; unit: string; height: number; size: number; gold?: boolean }) {
+  const { u, t, story } = f;
+  const { last } = splitName(row.name);
+  return (
+    <View style={{ flex: 1, alignItems: "center" }}>
+      <View>
+        <Portrait f={f} image={row.image} name={row.name} size={size} ring={gold ? "gold" : "sig"} halo={gold} />
+        <View style={{ position: "absolute", right: -u(2), bottom: -u(2) }}>
+          <RankChip f={f} rank={row.rank} size={story ? 24 : 19} />
+        </View>
+      </View>
+      <FitName f={f} k="name" text={last || row.name} width={96} lines={1} caps scale={gold ? 1.05 : 0.92} min={0.55} style={{ marginTop: u(8) }} />
+      {row.teamName ? <FitName f={f} k="body" text={row.teamName} width={96} lines={1} scale={0.82} color={t.inkMuted} min={0.6} /> : null}
+      <FillBox
+        f={f}
+        radius={12}
+        tone={gold ? "sig" : "soft"}
+        vertical
+        style={{ alignSelf: "stretch", marginHorizontal: u(4), height: u(height), marginTop: u(8), alignItems: "center", paddingTop: u(10), borderWidth: Math.max(1, u(0.7)), borderColor: t.glassLine }}
+      >
+        <CText f={f} k="score" scale={gold ? (story ? 0.56 : 0.44) : story ? 0.44 : 0.36} color={gold ? t.onFill : t.ink}>{row.value}</CText>
+        <Overline f={f} color={gold ? t.onFill : t.inkMuted} scale={0.85}>{unit}</Overline>
+      </FillBox>
+    </View>
+  );
+}
+
+/** Podyum — ilk üç basamakta; story'de altında 4–6. sıralar. */
+function PlayersPodium({ f, d }: { f: ShareFrame; d: PlayersShareData }) {
+  const { u, story } = f;
+  const [first, second, third, ...rest] = d.rows;
+  if (!first || !second || !third) return null;
+  return (
+    <Poster f={f} mood="center" title={d.league} meta={d.city} footer={d.footer}>
+      <Title f={f} d={d} />
+      <Spacer f={f} grow={0.6} min={story ? 14 : 6} />
+      <View style={{ flexDirection: "row", alignItems: "flex-end" }}>
+        <PodiumStep f={f} row={second} unit={d.unit} height={story ? 84 : 56} size={story ? 70 : 54} />
+        <PodiumStep f={f} row={first} unit={d.unit} height={story ? 118 : 78} size={story ? 92 : 68} gold />
+        <PodiumStep f={f} row={third} unit={d.unit} height={story ? 66 : 44} size={story ? 70 : 54} />
+      </View>
+      <Spacer f={f} grow={0.4} min={story ? 12 : 4} />
+      {story && rest.length ? (
+        <Glass f={f} radius={18} style={{ paddingVertical: u(4), paddingHorizontal: u(2) }}>
+          {rest.slice(0, 3).map((row) => (
+            <PlayerLine key={row.id} f={f} row={row} focus={row.id === d.focusId} h={30} />
+          ))}
+        </Glass>
+      ) : null}
       <Spacer f={f} />
     </Poster>
   );
@@ -189,6 +243,7 @@ function PlayersList({ f, d }: { f: ShareFrame; d: PlayersShareData }) {
 export function playersTemplates(d: PlayersShareData): ShareTemplateDef[] {
   return [
     { key: "lider", label: "Lider", render: (f) => <PlayersLeader f={f} d={d} /> },
+    ...(d.rows.length >= 3 && d.rows[0].rank === 1 ? [{ key: "podyum", label: "Podyum", render: (f: ShareFrame) => <PlayersPodium f={f} d={d} /> }] : []),
     { key: "liste", label: "Liste", render: (f) => <PlayersList f={f} d={d} /> },
   ];
 }

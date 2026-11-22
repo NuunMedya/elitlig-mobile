@@ -2,11 +2,13 @@
  * SONSUZ / BİLGİ OYUNU ANA SAYFASI — /oyun/<oyun> (sözleşme §6)
  *
  * Slalom, Top Sektir, Gol Düellosu, Kim Bu?, Kim Kazandı? ve Günün Testi'nin
- * evi: Royal Match tarzı üst şerit (avatar · can · jeton · yıldız · ayarlar),
- * bugünkü oyun yıldızı çubuğu, yan düğmeler (hediye, ücretsiz ödül, çark,
- * sıralama, kurallar) ve gece stadyumu sahnesinde büyük yeşil
- * "OYNA · Rekor X". OYNA asıl oyun ekranını açar; canı biten oyuncuya can
- * penceresi açılır (her tur 1 can, sözleşme §4). Günün Testi'nin canı yoktur.
+ * evi, bölümlü oyunlarla aynı dilde (v3): renkli HUD kapsülleri, oyuna özel
+ * kahraman sahnesi (ArenaScene: sokakta top süren futbolcu, meydanda top
+ * sektiren futbolcu, TV stüdyosu, takvim sahnesi) ve oyun renginde başlık
+ * kurdelesi; solda günlük ödüller rafı, sağda Sıralama · Diğer; OYNA'nın
+ * üstünde iki bilgi kartı (Rekor · Bugünkü yıldız) ve tek odak yeşil OYNA.
+ * OYNA asıl oyun ekranını açar; canı biten oyuncuya can penceresi açılır
+ * (her tur 1 can, sözleşme §4). Günün Testi'nin canı yoktur.
  */
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -14,18 +16,17 @@ import { useQuery } from "@tanstack/react-query";
 import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 
-import { ArenaScene } from "@/components/gamehome/ArenaScene";
+import { ArenaScene, GameTitle, HeroStats, type ArenaStat } from "@/components/gamehome/ArenaScene";
 import { GameHome } from "@/components/gamehome/GameHome";
-import { ChestBar } from "@/components/gamehome/GameHomeKit";
+import { fmtShort } from "@/components/gamehome/GameHomeKit";
 import { getMyArenaSummary } from "@/lib/api/arena";
-import { RECORD_STAR_LINE, scoreGame } from "@/lib/game/gameCatalog";
+import { scoreGame } from "@/lib/game/gameCatalog";
 import { cityKeys, getCity } from "@/lib/puzzle/api";
 import { useGameSave } from "@/lib/puzzle/saves";
 import { useAuth } from "@/providers/AuthProvider";
 
 /** Bilgi + arcade oyunlarının günlük şehir yıldızı tavanı (sunucu ARENA_STARS_PER_DAY). */
 const ARENA_DAILY_CAP = 30;
-const fmt = (n: number) => n.toLocaleString("tr-TR");
 
 export default function ScoreGameHome() {
   const router = useRouter();
@@ -40,6 +41,10 @@ export default function ScoreGameHome() {
 
   // Günün Testi: bugün oynandı mı (app/gunun.tsx ile aynı UTC gün anahtarı).
   const [today, setToday] = useState<{ correct: number } | null>(null);
+  const [insets, setInsets] = useState({ top: 100, bottom: 150, side: 80 });
+  const onInsets = useCallback((top: number, bottom: number, side: number) => {
+    setInsets((cur) => (Math.abs(cur.top - top) < 2 && Math.abs(cur.bottom - bottom) < 2 && cur.side === side ? cur : { top, bottom, side }));
+  }, []);
   useFocusEffect(
     useCallback(() => {
       if (def?.key !== "gunun") return;
@@ -60,26 +65,28 @@ export default function ScoreGameHome() {
   const best = device == null ? server : server == null ? device : Math.max(device, server);
   const gameStars = city?.stars.arena_by_game?.[def.key] ?? null;
   const daily = def.kind === "daily";
+  const stats = ([
+    daily
+      ? { icon: "checkmark-done", label: "Bugünkü test", value: today ? `${today.correct}/10` : "–/10" }
+      : { icon: "trophy", label: "Rekor", value: best != null ? fmtShort(best) : "–" },
+    !daily && signedIn && city
+      ? { icon: "star", label: "Bugünkü yıldız", value: `${fmtShort(Math.min(city.stars.arena_today ?? 0, ARENA_DAILY_CAP))}/${ARENA_DAILY_CAP}` }
+      : gameStars != null
+        ? { icon: "star", label: "Toplam yıldız", value: fmtShort(gameStars) }
+        : null,
+  ] as (ArenaStat | null)[]).filter((x): x is ArenaStat => x != null);
 
   return (
     <GameHome
       title={def.title}
       livesGame={def.lives}
-      background={<ArenaScene gameKey={def.key} icon={def.icon} />}
-      eventBar={
-        signedIn && city ? (
-          <ChestBar
-            icon="star"
-            title={daily ? "GÜNÜN TESTİ YILDIZI" : "BUGÜNKÜ OYUN YILDIZI"}
-            value={daily ? today?.correct ?? 0 : city.stars.arena_today ?? 0}
-            max={daily ? 10 : ARENA_DAILY_CAP}
-            note={gameStars != null ? `${def.title}: toplam ${fmt(gameStars)} yıldız · ${RECORD_STAR_LINE}` : RECORD_STAR_LINE}
-          />
-        ) : null
-      }
+      onInsets={onInsets}
+      background={<ArenaScene gameKey={def.key} top={insets.top} bottom={insets.bottom} side={insets.side} />}
+      eventBar={<GameTitle gameKey={def.key} title={def.title} />}
+      abovePlay={<HeroStats stats={stats} />}
       play={{
         title: daily && today ? "SONUCUN" : "OYNA",
-        sub: daily ? (today ? `Bugün ${today.correct}/10 · yarın yeni test` : "Bugünün 10 sorusu hazır") : best != null ? `Rekor ${fmt(best)}` : "İlk rekorunu kur",
+        sub: daily ? (today ? "Yarın yeni test" : "Bugünün 10 sorusu hazır") : best != null ? "Rekorunu geç" : "İlk rekorunu kur",
         onPress: () => router.push(def.route),
         accessibilityLabel: `${def.title} oyna${best != null ? `, rekorun ${best}` : ""}`,
       }}

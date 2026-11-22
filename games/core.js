@@ -24,6 +24,14 @@
  * game.resize(W, H) yeniden çağrılır (oyunlar yerleşimi orada yeniler) ve
  * varsa game.hudInsetChanged(inset) haber alır.
  *
+ * TAM EKRAN (güvenli alan): WebView ekranın TAMAMINI kaplar (çentik / durum
+ * çubuğu ve alttaki ev çubuğu dahil). Kabuk bu payları
+ * {type:"config", safeArea:{top, bottom}} ile (CSS px) bildirir. Oyunlar
+ * bundan habersizdir: A.W × A.H, güvenli alanın içindeki görünür sahnedir
+ * (çizim ve dokunuş koordinatları buna göre kaydırılır). Üst ve alt paylar
+ * sahnenin kenar renkleriyle (yumuşatılarak) doldurulur: oyunun dışında
+ * şerit / boş zemin görünmez, sahne kenardan kenara uzanır.
+ *
  * DÖNGÜ: değişken kare süresi, sabit üst sınırlı alt adımlar (≤1/120 sn).
  * 60 Hz'de de 120 Hz'de de aynı oyun; sekme arka plana geçince saat durur,
  * dönüşte biriken süre yutulur (oyun kendi kendini bitirmez).
@@ -51,6 +59,8 @@
     is3d: hud3d,
     /** RN'nin oyunun üstüne bindirdiği düğmelerin payı (CSS px). */
     hudInset: { top: 0, right: 0 },
+    /** Tam ekran: sahnenin üstünde / altında kalan güvenli alan payı (CSS px). */
+    safe: { top: 0, bottom: 0 },
     FONT: '-apple-system, "SF Pro Display", Roboto, "Helvetica Neue", Arial, sans-serif',
   });
 
@@ -96,6 +106,8 @@
         if (cmd.perks && typeof cmd.perks === "object") A.perks = cmd.perks;
         // HUD güvenli alanı: sağ üstteki RN duraklat düğmesinin payı.
         if (cmd.hudInset && typeof cmd.hudInset === "object") A.setHudInset(cmd.hudInset);
+        // Tam ekran: durum çubuğu / ev çubuğu payı (sahne bunların arasında).
+        if (cmd.safeArea && typeof cmd.safeArea === "object") A.setSafeArea(cmd.safeArea);
         // Oyuna özgü kadro (Penaltı: gerçek ligden atıcı + kaleci merdiveni).
         if (cmd.roster && typeof cmd.roster === "object") {
           A.roster = cmd.roster;
@@ -123,6 +135,13 @@
       if (A.game.resize) A.game.resize(A.W, A.H);
       if (A.game.hudInsetChanged) A.game.hudInsetChanged(A.hudInset);
     }
+  };
+  A.setSafeArea = function (safe) {
+    var top = safe.top != null ? insetNum(safe.top) : A.safe.top;
+    var bottom = safe.bottom != null ? insetNum(safe.bottom) : A.safe.bottom;
+    if (top === A.safe.top && bottom === A.safe.bottom) return;
+    A.safe = { top: top, bottom: bottom };
+    resize(true);
   };
   /**
    * Üst HUD satırının kullanılabilir yatay aralığı. pad: oyunun kendi kenar
@@ -884,7 +903,7 @@
 
   function local(e) {
     var r = canvas.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top, id: e.pointerId, t: performance.now() };
+    return { x: e.clientX - r.left, y: e.clientY - r.top - A.safe.top, id: e.pointerId, t: performance.now() };
   }
   var activePointer = null;
   canvas.addEventListener("pointerdown", function (e) {
@@ -915,17 +934,64 @@
 
   /* ───────────────────────────── boyut ───────────────────────────── */
 
-  function resize() {
+  // Tuval tüm pencereyi kaplar; oyunun gördüğü A.H güvenli alanın içidir.
+  var fullH = 0;
+  function resize(force) {
     var w = window.innerWidth;
-    var h = window.innerHeight;
-    if (w === A.W && h === A.H) return;
+    var full = window.innerHeight;
+    var h = Math.max(1, full - A.safe.top - A.safe.bottom);
+    if (force !== true && w === A.W && full === fullH) return;
+    fullH = full;
     A.W = w;
     A.H = h;
     canvas.width = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
+    canvas.height = Math.round(full * dpr);
     if (A.game && A.game.resize) A.game.resize(w, h);
   }
   window.addEventListener("resize", resize);
+
+  /*
+   * Kenar dolgusu: sahnenin en üst (ve en alt) piksel satırı küçük bir
+   * şeride örneklenir, sonra yumuşatılarak güvenli alan payına yayılır.
+   * Böylece gökyüzü / tribün / çim rengi çentiğin ve ev çubuğunun altına
+   * kesintisiz uzanır; üstte durum çubuğu simgeleri için hafif bir gölge.
+   */
+  var EDGE_N = 24;
+  // Üst ve alt örnek AYRI tuvallerde: aynı tuvalde komşu satırlar büyütülürken
+  // birbirine karışır (iki kenarın rengi birbirine sızar).
+  var edges = null;
+  function edgeRow(i, sy) {
+    var e = edges[i], ec = e.getContext("2d");
+    ec.clearRect(0, 0, EDGE_N, 1);
+    ec.drawImage(canvas, 0, sy, canvas.width, 1, 0, 0, EDGE_N, 1);
+    return e;
+  }
+  function bleed() {
+    var top = A.safe.top, bottom = A.safe.bottom;
+    if (top <= 0 && bottom <= 0) return;
+    try {
+      if (!edges) {
+        edges = [document.createElement("canvas"), document.createElement("canvas")];
+        edges[0].width = edges[1].width = EDGE_N;
+        edges[0].height = edges[1].height = 1;
+      }
+      var cw = canvas.width, ch = canvas.height;
+      var t = Math.round(top * dpr), b = Math.round(bottom * dpr);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.imageSmoothingEnabled = true;
+      if (t > 0) {
+        ctx.drawImage(edgeRow(0, t + 1), 0, 0, EDGE_N, 1, 0, 0, cw, t);
+        var g = ctx.createLinearGradient(0, 0, 0, t);
+        g.addColorStop(0, "rgba(6,8,24,0.34)");
+        g.addColorStop(1, "rgba(6,8,24,0)");
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, cw, t);
+      }
+      if (b > 0) ctx.drawImage(edgeRow(1, ch - b - 2), 0, 0, EDGE_N, 1, 0, ch - b, cw, b);
+    } catch (e) {
+      /* dolgu asla oyunu durdurmaz */
+    }
+  }
 
   /* ───────────────────────────── döngü ───────────────────────────── */
 
@@ -957,14 +1023,18 @@
       A.stepParticles(dt);
     }
 
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (hud3d) ctx.clearRect(0, 0, A.W, A.H);
+    if (hud3d) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, A.safe.top * dpr);
     if (A.shakeAmt > 0.2) {
       ctx.translate((Math.random() - 0.5) * A.shakeAmt, (Math.random() - 0.5) * A.shakeAmt);
       A.shakeAmt *= Math.exp(-14 * dt);
     } else A.shakeAmt = 0;
     A.game.render(ctx, dt);
     A.drawJuice(ctx, realDt);
+    bleed();
   }
   document.addEventListener("visibilitychange", function () {
     last = 0;

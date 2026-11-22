@@ -1,19 +1,26 @@
 /**
- * Elit Üçlü tahta katmanları: zemin hücresi (saha karosu, çamur, toprak/çim,
- * krampon kutusu), taşın üstündeki kilit (buz, kale ağı) ve tahtayı saran
- * kalın altın-ahşap kasa. Hepsi hücre başına memo'lu; yalnız değeri değişen
- * hücre yeniden çizilir. Vuruş alan hücre kısa bir sarsıntıyla, çimlenen
- * hücre "büyüme" sıçramasıyla tepki verir.
+ * Elit Üçlü tahta katmanları.
+ *
+ * SAKİN TAHTA: hücre başına kutu / karo YOKTUR. Tahtanın tamamı tek bir
+ * durağan SVG'dir (`BoardBed`): şekli izleyen ince, sıcak altın çerçeve,
+ * altında kısık lacivert bir yatak ve üstünde iki yakın soluk tonda yarı
+ * saydam dama. Delik (maske) hücrelerinde arka sahne görünür; çerçeve
+ * deliklerin çevresini de sarar.
+ *
+ * Hücre başına yalnız ENGELLER çizilir (çamur birikintisi, sade toprak/çim,
+ * ahşap krampon kutusu) ve taşın üstündeki kilitler (buz kalıbı, kale ağı).
+ * Hepsi hücre başına memo'lu; yalnız değeri değişen hücre yeniden çizilir.
+ * Vuruş alan hücre kısa bir sarsıntıyla, çimlenen hücre "büyüme"
+ * sıçramasıyla tepki verir.
  */
 
-import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
-import Svg, { Circle, Defs, G, Line, LinearGradient, RadialGradient, Rect, Stop } from "react-native-svg";
+import Svg, { Circle, ClipPath, Defs, Ellipse, G, Line, LinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg";
 import { radius } from "@/theme";
 import { UCLU_BOARD } from "@/lib/puzzle/ucluPalette";
 
-/* ───────────────────────────── zemin ───────────────────────────── */
+/* ───────────────────────────── engeller ───────────────────────────── */
 
 export interface CellViewProps {
   row: number;
@@ -25,73 +32,131 @@ export interface CellViewProps {
   turf: number;
 }
 
-/** Çıplak toprak ya da çimlenmiş hücre (çim hedefi). */
+/**
+ * Çim hedefi — bilerek SADE: yarı saydam toprak / çim lekesi ve ince desen.
+ * Damadan ayırt edilir ama göz alıcı bir yeşil blok değildir.
+ */
 export function Turf({ size, grown }: { size: number; grown: boolean }) {
   if (!grown)
     return (
       <Svg width={size} height={size} viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
-        <Rect x={3} y={3} width={94} height={94} rx={16} fill={UCLU_BOARD.dirt} stroke={UCLU_BOARD.dirtLo} strokeWidth={2} />
-        <Circle cx={26} cy={30} r={6} fill={UCLU_BOARD.dirtSpot} />
-        <Circle cx={72} cy={70} r={8} fill={UCLU_BOARD.dirtSpot} />
-        <Circle cx={70} cy={26} r={3.5} fill={UCLU_BOARD.dirtLo} />
-        <Circle cx={32} cy={74} r={3} fill={UCLU_BOARD.dirtLo} />
+        <Rect x={4} y={4} width={92} height={92} rx={22} fill={UCLU_BOARD.turfDirt} />
+        <G fill={UCLU_BOARD.turfDirtLo}>
+          <Circle cx={24} cy={28} r={3} />
+          <Circle cx={70} cy={22} r={2.4} />
+          <Circle cx={78} cy={64} r={3.2} />
+          <Circle cx={36} cy={74} r={2.6} />
+          <Circle cx={54} cy={48} r={2} />
+        </G>
+        <G fill={UCLU_BOARD.turfDirtSpot}>
+          <Circle cx={30} cy={44} r={5} />
+          <Circle cx={66} cy={78} r={6} />
+          <Circle cx={60} cy={30} r={3.5} />
+        </G>
       </Svg>
     );
   return (
     <Svg width={size} height={size} viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
-      <Defs>
-        <LinearGradient id="ugrass" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={UCLU_BOARD.grassHi} />
-          <Stop offset="1" stopColor={UCLU_BOARD.grass} />
-        </LinearGradient>
-      </Defs>
-      <Rect x={3} y={3} width={94} height={94} rx={16} fill="url(#ugrass)" stroke={UCLU_BOARD.grassLo} strokeWidth={2} />
-      <G stroke={UCLU_BOARD.grassLo} strokeWidth={3} strokeLinecap="round">
-        <Line x1={20} y1={30} x2={24} y2={20} />
-        <Line x1={26} y1={30} x2={27} y2={22} />
-        <Line x1={66} y1={76} x2={70} y2={66} />
-        <Line x1={72} y1={76} x2={73} y2={68} />
-        <Line x1={74} y1={32} x2={77} y2={24} />
-        <Line x1={30} y1={80} x2={33} y2={72} />
+      <Rect x={4} y={4} width={92} height={92} rx={22} fill={UCLU_BOARD.turfGrass} />
+      {/* Biçme şeridi: yarısı biraz açık (sahadaki çim deseni). */}
+      <Path d="M4 50 L96 50 L96 74 Q96 96 74 96 L26 96 Q4 96 4 74 Z" fill={UCLU_BOARD.turfGrassHi} />
+      <G stroke={UCLU_BOARD.turfBlade} strokeWidth={2.6} strokeLinecap="round">
+        <Line x1={22} y1={30} x2={25} y2={22} />
+        <Line x1={28} y1={31} x2={29} y2={24} />
+        <Line x1={68} y1={74} x2={71} y2={66} />
+        <Line x1={74} y1={75} x2={75} y2={68} />
+        <Line x1={72} y1={32} x2={75} y2={25} />
+        <Line x1={30} y1={78} x2={33} y2={71} />
       </G>
     </Svg>
   );
 }
 
+const MUD_BLOB = "M20 30 C16 14 40 9 51 16 C64 8 88 14 85 34 C95 46 93 70 81 80 C70 93 40 93 28 85 C10 78 8 50 20 30 Z";
+const MUD_INNER = "M32 38 C30 28 46 25 53 30 C62 25 76 30 73 42 C80 50 76 66 66 70 C56 78 40 76 34 70 C24 64 24 48 32 38 Z";
+
+/** Çamur birikintisi: parlak, katmanlı bir leke (iki katlıda koyu iç halka). */
 export function Mud({ size, layers }: { size: number; layers: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
-      <Rect x={5} y={5} width={90} height={90} rx={20} fill={layers >= 2 ? UCLU_BOARD.mudDeep : UCLU_BOARD.mud} stroke={UCLU_BOARD.mudDeep} strokeWidth={1.5} />
-      <Circle cx={28} cy={30} r={9} fill={UCLU_BOARD.mudSpot} />
-      <Circle cx={70} cy={66} r={12} fill={UCLU_BOARD.mudSpot} />
-      <Circle cx={66} cy={24} r={5} fill={UCLU_BOARD.mudSpot} />
-      {layers >= 2 ? <Rect x={9} y={9} width={82} height={82} rx={14} fill="none" stroke={UCLU_BOARD.mud} strokeWidth={5} strokeDasharray="12 8" /> : null}
+      <Defs>
+        <RadialGradient id={`umud${layers}`} cx="40%" cy="34%" r="70%">
+          <Stop offset="0" stopColor={UCLU_BOARD.mudHi} />
+          <Stop offset="0.55" stopColor={layers >= 2 ? UCLU_BOARD.mudDeep : UCLU_BOARD.mud} />
+          <Stop offset="1" stopColor={UCLU_BOARD.mudDeep} />
+        </RadialGradient>
+      </Defs>
+      <Path d={MUD_BLOB} fill={UCLU_BOARD.mudDeep} transform="translate(0 3)" opacity={0.6} />
+      <Path d={MUD_BLOB} fill={`url(#umud${layers})`} />
+      {layers >= 2 ? <Path d={MUD_INNER} fill={UCLU_BOARD.mudDeep} opacity={0.55} /> : null}
+      <Ellipse cx={36} cy={28} rx={10} ry={4.5} transform="rotate(-24 36 28)" fill={UCLU_BOARD.mudGloss} />
+      <Circle cx={72} cy={66} r={4.5} fill={UCLU_BOARD.mudGloss} />
+      <Circle cx={24} cy={60} r={2.6} fill={UCLU_BOARD.mudGloss} />
+      <Circle cx={62} cy={22} r={2.2} fill={UCLU_BOARD.mudGloss} />
     </Svg>
   );
 }
 
+/** Ahşap krampon kutusu: tahta damarlı kalaslar, metal köşelikler, çiviler; canı arttıkça metal kuşak. */
 export function Crate({ size, hp }: { size: number; hp: number }) {
+  const nail = (x: number, y: number) => (
+    <G key={`${x}-${y}`}>
+      <Circle cx={x} cy={y} r={3.4} fill={UCLU_BOARD.metalLo} />
+      <Circle cx={x - 0.8} cy={y - 0.8} r={1.9} fill={UCLU_BOARD.metalHi} />
+    </G>
+  );
   return (
     <Svg width={size} height={size} viewBox="0 0 100 100">
       <Defs>
-        <LinearGradient id="uwood" x1="0" y1="0" x2="0" y2="1">
+        <LinearGradient id="uwood" x1="0" y1="0" x2="0.3" y2="1">
           <Stop offset="0" stopColor={UCLU_BOARD.woodHi} />
-          <Stop offset="1" stopColor={UCLU_BOARD.wood} />
+          <Stop offset="0.5" stopColor={UCLU_BOARD.wood} />
+          <Stop offset="1" stopColor={UCLU_BOARD.woodLo} />
         </LinearGradient>
+        <LinearGradient id="umetal" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={UCLU_BOARD.metalHi} />
+          <Stop offset="0.5" stopColor={UCLU_BOARD.metal} />
+          <Stop offset="1" stopColor={UCLU_BOARD.metalLo} />
+        </LinearGradient>
+        <ClipPath id="ucrc">
+          <Rect x={7} y={6} width={86} height={84} rx={9} />
+        </ClipPath>
       </Defs>
-      <Rect x={6} y={11} width={88} height={84} rx={14} fill={UCLU_BOARD.woodLo} />
-      <Rect x={6} y={5} width={88} height={84} rx={14} fill="url(#uwood)" stroke={UCLU_BOARD.crateEdge} strokeWidth={2} />
-      <Rect x={14} y={10} width={50} height={7} rx={3.5} fill={UCLU_BOARD.beamCore} fillOpacity={0.55} />
-      <Line x1={10} y1={34} x2={90} y2={34} stroke={UCLU_BOARD.woodLo} strokeWidth={3.5} />
-      <Line x1={10} y1={62} x2={90} y2={62} stroke={UCLU_BOARD.woodLo} strokeWidth={3.5} />
-      {hp >= 2 ? <Rect x={6} y={41} width={88} height={13} fill={UCLU_BOARD.strap} stroke={UCLU_BOARD.strapLo} strokeWidth={1.5} /> : null}
-      {hp >= 3 ? <Rect x={43.5} y={5} width={13} height={84} fill={UCLU_BOARD.strap} stroke={UCLU_BOARD.strapLo} strokeWidth={1.5} /> : null}
-      <G fill={UCLU_BOARD.woodLo}>
-        <Circle cx={17} cy={16} r={3.5} />
-        <Circle cx={83} cy={16} r={3.5} />
-        <Circle cx={17} cy={78} r={3.5} />
-        <Circle cx={83} cy={78} r={3.5} />
+      <Ellipse cx={50} cy={93} rx={42} ry={5} fill={UCLU_BOARD.pieceShadow} />
+      <Rect x={5} y={4} width={90} height={88} rx={11} fill={UCLU_BOARD.woodDeep} />
+      <Rect x={7} y={6} width={86} height={84} rx={9} fill="url(#uwood)" />
+      <G clipPath="url(#ucrc)">
+        {/* Kalaslar ve damar. */}
+        <G stroke={UCLU_BOARD.woodDeep} strokeOpacity={0.7} strokeWidth={2.2}>
+          <Line x1={0} y1={34} x2={100} y2={34} />
+          <Line x1={0} y1={62} x2={100} y2={62} />
+        </G>
+        <G fill="none" stroke={UCLU_BOARD.woodGrain} strokeWidth={1.6} strokeLinecap="round">
+          <Path d="M14 18 Q34 14 52 20 T88 18" />
+          <Path d="M12 26 Q30 24 44 28" />
+          <Path d="M20 46 Q40 42 60 48 T90 46" />
+          <Path d="M48 54 Q64 52 80 56" />
+          <Path d="M12 74 Q32 70 52 76 T88 74" />
+          <Path d="M26 82 Q44 80 60 84" />
+        </G>
+        <Ellipse cx={70} cy={46} rx={4} ry={2.2} fill={UCLU_BOARD.woodGrain} />
+        {/* Çapraz destek. */}
+        <Path d="M10 88 L90 10" stroke={UCLU_BOARD.woodDeep} strokeOpacity={0.35} strokeWidth={9} />
+        <Path d="M10 85 L87 8" stroke={UCLU_BOARD.woodHi} strokeOpacity={0.55} strokeWidth={6} />
+        {/* Üst parlama. */}
+        <Rect x={7} y={6} width={86} height={9} fill={UCLU_BOARD.beamCore} opacity={0.22} />
+        {hp >= 2 ? <Rect x={0} y={41} width={100} height={14} fill="url(#umetal)" stroke={UCLU_BOARD.metalLo} strokeWidth={1.2} /> : null}
+        {hp >= 3 ? <Rect x={43} y={0} width={14} height={100} fill="url(#umetal)" stroke={UCLU_BOARD.metalLo} strokeWidth={1.2} /> : null}
       </G>
+      {/* Metal köşelikler. */}
+      <G fill="url(#umetal)" stroke={UCLU_BOARD.metalLo} strokeWidth={1.2} strokeLinejoin="round">
+        <Path d="M5 26 L5 14 Q5 4 15 4 L27 4 L27 12 L13 12 L13 26 Z" />
+        <Path d="M95 26 L95 14 Q95 4 85 4 L73 4 L73 12 L87 12 L87 26 Z" />
+        <Path d="M5 70 L5 82 Q5 92 15 92 L27 92 L27 84 L13 84 L13 70 Z" />
+        <Path d="M95 70 L95 82 Q95 92 85 92 L73 92 L73 84 L87 84 L87 70 Z" />
+      </G>
+      {[nail(19, 18), nail(81, 18), nail(19, 78), nail(81, 78)]}
+      {hp >= 2 ? [nail(12, 48), nail(88, 48)] : null}
     </Svg>
   );
 }
@@ -106,7 +171,13 @@ function CellViewBase({ row, col, cell, mud, crate, turf }: CellViewProps) {
     prev.current = { mud, crate, turf };
     if (was.turf !== turf && turf === 2) {
       grow.setValue(0.4);
-      Animated.spring(grow, { toValue: 1, damping: 7, stiffness: 260, mass: 0.6, useNativeDriver: true }).start();
+      Animated.spring(grow, {
+        toValue: 1,
+        damping: 7,
+        stiffness: 260,
+        mass: 0.6,
+        useNativeDriver: true,
+      }).start();
     }
     if (was.mud === mud && was.crate === crate) return;
     shake.setValue(0);
@@ -118,16 +189,13 @@ function CellViewBase({ row, col, cell, mud, crate, turf }: CellViewProps) {
     }).start();
   }, [mud, crate, turf, shake, grow]);
 
+  // Engelsiz hücre hiç çizilmez: zemini tek parça `BoardBed` verir.
+  if (!turf && !mud && !crate) return null;
   const dx = shake.interpolate({
     inputRange: [0, 0.2, 0.4, 0.6, 0.8, 1],
     outputRange: [0, -3, 3, -2, 2, 0],
   });
-  // Saha biçimi: satır şeritleri (A/B) + her şeritte hafif dama.
-  const stripe = row % 2 === 0;
-  const check = (row + col) % 2 === 0;
-  const ground = stripe ? (check ? UCLU_BOARD.cellA2 : UCLU_BOARD.cellA) : check ? UCLU_BOARD.cellB2 : UCLU_BOARD.cellB;
-  const crateSize = Math.round(cell * 0.94);
-  const gap = Math.max(1, Math.round(cell * 0.025));
+  const crateSize = Math.round(cell * 0.96);
   return (
     <View
       pointerEvents="none"
@@ -141,17 +209,6 @@ function CellViewBase({ row, col, cell, mud, crate, turf }: CellViewProps) {
         },
       ]}
     >
-      {/* Saha karosu: hafif kabartmalı, aralarında ince oluk (kasa zemini görünür). */}
-      <View
-        style={[
-          styles.tileBg,
-          {
-            margin: gap,
-            borderRadius: cell * 0.16,
-            backgroundColor: ground,
-          },
-        ]}
-      />
       {turf > 0 ? (
         <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale: turf === 2 ? grow : 1 }] }]}>
           <Turf size={cell} grown={turf === 2} />
@@ -169,83 +226,81 @@ function CellViewBase({ row, col, cell, mud, crate, turf }: CellViewProps) {
 
 export const CellView = React.memo(CellViewBase);
 
-/* ───────────────────────────── ışık ve çerçeve ───────────────────────────── */
+/* ───────────────────────────── tahta yatağı ve çerçeve ───────────────────────────── */
 
-/**
- * Tahtanın üstüne düşen projektör ışığı: üstten yayılan yumuşak parlaklık,
- * köşelerde gölge. Hücrelerin üstünde, taşların altında; tek SVG.
- */
-export const BoardLight = React.memo(function BoardLight({ size }: { size: number }) {
+/** Köşe başına yuvarlatılabilen dikdörtgen yolu (sıra: sol-üst, sağ-üst, sağ-alt, sol-alt). */
+function roundRect(x: number, y: number, w: number, h: number, rx: number, round: readonly boolean[]) {
+  const [a, b, c, d] = round.map((v) => (v ? rx : 0));
   return (
-    <Svg width={size} height={size} viewBox="0 0 100 100" preserveAspectRatio="none" style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Defs>
-        <RadialGradient id="ublight" cx="50%" cy="-10%" r="95%">
-          <Stop offset="0" stopColor={UCLU_BOARD.floodlight} stopOpacity={0.22} />
-          <Stop offset="0.55" stopColor={UCLU_BOARD.floodlight} stopOpacity={0.05} />
-          <Stop offset="1" stopColor={UCLU_BOARD.floodlight} stopOpacity={0} />
-        </RadialGradient>
-        <RadialGradient id="ubvig" cx="50%" cy="55%" r="75%">
-          <Stop offset="0.6" stopColor={UCLU_BOARD.ink} stopOpacity={0} />
-          <Stop offset="1" stopColor={UCLU_BOARD.ink} stopOpacity={0.12} />
-        </RadialGradient>
-      </Defs>
-      <G fill="none" stroke={UCLU_BOARD.pitchLine} strokeOpacity={0.55} strokeWidth={0.6}>
-        <Rect x={1.2} y={1.2} width={97.6} height={97.6} rx={1.5} />
-        <Line x1={1.2} y1={50} x2={98.8} y2={50} />
-        <Circle cx={50} cy={50} r={12} />
-        <Rect x={30} y={1.2} width={40} height={12} />
-        <Rect x={30} y={86.8} width={40} height={12} />
-      </G>
-      <Circle cx={50} cy={50} r={1.1} fill={UCLU_BOARD.pitchLine} fillOpacity={0.55} />
-      <Rect x={0} y={0} width={100} height={100} fill="url(#ublight)" />
-      <Rect x={0} y={0} width={100} height={100} fill="url(#ubvig)" />
-    </Svg>
+    `M${x + a} ${y} L${x + w - b} ${y} Q${x + w} ${y} ${x + w} ${y + b} ` +
+    `L${x + w} ${y + h - c} Q${x + w} ${y + h} ${x + w - c} ${y + h} ` +
+    `L${x + d} ${y + h} Q${x} ${y + h} ${x} ${y + h - d} L${x} ${y + a} Q${x} ${y} ${x + a} ${y} Z`
   );
-});
+}
 
 /**
- * Tahta kasası: kalın, parlak altın-ahşap çerçeve (üstten ışık alan gradyan,
- * koyu dış kontur, köşelerde perçin), içte koyu çim zemin (karoların arası ve
- * şekilli tahtanın boşlukları bu renkte görünür). Çekiç seçiliyken iç kenar
- * vurgu renginde yanar (hedef seçme kipi).
+ * Tahtanın tamamı tek, durağan SVG: her dolu hücre için büyütülmüş
+ * dikdörtgenler üst üste çizilir; birleşimleri tahtanın ŞEKLİNİ izleyen
+ * yumuşak gölge → koyu dış çizgi → ince sıcak altın çerçeve → koyu iç çizgi
+ * → lacivert yatak katmanlarını verir. En üstte yarı saydam soluk dama.
+ * `mask` ("1" dolu, "0" delik) ve hücre boyu değişmedikçe yeniden çizilmez.
+ * Çekiç seçiliyken çerçeve vurgu renginde yanar (hedef seçme kipi).
  */
-export const FrameTrim = React.memo(function FrameTrim({ width, height, pad, hammer }: { width: number; height: number; pad: number; hammer: boolean }) {
-  const r = 22;
-  const rivets = [
-    [pad / 2, pad / 2],
-    [width - pad / 2, pad / 2],
-    [pad / 2, height - pad / 2 - 3],
-    [width - pad / 2, height - pad / 2 - 3],
-  ];
+export const BoardBed = React.memo(function BoardBed({ cols, cell, pad, mask, hammer }: { cols: number; cell: number; pad: number; mask: string; hammer: boolean }) {
+  const rows = Math.ceil(mask.length / cols);
+  const w = cols * cell + pad * 2;
+  const h = rows * cell + pad * 2;
+  const filled = (r: number, c: number) => r >= 0 && c >= 0 && r < rows && c < cols && mask[r * cols + c] === "1";
+  const on: {
+    x: number;
+    y: number;
+    r: number;
+    c: number;
+    round: [boolean, boolean, boolean, boolean];
+  }[] = [];
+  for (let i = 0; i < mask.length; i++) {
+    if (mask[i] !== "1") continue;
+    const r = Math.floor(i / cols);
+    const c = i % cols;
+    const up = filled(r - 1, c);
+    const dn = filled(r + 1, c);
+    const lf = filled(r, c - 1);
+    const rt = filled(r, c + 1);
+    // Yalnız dışa bakan (dışbükey) köşeler yuvarlanır; komşuya bitişik köşeler
+    // düz kalır, böylece birleşim kenarlarında çentik oluşmaz.
+    on.push({
+      x: pad + c * cell,
+      y: pad + r * cell,
+      r,
+      c,
+      round: [!up && !lf, !up && !rt, !dn && !rt, !dn && !lf],
+    });
+  }
+  const grow = (e: number, rx: number, fill: string, dy = 0) =>
+    on.map((q, k) => <Path key={k} d={roundRect(q.x - e, q.y - e + dy, cell + e * 2, cell + e * 2, rx, q.round)} fill={fill} />);
   return (
-    <Svg width={width} height={height} style={StyleSheet.absoluteFill} pointerEvents="none">
+    <Svg width={w} height={h} style={StyleSheet.absoluteFill} pointerEvents="none">
       <Defs>
-        <LinearGradient id="ufrw" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={UCLU_BOARD.frameWoodHi} />
-          <Stop offset="0.45" stopColor={UCLU_BOARD.frameWood} />
-          <Stop offset="1" stopColor={UCLU_BOARD.frameWoodLo} />
+        <LinearGradient id="ubframe" x1="0" y1="0" x2="0" y2={h} gradientUnits="userSpaceOnUse">
+          <Stop offset="0" stopColor={hammer ? UCLU_BOARD.accentHi : UCLU_BOARD.frameWoodHi} />
+          <Stop offset="0.5" stopColor={hammer ? UCLU_BOARD.accent : UCLU_BOARD.frameWood} />
+          <Stop offset="1" stopColor={hammer ? UCLU_BOARD.accentLo : UCLU_BOARD.frameWoodLo} />
+        </LinearGradient>
+        <LinearGradient id="ubglow" x1="0" y1="0" x2="0" y2={h} gradientUnits="userSpaceOnUse">
+          <Stop offset="0" stopColor={UCLU_BOARD.beamCore} stopOpacity={0.1} />
+          <Stop offset="0.6" stopColor={UCLU_BOARD.beamCore} stopOpacity={0} />
         </LinearGradient>
       </Defs>
-      <Rect x={0} y={5} width={width} height={height - 5} rx={r} fill={UCLU_BOARD.chromeLip} />
-      <Rect x={0} y={0} width={width} height={height - 4} rx={r} fill={UCLU_BOARD.frameWoodRim} />
-      <Rect x={2} y={2} width={width - 4} height={height - 8} rx={r - 2} fill="url(#ufrw)" />
-      <Rect x={8} y={4} width={width - 16} height={4} rx={2} fill={UCLU_BOARD.beamCore} fillOpacity={0.45} />
-      {rivets.map(([x, y], i) => (
-        <G key={i}>
-          <Circle cx={x} cy={y} r={3.2} fill={UCLU_BOARD.frameWoodRim} />
-          <Circle cx={x - 0.6} cy={y - 0.6} r={2} fill={UCLU_BOARD.rivet} />
-        </G>
+      {/* Yumuşak gölge (grup saydamlığı: üst üste binen kareler koyulaşmaz). */}
+      <G opacity={0.5}>{grow(Math.min(pad, 10), radius.md, UCLU_BOARD.vignetteInk, 4)}</G>
+      <G>{grow(Math.min(pad - 2, 7), radius.sm + 2, UCLU_BOARD.frameWoodRim)}</G>
+      <G>{grow(Math.min(pad - 3, 5.6), radius.sm + 0.5, "url(#ubframe)")}</G>
+      <G>{grow(2.4, radius.xs, UCLU_BOARD.frameWoodRim)}</G>
+      <G>{grow(1.2, radius.xs - 1, UCLU_BOARD.well)}</G>
+      {on.map((q, k) => (
+        <Rect key={k} x={q.x} y={q.y} width={cell} height={cell} fill={(q.r + q.c) % 2 === 0 ? UCLU_BOARD.cellA : UCLU_BOARD.cellB} />
       ))}
-      <Rect
-        x={pad - 3}
-        y={pad - 3}
-        width={width - pad * 2 + 6}
-        height={height - pad * 2 + 6}
-        rx={12}
-        fill={UCLU_BOARD.frameInset}
-        stroke={hammer ? UCLU_BOARD.accent : UCLU_BOARD.frameWoodRim}
-        strokeWidth={hammer ? 3.5 : 2.5}
-      />
+      <G>{on.map((q, k) => (q.r < rows / 2 ? <Rect key={k} x={q.x} y={q.y} width={cell} height={cell} fill="url(#ubglow)" /> : null))}</G>
     </Svg>
   );
 });
@@ -301,7 +356,7 @@ export function ShineSweep({ size, tick, repeat = false }: { size: number; tick:
           <Defs>
             <LinearGradient id="ubsweep" x1="0" y1="0" x2="1" y2="0">
               <Stop offset="0" stopColor={UCLU_BOARD.floodlight} stopOpacity={0} />
-              <Stop offset="0.5" stopColor={UCLU_BOARD.floodlight} stopOpacity={0.38} />
+              <Stop offset="0.5" stopColor={UCLU_BOARD.floodlight} stopOpacity={0.22} />
               <Stop offset="1" stopColor={UCLU_BOARD.floodlight} stopOpacity={0} />
             </LinearGradient>
           </Defs>
@@ -313,6 +368,63 @@ export function ShineSweep({ size, tick, repeat = false }: { size: number; tick:
 }
 
 /* ───────────────────────────── kilit katmanı ───────────────────────────── */
+
+/** Buz kalıbı: yarı saydam, köşeli bir buz bloğu; parlak üst kenar ve çatlaklar (içindeki taş görünür). */
+export function IceBlock({ size }: { size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 100 100">
+      <Defs>
+        <LinearGradient id="uice" x1="0" y1="0" x2="0.4" y2="1">
+          <Stop offset="0" stopColor={UCLU_BOARD.iceHi} />
+          <Stop offset="0.35" stopColor={UCLU_BOARD.iceBody} />
+          <Stop offset="1" stopColor={UCLU_BOARD.iceLo} />
+        </LinearGradient>
+      </Defs>
+      <Rect x={4} y={4} width={92} height={92} rx={14} fill="url(#uice)" stroke={UCLU_BOARD.iceHi} strokeWidth={2.4} />
+      {/* Eğik bevel: üst-sol açık, alt-sağ koyu. */}
+      <Path d="M8 22 Q8 8 22 8 L78 8 L70 16 L24 16 Q16 16 16 24 L16 70 L8 78 Z" fill={UCLU_BOARD.iceHi} opacity={0.65} />
+      <Path d="M92 30 L92 78 Q92 92 78 92 L30 92 L38 84 L76 84 Q84 84 84 76 L84 38 Z" fill={UCLU_BOARD.iceLo} opacity={0.7} />
+      <G stroke={UCLU_BOARD.iceCrack} strokeWidth={1.8} strokeLinecap="round" fill="none">
+        <Path d="M60 16 L54 30 L62 38 L56 50" />
+        <Path d="M54 30 L44 34" />
+        <Path d="M84 60 L72 64 L68 76" />
+      </G>
+      <Path d="M22 26 L34 18" stroke={UCLU_BOARD.beamCore} strokeWidth={4} strokeLinecap="round" />
+      <Circle cx={22} cy={36} r={2} fill={UCLU_BOARD.beamCore} />
+    </Svg>
+  );
+}
+
+/** Kale ağı: düğümlü ip örgüsü (gölgeli), kalın beyaz kenar halatı. */
+export function NetLock({ size }: { size: number }) {
+  const lines = [20, 35, 50, 65, 80];
+  return (
+    <Svg width={size} height={size} viewBox="0 0 100 100">
+      <Rect x={5} y={5} width={90} height={90} rx={12} fill={UCLU_BOARD.netShade} />
+      {/* İp gölgesi (hafif kaydırılmış koyu örgü) → kabartma etkisi. */}
+      <G stroke={UCLU_BOARD.ropeLo} strokeWidth={4} transform="translate(1.2 1.8)">
+        {lines.map((p) => (
+          <React.Fragment key={p}>
+            <Line x1={p} y1={6} x2={p} y2={94} />
+            <Line x1={6} y1={p} x2={94} y2={p} />
+          </React.Fragment>
+        ))}
+      </G>
+      <G stroke={UCLU_BOARD.rope} strokeWidth={2.8}>
+        {lines.map((p) => (
+          <React.Fragment key={p}>
+            <Line x1={p} y1={6} x2={p} y2={94} />
+            <Line x1={6} y1={p} x2={94} y2={p} />
+          </React.Fragment>
+        ))}
+      </G>
+      <G fill={UCLU_BOARD.rope}>{lines.map((x) => lines.map((y) => <Circle key={`${x}-${y}`} cx={x} cy={y} r={2.6} />))}</G>
+      <Rect x={5} y={5} width={90} height={90} rx={12} fill="none" stroke={UCLU_BOARD.ropeLo} strokeWidth={7} transform="translate(0.8 1.4)" />
+      <Rect x={5} y={5} width={90} height={90} rx={12} fill="none" stroke={UCLU_BOARD.post} strokeWidth={5} />
+      <Rect x={9} y={7} width={40} height={2.4} rx={1.2} fill={UCLU_BOARD.beamCore} />
+    </Svg>
+  );
+}
 
 export interface LockViewProps {
   row: number;
@@ -355,30 +467,7 @@ function LockViewBase({ row, col, cell, snow, net }: LockViewProps) {
         },
       ]}
     >
-      {kind.current === "snow" ? (
-        <View style={[styles.snow, { margin: cell * 0.04 }]}>
-          <Svg width="100%" height="100%" viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
-            <Line x1={14} y1={30} x2={36} y2={14} stroke={UCLU_BOARD.snowEdge} strokeWidth={5} strokeLinecap="round" />
-            <Line x1={64} y1={88} x2={88} y2={68} stroke={UCLU_BOARD.snowEdge} strokeWidth={4} strokeLinecap="round" />
-          </Svg>
-          <View style={styles.snowBadge}>
-            <Ionicons name="snow" size={Math.round(cell * 0.26)} color={UCLU_BOARD.snowInk} />
-          </View>
-        </View>
-      ) : (
-        <Svg width={cell} height={cell} viewBox="0 0 100 100">
-          <Rect x={4} y={4} width={92} height={92} rx={14} fill={UCLU_BOARD.netShade} />
-          <Rect x={4} y={4} width={92} height={92} rx={14} fill="none" stroke={UCLU_BOARD.net} strokeWidth={3.5} />
-          <G stroke={UCLU_BOARD.net} strokeWidth={3}>
-            {[22, 40, 58, 76].map((p) => (
-              <React.Fragment key={p}>
-                <Line x1={p} y1={6} x2={p} y2={94} />
-                <Line x1={6} y1={p} x2={94} y2={p} />
-              </React.Fragment>
-            ))}
-          </G>
-        </Svg>
-      )}
+      {kind.current === "snow" ? <IceBlock size={cell} /> : <NetLock size={cell} />}
     </Animated.View>
   );
 }
@@ -387,20 +476,10 @@ export const LockView = React.memo(LockViewBase);
 
 const styles = StyleSheet.create({
   cell: { position: "absolute" },
-  tileBg: { ...StyleSheet.absoluteFillObject },
   center: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
   },
-  snow: {
-    flex: 1,
-    borderRadius: radius.md,
-    backgroundColor: UCLU_BOARD.snow,
-    borderWidth: 1.5,
-    borderColor: UCLU_BOARD.snowEdge,
-    overflow: "hidden",
-  },
-  snowBadge: { position: "absolute", right: 2, bottom: 1 },
   sweepClip: { overflow: "hidden" },
 });

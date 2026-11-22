@@ -171,7 +171,7 @@ function computeLayout(W: number, H: number, plates: number, cap: number, n: num
   };
 }
 
-export function KantinGame({ level: levelNo, maxWidth, maxHeight, preBoosters, boosterStock, useBooster, onFinish, paused }: PuzzleGameProps) {
+export function KantinGame({ level: levelNo, maxWidth, maxHeight, preBoosters, boosterStock, useBooster, onFinish, paused, onPause }: PuzzleGameProps) {
   const level = useMemo(() => kantinLevel(levelNo), [levelNo]);
   const cap = level.holdCap + (preBoosters.includes("tezgah") ? 2 : 0);
   const totalTime = level.timeLimit > 0 ? level.timeLimit + (preBoosters.includes("sure") ? KANTIN_EXTRA_TIME : 0) : 0;
@@ -608,7 +608,7 @@ export function KantinGame({ level: levelNo, maxWidth, maxHeight, preBoosters, b
       </View>
 
       <View style={[styles.abs, { top: 0, width: W }]}>
-        <Hud served={st.served} total={level.orders.length} timeLeft={timeLeft} tips={m.tips} tipsBump={tipsBump} height={geo.hudH} />
+        <Hud served={st.served} total={level.orders.length} timeLeft={timeLeft} tips={m.tips} tipsBump={tipsBump} height={geo.hudH} onPause={onPause} width={W} />
       </View>
 
       {/* Bekleme tezgâhı */}

@@ -41,12 +41,16 @@ import {
   ListRow,
   Reveal,
   ScreenHeader,
+  SkeletonCard,
   Touchable,
   useHeaderScroll,
 } from "@/components/ui";
 import { StageCard, StageStat } from "@/components/league/kit";
 import { RULES_SECTIONS, RULES_UPDATED_AT } from "@/constants/rulesContent";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
+import { getScopeRuleBook, ruleBookSections } from "@/lib/api/ruleBooks";
+import { formatDateLong } from "@/lib/format";
 import { useScope } from "@/providers/ScopeProvider";
 import { animateNextLayout, colors, elevate, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
@@ -129,16 +133,38 @@ export default function RulesScreen() {
 
   const searching = search.trim().length > 1;
 
+  /* Kapsamın yayındaki kural kitapçığı (yönetimin düzenlediği metin). Yoksa,
+     sunucuya ulaşılamazsa ya da metni boşsa resmî sabit metin gösterilir. */
+  const bookQuery = useQuery({
+    queryKey: ["rule-books", "scope", scope.cityId ?? null, scope.leagueId ?? null, scope.seasonId ?? null],
+    queryFn: () => getScopeRuleBook({ cityId: scope.cityId, leagueId: scope.leagueId, seasonId: scope.seasonId }),
+    staleTime: 10 * 60_000,
+    retry: 1,
+  });
+  const book = bookQuery.data ?? null;
+  const bookSections = useMemo(
+    () => (book?.content ? ruleBookSections(book.content, book.title || "Kurallar") : []),
+    [book],
+  );
+  const fromServer = bookSections.length > 0;
+  const sourceSections = fromServer ? bookSections : RULES_SECTIONS;
+  const updatedAt = fromServer ? formatDateLong(book?.updated_at || book?.published_at || "") || "" : RULES_UPDATED_AT;
+
   /** Bölümler tek seferde ayrıştırılır; arama yalnız süzer. */
   const parsed = useMemo(
     () =>
-      RULES_SECTIONS.map((section, index) => ({
-        title: section.title,
-        ...splitTitle(section.title),
-        index,
-        entries: section.items.map((item, itemIndex) => parseRule(item, index, itemIndex)),
-      })),
-    [],
+      sourceSections.map((section, index) => {
+        const split = splitTitle(section.title);
+        return {
+          title: section.title,
+          // Numarasız başlıkta (sunucu kitapçığı) sıra numarası verilir.
+          number: split.number || String(index + 1),
+          name: split.name,
+          index,
+          entries: section.items.map((item, itemIndex) => parseRule(item, index, itemIndex)),
+        };
+      }),
+    [sourceSections],
   );
 
   const sections = useMemo<RuleSectionData[]>(() => {
@@ -176,7 +202,7 @@ export default function RulesScreen() {
     [sections, searching],
   );
 
-  const allOpen = open.length === RULES_SECTIONS.length;
+  const allOpen = parsed.length > 0 && open.length === parsed.length;
 
   const toggleSection = (index: number) => {
     animateNextLayout();
@@ -187,7 +213,7 @@ export default function RulesScreen() {
 
   const toggleAll = () => {
     animateNextLayout();
-    setOpen(allOpen ? [] : RULES_SECTIONS.map((_, index) => index));
+    setOpen(allOpen ? [] : parsed.map((_, index) => index));
   };
 
   const listRef = useRef<SectionList<RuleEntry, RuleSectionData>>(null);
@@ -250,7 +276,7 @@ export default function RulesScreen() {
                 {upperTR("Resmî kural kitapçığı")}
               </Text>
               <Text style={styles.coverTitle} numberOfLines={1} {...textScale.dense}>
-                {scope.leagueLabel || "Elitlig"} kuralları
+                {fromServer && book?.title ? book.title : `${scope.leagueLabel || "Elitlig"} kuralları`}
               </Text>
             </View>
           </View>
@@ -267,7 +293,7 @@ export default function RulesScreen() {
                 </Text>
               </View>
               <Text style={styles.coverDateLabel} numberOfLines={1} {...textScale.badge}>
-                {RULES_UPDATED_AT}
+                {updatedAt}
               </Text>
             </View>
           </View>
@@ -339,9 +365,9 @@ export default function RulesScreen() {
   const listFooter = (
     <View style={styles.footer}>
       <Text style={styles.footerNote} {...textScale.long}>
-        Bu metin elitlig.com/kurallar sayfasındaki resmî kural kitapçığının
-        birebir kopyasıdır. Madde numaralarındaki atlamalar resmî metinde de
-        vardır.
+        {fromServer
+          ? "Bu metin lig yönetiminin bu kapsam için yayımladığı kural kitapçığıdır."
+          : "Bu metin elitlig.com/kurallar sayfasındaki resmî kural kitapçığının birebir kopyasıdır. Madde numaralarındaki atlamalar resmî metinde de vardır."}
       </Text>
       <ListRow
         leading={{ icon: "chatbubble-ellipses-outline", tone: "brand" }}
@@ -367,7 +393,7 @@ export default function RulesScreen() {
         {...scrollProps}
         onScroll={handleScroll}
         ref={listRef}
-        sections={sections}
+        sections={bookQuery.isLoading ? [] : sections}
         keyExtractor={(item) => item.key}
         stickySectionHeadersEnabled
         keyboardShouldPersistTaps="handled"
@@ -378,12 +404,16 @@ export default function RulesScreen() {
         ListHeaderComponent={listHeader}
         ListFooterComponent={sections.length ? listFooter : null}
         ListEmptyComponent={
+          bookQuery.isLoading ? (
+            <SkeletonCard lines={6} />
+          ) : (
           <EmptyState
             icon="search-outline"
             title="Sonuç yok"
             body="Aradığınız kelime kural metninde geçmiyor. Daha kısa bir kelime deneyin."
             variant="inline"
           />
+          )
         }
         renderSectionHeader={({ section }) => {
           /* Bölüm başlığı yapışkan bir KART BAŞLIĞIDIR: degrade numara

@@ -1,5 +1,5 @@
 import { del, get, post } from "../http";
-import type { Paged, TransferOffer } from "./panel";
+import type { TransferOffer } from "./panel";
 
 /**
  * Takım tarafı transfer uçları — routes/transferOffers.js, routes/transferMarket.js.
@@ -50,12 +50,25 @@ export interface OutboxOffer extends TransferOffer {
   release_status?: "PENDING" | "APPROVED" | "REJECTED" | null;
 }
 
-export const getOfferOutbox = (page = 1) =>
-  get<Paged<OutboxOffer>>("/api/transfer-offers/outbox", { page, limit: 50 });
-
 /** Serbest kalma izni — yalnız oyuncunun mevcut takımının yöneticisi. */
 export const decideRelease = (publicId: string, decision: "approve" | "reject", note = "") =>
   post<{ message?: string }>(`/api/transfer-offers/${encodeURIComponent(publicId)}/release/${decision}`, { note });
+
+/** Transfer izninin durumu — routes/transferOffers.js `GET /:offerId/release`. */
+export interface ReleaseStatus {
+  offer_public_id: string;
+  offer_status: string;
+  release_status: "PENDING" | "APPROVED" | "REJECTED" | null;
+  release_decided_at: string | null;
+  release_note: string | null;
+  decided_by_me: boolean;
+  can_decide: boolean;
+  player: { id: number; name: string | null } | null;
+  offering_team: { id: number; name: string | null } | null;
+}
+
+export const getReleaseStatus = (publicId: string) =>
+  get<{ release: ReleaseStatus }>(`/api/transfer-offers/${encodeURIComponent(publicId)}/release`).then((r) => r.release);
 
 /* ───────────────────────── Transfer borsası ───────────────────────── */
 

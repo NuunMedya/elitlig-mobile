@@ -14,6 +14,8 @@ export const SOCKET_EVENTS = Object.freeze({
   SCORE_UPDATED: "MATCH_SCORE_UPDATED",
   LINEUP_UPDATED: "MATCH_LINEUP_UPDATED",
   STATUS_UPDATED: "MATCH_STATUS_UPDATED",
+  /** İstatistik (şut, korner, top hâkimiyeti…) değişti; sunucu constants/socketEvents.js. */
+  STATS_UPDATED: "MATCH_STATS_UPDATED",
 });
 
 /** Anlık görüntüyü baştan çekmeyi gerektiren olaylar. */
@@ -27,4 +29,5 @@ export const RESNAPSHOT_EVENTS = [
   SOCKET_EVENTS.LINEUP_UPDATED,
   SOCKET_EVENTS.STATUS_UPDATED,
   SOCKET_EVENTS.TIMER_UPDATED,
+  SOCKET_EVENTS.STATS_UPDATED,
 ];

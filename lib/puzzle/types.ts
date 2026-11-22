@@ -58,11 +58,34 @@ export interface PuzzleGameProps {
   /** Ekran genişliğinden kenar boşlukları düşülmüş kullanılabilir genişlik. */
   maxWidth: number;
   /**
-   * Oyun alanının kullanılabilir yüksekliği (üst şerit ve alt güvenli alan
-   * düşülmüş). Oyun bu yüksekliği DOLDURMALIDIR: tahta / sahne büyür, hedef
-   * çubuğu üste, güçlendiriciler alta yaslanır; ekranın altı boş kalmaz.
+   * Oyun alanının kullanılabilir yüksekliği. Uygulama başlığı / şeridi YOK:
+   * RN oyunlarında ekran yüksekliğinden yalnız üst ve alt güvenli alan
+   * düşülür; tam ekran (WebView) oyunlarda ekranın tamamıdır. Oyun bu
+   * yüksekliği DOLDURMALIDIR: tahta / sahne büyür, hedef çubuğu üste,
+   * güçlendiriciler alta yaslanır; ekranın altı boş kalmaz.
    */
   maxHeight: number;
+  /**
+   * Oyun kutusunun dışında kalan ekran payı (px): kutudan ekran kenarlarına
+   * olan uzaklık (çentik / durum çubuğu, ev çubuğu, yan boşluklar). Kendi
+   * sahnesini çizen oyun, zeminini bu kadar dışarı taşırarak kenardan kenara
+   * uzatır; etkileşimli HUD öğeleri kutunun içinde kalır.
+   */
+  bleed?: { top: number; bottom: number; left: number; right: number };
+  /**
+   * Tam ekran (WebView) oyunlarda güvenli alan payı (CSS px): oyun sahnesini
+   * kenardan kenara çizer, HUD'unu bu payların içinde tutar
+   * (games/core.js `safeArea`).
+   */
+  safeArea?: { top: number; bottom: number };
+  /**
+   * Durdur: oyun kendi üst HUD satırına yuvarlak bir durdur düğmesi koyar
+   * (components/game/HudPauseButton) ve basılınca bunu çağırır; çerçeve mola
+   * kartını açar. Tam ekran (WebView) oyunlarda düğmeyi çerçeve bindirir.
+   */
+  onPause?: () => void;
+  /** Ses açık mı (çerçevenin mola kartındaki tercih; sesli oyunlar okur). */
+  sound?: boolean;
   /** Seviye öncesi seçilen güçlendiriciler (stoktan düşülmüş). */
   preBoosters: string[];
   /** Oyun içi güçlendirici stoğu (gösterim için). */
@@ -95,6 +118,12 @@ export interface PuzzleGameModule {
   boosters: PuzzleBoosterDef[];
   goalSummary: (level: number) => PuzzleGoalSummary;
   Game: React.ComponentType<PuzzleGameProps>;
+  /**
+   * Tam ekran (WebView / Canvas) oyun: ekranın tamamını alır, güvenli alanı
+   * kendisi uygular (`safeArea`); durdur düğmesini çerçeve sağ üst köşeye
+   * bindirir (oyunun HUD'u o köşeyi `hudInset` ile boş bırakır).
+   */
+  fullBleed?: boolean;
 }
 
 /** Tohumlu rastgele sayı üreteci (mulberry32) — seviyeler belirlenimci. */
