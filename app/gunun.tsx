@@ -854,7 +854,7 @@ export default function DailyQuizScreen() {
 
             {!auth.user ? (
               <Text style={styles.hint} {...textScale.long}>
-                Skorun rekor tablosuna yazılsın diye giriş yapabilirsin.
+                Oynamadan önce giriş yaparsan skorun rekor tablosuna yazılır.
               </Text>
             ) : null}
           </ScrollView>
@@ -890,7 +890,7 @@ export default function DailyQuizScreen() {
 
                 {!auth.user ? (
                   <Text style={styles.resultMeta} numberOfLines={2} {...textScale.dense}>
-                    Sıralamaya girmek için giriş yapman yeterli.
+                    Misafir turu sıralamaya girmez; giriş yapıp oynadığın testler sıralamaya yazılır.
                   </Text>
                 ) : players != null ? (
                   <Text style={styles.resultMeta} numberOfLines={2} {...textScale.dense}>

@@ -22,6 +22,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { useGameRoster } from "@/components/game/useGameRoster";
 import { OVERLAY_PAUSE } from "@/components/game/HudPauseButton";
+import { useLevelArenaScore } from "@/components/game/useLevelArenaScore";
 import { WebGame, type GameCommand, type GameOverPayload, type WebGameHandle } from "@/components/game/WebGame";
 import { Touchable, useReduceMotion } from "@/components/ui";
 import { STAGE_COMMON } from "@/lib/puzzle/stagePalette";
@@ -61,6 +62,8 @@ const CONTINUE_EXTRA = "+1 hak";
 
 export function SavunmaGame({ level, maxWidth, maxHeight, preBoosters, boosterStock, useBooster, onFinish, paused, requestContinue, safeArea, sound: soundProp }: PuzzleGameProps) {
   const web = useRef<WebGameHandle>(null);
+  /* Bölüm skoru arena tablosuna da gider (haftalık görevler + sıralama). */
+  const arenaScore = useLevelArenaScore("savunma");
   const reduceMotion = useReduceMotion();
   const auth = useAuth();
   const scope = useScope();
@@ -93,6 +96,7 @@ export function SavunmaGame({ level, maxWidth, maxHeight, preBoosters, boosterSt
     if (!started.current) {
       started.current = true;
       send({ type: "start" });
+      arenaScore.begin();
     }
   }, [ready, level, preBoosters, sound, reduceMotion, roster, safeTop, safeBottom, send]);
 
@@ -105,6 +109,7 @@ export function SavunmaGame({ level, maxWidth, maxHeight, preBoosters, boosterSt
     (payload: GameOverPayload) => {
       if (finished.current) return;
       finished.current = true;
+      arenaScore.submit(payload);
       const won = payload.stats.won === 1;
       const stars = (won ? Math.max(1, Math.min(3, Math.round(payload.stats.stars || 1))) : 0) as PuzzleResult["stars"];
       const conceded = payload.stats.conceded ?? 0;
@@ -114,7 +119,7 @@ export function SavunmaGame({ level, maxWidth, maxHeight, preBoosters, boosterSt
         : `Savunma ${payload.stats.wave ?? 1}. dalgada çöktü · ${defeated} rakip durduruldu`;
       onFinish({ won, stars, score: payload.score, summary });
     },
-    [onFinish],
+    [onFinish, arenaScore],
   );
 
   const onEvent = useCallback(

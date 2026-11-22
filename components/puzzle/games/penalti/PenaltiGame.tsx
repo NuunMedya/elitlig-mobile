@@ -5,6 +5,7 @@
  * bileşen yalnız köprüdür (docs/oyun-yenileme-2026-11.md §2):
  *   RN → oyun : config {levelMode:true, level, boosters, boosterStock, roster,
  *               perks, sound, reduceMotion, hudInset} · start · booster ·
+ *               boosterDeclined ·
  *               continue · giveUp · pause / resume
  *   oyun → RN : ready · levelInfo · useBooster {key} (canlı güçlendirici
  *               isteği: stok çerçevede, düşerse "booster" döner) · fail ·
@@ -22,6 +23,7 @@ import { StyleSheet, View } from "react-native";
 
 import { useGameRoster } from "@/components/game/useGameRoster";
 import { PAUSE_HUD_INSET } from "@/components/game/HudPauseButton";
+import { useLevelArenaScore } from "@/components/game/useLevelArenaScore";
 import { WebGame, type GameCommand, type GameOverPayload, type WebGameHandle } from "@/components/game/WebGame";
 import { useReduceMotion } from "@/components/ui";
 import { getPlayerCareer } from "@/lib/api/career";
@@ -39,6 +41,7 @@ const KEYS = ["nisan", "ek_sut"] as const;
 /** Bölüm modu komutları: WebGame'in GameCommand türünde (henüz) yok. */
 type LevelCommand =
   | { type: "booster"; key: string }
+  | { type: "boosterDeclined"; key: string }
   | { type: "continue"; extra?: { shots?: number } }
   | { type: "giveUp" }
   | {
@@ -57,6 +60,8 @@ type LevelCommand =
 
 export function PenaltiGame({ level, maxWidth, maxHeight, preBoosters, boosterStock, useBooster, onFinish, paused, requestContinue, safeArea, sound: soundProp }: PuzzleGameProps) {
   const web = useRef<WebGameHandle>(null);
+  /* Bölüm skoru arena tablosuna da gider (haftalık görevler + sıralama). */
+  const arenaScore = useLevelArenaScore("penalti");
   const send = useCallback((cmd: GameCommand | LevelCommand) => web.current?.send(cmd as GameCommand), []);
   const reduceMotion = useReduceMotion();
   const auth = useAuth();
@@ -116,6 +121,7 @@ export function PenaltiGame({ level, maxWidth, maxHeight, preBoosters, boosterSt
     if (!started.current) {
       started.current = true;
       send({ type: "start" });
+      arenaScore.begin();
     }
   }, [send]);
 
@@ -129,20 +135,23 @@ export function PenaltiGame({ level, maxWidth, maxHeight, preBoosters, boosterSt
     (payload: GameOverPayload) => {
       if (finished.current) return;
       finished.current = true;
+      arenaScore.submit(payload);
       const won = payload.stats.won === 1;
       const stars = won ? (Math.max(1, Math.min(3, Math.round(payload.stats.stars || 1))) as 1 | 2 | 3) : 0;
       const goals = payload.stats.goals ?? 0;
       const shots = payload.stats.shots ?? 0;
       onFinish({ won, stars, score: payload.score, summary: `${goals}/${shots} gol` });
     },
-    [onFinish],
+    [onFinish, arenaScore],
   );
 
   const onEvent = useCallback(
     (message: Record<string, unknown>) => {
       if (message.type === "useBooster") {
         const key = String(message.key ?? "");
+        // Düşemezse oyuna söylenir; yoksa düğme bir sonraki şuta kadar soluk kalırdı.
         if ((KEYS as readonly string[]).includes(key) && useBooster(key)) send({ type: "booster", key });
+        else send({ type: "boosterDeclined", key });
         return;
       }
       if (message.type === "fail") {

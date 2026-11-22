@@ -23,6 +23,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { useGameRoster } from "@/components/game/useGameRoster";
 import { OVERLAY_PAUSE } from "@/components/game/HudPauseButton";
+import { useLevelArenaScore } from "@/components/game/useLevelArenaScore";
 import { WebGame, type GameCommand, type GameOverPayload, type WebGameHandle } from "@/components/game/WebGame";
 import { Touchable, useReduceMotion } from "@/components/ui";
 import { STAGE_COMMON } from "@/lib/puzzle/stagePalette";
@@ -60,6 +61,8 @@ type LevelCommand =
 
 export function KadroGame({ level, maxWidth, maxHeight, preBoosters, boosterStock, useBooster, onFinish, paused, requestContinue, safeArea, sound: soundProp }: PuzzleGameProps) {
   const web = useRef<WebGameHandle>(null);
+  /* Bölüm skoru arena tablosuna da gider (haftalık görevler + sıralama). */
+  const arenaScore = useLevelArenaScore("kadro");
   const reduceMotion = useReduceMotion();
   const auth = useAuth();
   const scope = useScope();
@@ -95,6 +98,7 @@ export function KadroGame({ level, maxWidth, maxHeight, preBoosters, boosterStoc
     if (!started.current) {
       started.current = true;
       send({ type: "start" });
+      arenaScore.begin();
     }
   }, [ready, level, preBoosters, sound, reduceMotion, roster, safeTop, safeBottom, send]);
 
@@ -107,6 +111,7 @@ export function KadroGame({ level, maxWidth, maxHeight, preBoosters, boosterStoc
     (payload: GameOverPayload) => {
       if (finished.current) return;
       finished.current = true;
+      arenaScore.submit(payload);
       const s = payload.stats;
       const won = s.won === 1;
       const stars = (won ? Math.max(1, Math.min(3, Math.round(s.stars || 1))) : 0) as PuzzleResult["stars"];
@@ -115,7 +120,7 @@ export function KadroGame({ level, maxWidth, maxHeight, preBoosters, boosterStoc
         : `Kadron tükendi · ${s.rivals ?? 0} grup eritildi, en kalabalık kadro ${s.squad ?? 0}`;
       onFinish({ won, stars, score: payload.score, summary });
     },
-    [onFinish],
+    [onFinish, arenaScore],
   );
 
   const onEvent = useCallback(
