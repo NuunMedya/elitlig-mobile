@@ -12,7 +12,7 @@ import { shortName, splitName } from "@/lib/share/format";
 import { alpha } from "@/lib/share/palette";
 import { upperTR } from "@/theme";
 import { Poster, Spacer } from "../canvas/Layout";
-import { CText, Crest, FillBox, FitName, Glass, Glyph, Halo, Overline, Portrait, SigBar, StatTile, useSvgId } from "../canvas/Primitives";
+import { CText, Crest, FillBox, FitName, Glass, Glyph, Halo, Kicker, Overline, Portrait, StatTile, useSvgId } from "../canvas/Primitives";
 import type { ShareFrame, ShareTemplateDef } from "../canvas/types";
 
 export interface WeeklyPerson {
@@ -53,9 +53,8 @@ function WeekHead({ f, d, title }: { f: ShareFrame; d: WeeklyShareData; title: s
   const { u, story } = f;
   return (
     <View style={{ marginTop: u(story ? 8 : 0) }}>
-      <Overline f={f}>{d.week}</Overline>
-      <CText f={f} k="title" scale={story ? 1.05 : 0.8} style={{ marginTop: u(2) }}>{title}</CText>
-      <SigBar f={f} width={36} height={3} style={{ marginTop: u(story ? 8 : 5) }} />
+      <Kicker f={f}>{d.week}</Kicker>
+      <CText f={f} k="title" scale={story ? 1.05 : 0.8} style={{ marginTop: u(6) }}>{title}</CText>
     </View>
   );
 }
@@ -158,7 +157,7 @@ function WeeklySquad({ f, d }: { f: ShareFrame; d: WeeklyShareData }) {
   const lines: ("FWD" | "MID" | "DEF" | "GK")[] = ["FWD", "MID", "DEF", "GK"];
   const byLine = lines.map((key) => d.squad.filter((p) => (p.line ?? "MID") === key)).filter((row) => row.length);
   const pw = W - u(44);
-  const ph = u(story ? 420 : 272);
+  const ph = u(story ? 384 : 262);
   const size = story ? 44 : 30;
   return (
     <Poster f={f} mood="top" title={d.league} meta={d.city} footer={d.footer} watermark={false}>

@@ -6,6 +6,7 @@ const {
   createRunOncePlugin,
   withAndroidManifest,
   withInfoPlist,
+  withPodfile,
   withProjectBuildGradle,
 } = require("expo/config-plugins");
 
@@ -63,7 +64,34 @@ const withElitligLiveAndroid = (config) => {
   return config;
 };
 
+// Xcode 26 Swift derleyicisi HaishinKit 1.9.x'i -O ile derlerken çöküyor
+// ("Found a leaked owned value that was never consumed", MixerNode.format).
+// Yalnız bu pod için iyileştirmeyi kapat; uygulamanın geri kalanı etkilenmez.
+const HAISHIN_MARK = "# ElitligLive: HaishinKit -Onone";
+const HAISHIN_SNIPPET = `
+    ${HAISHIN_MARK}
+    installer.pods_project.targets.each do |t|
+      next unless t.name == 'HaishinKit'
+      t.build_configurations.each do |bc|
+        bc.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
+        bc.build_settings['SWIFT_COMPILATION_MODE'] = 'singlefile'
+      end
+    end`;
+
+function addHaishinFix(src) {
+  if (src.includes(HAISHIN_MARK)) return src;
+  const re = /post_install do \|installer\|/;
+  if (!re.test(src)) {
+    throw new Error("ElitligLive: Podfile'da post_install bloğu bulunamadı");
+  }
+  return src.replace(re, (m) => `${m}${HAISHIN_SNIPPET}`);
+}
+
 const withElitligLiveIos = (config, props) => {
+  config = withPodfile(config, (cfg) => {
+    cfg.modResults.contents = addHaishinFix(cfg.modResults.contents);
+    return cfg;
+  });
   return withInfoPlist(config, (cfg) => {
     const camera = props.cameraPermission || DEFAULT_CAMERA;
     const mic = props.microphonePermission || DEFAULT_MICROPHONE;

@@ -333,7 +333,8 @@ const AD_TEXT: Record<AdKind, { reward: string; icon: keyof typeof Ionicons.glyp
   life: { reward: "+1 can", icon: "heart", claiming: "Can ekleniyor", success: "+1 can kazandın!" },
   double_coins: { reward: "2× jeton", icon: "disc", claiming: "Jetonlar ekleniyor", success: "Jetonların ikiye katlandı!" },
   booster: { reward: "ücretsiz güçlendirici", icon: "flash", claiming: "Güçlendirici ekleniyor", success: "Ücretsiz güçlendirici çantanda!" },
-  spin: { reward: "çark hakkı", icon: "sync-circle", claiming: "Çark dönüyor", success: "Çark ödülün eklendi!" },
+  spin: { reward: "çark hakkı", icon: "sync-circle", claiming: "Çark dönüyor", success: "Ek çevirme hazır: çark dönüyor!" },
+  chest: { reward: "ek sandık", icon: "gift", claiming: "Sandık hazırlanıyor", success: "Bir sandık daha seçebilirsin!" },
 };
 
 /** Sunucu akışlı reklam (POST /ad/start → /ad/claim) — her tür için. */

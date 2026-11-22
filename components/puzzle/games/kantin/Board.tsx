@@ -23,9 +23,10 @@ import Svg, { Circle, Defs, G, LinearGradient, Path, Polygon, RadialGradient, Re
 
 import { kantinCrowd, kantinScene as S } from "@/lib/puzzle/kantinPalette";
 import { KANTIN_PRODUCTS, type KantinItem, type KantinOrder } from "@/lib/puzzle/levels/kantin";
-import { fonts, radius, space, textScale, type } from "@/theme";
+import { Touchable } from "@/components/ui";
+import { fonts, radius, space, textScale, touchSlop, type } from "@/theme";
 
-import { BoosterButton3D, HudPill, usePop, wave } from "../soyunma/CartoonKit";
+import { BoosterButton3D, HudPill, IconDisc, usePop, wave } from "../soyunma/CartoonKit";
 import { FanFigure, type FanMood } from "./Fan";
 import { CoinIcon, CrateIcon, ProductIcon, TileGloss } from "./ProductIcon";
 
@@ -235,7 +236,13 @@ export const Hud = memo(function Hud({
   tips,
   tipsBump,
   height,
+  onPause,
+  width,
 }: {
+  /** HUD genişliği: durdur düğmesiyle dar satırda haplar küçülür, sipariş hapında yalnız sayı kalır. */
+  width?: number;
+  /** Durdur: HUD satırının sağ ucunda, haplarla aynı dilde yuvarlak düğme. */
+  onPause?: () => void;
   served: number;
   total: number;
   timeLeft: number | null;
@@ -266,9 +273,11 @@ export const Hud = memo(function Hud({
     Animated.spring(pop, { toValue: 1, friction: 5, tension: 180, useNativeDriver: true }).start();
   }, [low, ss, pop]);
   const pct = total ? served / total : 0;
-  const pill = Math.max(34, Math.min(44, height - 14));
+  const narrow = Boolean(onPause) && (width ?? 999) < 430;
+  const tight = Boolean(onPause) && (width ?? 999) < 360;
+  const pill = tight ? 34 : Math.max(34, Math.min(44, height - 14));
   return (
-    <View style={[styles.hud, { height }]}>
+    <View style={[styles.hud, tight && styles.hudTight, { height }]}>
       <HudPill
         height={pill}
         style={styles.hudGoalWrap}
@@ -279,7 +288,7 @@ export const Hud = memo(function Hud({
         <View style={styles.hudGoalText}>
           <Text {...textScale.badge} style={styles.hudValue}>
             {served}
-            <Text style={styles.hudOf}>/{total} sipariş</Text>
+            <Text style={styles.hudOf}>/{total}{narrow ? "" : " sipariş"}</Text>
           </Text>
           <View style={styles.hudBar}>
             <View style={[styles.hudBarFill, { width: `${Math.round(pct * 100)}%` }]} />
@@ -299,6 +308,11 @@ export const Hud = memo(function Hud({
           {tips}
         </Text>
       </HudPill>
+      {onPause ? (
+        <Touchable onPress={onPause} hitSlop={touchSlop(pill)} accessibilityRole="button" accessibilityLabel="Oyunu durdur" haptic="light">
+          <IconDisc icon="pause" size={pill} tone="pill" color={S.hudText} />
+        </Touchable>
+      ) : null}
     </View>
   );
 });
@@ -859,6 +873,7 @@ const styles = StyleSheet.create({
   hud: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.sm },
   hudGoalWrap: { flex: 1 },
   hudGoalText: { flex: 1, gap: 3 },
+  hudTight: { gap: space.xs, paddingHorizontal: space.xs },
   hudValue: { ...type.scoreSm, color: S.hudText },
   hudOf: { ...type.numSmStrong, fontFamily: fonts.bold, color: S.hudOfInk },
   hudBar: { height: 7, borderRadius: radius.pill, backgroundColor: S.track, overflow: "hidden" },

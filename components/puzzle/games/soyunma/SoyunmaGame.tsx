@@ -12,6 +12,7 @@ import { Animated, Easing, InteractionManager, Pressable, StyleSheet, Text, View
 import Svg, { Defs, Line, LinearGradient, RadialGradient, Rect, Stop } from "react-native-svg";
 import { fonts, haptics, radius, space, textScale, type } from "@/theme";
 import { SOYUNMA_UI as UI } from "@/lib/puzzle/soyunmaPalette";
+import { HudPauseButton, type HudButtonSkin } from "@/components/game/HudPauseButton";
 import type { PuzzleGameProps } from "@/lib/puzzle/types";
 import {
   applyMove,
@@ -266,11 +267,11 @@ const CrestFly = memo(function CrestFly({ info, onArrive }: { info: CrestFlightI
 const shadowText = toonShadow;
 
 /** Hamle sayacı: koyu iç blok, iri beyaz rakam; azalınca kırmızı. */
-function MovesCounter({ label, value, warn, height }: { label: string; value: string; warn: boolean; height: number }) {
+function MovesCounter({ label, value, warn, height, narrow }: { label: string; value: string; warn: boolean; height: number; narrow?: boolean }) {
   const pop = usePop(value, 1.1);
   return (
     <Animated.View
-      style={[styles.counter, { height, backgroundColor: warn ? UI.red : UI.panelDeep, transform: [{ scale: pop }] }]}
+      style={[styles.counter, narrow && styles.counterNarrow, { height, backgroundColor: warn ? UI.red : UI.panelDeep, transform: [{ scale: pop }] }]}
       accessible
       accessibilityLabel={`${label}: ${value}`}
     >
@@ -332,7 +333,10 @@ interface BoardProps extends PuzzleGameProps {
   lvl: SoyunmaLevel;
 }
 
-function SoyunmaBoardView({ lvl, maxWidth, maxHeight, preBoosters, boosterStock, useBooster: spendBooster, onFinish, paused }: BoardProps) {
+/** Durdur düğmesi: HUD panelinin açık lacivert yüzü, koyu dudak. */
+const PAUSE_SKIN: HudButtonSkin = { face: UI.roomGlow, lip: UI.panelDeep, edge: UI.floorLine, ink: UI.text };
+
+function SoyunmaBoardView({ lvl, maxWidth, maxHeight, preBoosters, boosterStock, useBooster: spendBooster, onFinish, paused, onPause }: BoardProps) {
   // Ön güçlendirici: "aski" → sona boş bir ek askı.
   const extra = preBoosters.includes("aski");
   const board: SoyunmaBoard = useMemo(
@@ -349,6 +353,8 @@ function SoyunmaBoardView({ lvl, maxWidth, maxHeight, preBoosters, boosterStock,
    * Dolaplar odanın iç alanına genişlik VE yüksekliğe göre en büyük boyla
    * sığdırılır, zemine (alta) yaslanır; oda alanın kalanını doldurur. */
   const compact = maxHeight < 560;
+  /** Dar ekran (320): HUD satırı durdur düğmesine yer açmak için sıkışır. */
+  const narrow = maxWidth < 340;
   const hudH = compact ? 58 : 70;
   const barH = compact ? 52 : 62;
   const gapV = compact ? space.s : space.sm;
@@ -589,8 +595,8 @@ function SoyunmaBoardView({ lvl, maxWidth, maxHeight, preBoosters, boosterStock,
     <View style={{ width: maxWidth, height: maxHeight }}>
       {/* HUD */}
       <View style={[styles.hud, { height: hudH }]} onLayout={onHudLayout}>
-        <View style={[styles.hudFace, { height: hudH }]}>
-          <MovesCounter label={movesLabel} value={movesValue} warn={warn} height={hudH - 16} />
+        <View style={[styles.hudFace, narrow && styles.hudFaceNarrow, { height: hudH }]}>
+          <MovesCounter label={movesLabel} value={movesValue} warn={warn} height={hudH - 16} narrow={narrow} />
           <Animated.View
             onLayout={onGoalLayout}
             style={[
@@ -603,9 +609,11 @@ function SoyunmaBoardView({ lvl, maxWidth, maxHeight, preBoosters, boosterStock,
             <Crest team={lvl.teamIds[0]} size={compact ? 24 : 28} />
             <View style={styles.goalBody}>
               <View style={styles.goalRow}>
-                <Text {...textScale.badge} style={styles.goalLabel}>
-                  TAKIM
-                </Text>
+                {narrow ? null : (
+                  <Text {...textScale.badge} style={styles.goalLabel}>
+                    TAKIM
+                  </Text>
+                )}
                 <Text {...textScale.badge} style={styles.goalValue}>
                   {landedComplete}/{lvl.colors}
                 </Text>
@@ -625,8 +633,14 @@ function SoyunmaBoardView({ lvl, maxWidth, maxHeight, preBoosters, boosterStock,
               </Text>
             </View>
           ) : (
-            <StarMeter stars={liveStars} size={compact ? 16 : 20} />
+            <View style={styles.levelCol} accessible accessibilityLabel={`Seviye ${lvl.level}`}>
+              <Text {...textScale.badge} style={styles.counterLabel} numberOfLines={1}>
+                SEVİYE {lvl.level}
+              </Text>
+              <StarMeter stars={liveStars} size={compact ? 14 : 18} />
+            </View>
           )}
+          {onPause ? <HudPauseButton onPress={onPause} size={compact ? 34 : 40} skin={PAUSE_SKIN} /> : null}
         </View>
       </View>
 
@@ -790,6 +804,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.sm,
     borderRadius: radius.xl,
   },
+  levelCol: { alignItems: "center", gap: space.xxs },
+  hudFaceNarrow: { gap: space.xs, paddingHorizontal: space.xs },
+  counterNarrow: { minWidth: 60 },
   counter: { minWidth: 76, borderRadius: radius.lg, alignItems: "center", justifyContent: "center", paddingHorizontal: space.sm },
   counterLabel: { ...type.nano, fontFamily: fonts.bold, color: UI.textSoft, letterSpacing: 0.6 },
   counterValue: { ...type.scoreMd, color: UI.text },

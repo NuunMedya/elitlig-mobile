@@ -3,6 +3,7 @@ import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-nativ
 import { Ionicons } from "@expo/vector-icons";
 import { fonts, radius, space, textScale, type } from "@/theme";
 import { UCLE_UI as UI } from "@/lib/puzzle/uclePalette";
+import { HudPauseButton, type HudButtonSkin } from "@/components/game/HudPauseButton";
 
 type IonName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -30,7 +31,12 @@ interface HudProps {
   extraRack: boolean;
   compact: boolean;
   still?: boolean;
+  /** Durdur: panelin sağ ucunda, çiplerle aynı dilde yuvarlak düğme. */
+  onPause?: () => void;
 }
+
+/** Durdur düğmesi: panelin yarı saydam beyaz çip yüzü, koyu dudak. */
+const PAUSE_SKIN: HudButtonSkin = { face: UI.chromeHi, lip: UI.lip, edge: UI.outline, ink: UI.text };
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.max(0, Math.floor(s % 60))).padStart(2, "0")}`;
 
@@ -146,6 +152,8 @@ function HudBase(p: HudProps) {
             </View>
           </Animated.View>
         ) : null}
+
+        {p.onPause ? <HudPauseButton onPress={p.onPause} size={p.compact ? 34 : 40} skin={PAUSE_SKIN} /> : null}
       </View>
     </View>
   );

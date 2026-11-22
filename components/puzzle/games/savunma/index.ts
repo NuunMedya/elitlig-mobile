@@ -34,4 +34,5 @@ export const savunmaModule: PuzzleGameModule = {
   ],
   goalSummary,
   Game: SavunmaGame,
+  fullBleed: true,
 };

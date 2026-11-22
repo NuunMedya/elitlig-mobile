@@ -114,7 +114,7 @@
           "resizeMode": "contain",
           "backgroundColor": "#2E1065",
           "dark": {
-            "backgroundColor": "#180D33"
+            "backgroundColor": "#2E1065"
           }
         }
       ],

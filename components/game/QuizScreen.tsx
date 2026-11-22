@@ -519,18 +519,10 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
       {phase === "playing" ? <FlashLayer value={flash.value} ok={flashOk} /> : null}
 
       <Animated.View style={[styles.body, { paddingTop: insets.top + space.sm }, screenShake.style]}>
-        {/* — Üst şerit: HUD + duraklat (uygulama başlığı yok) — */}
+        {/* — Oyunun üst HUD satırı: puan / canlar + yuvarlak durdur düğmesi.
+             Uygulama başlığı ya da oyun adı şeridi YOK (ad, kurulum kartında). — */}
         <View style={styles.topBar}>
-          {phase !== "setup" && question ? (
-            <Hud score={score} lives={lives} bump={scoreBump} />
-          ) : (
-            <NavyPill>
-              <Ionicons name="trophy" size={15} color={QUIZ.accent} />
-              <Text style={styles.pillText} {...textScale.badge}>
-                {upperTR("Elitlig Arena")}
-              </Text>
-            </NavyPill>
-          )}
+          {phase !== "setup" && question ? <Hud score={score} lives={lives} bump={scoreBump} /> : null}
           <View style={styles.flex} />
           <RoundButton icon="pause" onPress={openPause} accessibilityLabel="Oyunu duraklat" shine={ambient} />
         </View>

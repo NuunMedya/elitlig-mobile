@@ -28,6 +28,17 @@ export const SHARE_FORMATS: Record<ShareFormat, { label: string; short: string; 
   post: { label: "Post 1080×1350", short: "Post", px: [1080, 1350], units: [360, 450] },
 };
 
+/**
+ * GÜVENLİ KENAR PAYLARI (birim). Instagram hikâyesinde üstte ilerleme
+ * çubuğu + profil satırı, altta "mesaj gönder" alanı görselin üstüne biner.
+ * Marka künyesi üst paya, elitlig.com alt paya oturur; asıl içerik (skor,
+ * arma, ad) daima aradaki gövdededir. Post'ta arayüz binmez, pay dardır.
+ */
+export const SAFE: Record<ShareFormat, { top: number; bottom: number; side: number }> = {
+  story: { top: 46, bottom: 40, side: 22 },
+  post: { top: 16, bottom: 14, side: 20 },
+};
+
 /** Tuvalin tasarım genişliği (birim). */
 export const BASE_UNITS = 360;
 

@@ -18,6 +18,8 @@
  *   · Günlük giriş ödülü + seri kartı (components/city/DailyReward): yıldız,
  *     jeton, joker; uzun seri ödülleri ve seri koruyucu (eski "Lig Yolu
  *     günlük ödülü" bunun içindedir).
+ *   · "Günlük ödüller" şeridi (components/gamehome/Rewards): Hediye · Günlük
+ *     Çark · Sandık Seç · Günün Penaltısı; rozet yalnız alınabilir ödülde.
  *   · Oyunlar EŞİT satırlar halinde, yalnız kategori başlıkları altında:
  *       Bilgi yarışmaları · Bulmacalar · Bölümlü arcade · Sonsuz arcade · Lig yarışmaları
  *     Her oyun kendi ANA SAYFASINA açılır (sözleşme §6): bölümlüler
@@ -48,6 +50,7 @@ import Svg, { Circle, Ellipse, Path, Polygon, Rect } from "react-native-svg";
 
 import { DailyRewardEntry } from "@/components/city/DailyReward";
 import { XpTransferBanner } from "@/components/city/XpTransferBanner";
+import { DailyRewardsStrip } from "@/components/gamehome/Rewards";
 import { OfflinePill, requestOfflineFlush } from "@/components/offline/OfflineSync";
 import { Touchable } from "@/components/ui";
 import { getMyArenaSummary, type ArenaGame } from "@/lib/api/arena";
@@ -283,6 +286,7 @@ export default function OyunlarScreen() {
 
         {/* Günlük giriş ödülü ve seri (yıldız + jeton + joker; seri koruyucu) */}
         {signedIn ? <DailyRewardEntry /> : null}
+        {signedIn ? <DailyRewardsStrip /> : null}
 
         {city ? <XpTransferBanner transfer={city.xp.transfer} perStar={city.xp.per_star} /> : null}
 

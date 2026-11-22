@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { useGameRoster } from "@/components/game/useGameRoster";
+import { PAUSE_HUD_INSET } from "@/components/game/HudPauseButton";
 import { WebGame, type GameCommand, type GameOverPayload, type WebGameHandle } from "@/components/game/WebGame";
 import { useReduceMotion } from "@/components/ui";
 import { getPlayerCareer } from "@/lib/api/career";
@@ -30,8 +31,8 @@ import { useScope } from "@/providers/ScopeProvider";
 
 /** Arena oyunlarıyla ortak ses tercihi (ArenaGameScreen ile aynı anahtar). */
 const SOUND_KEY = "elitlig.arena.sound.v1";
-/** Duraklat düğmesi oyun alanının DIŞINDA (üst şerit): HUD köşe boşluğu gerekmez. */
-const HUD_INSET = { top: 0, right: 0 };
+/** Sağ üstteki durdur düğmesinin (çerçeve bindirir) köşesi: oyun HUD'u orayı boş bırakır. */
+const HUD_INSET = PAUSE_HUD_INSET;
 /** Oyunun tanıdığı güçlendirici anahtarları (games/penalti.js applyBooster). */
 const KEYS = ["nisan", "ek_sut"] as const;
 
@@ -51,9 +52,10 @@ type LevelCommand =
       perks?: { penalti?: { aimBonus: number } } | null;
       roster?: Record<string, unknown> | null;
       hudInset?: { top: number; right: number };
+      safeArea?: { top: number; bottom: number };
     };
 
-export function PenaltiGame({ level, maxWidth, maxHeight, preBoosters, boosterStock, useBooster, onFinish, paused, requestContinue }: PuzzleGameProps) {
+export function PenaltiGame({ level, maxWidth, maxHeight, preBoosters, boosterStock, useBooster, onFinish, paused, requestContinue, safeArea, sound: soundProp }: PuzzleGameProps) {
   const web = useRef<WebGameHandle>(null);
   const send = useCallback((cmd: GameCommand | LevelCommand) => web.current?.send(cmd as GameCommand), []);
   const reduceMotion = useReduceMotion();
@@ -73,7 +75,9 @@ export function PenaltiGame({ level, maxWidth, maxHeight, preBoosters, boosterSt
   /* Gerçek lig kadrosu (atıcı + kaleci merdiveni); gelmezse varsayılan kadro. */
   const { roster } = useGameRoster("penalti", scope.cityId ?? null, playerId);
 
-  const [sound, setSound] = useState(true);
+  /* Ses: çerçevenin mola kartındaki tercih (yoksa kayıtlı tercih). */
+  const [savedSound, setSound] = useState(true);
+  const sound = soundProp ?? savedSound;
   useEffect(() => {
     AsyncStorage.getItem(SOUND_KEY)
       .then((value) => {
@@ -85,9 +89,12 @@ export function PenaltiGame({ level, maxWidth, maxHeight, preBoosters, boosterSt
   const boosters = useMemo(() => preBoosters.filter((k) => (KEYS as readonly string[]).includes(k)), [preBoosters]);
   const stock = useMemo(() => Object.fromEntries(KEYS.map((k) => [k, boosterStock[k] ?? 0])), [boosterStock]);
 
+  /* Tam ekran: sahne kenardan kenara, HUD güvenli alanın içinde (games/core.js safeArea). */
+  const safeTop = Math.round(safeArea?.top ?? 0);
+  const safeBottom = Math.round(safeArea?.bottom ?? 0);
   const config = useMemo<LevelCommand>(
-    () => ({ type: "config", levelMode: true, level, boosters, boosterStock: stock, sound, reduceMotion, perks, roster, hudInset: HUD_INSET }),
-    [level, boosters, stock, sound, reduceMotion, perks, roster],
+    () => ({ type: "config", levelMode: true, level, boosters, boosterStock: stock, sound, reduceMotion, perks, roster, hudInset: HUD_INSET, safeArea: { top: safeTop, bottom: safeBottom } }),
+    [level, boosters, stock, sound, reduceMotion, perks, roster, safeTop, safeBottom],
   );
   const configRef = useRef(config);
   configRef.current = config;
@@ -159,5 +166,5 @@ export function PenaltiGame({ level, maxWidth, maxHeight, preBoosters, boosterSt
 }
 
 const styles = StyleSheet.create({
-  frame: { alignSelf: "center", overflow: "hidden", borderRadius: 18 },
+  frame: { alignSelf: "center", overflow: "hidden" },
 });
