@@ -76,6 +76,12 @@ export interface LeaguePickerProps {
   flush?: boolean;
   /** "Tüm Türkiye" / "Tüm ligler" seçenekleri (yalnız Maçlar ekranı). */
   allowAll?: boolean;
+  /**
+   * Dar, iki satırlı hap (Maçlar alt çubuğu): gün şeridinin yanında durur,
+   * yüksekliği gün kapsülleriyle aynıdır. Üst satır il / "Tüm Türkiye", alt
+   * satır lig · sezon / "Tüm ligler". Sabitli çipler çizilmez.
+   */
+  compact?: boolean;
   testID?: string;
 }
 
@@ -106,6 +112,7 @@ export const LeaguePicker = React.memo(function LeaguePicker({
   step = "city",
   flush = false,
   allowAll = false,
+  compact = false,
   testID,
 }: LeaguePickerProps) {
   const ink = useHeaderTone("paper") === "ink";
@@ -127,6 +134,50 @@ export const LeaguePicker = React.memo(function LeaguePicker({
 
   const chips = showPinned ? pinnedLeagues : [];
   const parts = useMemo(() => label.split(" · "), [label]);
+
+  if (compact) {
+    const [head, ...rest] = parts;
+    const sub = rest.join(" · ") || (wide ? "Tüm iller" : "");
+    return (
+      <Touchable
+        feedback="chip"
+        haptic="selection"
+        onPress={open}
+        style={[styles.compact, ink ? styles.pillInk : styles.pillPaper]}
+        accessibilityRole="button"
+        accessibilityLabel={`Lig seçici: ${label}`}
+        accessibilityHint="İl, lig ve sezon seçmek için dokunun"
+        testID={testID ?? "league-picker"}
+      >
+        <View style={styles.compactText}>
+          <View style={styles.compactHead}>
+            <Ionicons
+              name={wide ? "earth" : "trophy"}
+              size={12}
+              color={ink ? colors.onDark : colors.brandAccent}
+            />
+            <Text
+              style={[styles.compactTitle, ink ? styles.pillLabelInk : null]}
+              numberOfLines={1}
+              {...textScale.dense}
+            >
+              {head}
+            </Text>
+          </View>
+          {sub ? (
+            <Text
+              style={[styles.compactSub, ink ? styles.partMutedInk : null]}
+              numberOfLines={1}
+              {...textScale.dense}
+            >
+              {sub}
+            </Text>
+          ) : null}
+        </View>
+        <Ionicons name="chevron-down" size={12} color={ink ? colors.onDark : colors.brandAccent} />
+      </Touchable>
+    );
+  }
 
   const pill = (
     <Touchable
@@ -261,6 +312,36 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.brandDim,
+  },
+  compact: {
+    flex: 1,
+    height: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    paddingLeft: space.sm,
+    paddingRight: space.s,
+    borderRadius: radius.lg,
+  },
+  compactText: {
+    flex: 1,
+    minWidth: 0,
+    gap: space.px,
+  },
+  compactHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+  },
+  compactTitle: {
+    ...type.label,
+    fontFamily: fonts.semibold,
+    color: colors.textPrimary,
+    flexShrink: 1,
+  },
+  compactSub: {
+    ...type.caption,
+    color: colors.textTertiary,
   },
   chevronInk: {
     backgroundColor: colors.inkTile,
