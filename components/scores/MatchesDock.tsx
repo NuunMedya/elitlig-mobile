@@ -1,21 +1,24 @@
 /**
  * MatchesDock — Maçlar ekranının ALT ÇUBUĞU: alt menünün hemen üstünde yüzen
- * cam kart, iki kat.
+ * cam kart, TEK SATIR (telefonda dikey yer yemesin diye gün şeridi ile kapsam
+ * seçici yan yana durur).
  *
- *   ╭───────────────────────────────────────────────╮
- *   │ [📅]  Pzt  Sal  Çar ▐Per▌ Cum  Cmt  Paz        │  gün kapsülleri
- *   │        9    10   11 ▐12▌  13   14   15        │  (seçili: degrade + hale)
- *   │        ·         ·  ▐ • ▌  ·                   │  maçlı gün noktası
- *   ├───────────────────────────────────────────────┤
- *   │ [🏆 Ankara · FREELİG · 15. Sezon ▾]  [↩ Bugün] │  kapsam + bugüne dön
- *   ╰───────────────────────────────────────────────╯
+ *   ╭──────────────────────────────────────────────╮
+ *   │ [📅]  Pzt ▐Sal▌ Çar  Per │ 🌐 Tüm Türkiye ▾   │
+ *   │        9  ▐10▌  11   12  │    Tüm iller      │
+ *   │        ·  ▐ • ▌  ·       │                   │
+ *   ╰──────────────────────────────────────────────╯
  *   ══════════════ alt menü ══════════════
  *
- * GÜN ŞERİDİ: seçili günün üç gün öncesi ile üç gün sonrası; kapsüle dokunmak
- * o güne gider, şerit seçili günü ortada tutacak biçimde kayar. Maçlı günün
- * altında nokta (canlıysa pembe). Uzak bir gün için soldaki takvim düğmesi.
- * Seçili kapsül metin taşıdığı için `gradientBrand` ile dolar; imza degradesi
- * (`gradientSignature`) kapsülün çevresinde ince hale olarak durur.
+ * GÜN ŞERİDİ: dar ekranda seçili günün bir öncesi + iki sonrası (4 gün),
+ * geniş ekranda üç öncesi + üç sonrası (7 gün). Kapsüle dokunmak o güne
+ * gider. Maçlı günün altında nokta (canlıysa pembe). Uzak bir gün ya da
+ * "Bugüne git" için soldaki takvim düğmesi; bugünden uzaktayken düğmede
+ * küçük bir işaret durur. Seçili kapsül `gradientBrand` ile dolar; imza
+ * degradesi (`gradientSignature`) çevresinde ince hale olarak durur.
+ *
+ * KAPSAM: `LeaguePicker compact` — kapsüllerle aynı yükseklikte iki satırlı
+ * hap (il / lig · sezon).
  *
  * Canlı segmentinde gün kavramı yoktur: şeridin yerini aynı yükseklikte
  * "N canlı maç" özeti alır — çubuk zıplamaz.
@@ -27,7 +30,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { memo, useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { LeaguePicker } from "@/components/LeaguePicker";
 import { LiveBadge, Touchable } from "@/components/ui";
 import {
@@ -68,8 +71,11 @@ export interface MatchesDockProps {
 }
 
 const SLOP = touchSlop(36);
-/** Şeritte seçili günün iki yanındaki gün sayısı. */
-const SIDE_DAYS = 3;
+/** Şerit: dar ekranda seçili günden 1 önce + 2 sonra, genişte 3 + 3. */
+const NARROW_DAYS = { before: 1, after: 2 } as const;
+const WIDE_DAYS = { before: 3, after: 3 } as const;
+/** Bu genişlikten itibaren 7 gün sığar (tablet / yatay). */
+const WIDE_BREAKPOINT = 600;
 const WEEKDAYS_SHORT = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"] as const;
 
 export const MatchesDock = memo(function MatchesDock({
@@ -88,18 +94,20 @@ export const MatchesDock = memo(function MatchesDock({
   markers,
   onSelectDate,
 }: MatchesDockProps) {
+  const { width } = useWindowDimensions();
+  const span = width >= WIDE_BREAKPOINT ? WIDE_DAYS : NARROW_DAYS;
   const days = useMemo(() => {
     if (!date) return [];
     const list: string[] = [];
-    for (let i = -SIDE_DAYS; i <= SIDE_DAYS; i += 1) list.push(shiftDays(date, i));
+    for (let i = -span.before; i <= span.after; i += 1) list.push(shiftDays(date, i));
     return list;
-  }, [date]);
+  }, [date, span]);
 
   const strip = date && onSelectDate;
 
   return (
     <View style={styles.dock} testID="matches-dock">
-      {/* — ÜST KAT: gün şeridi / canlı özeti — */}
+      {/* — SOL: gün şeridi / canlı özeti — */}
       {live ? (
         <View style={styles.liveRow} accessibilityRole="text">
           <View style={[styles.liveOrb, liveCount > 0 ? styles.liveOrbOn : null]}>
@@ -121,14 +129,12 @@ export const MatchesDock = memo(function MatchesDock({
             feedback="chip"
             haptic="selection"
             onPress={onToday}
-            style={styles.ghostPill}
+            hitSlop={SLOP}
+            style={styles.calendarBtn}
             accessibilityRole="button"
             accessibilityLabel="Bugünün maçlarına dön"
           >
-            <Ionicons name="calendar-outline" size={13} color={colors.brandAccent} />
-            <Text style={styles.ghostPillText} {...textScale.dense}>
-              Bugün
-            </Text>
+            <Ionicons name="calendar-outline" size={18} color={colors.brandAccent} />
           </Touchable>
         </View>
       ) : strip ? (
@@ -140,9 +146,10 @@ export const MatchesDock = memo(function MatchesDock({
             hitSlop={SLOP}
             style={styles.calendarBtn}
             accessibilityRole="button"
-            accessibilityLabel={`${dayLabel}. Takvimi aç`}
+            accessibilityLabel={`${dayLabel}. Takvimi aç${isToday ? "" : ", bugüne dönmek için de"}`}
           >
             <Ionicons name="calendar-outline" size={18} color={colors.brandAccent} />
+            {!isToday ? <View style={styles.awayDot} /> : null}
           </Touchable>
           <View style={styles.days}>
             {days.map((iso) => (
@@ -197,27 +204,9 @@ export const MatchesDock = memo(function MatchesDock({
         </View>
       )}
 
-      {/* — ALT KAT: kapsam + bugüne dön — */}
-      <View style={styles.bottomRow}>
-        <View style={styles.picker}>
-          <LeaguePicker allowAll pinned={false} flush />
-        </View>
-        {!live && !isToday ? (
-          <Touchable
-            feedback="chip"
-            haptic="selection"
-            onPress={onToday}
-            hitSlop={SLOP}
-            style={styles.todayPill}
-            accessibilityRole="button"
-            accessibilityLabel="Bugüne dön"
-          >
-            <Ionicons name="return-down-back" size={13} color={colors.brandAccent} />
-            <Text style={styles.ghostPillText} {...textScale.dense}>
-              Bugün
-            </Text>
-          </Touchable>
-        ) : null}
+      {/* — SAĞ: kapsam — */}
+      <View style={[styles.picker, width >= WIDE_BREAKPOINT ? styles.pickerWide : null]}>
+        <LeaguePicker allowAll compact />
       </View>
     </View>
   );
@@ -324,6 +313,8 @@ const styles = StyleSheet.create({
     marginBottom: space.sm,
     marginTop: space.xs,
     padding: space.s,
+    flexDirection: "row",
+    alignItems: "center",
     gap: space.s,
     borderRadius: radius.xxl,
     backgroundColor: colors.glass,
@@ -334,6 +325,8 @@ const styles = StyleSheet.create({
 
   /* — Gün şeridi — */
   stripRow: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: space.xs,
@@ -345,6 +338,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.brandDim,
+  },
+  /** Bugünden uzaktayken takvim düğmesindeki işaret ("bugüne dön" buradan). */
+  awayDot: {
+    position: "absolute",
+    top: space.s,
+    right: space.s,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.brandAccent,
   },
   days: {
     flex: 1,
@@ -407,6 +410,8 @@ const styles = StyleSheet.create({
 
   /* — Eski gezgin (geriye uyum) — */
   dayNav: {
+    flex: 1,
+    minWidth: 0,
     height: 40,
     flexDirection: "row",
     alignItems: "center",
@@ -428,6 +433,8 @@ const styles = StyleSheet.create({
 
   /* — Canlı özeti — */
   liveRow: {
+    flex: 1,
+    minWidth: 0,
     height: CAPSULE_H,
     flexDirection: "row",
     alignItems: "center",
@@ -454,29 +461,17 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
   },
 
-  /* — Alt kat — */
-  bottomRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-    paddingTop: space.s,
-    borderTopWidth: hairline,
-    borderTopColor: colors.separator,
-  },
+  /* — Kapsam (sağ) — */
   picker: {
-    flex: 1,
-    minWidth: 0,
+    width: "40%",
+    maxWidth: 200,
+    flexDirection: "row",
+  },
+  pickerWide: {
+    width: 240,
+    maxWidth: 240,
   },
   ghostPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.xs,
-    height: 32,
-    paddingHorizontal: space.md,
-    borderRadius: radius.pill,
-    backgroundColor: colors.brandDim,
-  },
-  todayPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.xs,
