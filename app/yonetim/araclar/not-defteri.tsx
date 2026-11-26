@@ -15,7 +15,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, RefreshControl, Share, StyleSheet, Text, View } from "react-native";
 
@@ -68,6 +68,7 @@ const matchesQuery = (note: ToolNote, query: string) => {
 };
 
 export default function NotebookScreen() {
+  const router = useRouter();
   const toast = useToast();
   const queryClient = useQueryClient();
   const [archived, setArchived] = useState(false);
@@ -237,7 +238,10 @@ export default function NotebookScreen() {
       app="not-defteri"
       title="Not defteri"
       scroll={false}
-      actions={[{ icon: "share-outline", onPress: exportAll, accessibilityLabel: "Notları dışa aktar" }]}
+      actions={[
+        { icon: "mic-outline", onPress: () => router.push("/yonetim/araclar/sesli-not"), accessibilityLabel: "Sesli hızlı not (Siri)" },
+        { icon: "share-outline", onPress: exportAll, accessibilityLabel: "Notları dışa aktar" },
+      ]}
       bottom={
         <View style={styles.segment}>
           <SegmentedControl
