@@ -6,6 +6,7 @@
  * rotası ise `/mac/123`. Bu fonksiyon yalnız TANIDIĞI web yollarını çevirir;
  * uygulamanın kendi şeması (`elitlig://mac/123`) ve tanımadığı her şey olduğu
  * gibi geçer. Tanınmayan bir https adresi ana sayfaya iner (boş ekran yok).
+ * `elitlig://` adresleri de aynı kurallardan geçer (site yolu ya da uygulama yolu).
  *
  * Saf fonksiyondur: `app/+native-intent.tsx` çağırır, hata fırlatmaz.
  */
@@ -105,7 +106,14 @@ function adminPath(pathname: string, search: string): string | null {
 
 export function webPathToAppPath(input: string): string {
   try {
-    const raw = String(input ?? "");
+    let raw = String(input ?? "");
+    // Uygulama şeması: `elitlig://yonetim/araclar/projeler?proje=7` sitedeki
+    // adresle aynı biçimde çevrilir (Siri Kestirmeleri, QR, dış uygulamalar).
+    // `https://` yerine `elitlig://` yazılmış site adresi de kabul edilir:
+    // `elitlig://elitlig.com/haber/…`. Uygulamanın kendi yolları
+    // (`elitlig://mac/123`) eskisi gibi aynı ekrana gider.
+    const scheme = raw.match(/^elitlig:\/\/\/?(.*)$/i);
+    if (scheme) raw = `/${scheme[1].replace(/^(?:www\.)?elitlig\.com(?=[/?#]|$)\/?/i, "")}`;
     const isWeb = /^https?:\/\//i.test(raw);
     let pathname = raw;
     let search = "";
