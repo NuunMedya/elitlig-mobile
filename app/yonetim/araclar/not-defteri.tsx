@@ -15,7 +15,8 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
-import { useCallback, useMemo, useState } from "react";
+import { useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, RefreshControl, Share, StyleSheet, Text, View } from "react-native";
 
 import { ActionSheet, AdminScreen, confirmAction, useAdminMutation, type SheetAction } from "@/components/admin";
@@ -79,6 +80,23 @@ export default function NotebookScreen() {
   const key = toolKeys.notes(archived);
   const notesQuery = useQuery({ queryKey: key, queryFn: () => listNotes(archived ? "1" : "0") });
   const notes = useMemo(() => notesQuery.data ?? [], [notesQuery.data]);
+
+  // Site bağlantısı / derin bağlantı: ?not=<id> o notu bir kez açar.
+  const { not: linkedNote } = useLocalSearchParams<{ not?: string }>();
+  const openedLink = useRef<string | null>(null);
+  useEffect(() => {
+    if (!linkedNote || openedLink.current === linkedNote || !notesQuery.data) return;
+    const found = notesQuery.data.find((n) => String(n.id) === linkedNote);
+    if (found) {
+      openedLink.current = linkedNote;
+      setEditor(draftFromNote(found));
+    } else if (!archived) {
+      setArchived(true); // arşivdeki bir not olabilir
+    } else {
+      openedLink.current = linkedNote; // bulunamadı (silinmiş ya da yetki yok): listeye dön
+      setArchived(false);
+    }
+  }, [linkedNote, notesQuery.data, archived]);
 
   const refresh = useRefresh(() => void notesQuery.refetch(), { refreshing: notesQuery.isRefetching });
 

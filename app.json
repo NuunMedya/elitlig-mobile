@@ -60,7 +60,8 @@
               "scheme": "https",
               "host": "elitlig.com",
               "pathPrefix": "/haberler"
-            },{
+            },
+            {
               "scheme": "https",
               "host": "elitlig.com",
               "pathPrefix": "/haber/"
@@ -74,10 +75,401 @@
               "scheme": "https",
               "host": "www.elitlig.com",
               "pathPrefix": "/haberler"
-            },{
+            },
+            {
               "scheme": "https",
               "host": "www.elitlig.com",
               "pathPrefix": "/haber/"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/araclar"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/araclar/ajanda"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/araclar/hesap-araclari"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/araclar/muhasebe"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/araclar/not-defteri"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/araclar/odak-sayaci"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/araclar/projeler"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/araclar/rehber"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/araclar/tablolar"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/araclar/on-muhasebe"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/haftanin-enleri"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/hesabim"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/junior-cup"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/kura"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/panorama"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/piyasa-degeri"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/sponsorlar"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/takim-finans"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/talepler"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/turkiye-muhasebe"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/admin/cop-kutusu"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/admin/islem-kayitlari"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/admin/itirazlar"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/admin/mesajlar"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/admin/personel"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/admin/savunmalar"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/admin/sehirler"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/admin/sifre-talepleri"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/admin/transfer-onaylari"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/admin/yetkilendirme"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/admin/yonetim-kullanicilari"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/admin/ziyaretci-analizi"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "pathPrefix": "/yonetim/araclar/tablolar/"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/araclar"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/araclar/ajanda"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/araclar/hesap-araclari"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/araclar/muhasebe"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/araclar/not-defteri"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/araclar/odak-sayaci"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/araclar/projeler"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/araclar/rehber"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/araclar/tablolar"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/araclar/on-muhasebe"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/haftanin-enleri"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/hesabim"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/junior-cup"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/kura"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/panorama"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/piyasa-degeri"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/sponsorlar"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/takim-finans"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/talepler"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/turkiye-muhasebe"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/admin/cop-kutusu"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/admin/islem-kayitlari"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/admin/itirazlar"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/admin/mesajlar"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/admin/personel"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/admin/savunmalar"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/admin/sehirler"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/admin/sifre-talepleri"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/admin/transfer-onaylari"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/admin/yetkilendirme"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/admin/yonetim-kullanicilari"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/admin/ziyaretci-analizi"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "pathPrefix": "/yonetim/araclar/tablolar/"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/araclar/mesajlar"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "pathPrefix": "/yonetim/araclar/mesajlar/"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "pathPrefix": "/yonetim/admin/mesajlar/"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "pathPrefix": "/yonetim/araclar/projeler/"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/araclar/mesajlar"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "pathPrefix": "/yonetim/araclar/mesajlar/"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "pathPrefix": "/yonetim/admin/mesajlar/"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "pathPrefix": "/yonetim/araclar/projeler/"
             }
           ],
           "category": [
