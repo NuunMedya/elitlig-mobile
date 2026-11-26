@@ -19,6 +19,11 @@ sayfayı da yakalarsa, o adres uygulamada ana sayfaya düşer. Bunu önlemek iç
 o adresi `"exclude": true` ile listenin BAŞINA ekleyin, ör.
 `{ "/": "/yonetim/araclar/ekipman", "exclude": true }`.
 
+Alt sayfalar sorgu parametresiyle gelir ve uygulama aynı adları okur:
+projeler `?proje=7&sekme=kisiler&kisi=3` → `/yonetim/araclar/projeler/7?sekme=kisiler&kisi=3`,
+not defteri `?not=4`, rehber `?kisi=12` → üye kartı, muhasebe `?bolum=mac`,
+mesajlar `/yonetim/araclar/mesajlar/42` → `/yonetim/sohbet/42`.
+
 ## 1) iOS — `elitlig-client/public/.well-known/apple-app-site-association`
 
 `TEAMID` = Apple Developer hesabının Team ID'si (developer.apple.com →
@@ -32,7 +37,6 @@ Membership). Uzantısız dosya, `application/json` olarak sunulmalı:
         "appIDs": ["TEAMID.com.elitlig.app"],
         "components": [
           { "/": "/yonetim/araclar/ekipman", "exclude": true },
-          { "/": "/yonetim/araclar/mesajlar/*", "exclude": true },
           { "/": "/sehir/*" },
           { "/": "/haberler", "?": { "haber": "?*" } },
           { "/": "/*/mac/*" },

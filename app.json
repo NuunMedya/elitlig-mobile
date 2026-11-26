@@ -430,6 +430,46 @@
               "scheme": "https",
               "host": "www.elitlig.com",
               "pathPrefix": "/yonetim/araclar/tablolar/"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "path": "/yonetim/araclar/mesajlar"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "pathPrefix": "/yonetim/araclar/mesajlar/"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "pathPrefix": "/yonetim/admin/mesajlar/"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "pathPrefix": "/yonetim/araclar/projeler/"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "path": "/yonetim/araclar/mesajlar"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "pathPrefix": "/yonetim/araclar/mesajlar/"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "pathPrefix": "/yonetim/admin/mesajlar/"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "pathPrefix": "/yonetim/araclar/projeler/"
             }
           ],
           "category": [
