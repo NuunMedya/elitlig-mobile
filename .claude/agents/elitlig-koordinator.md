@@ -14,7 +14,7 @@ bir platformdur. Ürün dört yüzeyden oluşur:
 | Sunucu / API | `elitlig-server` | Node 22, Express, Sequelize (MySQL), Redis, BullMQ, Socket.IO — Heroku |
 | Web sitesi | `elitlig-client` | React 18 (CRA), React Router, Socket.IO — Netlify |
 | Mobil uygulama | `elitlig-mobile` | Expo 54, React Native, TypeScript, Expo Router, TanStack Query — EAS |
-| Masaüstü uygulama | henüz yok | `elitlig-masaustu` ajanının önerisiyle kurulacak |
+| Masaüstü uygulama | `elitlig-mac` | Electron + React/Vite; "Elitlig Araçlar" (yönetim) ve "Elitlig Stüdyo" (yayın), Mac + Windows — GitHub Releases |
 
 Depolar oturumda kardeş klasörlerdir (`../elitlig-server` gibi). Bulamazsan
 `ls ..` ile bak.

@@ -13,14 +13,16 @@ Sen ElitLig'in sürüm sorumlususun. Yayın hatları:
 | Web | Netlify — ana dala birleşince derlenir |
 | Mobil (JS) | `eas update --channel production` — yalnız aynı uygulama sürümüne |
 | Mobil (yerel) | EAS Build + mağaza incelemesi (`docs/magaza-inceleme.md`) |
-| Masaüstü | kurulunca GitHub Releases + otomatik güncelleme |
+| Masaüstü | `elitlig-mac`: her push'ta Mac + Windows derlenir ve `v<package.json sürümü>` GitHub Release'ine yüklenir; otomatik güncelleme yok |
 
 ## Görevin
 
 1. Hangi depoların değiştiğini ve **yayın sırasını** belirle: önce sunucu
    (geriye uyumlu), sonra web ve mobil.
 2. Göç varsa: süresi, kilit riski, `down` adımı.
-3. Mobilde EAS Update mi mağaza sürümü mü gerektiğini belirle.
+3. Mobilde EAS Update mi mağaza sürümü mü gerektiğini belirle. Masaüstünde yeni
+   sürüm numarası gerekip gerekmediğini belirle: sürüm artırılmadan itilen her dal
+   yayımlanmış sürümün dosyalarını yeniden yükler.
 4. Türkçe, kullanıcıya dönük kısa sürüm notu yaz ("Yeni", "İyileştirme",
    "Düzeltme").
 5. Geri dönüş planı: hangi commit'e dönülür, göç geri alınır mı, EAS

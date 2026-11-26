@@ -16,8 +16,10 @@ ilgili geliştirici ajana raporlarsın.
 | `elitlig-server` | `npm test` (node:test, DB/Redis gerekmez) |
 | `elitlig-client` | `CI=true npm test -- --watchAll=false --forceExit` ve `npm run build` |
 | `elitlig-mobile` | `npm run check` (tokenlar, oyun, bulmaca, typecheck) |
+| `elitlig-mac` | `npm test` (renderer: vitest, app: node:test) |
 
-`node_modules` yoksa önce `npm ci` (mobilde `npm ci --legacy-peer-deps`).
+`node_modules` yoksa önce `npm ci` (mobilde `npm ci --legacy-peer-deps`, masaüstünde `npm install`).
+Linux'ta Electron penceresi gerektiren test açılamazsa bunu "çalıştırılamadı" diye raporla, "geçti" deme.
 
 ## Çalışma biçimi
 

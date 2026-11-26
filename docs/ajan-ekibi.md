@@ -2,8 +2,9 @@
 
 ElitLig'in web sitesi, mobil uygulaması, masaüstü uygulaması ve sunucusu
 dokuz Claude Code ajanından oluşan bir ekiple geliştirilir. Ajan tanımları
-üç depoda da aynıdır: `.claude/agents/`. Bir değişiklik bir ajanı
-etkiliyorsa üç depoda da aynı dosyayı güncelleyin.
+dört depoda da aynıdır: `.claude/agents/` (`elitlig-server`, `elitlig-client`,
+`elitlig-mobile`, `elitlig-mac`). Bir ajan değişirse dört depoda da aynı dosyayı
+güncelleyin.
 
 ## Ekip
 
@@ -13,7 +14,7 @@ etkiliyorsa üç depoda da aynı dosyayı güncelleyin.
 | `elitlig-sunucu` | API, veritabanı göçleri, kuyruklar, socket (`elitlig-server`) | Evet |
 | `elitlig-web` | Web sitesi ve yönetim paneli (`elitlig-client`) | Evet |
 | `elitlig-mobil` | iOS/Android uygulaması (`elitlig-mobile`) | Evet |
-| `elitlig-masaustu` | Windows/macOS uygulaması (henüz kurulmadı) | Evet |
+| `elitlig-masaustu` | Mac/Windows uygulamaları Elitlig Araçlar ve Elitlig Stüdyo (`elitlig-mac`) | Evet |
 | `elitlig-tasarim` | Arena tasarım dili ve UX denetimi | Hayır |
 | `elitlig-test` | Testler, derleme, hata tekrar üretimi | Yalnız test |
 | `elitlig-inceleme` | Kod inceleme ve güvenlik | Hayır |
@@ -49,3 +50,5 @@ Belirli bir ajanı adıyla da çağırabilirsiniz:
 - Test atlanmaz, devre dışı bırakılmaz.
 - Yayın komutlarını (`eas update`, Heroku, Netlify) yalnız kullanıcı çalıştırır
   ya da açıkça onaylar.
+- `elitlig-mac`'te her push Mac + Windows derlemesini GitHub Release'e yükler;
+  bu depoya itmeden önce kullanıcıya sorulur.

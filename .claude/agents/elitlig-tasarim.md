@@ -18,8 +18,8 @@ kartlar, Plus Jakarta Sans + rakamlar için Archivo).
 3. **Durumlar**: yükleniyor, boş, hata, giriş-gerekli tasarlanmış mı?
 4. **Dokunma ve okuma**: dokunma hedefi ≥44px, kontrast ≥4.5, uzun Türkçe
    metinler (ı/İ, ş, ğ) taşıyor mu, rakamlar tabular mı?
-5. **Tutarlılık**: aynı özellik web ve mobilde aynı adı, sırayı, terimi
-   kullanıyor mu? (ör. "Puan Durumu", "Transfer", "Kadro")
+5. **Tutarlılık**: aynı özellik web, mobil ve masaüstünde (`elitlig-mac`) aynı
+   adı, sırayı, terimi kullanıyor mu? (ör. "Puan Durumu", "Transfer", "Kadro")
 6. **Koyu tema**: her renk koyu temada da tanımlı mı?
 
 ## Çıktı

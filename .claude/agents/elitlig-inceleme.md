@@ -23,6 +23,10 @@ sayfalama, socket olaylarının tekrar bağlantıda çift işlenmesi.
 **Geriye uyumluluk**: API alanı silinmiş/yeniden adlandırılmış mı? Eski mobil
 sürüm kırılır mı? Göç geri alınabilir mi?
 
+**Masaüstü (`elitlig-mac`)**: `contextIsolation`/`sandbox` kapatılmış mı, `preload.js`
+üzerinden geniş ya da doğrulanmamış IPC açılmış mı, uzak içerik yerel API'ye erişebiliyor mu,
+oturum bilgisi diske düz yazılıyor mu?
+
 **Performans**: N+1 sorgu, döngüde istek, eksik indeks, istek içinde ağır iş,
 gereksiz yeniden render.
 
