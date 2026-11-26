@@ -22,6 +22,32 @@ const SIMPLE: Record<string, string> = {
   "/oyuncu-listesi": "/ara",
 };
 
+/**
+ * Sitede ve uygulamada AYNI adla bulunan yönetim sayfaları: yol olduğu gibi
+ * geçer (`/yonetim/araclar/not-defteri` → `/yonetim/araclar/not-defteri`).
+ * Yalnız uygulamada karşılığı olan sayfalar burada; diğerleri (editör, kura
+ * yayını vb.) ana sayfaya düşmesin diye app.json'daki Android filtrelerine de
+ * yalnız bu adresler yazılı. Yeni sayfa eklenince iki yer birlikte güncellenir.
+ */
+const MIRRORED: RegExp[] = [
+  /^\/yonetim$/,
+  /^\/yonetim\/araclar(?:\/(?:ajanda|hesap-araclari|muhasebe|not-defteri|odak-sayaci|projeler|rehber|tablolar))?$/,
+  /^\/yonetim\/araclar\/tablolar\/\d+$/,
+  /^\/yonetim\/(?:haftanin-enleri|hesabim|junior-cup|kura|panorama|piyasa-degeri|sponsorlar|takim-finans|talepler)$/,
+];
+
+/** Sitede `/yonetim/admin/<ad>`, uygulamada `/yonetim/<ad>` olan sayfalar. */
+const ADMIN_ALIAS = new Set([
+  "cop-kutusu", "islem-kayitlari", "itirazlar", "mesajlar", "personel", "savunmalar", "sehirler",
+  "sifre-talepleri", "transfer-onaylari", "yetkilendirme", "yonetim-kullanicilari", "ziyaretci-analizi",
+]);
+
+/** Sitede başka adla duran muhasebe sayfaları. */
+const RENAMED: Record<string, string> = {
+  "/yonetim/araclar/on-muhasebe": "/yonetim/araclar/muhasebe/on-muhasebe",
+  "/yonetim/turkiye-muhasebe": "/yonetim/araclar/muhasebe/turkiye",
+};
+
 export function webPathToAppPath(input: string): string {
   try {
     const raw = String(input ?? "");
@@ -64,6 +90,12 @@ export function webPathToAppPath(input: string): string {
     }
 
     if (SIMPLE[pathname]) return SIMPLE[pathname];
+
+    // Yönetim sayfaları (uygulamada karşılığı olanlar)
+    if (MIRRORED.some((re) => re.test(pathname))) return pathname;
+    if (RENAMED[pathname]) return RENAMED[pathname];
+    const admin = pathname.match(/^\/yonetim\/admin\/([a-z-]+)$/);
+    if (admin && ADMIN_ALIAS.has(admin[1])) return `/yonetim/${admin[1]}`;
     if (/^\/sehir\/(?:[a-z0-9-]*-)?\d+(\/.*)?$/i.test(pathname) || pathname === "/") return "/";
 
     // Uygulama şeması ve uygulama içi yollar olduğu gibi geçer.

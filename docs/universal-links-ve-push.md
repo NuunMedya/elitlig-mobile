@@ -12,6 +12,13 @@ Bağlantıların tarayıcı yerine uygulamayı açması için sitenin iki doğru
 dosyası yayınlaması gerekir. İkisi de hesap bilgisi istediği için repoya
 uydurma değerle konmadı.
 
+Yönetim sayfaları: yalnız uygulamada karşılığı olanlar uygulamada açılır
+(`lib/webPaths.ts` → `MIRRORED`, `ADMIN_ALIAS`, `RENAMED`). iOS dosyasındaki
+joker (`/yonetim/araclar/*`, `/yonetim/admin/*`) uygulamada olmayan bir alt
+sayfayı da yakalarsa, o adres uygulamada ana sayfaya düşer. Bunu önlemek için
+o adresi `"exclude": true` ile listenin BAŞINA ekleyin, ör.
+`{ "/": "/yonetim/araclar/ekipman", "exclude": true }`.
+
 ## 1) iOS — `elitlig-client/public/.well-known/apple-app-site-association`
 
 `TEAMID` = Apple Developer hesabının Team ID'si (developer.apple.com →
@@ -24,11 +31,27 @@ Membership). Uzantısız dosya, `application/json` olarak sunulmalı:
       {
         "appIDs": ["TEAMID.com.elitlig.app"],
         "components": [
+          { "/": "/yonetim/araclar/ekipman", "exclude": true },
+          { "/": "/yonetim/araclar/mesajlar/*", "exclude": true },
           { "/": "/sehir/*" },
           { "/": "/haberler", "?": { "haber": "?*" } },
           { "/": "/*/mac/*" },
           { "/": "/*/takim/*" },
-          { "/": "/*/oyuncu/*" }
+          { "/": "/*/oyuncu/*" },
+          { "/": "/yonetim" },
+          { "/": "/yonetim/araclar" },
+          { "/": "/yonetim/araclar/*" },
+          { "/": "/yonetim/haftanin-enleri" },
+          { "/": "/yonetim/hesabim" },
+          { "/": "/yonetim/junior-cup" },
+          { "/": "/yonetim/kura" },
+          { "/": "/yonetim/panorama" },
+          { "/": "/yonetim/piyasa-degeri" },
+          { "/": "/yonetim/sponsorlar" },
+          { "/": "/yonetim/takim-finans" },
+          { "/": "/yonetim/talepler" },
+          { "/": "/yonetim/turkiye-muhasebe" },
+          { "/": "/yonetim/admin/*" }
         ]
       }
     ]
@@ -56,7 +79,7 @@ Membership). Uzantısız dosya, `application/json` olarak sunulmalı:
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
       "namespace": "android_app",
-      "package_name": "com.elitlig.app",
+      "package_name": "com.elitligtr",
       "sha256_cert_fingerprints": ["SHA256"]
     }
   }
