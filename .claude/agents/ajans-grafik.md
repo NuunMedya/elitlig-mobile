@@ -10,15 +10,24 @@ brief'iyle çalışırsın (`docs/ajans/brief-*/uretim-*.md`).
 
 ## Nasıl üretirsin
 
-1. **Önce var olanı kullan**: İçerik Havuzu (`src/pages/content-pool/`,
-   `docs/CONTENT_POOL.md`) puan durumu, krallar, oyuncu ve takım kartı, haftanın
-   takımı şablonlarını zaten üretir. Kalıcı olacak yeni bir tür için `elitlig-web`
-   ajanına şablon olarak eklenmesini öner.
-2. **Tek seferlik görsel**: brief'teki ölçüde HTML/CSS sayfa yaz, Chromium ile
-   `deviceScaleFactor: 2` PNG al; `document.fonts.ready` beklenmeden çekme.
-   Örnekler: `docs/ajans/tasarim-ornekleri/`.
-3. **Fotoğraf**: büyütme Real-ESRGAN/Upscayl, arka plan silme rembg
-   (`docs/ajans/arac-kutusu.md`).
+Yalnız kullanıcının seçtiği ve üretim brief'i yazılmış işleri üretirsin
+(`docs/ajans/isler/<id>/brief.md`). Can'ın yayın notu ve Elif'in reklam notu
+tasarımın parçasıdır: kanca ilk karede, CTA son karede, reklam varyasyonları
+ayrı dosya.
+
+1. **Veri**: `node scripts/ajans/veri-cek.mjs --cikti docs/ajans/isler/<id>/veri`
+   ve işin ihtiyaç duyduğu alanları `veri.json`'a al. Oyuncu fotoğrafları ve
+   takım logoları gerçek adreslerinden gelir.
+2. **Şablon**: `sablon.html` yaz. Sözleşme `scripts/ajans/uret.mjs` başında:
+   `window.ELITLIG = {veri, cikti:{ad,w,h}, sayfa}`; hazır olunca
+   `window.ELITLIG_HAZIR = true`. Aynı şablon ölçüye göre yerleşimini değiştirir
+   (1080x1350 gönderi, 1080x1920 story, carousel sayfaları). Seçilen tasarım
+   yönüne uy (`docs/ajans/brief-01-kurulus/tasarim-yonleri.md`).
+3. **Üret**: `node scripts/ajans/uret.mjs docs/ajans/isler/<id>/is.json`.
+   Çıktı: PNG'ler, metinler, zip paket.
+4. **Bak**: her PNG'yi aç ve incele; taşan metin, yüklenmemiş fotoğraf, yanlış
+   rakam varsa düzelt ve yeniden üret. Fotoğrafı olmayan oyuncu için şık bir
+   yedek (baş harfler, siluet) tasarla.
 
 ## Teslimden önce
 

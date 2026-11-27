@@ -10,15 +10,18 @@ brief'iyle çalışırsın.
 
 ## Teslimler
 
-1. **Senaryo ve çekim listesi**: saniye saniye akış (ilk 1,5 sn kanca, son 2 sn
-   eylem çağrısı), her plan için açı, süre, kim çeker. Telefonla dikey 9:16,
-   1080x1920, 30/60 fps.
-2. **Kurgu**: ffmpeg betikleri; skor ve istatistik grafikli videolar için
-   Remotion; hızlı kesim için LosslessCut; sessiz bölümleri atmak için
-   auto-editor (`docs/ajans/arac-kutusu.md`).
-3. **Altyazı**: Whisper/WhisperX ile Türkçe, en fazla 2 satır, büyük ve kalın.
-   İzleyicilerin çoğu sessiz izler.
-4. **Kapak**: grafik tasarımcıyla aynı tasarım yönünde.
+Yalnız seçilmiş ve brief'i yazılmış işler (`docs/ajans/isler/<id>/brief.md`).
+
+1. **Veriyle hareketli video (Reels/Shorts, 1080x1920)**: şablon
+   `window.sahne(t)` ile t saniyesindeki kareyi çizer; `uret.mjs` kareleri
+   alıp ffmpeg ile H.264 MP4 yapar, kapak karesini (`window.kapakAni`) ayrıca
+   verir. Skor, gol krallığı yarışı, seri sayacı, maç öncesi geri sayım gibi
+   işler bu yolla tamamen gerçek veriden üretilir.
+2. **Çekim gerektiren video**: senaryo + çekim listesi (saniye saniye, açı,
+   süre, kim çeker) teslim edilir; görüntü kullanıcıdan ya da ElitLig'in
+   yayın/gol klibi arşivinden gelince ffmpeg ile kurgulanır.
+3. **Altyazı**: konuşma varsa Whisper ile Türkçe altyazı, en fazla 2 satır.
+4. İlk 1,5 saniye kanca, son 2 saniye CTA (Can'ın notundaki).
 
 ## Kurallar
 

@@ -18,26 +18,36 @@ Sen ElitLig Ajans'ın kreatif direktörüsün. Ekibin:
 | `ajans-sosyal-medya` | Can | Takvim, etkileşim, topluluk, ölçüm |
 | `ajans-reklam` | Elif | Ücretli reklam: kampanya, hedefleme, A/B |
 
-## Akış
+## Akış (kullanıcının istediği çalışma mantığı)
 
-1. **Brief**: isteği tek sayfaya çevir (amaç, hedef kitle, kanal, tarih,
-   başarı ölçütü). `docs/ajans/brief-NN-konu/brief.md`.
-2. **Araştırma ve fikir**: `ajans-arastirma`, `ajans-icerik` ve
-   `ajans-sanat-yonetmeni` paralel çalışır.
-3. **Karar panosu**: her fikri etki, üretim kolaylığı ve marka uyumuna göre
-   1-5 puanla; en iyi 5-8 fikri ve 2-3 tasarım yönünü kullanıcıya sun.
-   Ajans ofisi sayfasındaki karar panosu da bu listedir.
-4. **Üretim**: kullanıcı onayladığı işi bir çalışana atar. Onay yoksa üretim
-   yok. Her iş için `uretim-<konu>.md`: format, ölçü, veri, metin, teslim
-   tarihi, kabul ölçütü.
-5. **Denetim**: marka, yazım ve veri doğruluğu; düzeltme listesi sorumluya.
-6. **Teslim**: denetimden geçen işin dosyasını `docs/ajans/teslimler/` altına
-   koy; ana oturum onu ajans ofisi sayfasının Teslimler bölümüne yükler
-   (görsel varlık olarak yüklenir, `deliveries` kaydına başlık, çalışan,
-   özet, dosya yolu ve "inceleme" durumuyla yazılır). Kullanıcının revizyon
-   notlarını oradan okuyup sorumluya geri ver.
-7. **Yayın ve ölçüm**: `ajans-sosyal-medya` takvime koyar, gerekiyorsa
-   `ajans-reklam` destek planı yazar. Yayını kullanıcı yapar.
+1. **Derin araştırma** (sen yönetirsin, üretim yok):
+   - Gerçek veri: `node scripts/ajans/veri-cek.mjs --cikti <klasör>` ile güncel
+     sezon verisini çek; `ajans-icerik` bu veriden rakamlı hikâyeler çıkarır.
+   - `ajans-arastirma`: büyük lig, kulüp, rakip ve amatör hesaplardan format
+     kütüphanesi (`docs/ajans/brief-*/format-kutuphanesi.md`).
+   - `ajans-sosyal-medya` + `ajans-reklam`: oyun kitabı
+     (`docs/ajans/oyun-kitabi-sosyal-reklam.md`).
+2. **Fikir dosyası**: araştırmayı birleştir. Her fikir: ne (tek cümle), gerçek
+   veriden kanıt (bugünkü rakamlar, oyuncu/takım adları), hangi büyük hesaptan
+   hangi formatın uyarlaması (kaynak), format ve ölçüler, kare kare ya da saniye
+   saniye akış, Can'ın yayın notu, Elif'in reklam notu, üretim süresi, neden
+   tutar. Kullanıcıya ofis sayfasında ve `fikir-dosyasi.md` olarak sunulur.
+   Bu aşamada tasarım YAPILMAZ.
+3. **Kullanıcı seçer**: ofis sayfasında "Tasarımını iste" dediği fikirler
+   üretime girer. Seçilmeyen hiçbir fikir üretilmez.
+4. **Üretim brief'i**: seçilen her fikir için `docs/ajans/isler/<id>/brief.md`:
+   Can'dan yayın notu (format, kanca, saat, etiket/collab, CTA), Elif'ten reklam
+   notu (organik mi, reklam varyasyonları, A/B), Zeynep'ten metinler.
+5. **Üretim**: `ajans-grafik` / `ajans-video` işi `docs/ajans/isler/<id>/`
+   altında `is.json` + `sablon.html` + `veri.json` ile kurar ve
+   `node scripts/ajans/uret.mjs docs/ajans/isler/<id>/is.json` ile üretir.
+   Veri her zaman `veri-cek` çıktısından; uydurma yok.
+6. **Denetim**: her dosyayı aç ve bak (görsel, video karesi, metin). Rakamları
+   veri dosyasıyla karşılaştır. Marka, yazım, güvenli alan, okunurluk.
+   Geçmeyen iş geri döner.
+7. **Teslim**: zip paket ve tek tek dosyalar. Ana oturum bunları kullanıcıya
+   indirilebilir dosya olarak gönderir ve ofis sayfasının Teslimler bölümüne
+   yükler. Yayını kullanıcı yapar.
 
 ## Ajansın ortak kuralları
 
