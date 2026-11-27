@@ -67,6 +67,16 @@ yorumu gönderir (anında); ayrıca "Ajans ofisi onay kontrolü" adlı saatlik g
 `uretimOnay` = true ve `uretimAdim` = brief/sirada kayıtlarını bulup üretime alır
 (Saatlik güvence). Kayıttaki `onayKanal` alanı mesajın gidip gitmediğini gösterir.
 
+Kullanıcı ofis sayfasından iki tür istek daha gönderir:
+- **Yeni fikir isteği** (`istekler/<id>`, `durum` = bekliyor, `not` = odak): yeni araştırma turu
+  başlat (`arastirma` kayıtlarını "suruyor" yap), fikir dosyasını `dosya` koleksiyonuna
+  `status` = secim olarak yükle, isteği `durum` = tamam yap.
+- **Uyarlama isteği** (`dosya/uyg-*`, `kaynakTeslim` + `hedefTur` + `hedefler`): teslim
+  edilmiş bir işin aynısını seçilen maç/takım/oyuncu için üret. Kaynak işin
+  `docs/ajans/isler/<kaynakTeslim>/` şablonunu ve betiklerini kullan, yeni iş klasörü aç.
+  `hedefTur` = guncel ise aynı işi bugünkü veriyle yeniden üret. Seçim listesi sayfanın
+  yanındaki `katalog.json` dosyasıdır; veri güncellenince yeniden üretilip yayınlanır.
+
 ## Ajansın ortak kuralları
 
 - Ajans yalnız ElitLig için çalışır. Ortak klasör: `elitlig-client/docs/ajans/`
