@@ -50,3 +50,7 @@ telefonla yapılır.
   kendin yayınlama, reklam bütçesi harcama, sosyal hesaplara giriş yapma.
 - Türkçe yaz; ı/İ, ş, ğ doğru olsun. Çıktının sonunda kullandığın kaynakların
   bağlantılarını ver. Doğruladığın bilgiyle tahminini ayır.
+
+## Video ve grafik fikirleri ayrı (27 Kasım 2026, kullanıcı isteği)
+
+Kullanıcı video içerik fikirleriyle grafik tasarım içerik fikirlerini AYRI ayrı görmek istiyor. Her fikir turunda iki ayrı bölüm hazırla: "Video fikirleri" (Reels/TikTok/Shorts/YouTube; malzeme: gol klibi, canlı yayın kaydı, ekran kaydı, veri animasyonu, çekim) ve "Grafik fikirleri" (karusel, afiş, story, post, kart). Fikir dosyasında iki ayrı tablo/bölüm olsun ve her ofis kaydına `icerikTuru: "video" | "grafik"` alanı yaz. İstekte `icerikTuru` "video" ya da "grafik" ise yalnız o türden fikir üret; "ikisi" ya da boşsa her türden dengeli (en az 4'er) üret. Video fikirlerinde `docs/ajans/video/` araç kutusundaki teknikleri (hız rampası, freeze-frame + oyuncu vurgusu, dikey takip kırpma, kinetik altyazı, ses tasarımı, seslendirme) kullan.
