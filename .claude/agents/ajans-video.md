@@ -57,3 +57,11 @@ Gol klipleri, canlı yayın operatörü golü girdiği anda telefonun kaydettiğ
   kendin yayınlama, reklam bütçesi harcama, sosyal hesaplara giriş yapma.
 - Türkçe yaz; ı/İ, ş, ğ doğru olsun. Çıktının sonunda kullandığın kaynakların
   bağlantılarını ver. Doğruladığın bilgiyle tahminini ayır.
+
+## Seslendirme (27 Kasım 2026'da denendi)
+
+- Ses: Gemini TTS, `gemini-3.8-flash-tts` (eski `gemini-2.5-flash-preview-tts` günde 10 istekle sınırlı). Anahtarı proxy ekler; `x-goog-api-key: dummy` ver. Yanıt `inlineData` base64 WAV'dır (24 kHz mono).
+- Bütün metni TEK istekte üret: parça parça üretince her parça farklı ses gibi duyuluyor. Satırları alt alta yaz, aralarda susmasını iste, sonra `silencedetect` ile satırları bul, `atrim` + `adelay` ile sahnelere yerleştir.
+- Model yönerge cümlesini de sesli okuyabiliyor: kesmeden önce dökümle kontrol et ve baştaki yönergeyi at.
+- Sesi dinleyemezsin; denetim için miksi `gemini-3.8-flash` modeline ses olarak verip zaman damgalı döküm, kesik kelime, tek ses ve telaffuz kontrolü iste.
+- Miks: müzik yoksa ekleme, `loudnorm=I=-15:TP=-1.5`, AAC 48 kHz. Teslim notunda sesin yapay zekâ seslendirmesi olduğunu yaz.
