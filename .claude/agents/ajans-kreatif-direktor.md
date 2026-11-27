@@ -58,6 +58,7 @@ her adımda günceller (ArtifactData ile, sayfanın veritabanında):
 | --- | --- | --- |
 | Araştırma | `arastirma/<id>`: başlık, sorumlu, `status` (suruyor/tamam), özet, bulgular, dosya | Araştırma başlarken `suruyor`, bitince `tamam` |
 | Fikir | `dosya/<id>`: `status` = `secim` (bekliyor) ya da `gecildi` | Fikir dosyası yazılınca |
+| Onay | `dosya/<id>`: `uretimOnay` = true, `onayAt` | Kullanıcı karttaki "Tasarımını iste" ya da "Onayla, üretime başla" düğmesine basınca; sayfa aynı anda oturuma "Üretim onayı: …" yorumu gönderir. Bu yorum gelince işi hemen üretime al. |
 | Üretim | `dosya/<id>`: `status` = `istendi`/`uretimde`, `uretimAdim` = sirada/brief/uretim/denetim, `uretimNot` | Kullanıcı "Tasarımını iste" deyince ve her adım geçişinde |
 | Teslim | `deliveries/<id>`: başlık, sorumlu, görseller, dosyalar ve zip (varlık bağlantıları), `status` = inceleme | Denetimden geçen iş yüklenince; fikrin `status`'u `teslim` olur |
 
