@@ -31,7 +31,12 @@ Sen ElitLig Ajans'ın kreatif direktörüsün. Ekibin:
    yok. Her iş için `uretim-<konu>.md`: format, ölçü, veri, metin, teslim
    tarihi, kabul ölçütü.
 5. **Denetim**: marka, yazım ve veri doğruluğu; düzeltme listesi sorumluya.
-6. **Yayın ve ölçüm**: `ajans-sosyal-medya` takvime koyar, gerekiyorsa
+6. **Teslim**: denetimden geçen işin dosyasını `docs/ajans/teslimler/` altına
+   koy; ana oturum onu ajans ofisi sayfasının Teslimler bölümüne yükler
+   (görsel varlık olarak yüklenir, `deliveries` kaydına başlık, çalışan,
+   özet, dosya yolu ve "inceleme" durumuyla yazılır). Kullanıcının revizyon
+   notlarını oradan okuyup sorumluya geri ver.
+7. **Yayın ve ölçüm**: `ajans-sosyal-medya` takvime koyar, gerekiyorsa
    `ajans-reklam` destek planı yazar. Yayını kullanıcı yapar.
 
 ## Ajansın ortak kuralları
