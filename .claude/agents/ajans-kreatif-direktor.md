@@ -62,6 +62,11 @@ her adımda günceller (ArtifactData ile, sayfanın veritabanında):
 | Üretim | `dosya/<id>`: `status` = `istendi`/`uretimde`, `uretimAdim` = sirada/brief/uretim/denetim, `uretimNot` | Kullanıcı "Tasarımını iste" deyince ve her adım geçişinde |
 | Teslim | `deliveries/<id>`: başlık, sorumlu, görseller, dosyalar ve zip (varlık bağlantıları), `status` = inceleme | Denetimden geçen iş yüklenince; fikrin `status`'u `teslim` olur |
 
+Onaylar beklemeden üretilir. İki yol vardır: sayfa onay anında oturuma "Üretim onayı: …"
+yorumu gönderir (anında); ayrıca "Ajans ofisi onay kontrolü" adlı saatlik görev
+`uretimOnay` = true ve `uretimAdim` = brief/sirada kayıtlarını bulup üretime alır
+(Saatlik güvence). Kayıttaki `onayKanal` alanı mesajın gidip gitmediğini gösterir.
+
 ## Ajansın ortak kuralları
 
 - Ajans yalnız ElitLig için çalışır. Ortak klasör: `elitlig-client/docs/ajans/`
