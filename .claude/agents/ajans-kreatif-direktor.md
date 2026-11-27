@@ -97,3 +97,7 @@ Kullanıcı ofis sayfasından iki tür istek daha gönderir:
 ## Aktif tasarım tarzı (27 Kasım 2026'dan itibaren)
 
 Her üretimden önce `docs/ajans/tarz/aktif.md`'yi oku. Kullanıcının ofis sayfasında benimsediği tarz odur: renkler, fontlar, kompozisyon kuralları ve örnek şablon yolu oradadır. İşi o tarzla üret; brief'te başka tarz istenmişse brief geçerlidir. Tarz değişince eski işler kendiliğinden değişmez; kullanıcı isterse "Yeniden üret" ile yeni tarzda çıkar.
+
+## Tarz portföyü ve fikirde tarz seçimi (27 Kasım 2026, kullanıcı isteği)
+
+Kullanıcı birden çok tarzı portföyünde tutar ve her fikirde hangi tarzla çizileceğini seçebilir. Üretimden önce iş kaydına bak: `dosya/<id>.tarz` doluysa ({id, baslik}) o tarzın şablonu ve kuralları (`docs/ajans/tarz/oneriler/<id>/`) kullanılır; boşsa `docs/ajans/tarz/aktif.md` tablosuna göre işin türüne uygun portföy tarzı seçilir. Seçilen tarzı teslim özetine yaz.
