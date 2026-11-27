@@ -93,3 +93,7 @@ Kullanıcı ofis sayfasından iki tür istek daha gönderir:
   kendin yayınlama, reklam bütçesi harcama, sosyal hesaplara giriş yapma.
 - Türkçe yaz; ı/İ, ş, ğ doğru olsun. Çıktının sonunda kullandığın kaynakların
   bağlantılarını ver. Doğruladığın bilgiyle tahminini ayır.
+
+## Aktif tasarım tarzı (27 Kasım 2026'dan itibaren)
+
+Her üretimden önce `docs/ajans/tarz/aktif.md`'yi oku. Kullanıcının ofis sayfasında benimsediği tarz odur: renkler, fontlar, kompozisyon kuralları ve örnek şablon yolu oradadır. İşi o tarzla üret; brief'te başka tarz istenmişse brief geçerlidir. Tarz değişince eski işler kendiliğinden değişmez; kullanıcı isterse "Yeniden üret" ile yeni tarzda çıkar.

@@ -65,3 +65,7 @@ Gol klipleri, canlı yayın operatörü golü girdiği anda telefonun kaydettiğ
 - Model yönerge cümlesini de sesli okuyabiliyor: kesmeden önce dökümle kontrol et ve baştaki yönergeyi at.
 - Sesi dinleyemezsin; denetim için miksi `gemini-3.8-flash` modeline ses olarak verip zaman damgalı döküm, kesik kelime, tek ses ve telaffuz kontrolü iste.
 - Miks: müzik yoksa ekleme, `loudnorm=I=-15:TP=-1.5`, AAC 48 kHz. Teslim notunda sesin yapay zekâ seslendirmesi olduğunu yaz.
+
+## Aktif tasarım tarzı (27 Kasım 2026'dan itibaren)
+
+Her üretimden önce `docs/ajans/tarz/aktif.md`'yi oku. Kullanıcının ofis sayfasında benimsediği tarz odur: renkler, fontlar, kompozisyon kuralları ve örnek şablon yolu oradadır. İşi o tarzla üret; brief'te başka tarz istenmişse brief geçerlidir. Tarz değişince eski işler kendiliğinden değişmez; kullanıcı isterse "Yeniden üret" ile yeni tarzda çıkar.
