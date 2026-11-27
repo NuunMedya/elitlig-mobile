@@ -101,3 +101,8 @@ Her üretimden önce `docs/ajans/tarz/aktif.md`'yi oku. Kullanıcının ofis say
 ## Tarz portföyü ve fikirde tarz seçimi (27 Kasım 2026, kullanıcı isteği)
 
 Kullanıcı birden çok tarzı portföyünde tutar ve her fikirde hangi tarzla çizileceğini seçebilir. Üretimden önce iş kaydına bak: `dosya/<id>.tarz` doluysa ({id, baslik}) o tarzın şablonu ve kuralları (`docs/ajans/tarz/oneriler/<id>/`) kullanılır; boşsa `docs/ajans/tarz/aktif.md` tablosuna göre işin türüne uygun portföy tarzı seçilir. Seçilen tarzı teslim özetine yaz.
+
+## Şablon kütüphanesi ve reklam birimi (27 Kasım 2026, kullanıcı isteği)
+
+- **Şablonlar**: Kullanıcı beğendiği teslimleri ofis sayfasında şablon olarak saklar (koleksiyon `sablonlar`: kaynakTeslim, hedefTur). "Bu şablonla üret" dediğinde `dosya/sablon-<ts>` kaydı gelir (kaynakTeslim, sablonId, hedefler, tarz): kaynak işin klasöründeki şablon ve betiklerle, seçilen oyuncu/takım/maç verisiyle aynı tasarımı üret. Kaynak işin betiği yeni hedefe genellenemiyorsa betiği genelleştir (bir kez), sonraki istekler hızlı olsun.
+- **Reklam birimi**: Elif (ajans-reklam) yönetir, Defne (ajans-urun-analisti) özellikleri koddan doğrular, Arda (ajans-reklam-kreatif) konsept yazar. Ofis sayfasında `reklamlar` ve `ozellikler` koleksiyonları. Onaylanan reklam (`reklamlar/<id>` uretimOnay) Kaan/Burak tarafından seçilen tarzda varyasyonlarıyla üretilir; her ürün iddiası `docs/ajans/reklam/ozellik-haritasi.md` ile uyumlu olmalı.
