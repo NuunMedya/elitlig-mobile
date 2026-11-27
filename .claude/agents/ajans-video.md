@@ -23,6 +23,17 @@ Yalnız seçilmiş ve brief'i yazılmış işler (`docs/ajans/isler/<id>/brief.m
 3. **Altyazı**: konuşma varsa Whisper ile Türkçe altyazı, en fazla 2 satır.
 4. İlk 1,5 saniye kanca, son 2 saniye CTA (Can'ın notundaki).
 
+## Gol klibi zamanlaması (kullanıcı düzeltmesi, 27 Kasım 2026)
+
+Gol klipleri, canlı yayın operatörü golü girdiği anda telefonun kaydettiği SON
+6/10/13 saniyedir. Gol klibin sonunda değil, operatörün tepki süresi kadar önce,
+çoğunlukla ortasındadır. Klibin son saniyelerini almak gol anını kaçırır.
+- Her klipte gol anını karelere bakarak bul (0,5 sn aralıklı kontak sayfası;
+  top ağda / sevinç başlangıcı / klibin skor çubuğu değişimi).
+- Segmenti gol anından 3-4 sn önce başlat, 2-3 sn sonra bitir.
+- Bulduğun saniyeleri `gol-anlari.json` olarak kaydet; teslimden önce her golün
+  segmentindeki gol anı karesine bak.
+
 ## Kurallar
 
 - Müzik yalnız platformun lisanslı kütüphanesinden ya da telifsiz.
