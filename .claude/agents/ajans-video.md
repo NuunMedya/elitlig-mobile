@@ -93,6 +93,7 @@ Ne zaman hangisi:
 - Gol klibi Reels/Shorts işi: önce `kurgu.mjs` (is.json'da sahneler: gol anı, kadraj, hiz, dondur, punch, halka, katman bilgisi). Örnek: `gosteri/is.json`.
 - Katman (kart, skor levhası, şerit, halka, altyazı) HTML'dir: aktif/seçilen tarzın şablonuna göre `gosteri/katman.html` gibi yaz (Kinetik: Archivo genişlik ekseni, mor şerit, açık kartlar). Sözleşme `window.sahne(t)`, şeffaf arka plan.
 - Elle düzeltme araçları: `kilit` (takip yanlış kümeye giderse), `anahtar` (tam elle pan), `gol_ani` sayısı (otomatik tahmin yerine kare kare bulunan).
+- **Gol kamerası (28.11.2026, kullanıcı düzeltmesi):** gol anında kadraj kaleye kayar. `kurgu.mjs` klip sahnelerinde varsayılan açık: gol anından ~1,3 sn önce pencere yumuşak pan ile kale ağzına kayar, gol/ağır çekim/freeze boyunca kale ağzı ve top kadrajda kalır (şutçu kenarda), sonra oyuncuya yarı döner; punch-in kale ağzına yapılır; `halka:{kale:true}` freeze anında kale ağzındaki topu halkalar. Kale konumu `araclar/dikey-kadraj/kale.py` ile otomatik bulunur (beyaz direkler + üst direk + ağ dokusu; panlayan kamerada kare kare izlenir). Güven < 0,45 ya da kontak sayfasında işaret yanlışsa sahneye `kale:{x,y}` ya da `kale:{anahtar:[{t,x,y}]}` elle ver (kontak/<sahne>_kale.jpg işaretli kareleri gösterir). Kontrol listesine ek: gol anı karesinde top ve ağ görünüyor; `gol_kamerasi_kontak.py` ile gol -1/-0,5/0/+0,5/+1 sn çıktı karelerine bak, kale görünmüyorsa teslim etme. Gol anı ile freeze aynı ana konur.
 - Gol-ani ölçümü (29 etiketli klip): ses kuralı ±1 sn %76 (güncel format %87); görsel optik akış birleşimi artırmadı. Tahmini asla doğrulamasız kullanma.
 - Halka/ok: oyuncu kimliğini pikselle verideki golcüye bağlayamıyorsan halka "şutu çeken"/"top" için; isim etiketi verideki golcüdür. Yer tutucu oyuncu adı kullanma.
 - Tek istekte seslendirme; TTS kotası dolarsa (429) yeniden dene, olmazsa sessiz altyazı + efektle teslim et ve nedenini yaz.
@@ -106,4 +107,5 @@ Kalite kontrol listesi (teslimden önce):
 6. Ses: loudnorm ölçüsü -14 LUFS / TP <= -1.5; konuşma varken ortam kısılıyor; Gemini ses denetimi (döküm, tek ses, telaffuz, bozulma) yapıldı; müzik yatağı/efektler sentez (telifsiz) ve teslim notunda "yapay zekâ seslendirme" yazıyor.
 7. Kapak karesi okunur; kontak sayfası (`_kontak.jpg`) tüm akışı gösteriyor.
 8. Oyuncu yüz/ses izni brief'te var; kavga/sakatlık/hakem tartışması yok.
-9. Çıktı sonunda kaynaklar ve kullanılan araçların lisansları listelendi.
+9. Gol kamerası: her golde gol anı ±0,5 sn çıktı karelerinde kale ağı ve top kadrajda (`kontak/<sahne>_gol-kamerasi.jpg`).
+10. Çıktı sonunda kaynaklar ve kullanılan araçların lisansları listelendi.
